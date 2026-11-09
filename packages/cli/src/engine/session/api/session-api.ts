@@ -26,7 +26,6 @@ import type { NativeSessionOrigin } from "../../acp/protocol/native-session.ts";
 
 export interface SessionPrepareOptions {
     readonly adapter: Adapter;
-    readonly additionalDirectories: readonly string[];
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
     readonly sessionId: string;
@@ -41,7 +40,6 @@ export type SessionRecovery = { readonly kind: "history-required" } | { readonly
 
 export interface AgentSettingsInspectionOptions {
     readonly adapter: Adapter;
-    readonly additionalDirectories: readonly string[];
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
     readonly model?: string;

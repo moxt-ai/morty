@@ -2,7 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 import { methods, RequestError } from "@agentclientprotocol/sdk";
 import { decodeAgentPromptResponse, type SessionConfigOption } from "@morty-build/client/protocol";
 import { z } from "zod";
-import { arraysEqual, isRecord, truncate } from "../../util/value-utils.ts";
+import { isRecord, truncate } from "../../util/value-utils.ts";
 import { AcpConfigurationValueUnavailableError, AcpExecutionError } from "../acp-error.ts";
 import { buildPromptContent } from "../client/prompt-content.ts";
 import type { AcpContentExternalizer } from "../content/content-externalizer.ts";
@@ -29,7 +29,6 @@ const isMethodNotFound = (cause: unknown): boolean => cause instanceof RequestEr
 const targetSchema = z.object({
     nativeSessionId: nativeSessionIdSchema,
     cwd: absolutePathSchema,
-    additionalDirectories: z.array(absolutePathSchema),
 });
 
 /** Adapter-private active writers. Query sessions never enter this registry. */
@@ -52,11 +51,7 @@ export class AcpExecutionConnections {
             ({ subscriber }) => subscriber.onSessionEvent === params.onSessionEvent,
         );
         if (existing !== undefined) {
-            if (
-                existing.scope.agent !== params.scope.agent ||
-                existing.scope.cwd !== params.scope.cwd ||
-                !arraysEqual(existing.scope.additionalDirectories, params.scope.additionalDirectories)
-            ) {
+            if (existing.scope.agent !== params.scope.agent || existing.scope.cwd !== params.scope.cwd) {
                 throw new AcpExecutionError(
                     "The agent or workspace cannot change after a conversation has started",
                     {},
@@ -121,7 +116,6 @@ export class AcpExecutionConnections {
         const existing = this.#find({
             nativeSessionId,
             cwd: session.scope.cwd,
-            additionalDirectories: session.scope.additionalDirectories,
         });
         if (existing !== undefined && existing !== session) {
             throw new AcpExecutionError("Another writer is using this native session", {}, "session_busy");
@@ -142,12 +136,7 @@ export class AcpExecutionConnections {
             ({ connection, scope }) =>
                 connection.events.sessionId() === decoded.data.nativeSessionId &&
                 scope.cwd === decoded.data.cwd &&
-                scope.cwd === resolve(decoded.data.cwd) &&
-                arraysEqual(scope.additionalDirectories, decoded.data.additionalDirectories) &&
-                arraysEqual(
-                    scope.additionalDirectories,
-                    decoded.data.additionalDirectories.map((path) => resolve(path)),
-                ),
+                scope.cwd === resolve(decoded.data.cwd),
         );
         if (matches.length > 1) {
             throw new AcpExecutionError("Another writer is using this native session", {}, "session_busy");

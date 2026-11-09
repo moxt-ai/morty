@@ -101,7 +101,6 @@ describe("Session settings reads after a daemon restart", () => {
         const manager = createManager(store);
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "no-load-config-read-command",
                 cwd: process.cwd(),
@@ -125,7 +124,6 @@ describe("Session settings reads after a daemon restart", () => {
             // support it fails before any configuration is reachable.
             await expect(
                 reader.restoreSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     sessionId,
@@ -133,7 +131,6 @@ describe("Session settings reads after a daemon restart", () => {
                 }),
             ).rejects.toMatchObject({ code: "native_history_unsupported" });
             const prepared = await reader.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
                 sessionId,
@@ -162,7 +159,6 @@ describe("Session settings reads after a daemon restart", () => {
         try {
             const imported = await first.openNativeSession(
                 {
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     sessionId,
@@ -172,7 +168,6 @@ describe("Session settings reads after a daemon restart", () => {
             );
             expect(imported.sessionId).toBe(sessionId);
             await first.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "config-read-retired-command",
                 cwd: process.cwd(),
@@ -184,7 +179,6 @@ describe("Session settings reads after a daemon restart", () => {
             });
             // Configure a model so a later read has a non-default value to find.
             await first.applySessionConfiguration({
-                additionalDirectories: [],
                 agent,
                 booleanValue: false,
                 configId: "model",
@@ -205,7 +199,6 @@ describe("Session settings reads after a daemon restart", () => {
             const [found] = restarted.findSessions([sessionId]);
             expect(found).toMatchObject({ sessionId, title: "Imported native session", prompted: true });
             const prepared = await restarted.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
                 sessionId,

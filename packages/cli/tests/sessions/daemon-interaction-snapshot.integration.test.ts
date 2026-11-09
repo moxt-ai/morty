@@ -140,7 +140,6 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
         const sessionId = "interaction_snapshot";
         socket.send(
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -154,7 +153,6 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
         const submittedAt = Date.now();
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "interaction_turn",
@@ -175,7 +173,6 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
             socket.send(
                 encodeNativeSessionRequest({
                     action: "active-turn",
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -322,7 +319,6 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         const sessionId = "announced_permission";
         socket.send(
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -335,7 +331,6 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         await messages.nextKind(SESSION_READY_KIND);
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "announced_turn",
@@ -435,7 +430,6 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         const sessionId = "null_input_permission";
         socket.send(
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -448,7 +442,6 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         await messages.nextKind(SESSION_READY_KIND);
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "null_input_turn",
@@ -548,7 +541,6 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         const sessionId = "orphan_update_permission";
         socket.send(
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -561,7 +553,6 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         await messages.nextKind(SESSION_READY_KIND);
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "orphan_update_turn",
@@ -661,7 +652,6 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
         const sessionId = "prepared_session";
         socket.send(
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -756,7 +746,6 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             initial.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
             initial.socket.send(
                 encodeSessionPrepareCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -768,7 +757,6 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             await messages.nextKind(SESSION_READY_KIND);
             initial.socket.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: config.bindingId,
                     commandId: "initial_turn",
@@ -917,7 +905,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         const sessionId = "queued_identity";
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "running_turn",
@@ -935,7 +922,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         // A different Agent identity queues behind the running turn in the same Session.
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 commandId: "foreign_queued_turn",
@@ -958,7 +944,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         };
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "own_queued_turn",
@@ -974,7 +959,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         socket.send(
             encodeNativeSessionRequest({
                 action: "active-turn",
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",

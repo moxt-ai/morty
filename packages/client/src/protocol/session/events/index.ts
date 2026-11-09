@@ -351,13 +351,11 @@ const promptMessageId = z.string().min(1).max(2_048);
 export interface PromptExecutionContext {
     readonly agentId: string;
     readonly directoryId: string;
-    readonly additionalDirectoryIds: readonly string[];
 }
 const promptExecutionContextSchema = z
     .object({
         agentId: identifier,
         directoryId: DIRECTORY_IDENTIFIER,
-        additionalDirectoryIds: z.array(DIRECTORY_IDENTIFIER).max(16).readonly(),
     })
     .readonly() satisfies z.ZodType<PromptExecutionContext>;
 

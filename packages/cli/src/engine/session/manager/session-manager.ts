@@ -418,7 +418,7 @@ export class SessionManager {
                         "session-preparation-wait",
                         async () => await waitForSharedOperation(pending, options.signal),
                     );
-                    if (runtime.belongsTo(options.agent.id, options.cwd, options.additionalDirectories)) {
+                    if (runtime.belongsTo(options.agent.id, options.cwd)) {
                         this.#executionProcesses.touch(options.sessionId, runtime);
                         if (recovery.kind === "history-required") {
                             await metrics.measure(
@@ -432,7 +432,7 @@ export class SessionManager {
                 }
                 const existing = this.#executionProcesses.get(options.sessionId);
                 if (existing !== undefined) {
-                    if (existing.belongsTo(options.agent.id, options.cwd, options.additionalDirectories)) {
+                    if (existing.belongsTo(options.agent.id, options.cwd)) {
                         const runtime = await this.#currentSessionProcess(existing, options, recovery);
                         this.#executionProcesses.touch(options.sessionId, runtime);
                         if (recovery.kind === "history-required") {
@@ -625,7 +625,7 @@ export class SessionManager {
             if (existing === undefined) {
                 return (await this.#startPreparation(options, recovery)).prepared();
             }
-            if (!existing.belongsTo(options.agent.id, options.cwd, options.additionalDirectories)) {
+            if (!existing.belongsTo(options.agent.id, options.cwd)) {
                 throw new AcpExecutionError(
                     "The agent or workspace cannot change after a conversation has started",
                     {},
@@ -736,10 +736,7 @@ export class SessionManager {
                 throw new AcpExecutionError("The target turn is no longer active", {}, "steering_target_unavailable");
             }
             const runtime = this.#executionProcesses.get(options.sessionId);
-            if (
-                runtime === undefined ||
-                !runtime.belongsTo(options.agent.id, options.cwd, options.additionalDirectories)
-            ) {
+            if (runtime === undefined || !runtime.belongsTo(options.agent.id, options.cwd)) {
                 throw new AcpExecutionError(
                     "The target turn execution context is unavailable",
                     {},
@@ -966,19 +963,13 @@ export class SessionManager {
         options.signal.throwIfAborted();
         const runtime = this.#executionProcesses.get(options.sessionId);
         if (runtime !== undefined) {
-            return runtime.belongsTo(options.agent.id, options.cwd, options.additionalDirectories)
-                ? runtime.interactionSnapshot()
-                : undefined;
+            return runtime.belongsTo(options.agent.id, options.cwd) ? runtime.interactionSnapshot() : undefined;
         }
         const stored = this.#store.read(options.sessionId);
         if (
             !(stored instanceof FoundStoredSession) ||
             stored.session.agentId !== options.agent.id ||
-            stored.session.cwd !== options.cwd ||
-            stored.session.additionalDirectories.length !== options.additionalDirectories.length ||
-            !stored.session.additionalDirectories.every(
-                (directory, index) => directory === options.additionalDirectories[index],
-            )
+            stored.session.cwd !== options.cwd
         ) {
             return undefined;
         }
@@ -987,12 +978,8 @@ export class SessionManager {
         return { sessionGenerationId, throughPosition, interactions: [] };
     };
 
-    readonly hasPreparedSession = (
-        sessionId: string,
-        agentId: string,
-        cwd: string,
-        additionalDirectories: readonly string[],
-    ): boolean => this.#executionProcesses.get(sessionId)?.belongsTo(agentId, cwd, additionalDirectories) === true;
+    readonly hasPreparedSession = (sessionId: string, agentId: string, cwd: string): boolean =>
+        this.#executionProcesses.get(sessionId)?.belongsTo(agentId, cwd) === true;
 
     readonly createNativeSession = async (options: SessionPrepareOptions): Promise<string> =>
         this.#operations.run(options, async (options) => {
@@ -1041,7 +1028,7 @@ export class SessionManager {
             this.#assertOpen(options.sessionId);
             const existing = this.#executionProcesses.get(options.sessionId);
             if (existing !== undefined) {
-                if (!existing.belongsTo(options.agent.id, options.cwd, options.additionalDirectories)) {
+                if (!existing.belongsTo(options.agent.id, options.cwd)) {
                     throw new AcpExecutionError(
                         "The agent or workspace cannot change after a conversation has started",
                         {},

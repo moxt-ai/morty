@@ -48,7 +48,6 @@ test.each(["pi", "claude", "codex"] as const)(
                         agentId,
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         disposition: "append",
                         prompt: text,

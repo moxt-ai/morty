@@ -99,7 +99,6 @@ describe("ACP conversation sessions", () => {
         });
         const prompt = (commandId: string) =>
             manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId,
                 cwd: temporaryDirectory,
@@ -165,7 +164,6 @@ describe("ACP conversation sessions", () => {
         try {
             vi.setSystemTime(new Date("2026-10-01T12:00:00.000Z"));
             await firstManager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "initial-command",
                 cwd: process.cwd(),
@@ -203,7 +201,6 @@ describe("ACP conversation sessions", () => {
             });
             try {
                 await reopenedManager.prepareSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     sessionId: "existing-conversation",
@@ -216,7 +213,6 @@ describe("ACP conversation sessions", () => {
                 expect(reopened.session.updatedAt).toBe(initial.session.updatedAt);
 
                 await reopenedManager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "new-command",
                     cwd: process.cwd(),
@@ -728,7 +724,6 @@ describe("ACP conversation sessions", () => {
 
         try {
             await firstRuntime.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "claude-first-turn",
                 cwd: process.cwd(),
@@ -849,7 +844,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
             try {
                 const hangingTurn = manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "pi-hanging-command",
                     cwd: process.cwd(),
@@ -885,7 +879,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 expect(processExists(piPid)).toBe(true);
                 observer.events.length = 0;
                 await manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "pi-after-cancellation",
                     cwd: process.cwd(),
@@ -958,7 +951,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             await manager.prepareSession({
-                additionalDirectories: [],
                 agent: codex,
                 cwd: process.cwd(),
                 sessionId: "rebound-conversation",
@@ -968,7 +960,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
             await expect(
                 manager.prepareSession(
                     {
-                        additionalDirectories: [],
                         agent: claude,
                         cwd: process.cwd(),
                         sessionId: "rebound-conversation",
@@ -987,7 +978,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
             const observer = new RecordingObserver();
             manager.setObserver(observer);
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: claude,
                 commandId: "command-after-rebind",
                 cwd: process.cwd(),
@@ -1025,7 +1015,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
             maxProcesses: null,
         });
         const preparation = {
-            additionalDirectories: [],
             agent: new AcpAgentDefinition(
                 "codex",
                 "Codex",
@@ -1104,7 +1093,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "controlled-acp-interleaved-command",
                 cwd: process.cwd(),
@@ -1193,7 +1181,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         );
         const signal = new AbortController().signal;
         const activeTurn = manager.runPrompt({
-            additionalDirectories: [],
             agent,
             commandId: "conversation-1-active",
             cwd: temporaryDirectory,
@@ -1210,7 +1197,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         );
         const runTurn = async (sessionId: string): Promise<void> => {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: `${sessionId}-turn`,
                 cwd: temporaryDirectory,
@@ -1298,7 +1284,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.prepareSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     sessionId: "controlled-acp-wrong-session-notification",
@@ -1349,7 +1334,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.prepareSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     sessionId: "authentication-required-session",
@@ -1400,7 +1384,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "command-model-unavailable",
                     cwd: process.cwd(),
@@ -1458,7 +1441,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "command-invalid-prompt",
                     cwd: process.cwd(),
@@ -1549,7 +1531,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             const cancelledTurn = manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "command-cancelled-tree",
                 cwd: temporaryDirectory,
@@ -1571,7 +1552,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             expect(processExists(childPid)).toBe(true);
             observer.events.length = 0;
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "command-after-tree-cancel",
                 cwd: temporaryDirectory,
@@ -1651,7 +1631,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: codex,
                 commandId: "command-locked-first",
                 cwd: process.cwd(),
@@ -1663,7 +1642,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             });
             await expect(
                 manager.runPrompt({
-                    additionalDirectories: [],
                     agent: claude,
                     commandId: "command-locked-second",
                     cwd: process.cwd(),
@@ -1717,7 +1695,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         const signal = new AbortController().signal;
 
         await manager.prepareSession({
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             sessionId: "exited-conversation",
@@ -1725,7 +1702,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         });
         await expect(
             manager.applySessionConfiguration({
-                additionalDirectories: [],
                 agent,
                 booleanValue: false,
                 configId: "model",

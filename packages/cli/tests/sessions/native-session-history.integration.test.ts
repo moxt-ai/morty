@@ -66,7 +66,6 @@ describe("native session history", () => {
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    additionalDirectories: [],
                     sessionId: "read-only-preview",
                     signal: new AbortController().signal,
                 },
@@ -94,7 +93,6 @@ describe("native session history", () => {
             const nativeSessionId = await f.seed("Writer-owned Codex session");
             await f.sessions.openNativeSession(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId: "active-codex-session",
@@ -105,7 +103,6 @@ describe("native session history", () => {
 
             const preview = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId: "codex-preview",
@@ -152,7 +149,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId,
@@ -194,7 +190,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId,
@@ -235,7 +230,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId,
@@ -265,7 +259,6 @@ describe("native session history", () => {
             const nativeSessionId = await f.seed("Preserve this update");
             const replay = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId: "v2-history-query",
@@ -305,7 +298,6 @@ describe("native session history", () => {
 
             const newestMessage = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId: "v2-history-query",
@@ -321,7 +313,6 @@ describe("native session history", () => {
             ).toEqual(["agent_thought_chunk", "tool_call", "tool_call", "agent_message_chunk"]);
             const olderMessage = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId: "v2-history-query",
@@ -357,7 +348,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     sessionId,
@@ -395,7 +385,6 @@ describe("native session history", () => {
                 }
             });
             const options = {
-                additionalDirectories: [],
                 agent: f.agent,
                 cwd: f.workspace,
                 sessionId,

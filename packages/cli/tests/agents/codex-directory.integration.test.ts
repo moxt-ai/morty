@@ -13,7 +13,6 @@ it("Given a saved Codex conversation with an active writer, When it is previewed
         const options = {
             agent: f.agent,
             cwd: f.workspace,
-            additionalDirectories: [],
             sessionId: "preview",
             signal: AbortSignal.timeout(30_000),
         };
@@ -85,7 +84,6 @@ it("Given saved Codex threads, When its directory is listed through the in-proce
             {
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
                 sessionId: opened.ready.sessionId,
                 signal: AbortSignal.timeout(30_000),
             },

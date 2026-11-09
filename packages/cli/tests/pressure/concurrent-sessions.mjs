@@ -341,7 +341,6 @@ async function exercise(count) {
                                 bindingId: "workspace",
                                 agentId: "pressure-agent",
                                 directoryId: "default",
-                                additionalDirectoryIds: [],
                                 sessionId: `pressure-${offset + index}`,
                             }),
                         );
@@ -394,7 +393,6 @@ async function exercise(count) {
                     agentId: "pressure-agent",
                     bindingId: "workspace",
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     disposition: "append",
                     prompt: `${phase}|${sessionId}`,
                     attachments: [],

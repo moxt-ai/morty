@@ -23,7 +23,6 @@ const sessionHistoryPageLoadSchema = z
 const sessionPreviewHistoryPageLoadSchema = z
     .object({
         ...pageRequestFields,
-        additionalDirectoryIds: z.array(directoryIdentifier).max(16).readonly(),
         agentId: identifier,
         bindingId: identifier,
         directoryId: directoryIdentifier,

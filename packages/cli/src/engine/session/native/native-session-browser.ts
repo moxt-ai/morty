@@ -7,7 +7,6 @@ import {
     type NativeSessionResult,
     type SessionMetadata,
     type SessionReadyEvent,
-    type WorkspaceEntry,
 } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { NativeSessionInfo } from "../../acp/protocol/native-session.ts";
@@ -24,7 +23,6 @@ interface ListedTarget {
     readonly scope: string;
     readonly nativeSessionId: string;
     readonly cwd: string;
-    readonly additionalDirectories: readonly string[];
 }
 interface ListedCursor {
     readonly scope: string;
@@ -35,8 +33,6 @@ interface AuthorizedNativeSession {
     readonly cwd: string;
     readonly directoryId: string;
     readonly directoryLabel: string;
-    readonly additionalDirectories: readonly string[];
-    readonly additionalEntries: readonly WorkspaceEntry[];
 }
 
 const MAXIMUM_SESSION_TITLE_LENGTH = 500;
@@ -132,14 +128,8 @@ export class NativeSessionService {
     readonly #execute = async (command: NativeSessionCommand, signal: AbortSignal): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
         const cwd = await this.#directories.resolve(this.#bindingId, command.directoryId, signal);
-        const additionalDirectories = await this.#directories.resolveMany(
-            this.#bindingId,
-            command.additionalDirectoryIds,
-            signal,
-        );
         signal.throwIfAborted();
         const options: SessionPrepareOptions = {
-            additionalDirectories,
             ...(await this.#resolveAgent(command.agentId, signal)),
             cwd,
             sessionId: command.sessionId,
@@ -180,7 +170,6 @@ export class NativeSessionService {
                 scope: entryScope,
                 nativeSessionId: info.sessionId,
                 cwd: authorized.cwd,
-                additionalDirectories: authorized.additionalDirectories,
             });
             return {
                 entryId,
@@ -193,7 +182,6 @@ export class NativeSessionService {
                 directoryId: authorized.directoryId,
                 directoryLabel: authorized.directoryLabel,
                 updatedAt: info.updatedAt ?? null,
-                additionalDirectories: authorized.additionalEntries,
             };
         };
         const envelope = {
@@ -290,13 +278,6 @@ export class NativeSessionService {
                 "native_session_unsupported",
             );
         }
-        if (target.additionalDirectories.length > 0 && !capabilities.additionalDirectories) {
-            throw new AcpExecutionError(
-                "This Agent cannot restore additional working directories",
-                {},
-                "native_session_unsupported",
-            );
-        }
         const sourceTitle = target.info.title ?? "Untitled session";
         const title =
             action === "fork"
@@ -307,7 +288,6 @@ export class NativeSessionService {
                 ...options,
                 cwd: target.cwd,
                 sessionId: command.targetSessionId,
-                additionalDirectories: target.additionalDirectories,
             },
             action === "fork"
                 ? { kind: "fork", nativeSessionId: target.info.sessionId, title }
@@ -316,7 +296,6 @@ export class NativeSessionService {
         );
         signal.throwIfAborted();
         const ready: SessionReadyEvent = {
-            additionalDirectories: target.additionalEntries,
             agentId: command.agentId,
             agentName: opened.prepared.agentName,
             agentVersion: opened.prepared.agentVersion,
@@ -356,15 +335,9 @@ export class NativeSessionService {
     private readonly describeSessions = (sessions: readonly StoredSession[]): readonly SessionMetadata[] => {
         const entries: SessionMetadata[] = [];
         for (const session of sessions) {
-            // A description reports the directories the Session recorded. Checking that they still exist
-            // would let one deleted or unmounted directory fail every Session in the list.
+            // Report the recorded workspace even if it was deleted or unmounted.
             const directory = this.#directories.identifyRecorded(this.#bindingId, session.cwd);
-            const additionalDirectories = session.additionalDirectories.map((path) => {
-                const identified = this.#directories.identifyRecorded(this.#bindingId, path);
-                return { directoryId: identified.directoryId, name: identified.name };
-            });
             entries.push({
-                additionalDirectories,
                 agentId: session.agentId,
                 directoryId: directory.directoryId,
                 directoryLabel: directory.label,
@@ -385,28 +358,11 @@ export class NativeSessionService {
     ): Promise<AuthorizedNativeSession | null> => {
         try {
             const primary = await this.#directories.identify(command.bindingId, info.cwd, options.signal);
-            const additionalDirectories: string[] = [];
-            const additionalEntries: WorkspaceEntry[] = [];
-            const paths = new Set([primary.path]);
-            for (const path of info.additionalDirectories) {
-                const directory = await this.#directories.identify(command.bindingId, path, options.signal);
-                if (paths.has(directory.path)) {
-                    throw new LocalAuthorizationError("Native session roots must be distinct");
-                }
-                paths.add(directory.path);
-                additionalDirectories.push(directory.path);
-                additionalEntries.push({
-                    directoryId: directory.directoryId,
-                    name: directory.name,
-                });
-            }
             return {
                 info,
                 cwd: primary.path,
                 directoryId: primary.directoryId,
                 directoryLabel: primary.label,
-                additionalDirectories,
-                additionalEntries,
             };
         } catch (error) {
             options.signal.throwIfAborted();
@@ -446,11 +402,7 @@ export class NativeSessionService {
         if (target === null) {
             throw new LocalAuthorizationError("The selected native session is not authorized");
         }
-        if (
-            target.cwd !== selected.cwd ||
-            target.additionalDirectories.length !== selected.additionalDirectories.length ||
-            target.additionalDirectories.some((path, index) => path !== selected.additionalDirectories[index])
-        ) {
+        if (target.cwd !== selected.cwd) {
             throw new AcpExecutionError(
                 "This session's directory changed. Refresh the list before continuing.",
                 {},

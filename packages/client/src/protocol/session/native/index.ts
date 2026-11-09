@@ -93,7 +93,6 @@ export type LastTurnOutcome = z.infer<typeof lastTurnOutcomeSchema>;
 const identity = {
     ...envelope,
     kind: z.literal(NATIVE_SESSION_REQUEST_KIND),
-    additionalDirectoryIds: z.array(directoryId).max(16).readonly(),
     agentId: identifier,
     bindingId: identifier,
     directoryId,
@@ -167,10 +166,6 @@ const nativeSessionEntrySchema = z
         directoryId,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         updatedAt: z.iso.datetime({ offset: true }).nullable(),
-        additionalDirectories: z
-            .array(z.object({ directoryId, name: z.string().min(1).max(255) }).readonly())
-            .max(16)
-            .readonly(),
     })
     .readonly();
 export type NativeSessionEntry = z.infer<typeof nativeSessionEntrySchema>;

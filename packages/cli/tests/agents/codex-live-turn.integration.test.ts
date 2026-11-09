@@ -137,7 +137,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             const commandId = randomUUID();
             const queuedCommandId = randomUUID();
             const originalPrompt = encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 commandId,
@@ -177,7 +176,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                     socket.send(
                         encodeNativeSessionCommand({
                             action: "active-turn",
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             bindingId: config.bindingId,
                             directoryId: `path-${Buffer.from(config.defaultWorkspace).toString("base64url")}`,
@@ -265,7 +263,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         await providerEntered.promise;
                         socket.send(
                             encodeSessionPromptCommand({
-                                additionalDirectoryIds: [],
                                 agentId: "codex",
                                 bindingId: config.bindingId,
                                 commandId: queuedCommandId,
@@ -300,7 +297,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                             socket.send(
                                 encodeNativeSessionCommand({
                                     action: "active-turn",
-                                    additionalDirectoryIds: [],
                                     agentId: "codex",
                                     bindingId: config.bindingId,
                                     directoryId: "default",

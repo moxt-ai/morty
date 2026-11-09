@@ -52,7 +52,6 @@ describe("Agent setting capabilities", () => {
                 ),
         );
         const session = {
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             sessionId: "controlled-provider-default-effort",
@@ -132,7 +131,6 @@ describe("Agent setting capabilities", () => {
                 ),
         );
         const session = {
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             sessionId: "controlled-without-effort",
@@ -197,7 +195,6 @@ describe("Agent setting capabilities", () => {
 
         try {
             const prepared = await manager.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
                 sessionId: "pi-native-settings-only",
@@ -251,7 +248,6 @@ describe("Agent setting capabilities", () => {
                 ),
         );
         const session = {
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             sessionId: "ignored-setting-update",
@@ -282,7 +278,6 @@ it("Given ACP exposes select and boolean settings, When a user configures the co
     expect(prepared).toMatchObject({
         agentName: "Morty test agent",
         capabilities: {
-            additionalDirectories: true,
             embeddedContextPrompt: true,
             imagePrompt: true,
             loadSession: true,

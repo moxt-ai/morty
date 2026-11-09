@@ -5,7 +5,7 @@ import { nativeSessionIdSchema } from "../protocol/native-session.ts";
 import type { AcpExecutionConnection } from "./execution-connections.ts";
 
 export function sessionWorkspace(scope: AdapterSessionScope) {
-    return { cwd: scope.cwd, additionalDirectories: [...scope.additionalDirectories], mcpServers: [] };
+    return { cwd: scope.cwd, mcpServers: [] };
 }
 
 export function createdNativeSessionId(response: unknown): string {

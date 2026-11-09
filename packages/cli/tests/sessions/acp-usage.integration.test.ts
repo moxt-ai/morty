@@ -68,7 +68,6 @@ async function run(
     });
     try {
         return await manager.runPrompt({
-            additionalDirectories: [],
             agent: usageAgent(response, context),
             commandId: "usage-command",
             cwd: process.cwd(),

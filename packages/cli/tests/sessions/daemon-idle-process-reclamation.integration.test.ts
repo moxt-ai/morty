@@ -74,7 +74,7 @@ if (process.argv.includes("--version")) {
 } else {
     process.env.MORTY_FAKE_ACP_PROCESS_ID = String(process.pid);
     process.argv.push("--agent-name", "Controlled ACP", "--exclusive-writer", "--http-mcp",
-        "--no-additional-directories", "--no-delete-session", "--no-fork-session", "--no-embedded-context"
+        "--no-delete-session", "--no-fork-session", "--no-embedded-context"
         ${recovery === "load" ? ', "--load-only"' : ""});
     await import(${JSON.stringify(peerUrl)});
 }
@@ -121,7 +121,6 @@ async function expire(native: string, pid: string, timer: IdleTimeoutTimer): Pro
 function sendPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): void {
     peer.send(
         encodeSessionPromptCommand({
-            additionalDirectoryIds: [],
             agentId: "claude",
             bindingId: peer.bindingId,
             commandId: crypto.randomUUID(),
@@ -245,7 +244,6 @@ test.each(["resume", "load"] as const)(
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         cursor: null,
                     }),
                 );
@@ -285,7 +283,6 @@ test("Given a client read a conversation's settings before its idle process exit
         const configureId = crypto.randomUUID();
         peer.send(
             encodeSessionConfigureCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 booleanValue: false,
@@ -356,7 +353,6 @@ test("Given a retained native session browser, When two idle hours pass, Then it
                     agentId: "claude",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     action: "list",
                     cursor: null,
                 }),
@@ -395,7 +391,6 @@ test("Given an old retained process was closed and the daemon restarted, When it
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
             }),
         );
         expect(decodeSessionReadyEvent(await nextResponse(peer, "session.ready")).sessionId).toBe(sessionId);
@@ -424,7 +419,6 @@ test("Given native history is loading in a retained process, When three hours pa
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
             }),
         );
         await nextResponse(peer, "session.ready");
@@ -461,7 +455,6 @@ test("Given a canonical native Session is idle, When its process is reclaimed, T
                 fastMode: false,
                 mode: "code",
                 cwd: peer.workspace,
-                additionalDirectories: [],
                 title: "Native title before idle",
                 history: [],
             }),
@@ -474,7 +467,6 @@ test("Given a canonical native Session is idle, When its process is reclaimed, T
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
             }),
         );
         await nextResponse(peer, "session.ready");

@@ -48,7 +48,6 @@ test.each([
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     }),
                 );
                 for (;;) {

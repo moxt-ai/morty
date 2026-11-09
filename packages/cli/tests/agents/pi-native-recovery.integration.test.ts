@@ -46,7 +46,6 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                         agentId: "pi",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
                         disposition: SessionPromptDisposition.Append,
@@ -143,7 +142,6 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Reply with a short greeting, without using tools",
                 disposition: SessionPromptDisposition.Append,
@@ -170,7 +168,6 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
         const discoveryId = randomUUID();
         const listRequestId = randomUUID();
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "pi",
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -272,7 +269,6 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Save this conversation so it can be forked",
                 disposition: SessionPromptDisposition.Append,
@@ -292,7 +288,6 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
         const discoveryId = randomUUID();
         const listRequestId = randomUUID();
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "pi",
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -405,7 +400,6 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Continue in the independent fork",
                 disposition: SessionPromptDisposition.Append,

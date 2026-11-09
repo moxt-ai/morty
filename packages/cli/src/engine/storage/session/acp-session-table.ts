@@ -5,7 +5,6 @@ import type { LocalSqliteDatabase } from "../sqlite/local-sqlite-database.ts";
 
 /** One saved session row. The list columns hold JSON text that the session record decodes. */
 export interface AcpSessionRow {
-    readonly additionalDirectories: string;
     readonly agentId: string;
     readonly configurations: string;
     readonly cwd: string;
@@ -17,7 +16,6 @@ export interface AcpSessionRow {
 }
 
 const acpSessionRowSchema = z.object({
-    additionalDirectories: z.string(),
     agentId: z.string(),
     configurations: z.string(),
     cwd: z.string(),

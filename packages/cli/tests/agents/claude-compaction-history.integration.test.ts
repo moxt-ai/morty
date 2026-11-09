@@ -133,7 +133,6 @@ test.each(["auto", "multiple", "preservedSegment", "preservedMessages", "missing
                 peer.send(
                     encodeSessionPreviewHistoryPageLoad({
                         agentId: "claude",
-                        additionalDirectoryIds: [],
                         bindingId: peer.bindingId,
                         directoryId: "default",
                         cursor: null,

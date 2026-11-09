@@ -11,7 +11,6 @@ const nativeSessionInfoSchema = z
     .object({
         sessionId: nativeSessionIdSchema,
         cwd: path,
-        additionalDirectories: z.array(path).max(16).default([]).readonly(),
         title: title.nullish(),
         updatedAt: z.iso.datetime({ offset: true }).nullish(),
     })

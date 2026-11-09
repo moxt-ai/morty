@@ -38,7 +38,6 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                     agentId: "controlled-acp",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     sessionId: peer.sessionId,
                 };
                 const next = async (kind: string): Promise<string> => {
@@ -181,7 +180,6 @@ test.each(["opening", "configuration"] as const)(
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         sessionId: peer.sessionId,
                         requestId,
                     }),
@@ -206,7 +204,6 @@ test.each(["opening", "configuration"] as const)(
                                 agentId: "controlled-acp",
                                 bindingId: peer.bindingId,
                                 directoryId: "default",
-                                additionalDirectoryIds: [],
                                 sessionId: peer.sessionId,
                                 requestId: configureId,
                                 configId: "model",

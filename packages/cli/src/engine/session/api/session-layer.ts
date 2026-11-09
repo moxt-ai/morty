@@ -142,18 +142,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
                         command.directoryId,
                         requestOptions.signal,
                     );
-                    const additionalDirectories = await directories.resolveMany(
-                        command.bindingId,
-                        command.additionalDirectoryIds,
-                        requestOptions.signal,
-                    );
-                    return (
-                        cwd === requestOptions.cwd &&
-                        additionalDirectories.length === requestOptions.additionalDirectories.length &&
-                        additionalDirectories.every(
-                            (directory, index) => directory === requestOptions.additionalDirectories[index],
-                        )
-                    );
+                    return cwd === requestOptions.cwd;
                 },
                 (snapshot) => {
                     const lastTurn = snapshot.turn === null ? operations.lastTurn(request.targetSessionId) : undefined;

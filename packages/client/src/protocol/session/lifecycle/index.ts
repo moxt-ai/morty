@@ -10,7 +10,6 @@ import {
     sessionCommandSchema,
     sessionIdentityFields,
     sessionStatusSchema,
-    workspaceEntrySchema,
 } from "../shared/index.ts";
 
 export const SESSION_PREPARE_KIND = "session.prepare";
@@ -44,7 +43,6 @@ export type SessionStatusChangedEvent = z.infer<typeof sessionStatusChangedEvent
 
 const sessionMetadataSchema = z
     .object({
-        additionalDirectories: z.array(workspaceEntrySchema).max(16).readonly(),
         agentId: IDENTIFIER,
         directoryId: DIRECTORY_IDENTIFIER,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
@@ -169,7 +167,6 @@ const runtimeTimingsSchema = z
 
 export const sessionReadyEventSchema = z
     .object({
-        additionalDirectories: z.array(workspaceEntrySchema).max(16).readonly(),
         agentId: IDENTIFIER,
         agentName: z.string().max(255),
         agentVersion: z.string().max(128),

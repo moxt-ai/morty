@@ -91,7 +91,6 @@ test.each(["owned", "borrowed"])(
                         await seeded.promise;
                     }
                     const identity = {
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -132,7 +131,6 @@ test.each(["owned", "borrowed"])(
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Stream a concise proposed plan",
                         disposition: SessionPromptDisposition.Append,

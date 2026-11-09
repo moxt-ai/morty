@@ -176,7 +176,6 @@ describe("daemon narration delivery", () => {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
             const prompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: "narration_turn",

@@ -38,7 +38,6 @@ export function registerNativeSessions(agent: ReturnType<typeof acp.agent>) {
             const state = new ControlledSessionState(0, projectModel(context.params.cwd));
             nativeMetadata.set(sessionId, {
                 cwd: context.params.cwd,
-                additionalDirectories: context.params.additionalDirectories ?? [],
                 title: "",
             });
             sessions.set(sessionId, state);
@@ -127,7 +126,6 @@ export function registerNativeSessions(agent: ReturnType<typeof acp.agent>) {
                               {
                                   sessionId: id,
                                   cwd: metadata.cwd,
-                                  additionalDirectories: [...metadata.additionalDirectories],
                                   title: process.argv.includes("--oversized-native-session-title")
                                       ? `${metadata.title}${"x".repeat(600)}`
                                       : metadata.title,
@@ -158,7 +156,6 @@ export function registerNativeSessions(agent: ReturnType<typeof acp.agent>) {
             nativeMetadata.set(sessionId, {
                 ...metadata,
                 cwd: context.params.cwd,
-                additionalDirectories: context.params.additionalDirectories ?? [],
             });
             const sourceHistory = nativeHistory.get(context.params.sessionId) ?? [];
             const forkHistory = [...sourceHistory];

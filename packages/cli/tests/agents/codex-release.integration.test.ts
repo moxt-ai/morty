@@ -21,7 +21,6 @@ async function promptFromMorty(peer: RealDaemonPeer, sessionId: string, prompt: 
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             attachments: [],
             prompt,
             disposition: SessionPromptDisposition.Append,

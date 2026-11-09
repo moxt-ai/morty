@@ -22,7 +22,6 @@ type SettingsChange =
 
 /** The Session binding a settings change states, as the pane that opened the Session read it. */
 interface SessionBinding {
-    readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly directoryId: string;
 }

@@ -22,7 +22,6 @@ for (const client of ["SDK", "HTTP"] as const) {
             const runtime = await platform.connectAgent(project.computerId);
             const sessionId = `session-${crypto.randomUUID()}`;
             const request = {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
@@ -54,7 +53,6 @@ for (const client of ["SDK", "HTTP"] as const) {
             await runtime.client.turns.submitToRuntime(
                 sessionId,
                 {
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     attachments: [],
                     content: "Remember this conversation",
@@ -132,7 +130,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         if (process.platform === "linux") {
             expect(listing.parentDirectoryId.length).toBeGreaterThan(2048);
         }
-        const identity = { additionalDirectoryIds: [], agentId: "claude", directoryId };
+        const identity = { agentId: "claude", directoryId };
         const sessionId = `session-${crypto.randomUUID()}`;
         await runtime.client.sessions.create(
             {
@@ -176,10 +174,11 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
     }
 });
 
-it("Given a Session with an additional directory, When the App prompts it and reads its execution without stating its binding, Then the Runtime runs the Turn in the Session's own directories", async () => {
-    const additional = await mkdtemp(join(tmpdir(), "morty-additional-directory-"));
+it("Given a Session in a selected workspace, When the App prompts it and reads its execution without stating its binding, Then the Runtime runs the Turn in the Session's own workspace", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "morty-session-workspace-"));
     try {
-        const additionalDirectoryId = `path-${Buffer.from(await realpath(additional)).toString("base64url")}`;
+        const directoryLabel = await realpath(workspace);
+        const directoryId = `path-${Buffer.from(directoryLabel).toString("base64url")}`;
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
@@ -195,10 +194,9 @@ it("Given a Session with an additional directory, When the App prompts it and re
         const sessionId = `session-${crypto.randomUUID()}`;
         await runtime.client.sessions.create(
             {
-                additionalDirectoryIds: [additionalDirectoryId],
                 agentId: "claude",
                 configurations: [],
-                directoryId: "default",
+                directoryId,
                 computerId: runtime.computerId,
                 sessionId,
             },
@@ -216,7 +214,7 @@ it("Given a Session with an additional directory, When the App prompts it and re
             sessionId,
             {
                 attachments: [],
-                content: "Remember the additional directory",
+                content: "Remember the selected workspace",
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
             },
             signal,
@@ -227,14 +225,15 @@ it("Given a Session with an additional directory, When the App prompts it and re
 
         expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({
-                additionalDirectories: [expect.objectContaining({ directoryId: additionalDirectoryId })],
                 agentId: "claude",
+                directoryId,
+                directoryLabel,
                 prompted: true,
                 sessionId,
-                title: "Remember the additional directory",
+                title: "Remember the selected workspace",
             }),
         );
     } finally {
-        await rm(additional, { recursive: true, force: true });
+        await rm(workspace, { recursive: true, force: true });
     }
 });

@@ -44,7 +44,6 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt,
                 disposition: SessionPromptDisposition.Append,
@@ -95,7 +94,6 @@ test("Given a real Codex model that asks the user a question while it keeps work
         // Previewing the saved Codex thread replays it from Codex itself.
         const identity = {
             agentId: "codex",
-            additionalDirectoryIds: [],
             bindingId: peer.bindingId,
             directoryId: "default",
         } as const;

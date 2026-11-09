@@ -9,7 +9,6 @@ import {
     ProtocolMessageError,
     parseJson,
     readDirectoryIdentifier,
-    readDirectoryIdentifiers,
     readIdentifier,
     readText,
 } from "../../shared/message-codec.ts";
@@ -42,7 +41,6 @@ type SessionPromptPlacement =
     | { readonly disposition: typeof SessionPromptDisposition.Steer; readonly targetCommandId: string };
 
 export type SessionPromptCommand = {
-    readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly bindingId: string;
     readonly commandId: string;
@@ -162,7 +160,6 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
     }
 
     return {
-        additionalDirectoryIds: readDirectoryIdentifiers(value, "additionalDirectoryIds", 16),
         agentId: readIdentifier(value, "agentId"),
         bindingId: readIdentifier(value, "bindingId"),
         commandId: readIdentifier(value, "commandId"),

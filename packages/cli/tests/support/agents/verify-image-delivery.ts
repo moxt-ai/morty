@@ -53,7 +53,6 @@ export async function verifyImageDelivery(
     const sendPrompt = (commandId: string, prompt: string): void =>
         peer.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: input.agentId,
                 bindingId: peer.bindingId,
                 commandId,

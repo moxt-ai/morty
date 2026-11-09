@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
@@ -34,13 +34,10 @@ export async function createControlledSession() {
     });
     const cancellation = new AbortController();
     try {
-        const shared = join(directory, "shared");
-        await mkdir(shared);
         return {
             manager,
             observer,
             request: {
-                additionalDirectories: [shared],
                 agent: fakeAgent([], { MORTY_FAKE_ACP_STATE_DIRECTORY: directory }),
                 cwd: directory,
                 sessionId: "controls-session",

@@ -37,7 +37,6 @@ import {
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const sessionIdentitySchema = v.strictObject({
-    additionalDirectoryIds: v.array(v.custom<string>(isDirectoryIdentifier)),
     agentId: identifier,
     directoryId: v.custom<string>(isDirectoryIdentifier),
 });
@@ -209,7 +208,6 @@ export function createProjectRuntimeRoutes() {
             }
             const command = decodeSessionPrepareCommand(
                 JSON.stringify({
-                    additionalDirectoryIds: body.additionalDirectoryIds,
                     agentId: body.agentId,
                     bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     configurations: body.configurations,
@@ -411,10 +409,10 @@ export function createProjectRuntimeRoutes() {
             assertRequiredKeys(
                 body,
                 body["action"] === "list"
-                    ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "cursor", "discoveryId"]
+                    ? ["action", "agentId", "directoryId", "cursor", "discoveryId"]
                     : body["action"] === "find"
-                      ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "nativeSessionId"]
-                      : ["action", "agentId", "directoryId", "additionalDirectoryIds", "entryId", "discoveryId"],
+                      ? ["action", "agentId", "directoryId", "nativeSessionId"]
+                      : ["action", "agentId", "directoryId", "entryId", "discoveryId"],
             );
             const { discoveryId, ...input } = body;
             const sessionId =

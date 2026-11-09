@@ -275,7 +275,6 @@ const uploadedAttachmentSchema = v.strictObject({
     uri: v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)),
 });
 const pendingRequestEntries = {
-    additionalDirectoryIds: v.pipe(v.array(v.custom<string>(isDirectoryIdentifier)), v.maxLength(16), v.readonly()),
     agentId: v.exactOptional(submissionIdentifier),
     directoryId: v.exactOptional(v.custom<string>(isDirectoryIdentifier)),
     // Preserve the attempted request exactly; the receiving API owns prompt-size rejection.

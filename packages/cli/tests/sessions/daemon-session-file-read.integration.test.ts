@@ -50,7 +50,6 @@ test("Given a persisted conversation with different product and native IDs, When
                     peer.send(
                         encodeSessionPromptCommand({
                             kind: "session.prompt",
-                            additionalDirectoryIds: [],
                             agentId: "controlled-acp",
                             bindingId: peer.bindingId,
                             directoryId: "default",
@@ -171,7 +170,6 @@ if (process.argv.includes("--version")) {
   process.argv.push(
     "--agent-name", "Controlled ACP",
     "--agent-version", "1.0.0",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -201,7 +199,6 @@ if (process.argv.includes("--version")) {
             async (peer) => {
                 peer.send(
                     encodeSessionPrepareCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",

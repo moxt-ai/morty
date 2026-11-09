@@ -99,9 +99,7 @@ export class NativeSessionForks {
                 restored.ready.sessionId !== restore.sessionId ||
                 restored.ready.agentId !== input.agentId ||
                 restored.entry.agentId !== input.agentId ||
-                restored.ready.directoryId !== source.entry.directoryId ||
-                JSON.stringify(restored.ready.additionalDirectories.map((directory) => directory.directoryId)) !==
-                    JSON.stringify(source.entry.additionalDirectories.map((directory) => directory.directoryId))
+                restored.ready.directoryId !== source.entry.directoryId
             ) {
                 throw unknownOutcome();
             }
@@ -158,9 +156,7 @@ export class NativeSessionForks {
         request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) => {
-        const requestHash = await hashSecret(
-            JSON.stringify([input.agentId, input.nativeSessionId, input.directoryId, input.additionalDirectoryIds]),
-        );
+        const requestHash = await hashSecret(JSON.stringify([input.agentId, input.nativeSessionId, input.directoryId]));
         signal.throwIfAborted();
         const key = JSON.stringify([scope.computerId, operationId]);
         const prior = this.#storage.read(scope.computerId, operationId);
@@ -230,9 +226,6 @@ export class NativeSessionForks {
                         agentId: input.agentId,
                         bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                         directoryId: found.entry.directoryId,
-                        additionalDirectoryIds: found.entry.additionalDirectories.map(
-                            (directory) => directory.directoryId,
-                        ),
                         requestId: crypto.randomUUID(),
                         sessionId: found.sessionId,
                         entryId: found.entry.entryId,

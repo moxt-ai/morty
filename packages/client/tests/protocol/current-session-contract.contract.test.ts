@@ -86,7 +86,6 @@ it("Given history holding a turn's lifecycle, When a client decodes it, Then the
 });
 it("Given a session list entry without status, When a client decodes it, Then it rejects the retired entry", () => {
     const entry = {
-        additionalDirectories: [],
         agentId: "agent-1",
         directoryId: "default",
         directoryLabel: "Workspace",

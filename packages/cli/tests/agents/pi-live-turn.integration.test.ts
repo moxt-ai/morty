@@ -28,7 +28,6 @@ test("Given a reused real Pi session, When local commands reply consecutively, T
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
                     commandId,
@@ -104,7 +103,6 @@ test("Given real Pi transforms user input, When a prompt runs through the daemon
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 commandId,
@@ -169,7 +167,6 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
             const sendPrompt = (commandId: string, prompt: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "pi",
                         bindingId: peer.bindingId,
                         commandId,
@@ -276,7 +273,6 @@ test("Given real Pi only supports disabled thinking, When a session is prepared,
         const requestId = randomUUID();
         peer.send(
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",
@@ -312,7 +308,6 @@ test("Given real Pi without an external ACP adapter, When Bash executes through 
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
                     commandId,

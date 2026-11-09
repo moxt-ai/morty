@@ -105,7 +105,6 @@ process.argv.push(
     "--agent-version", version,
     "--no-load-session",
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -349,7 +348,6 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeSessionPrepareCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -366,7 +364,6 @@ test.for([
                 sendText(
                     await socketReady.promise,
                     encodeNativeSessionCommand({
-                        additionalDirectoryIds: [],
                         agentId,
                         bindingId: config.bindingId,
                         directoryId: "default",
@@ -390,7 +387,6 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeSessionPrepareCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -426,7 +422,6 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeNativeSessionCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -446,7 +441,6 @@ test.for([
                 sendText(
                     await socketReady.promise,
                     encodeSessionPreviewHistoryPageLoad({
-                        additionalDirectoryIds: [],
                         agentId,
                         bindingId: config.bindingId,
                         directoryId: "default",

@@ -32,7 +32,6 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     attachments: [],
                     prompt: `Question ${turn}: answer without using tools`,
                     disposition: SessionPromptDisposition.Append,
@@ -59,7 +58,6 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
             }
         }
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",

@@ -75,7 +75,6 @@ process.argv.push(
     "--agent-version", version,
     "--no-load-session",
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -469,7 +468,6 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         sendText(
             socket,
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "controlled-acp",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -595,7 +593,6 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         sendText(
             socket,
             encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
                 agentId: "controlled-acp",
                 bindingId: config.bindingId,
                 directoryId: "default",

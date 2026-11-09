@@ -65,7 +65,6 @@ test("Given unsupported attachments, When a prompt has text, Then the daemon del
                     const commandId = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            additionalDirectoryIds: [],
                             agentId: "controlled-acp",
                             attachments,
                             bindingId: peer.bindingId,

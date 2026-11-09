@@ -13,7 +13,6 @@ export interface FakeHarnessEndpoint {
 }
 
 export const fakeHarnessCapabilities: SessionCapabilities = {
-    additionalDirectories: true,
     audioPrompt: false,
     closeSession: true,
     deleteSession: false,
@@ -520,7 +519,6 @@ class ControlledAgentEndpoint implements FakeHarnessEndpoint {
                     .sessions()
                     .filter((session) => session.turnCount > 0)
                     .map((session) => ({
-                        additionalDirectories: [],
                         cwd: context.params.cwd ?? "/",
                         sessionId: session.sessionId,
                         title: this.#state.title(session.sessionId) ?? `Native ${session.sessionId}`,

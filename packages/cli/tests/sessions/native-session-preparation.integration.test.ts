@@ -23,7 +23,6 @@ describe("native session preparation", () => {
             const options = {
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
                 sessionId: "shared-loading",
                 signal: owner.signal,
                 origin: { kind: "import", nativeSessionId, title: "" },
@@ -69,7 +68,6 @@ describe("native session preparation", () => {
                 .prepareSession({
                     agent: f.agent,
                     cwd: f.workspace,
-                    additionalDirectories: [],
                     sessionId: "closing-loading",
                     signal: owner.signal,
                     origin: { kind: "import", nativeSessionId, title: "" },
@@ -114,7 +112,6 @@ describe("native session preparation", () => {
         try {
             await external.runPrompt({
                 agent: f.agent,
-                additionalDirectories: [],
                 cwd: f.workspace,
                 signal: new AbortController().signal,
                 sessionId: "external",

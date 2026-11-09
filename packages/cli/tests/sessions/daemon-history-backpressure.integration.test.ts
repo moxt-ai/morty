@@ -49,7 +49,7 @@ test.each([
 if (process.argv.includes("--version")) {
     process.stdout.write("1.0.0\\n");
 } else {
-    process.argv.push("--agent-name", "Controlled ACP", "--agent-version", "1.0.0", "--http-mcp", "--no-additional-directories", "--no-delete-session", "--no-fork-session", "--no-embedded-context");
+    process.argv.push("--agent-name", "Controlled ACP", "--agent-version", "1.0.0", "--http-mcp", "--no-delete-session", "--no-fork-session", "--no-embedded-context");
     await import(${JSON.stringify(new URL("./fixtures/acp-peer.ts", import.meta.url).toString())});
 }
 `,
@@ -81,7 +81,6 @@ if (process.argv.includes("--version")) {
                 async (peer) => {
                     peer.send(
                         encodeSessionPreviewHistoryPageLoad({
-                            additionalDirectoryIds: [],
                             agentId: "claude",
                             bindingId: peer.bindingId,
                             cursor: null,

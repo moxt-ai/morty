@@ -25,7 +25,6 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
             },
             async (peer) => {
                 const identity = {
-                    additionalDirectoryIds: [],
                     agentId: "controlled-acp",
                     bindingId: peer.bindingId,
                     directoryId: "default",

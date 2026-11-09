@@ -55,7 +55,6 @@ describe("acp commands environment", () => {
 
         try {
             const prepared = await manager.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
                 sessionId: "controlled-compact-session",
@@ -94,7 +93,6 @@ describe("acp commands environment", () => {
 
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: `${agentId}-compact-command`,
                 cwd: process.cwd(),
@@ -161,7 +159,6 @@ describe("acp commands environment", () => {
         );
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: config.catalog.find("codex"),
                 commandId: "login-shell-command",
                 cwd: workspace,

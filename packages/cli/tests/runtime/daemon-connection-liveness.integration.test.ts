@@ -952,7 +952,6 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     socket,
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         commandId: daemonSockets.length === 1 ? "reconciliation-command" : "fresh-command",
@@ -1068,7 +1067,6 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         commandId: `live-command-${turn}`,

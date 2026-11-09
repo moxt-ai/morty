@@ -370,7 +370,6 @@ export async function prepareNewRealSession(
             agentId,
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
         }),
     );
     for (;;) {

@@ -105,7 +105,6 @@ export class MortySessionAccessRevocation {
  * `sessionId` again is safe: it returns that Session with the stated settings applied.
  */
 export interface CreateMortySessionRequest {
-    readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly configurations: readonly SessionConfigurationSelection[];
     readonly directoryId: string;
@@ -119,7 +118,6 @@ export interface CreateMortySessionRequest {
  * require every field, so leave fields out only with a Relay that resolves them.
  */
 export interface MortySessionBinding {
-    readonly additionalDirectoryIds?: readonly string[];
     readonly agentId?: string;
     readonly directoryId?: string;
 }

@@ -66,14 +66,12 @@ type NativeListInput = {
     readonly action: "list";
     readonly agentId: string;
     readonly directoryId: string;
-    readonly additionalDirectoryIds: readonly string[];
     readonly cursor: string | null;
     readonly discoveryId: string | null;
 };
 type NativeEntryInput = {
     readonly agentId: string;
     readonly directoryId: string;
-    readonly additionalDirectoryIds: readonly string[];
     readonly discoveryId: string;
 };
 type NativePreviewInput = Omit<NativeEntryInput, "discoveryId"> & { readonly nativeSessionId: string };
@@ -306,7 +304,6 @@ export class ChatService {
                     {
                         ...session,
                         createdAt: new Date(session.createdAt).toISOString(),
-                        additionalDirectoryIds: details.additionalDirectories.map((directory) => directory.directoryId),
                         directoryId: details.directoryId,
                         directoryLabel: details.directoryLabel,
                         prompted: details.prompted,
@@ -526,7 +523,6 @@ export class ChatService {
                 computerId,
                 agentRef: metadata.agentId,
                 workspaceRef: metadata.directoryId,
-                additionalDirectoryIds: metadata.additionalDirectories.map((directory) => directory.directoryId),
             },
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
@@ -611,7 +607,6 @@ export class ChatService {
             {
                 agentId: agent.agentRef,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 nativeSessionId: sessionId,
             },
             scope.signal,
@@ -624,7 +619,6 @@ export class ChatService {
                 discoveryId: found.sessionId,
                 agentId: agent.agentRef,
                 directoryId: entry.directoryId,
-                additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
                 entryId: entry.entryId,
             },
             scope.signal,
@@ -653,7 +647,6 @@ export class ChatService {
             scope.computerId,
             input.nativeSessionId,
             {
-                additionalDirectoryIds: input.additionalDirectoryIds,
                 agentId: input.agentId,
                 directoryId: input.directoryId,
             },

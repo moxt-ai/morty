@@ -826,7 +826,6 @@ describe("daemon session configuration boundary", () => {
             const sessionId = "steered_configured_conversation";
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: runningCommandId,
@@ -948,7 +947,6 @@ describe("daemon session configuration boundary", () => {
             const sessionId = "steered_drifted_settings_conversation";
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: runningCommandId,

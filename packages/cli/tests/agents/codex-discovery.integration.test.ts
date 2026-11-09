@@ -105,7 +105,6 @@ test.skipIf(process.platform === "win32")(
                     agent,
                     sessionId,
                     cwd: directory,
-                    additionalDirectories: [],
                     commandId: crypto.randomUUID(),
                     prompt: "Hello",
                     images: [],

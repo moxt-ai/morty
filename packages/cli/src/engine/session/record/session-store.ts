@@ -1,10 +1,8 @@
-import { z } from "zod";
 import type { AcpSessionRow, AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { MemorySessionEventStore, type SessionEventStore } from "../history/session-event-store.ts";
 import { decodeStoredSessionConfigurations, type StoredSessionConfiguration } from "../live/session-configurations.ts";
 
 export class StoredSession {
-    readonly additionalDirectories: readonly string[];
     readonly agentId: string;
     readonly configurations: readonly StoredSessionConfiguration[];
     readonly cwd: string;
@@ -19,13 +17,11 @@ export class StoredSession {
         agentId: string,
         nativeSessionId: string,
         cwd: string,
-        additionalDirectories: readonly string[],
         prompted: boolean,
         title: string,
         updatedAt = new Date().toISOString(),
         configurations: readonly StoredSessionConfiguration[] = [],
     ) {
-        this.additionalDirectories = [...additionalDirectories];
         this.agentId = agentId;
         this.cwd = cwd;
         this.configurations = configurations.map((configuration) => ({ ...configuration }));
@@ -102,8 +98,6 @@ export class MemorySessionStore implements SessionStore {
 }
 
 function decodeStoredSession(row: AcpSessionRow): StoredSession {
-    const decodedAdditionalDirectories: unknown = JSON.parse(row.additionalDirectories);
-    const additionalDirectories = z.array(z.string()).parse(decodedAdditionalDirectories);
     const decodedConfigurations: unknown = JSON.parse(row.configurations);
     const configurations = decodeStoredSessionConfigurations(decodedConfigurations);
     return new StoredSession(
@@ -111,7 +105,6 @@ function decodeStoredSession(row: AcpSessionRow): StoredSession {
         row.agentId,
         row.nativeSessionId,
         row.cwd,
-        additionalDirectories,
         row.prompted,
         row.title,
         row.updatedAt,
@@ -153,7 +146,6 @@ export class SqliteSessionStore implements SessionStore {
 
     readonly write = (session: StoredSession): void => {
         this.#table.upsert({
-            additionalDirectories: JSON.stringify(session.additionalDirectories),
             agentId: session.agentId,
             configurations: JSON.stringify(session.configurations),
             cwd: session.cwd,

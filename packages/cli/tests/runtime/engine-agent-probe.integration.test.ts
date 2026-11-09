@@ -316,7 +316,6 @@ test.for([
                         agentId: "codex",
                         bindingId: "workspace",
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     },
                     peer.signal,
                 ),

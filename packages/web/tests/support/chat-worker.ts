@@ -82,7 +82,6 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                         runtime.computerId,
                         sessionId,
                         {
-                            additionalDirectoryIds: [],
                             agentId: agents[0]?.id ?? "codex",
                             booleanValue: false,
                             configId: "model",
@@ -99,7 +98,6 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                     await runtime.client.turns.submitToRuntime(
                         sessionId,
                         {
-                            additionalDirectoryIds: [],
                             agentId: agents[0]?.id ?? "codex",
                             attachments: [],
                             content,

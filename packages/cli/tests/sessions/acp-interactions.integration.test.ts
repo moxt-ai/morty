@@ -34,7 +34,6 @@ describe("acp interactions", () => {
         const signal = new AbortController().signal;
         try {
             const running = manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "running-command",
                 cwd: process.cwd(),
@@ -66,7 +65,6 @@ describe("acp interactions", () => {
 
             await expect(
                 manager.steerPrompt({
-                    additionalDirectories: [],
                     agent: fakeAgent(),
                     commandId: "steering-command",
                     cwd: process.cwd(),

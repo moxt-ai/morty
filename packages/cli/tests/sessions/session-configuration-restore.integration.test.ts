@@ -91,7 +91,6 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
 });
 
 const identity = (peer: RealDaemonPeer) => ({
-    additionalDirectoryIds: [],
     agentId: "controlled-acp",
     bindingId: peer.bindingId,
     directoryId: "default",

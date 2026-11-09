@@ -150,7 +150,6 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
         );
         const managedSessionId = "imported-image-session";
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -201,7 +200,6 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
         const sendPrompt = (commandId: string, prompt: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     commandId,

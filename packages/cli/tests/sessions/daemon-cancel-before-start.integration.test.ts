@@ -31,7 +31,6 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                 const commandId = randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId,
@@ -95,7 +94,6 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                 const queued = randomUUID();
                 const prompt = (commandId: string, text: string) =>
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId,
@@ -257,7 +255,6 @@ test("Given an unacknowledged command, When Stop arrives before its prompt, Then
                 }
                 const prompt = (commandId: string) =>
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId,
@@ -329,7 +326,6 @@ test("Given a prompt still loading its conversation's saved history, When the cl
             async (peer) => {
                 const prompt = (commandId: string, text: string) =>
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId,

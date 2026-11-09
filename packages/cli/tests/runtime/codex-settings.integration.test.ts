@@ -20,7 +20,6 @@ test("Given an owned Codex session, When Codex changes collaboration mode during
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Enter Plan mode",
                 disposition: SessionPromptDisposition.Append,

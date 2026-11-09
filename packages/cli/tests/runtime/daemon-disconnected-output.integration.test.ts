@@ -321,7 +321,6 @@ async function startRuntime() {
         prompt: async (peer: RelayPeer, sessionId: string): Promise<ControlledTurn> => {
             peer.socket.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "controlled",
                     bindingId: config.bindingId,
                     commandId: `command-${sessionId}`,
@@ -511,7 +510,6 @@ test.each([
         }
         runtime.initial.socket.send(
             encodeSessionPreviewHistoryPageLoad({
-                additionalDirectoryIds: [],
                 agentId: "controlled",
                 bindingId: runtime.bindingId,
                 directoryId: "default",

@@ -24,7 +24,6 @@ test("Given a Session still applying initial settings, When another caller creat
         const signal = AbortSignal.timeout(30000);
         const sessionId = crypto.randomUUID();
         const input = {
-            additionalDirectoryIds: [],
             agentId: "configuration-test",
             directoryId: "default",
             computerId: runtime.computerId,

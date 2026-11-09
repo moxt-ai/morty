@@ -139,7 +139,6 @@ async function applySessionConfigurationSelection(
     agent: AcpAgentDefinition,
     adapter: Adapter,
     cwd: string,
-    additionalDirectories: readonly string[],
     commandId: string,
     sessionId: string,
     signal: AbortSignal,
@@ -169,7 +168,6 @@ async function applySessionConfigurationSelection(
     return (
         await sessions.applySessionConfiguration({
             adapter,
-            additionalDirectories,
             agent,
             booleanValue: selection.booleanValue,
             configId: selection.configId,
@@ -195,7 +193,6 @@ export async function applyCompleteSessionConfiguration(
     agent: AcpAgentDefinition,
     adapter: Adapter,
     cwd: string,
-    additionalDirectories: readonly string[],
     commandId: string,
     sessionId: string,
     signal: AbortSignal,
@@ -210,7 +207,6 @@ export async function applyCompleteSessionConfiguration(
             agent,
             adapter,
             cwd,
-            additionalDirectories,
             commandId,
             sessionId,
             signal,

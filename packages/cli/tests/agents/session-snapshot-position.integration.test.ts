@@ -91,7 +91,6 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                         agentId,
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         prompt: "Reply with the requested answer.",
                         attachments: [],
                         disposition: SessionPromptDisposition.Append,

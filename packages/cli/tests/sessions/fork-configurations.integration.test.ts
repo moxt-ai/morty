@@ -50,7 +50,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     };
                     const configureSource = async (
                         sessionConfigurations: NonNullable<

@@ -29,7 +29,7 @@ import { unsupportedSessionCapabilities } from "../../acp/protocol/session-capab
 import type { SessionConfigurationSelection } from "../../acp/protocol/session-config-protocol.ts";
 import type { OperationMetrics } from "../../infra/operation-metrics.ts";
 import { SerialTaskQueue } from "../../util/serial-task-queue.ts";
-import { arraysEqual, recordsEqual, truncate } from "../../util/value-utils.ts";
+import { recordsEqual, truncate } from "../../util/value-utils.ts";
 import {
     type ElicitationResponseOptions,
     type PermissionResponseOptions,
@@ -95,9 +95,6 @@ interface LoadedSession {
 export class AgentSession implements AgentSessionRestore {
     // The restore surface: AgentSessionRestore members expose private state to
     // session-restore.ts only. The class keeps the fields private.
-    get additionalDirectories(): readonly string[] {
-        return this.#additionalDirectories;
-    }
     get agentId(): string {
         return this.#agentId;
     }
@@ -134,7 +131,6 @@ export class AgentSession implements AgentSessionRestore {
         return this.#nativeIdentity.kind === "bound" ? this.#nativeIdentity.nativeSessionId : "";
     }
     readonly #adapter: Adapter;
-    readonly #additionalDirectories: readonly string[];
     readonly #agentId: string;
     readonly #cwd: string;
     readonly #environment: Readonly<Record<string, string>>;
@@ -164,7 +160,6 @@ export class AgentSession implements AgentSessionRestore {
     private constructor(
         agent: AcpAgentDefinition,
         cwd: string,
-        additionalDirectories: readonly string[],
         mortySessionId: string,
         getObserver: () => SessionObserver,
         execution: SessionExecutionRecord,
@@ -175,7 +170,6 @@ export class AgentSession implements AgentSessionRestore {
     ) {
         this.#agentCommand = () => execution.agentCommand(this.#mortySessionId);
         this.#settledTurns = () => execution.settledTurns(this.#mortySessionId);
-        this.#additionalDirectories = [...additionalDirectories];
         this.#adapter = adapter;
         this.#agentId = agent.id;
         this.#commands = [];
@@ -197,7 +191,6 @@ export class AgentSession implements AgentSessionRestore {
         this.#scope = {
             agent,
             cwd,
-            additionalDirectories: this.#additionalDirectories,
             ...(externalize === undefined
                 ? {}
                 : { externalizeUpdate: (update, signal) => externalize(this.#mortySessionId, update, signal) }),
@@ -258,7 +251,6 @@ export class AgentSession implements AgentSessionRestore {
                     new AgentSession(
                         options.agent,
                         options.cwd,
-                        options.additionalDirectories,
                         options.sessionId,
                         getObserver,
                         execution,
@@ -312,10 +304,7 @@ export class AgentSession implements AgentSessionRestore {
             adapter,
         );
 
-    readonly belongsTo = (agentId: string, cwd: string, additionalDirectories: readonly string[]): boolean =>
-        this.#agentId === agentId &&
-        this.#cwd === cwd &&
-        arraysEqual(this.#additionalDirectories, additionalDirectories);
+    readonly belongsTo = (agentId: string, cwd: string): boolean => this.#agentId === agentId && this.#cwd === cwd;
 
     readonly usesEnvironment = (environment: Readonly<Record<string, string>>): boolean =>
         recordsEqual(this.#environment, environment);
@@ -327,7 +316,6 @@ export class AgentSession implements AgentSessionRestore {
                 this.#agentId,
                 this.#nativeSessionId,
                 this.#cwd,
-                this.#additionalDirectories,
                 this.#prompted,
                 this.#sessionTitle ?? "",
                 updatedAt,
@@ -626,7 +614,6 @@ export class AgentSession implements AgentSessionRestore {
                 this.#agentId,
                 sessionId,
                 this.#cwd,
-                this.#additionalDirectories,
                 false,
                 "",
                 new Date().toISOString(),
@@ -716,7 +703,6 @@ export class AgentSession implements AgentSessionRestore {
     readonly #target = (): AdapterSessionTarget => ({
         nativeSessionId: this.#nativeSessionId,
         cwd: this.#cwd,
-        additionalDirectories: this.#additionalDirectories,
     });
 
     /** Loads what the Agent needs before it can receive a prompt; the Agent does not receive it yet. */

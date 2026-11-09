@@ -18,7 +18,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         const sessionId = `session-${crypto.randomUUID()}`;
         await runtime.client.sessions.create(
             {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
@@ -30,7 +29,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         await runtime.client.turns.submitToRuntime(
             sessionId,
             {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 content: "Remember this conversation",
                 directoryId: "default",
@@ -70,7 +68,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         const discovery = await runtime.client.runtimes.nativeSessions(
             {
                 action: "list",
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 cursor: null,
                 directoryId: "default",

@@ -1,7 +1,6 @@
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { AdapterSessionOpened } from "../../acp/native-history/preview-contract.ts";
 import { type NativeSessionOrigin, nativeSessionIdSchema } from "../../acp/protocol/native-session.ts";
-import { arraysEqual } from "../../util/value-utils.ts";
 import type { SessionRecovery } from "../api/session-api.ts";
 import { FoundStoredSession, StoredSession } from "../record/session-store.ts";
 import type { AgentSessionRestore } from "./agent-session-restore.ts";
@@ -29,7 +28,6 @@ export async function restoreSession(
                       session.agentId,
                       nativeSessionIdSchema.parse(origin.nativeSessionId),
                       session.cwd,
-                      session.additionalDirectories,
                       true,
                       origin.title,
                   ),
@@ -37,9 +35,7 @@ export async function restoreSession(
             : session.store.read(session.sessionId),
     );
     const sameConversation = (record: StoredSession): boolean =>
-        record.agentId === session.agentId &&
-        record.cwd === session.cwd &&
-        arraysEqual(record.additionalDirectories, session.additionalDirectories);
+        record.agentId === session.agentId && record.cwd === session.cwd;
     // A prompted Session continues its native conversation. Until its first prompt a Session has none worth
     // continuing (the Agent may not have kept it), so it opens a new one but keeps its own title and settings,
     // unless its Agent or workspace changed.
@@ -64,13 +60,6 @@ export async function restoreSession(
         if (!session.capabilities.unstableForkSession) {
             throw new AcpExecutionError(
                 "This Agent does not support session forking",
-                {},
-                "native_session_unsupported",
-            );
-        }
-        if (session.additionalDirectories.length > 0 && !session.capabilities.additionalDirectories) {
-            throw new AcpExecutionError(
-                "This Agent cannot restore additional working directories",
                 {},
                 "native_session_unsupported",
             );

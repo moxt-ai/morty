@@ -70,7 +70,6 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 sessionId: id,
             } as const;
             peer.send(encodeNativeSessionCommand({ ...base, action: "list", requestId: "list", cursor: null }));

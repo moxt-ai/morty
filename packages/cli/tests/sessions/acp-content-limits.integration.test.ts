@@ -35,7 +35,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "image-command",
                 cwd: process.cwd(),
@@ -93,7 +92,6 @@ describe("acp content limits", () => {
         try {
             for (const commandId of ["first-image-turn", "second-image-turn"]) {
                 await manager.runPrompt({
-                    additionalDirectories: [],
                     agent: fakeAgent(),
                     commandId,
                     cwd: process.cwd(),
@@ -144,7 +142,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "oversized-tool-output-command",
                 cwd: process.cwd(),
@@ -187,7 +184,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "oversized-reasoning-command",
                 cwd: process.cwd(),
@@ -250,7 +246,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "markdown-image-command",
                 cwd: directory,
@@ -295,7 +290,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent([], { FAKE_ACP_IMAGE_DIRECTORY: generatedImages }),
                 commandId: "codex-generated-image-command",
                 cwd: workspace,
@@ -342,7 +336,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "media-command",
                 cwd: directory,

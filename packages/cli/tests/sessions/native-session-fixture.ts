@@ -152,7 +152,6 @@ export async function fixture(
         }),
     );
     const identity = {
-        additionalDirectoryIds: [],
         agentId: agent.id,
         bindingId: "workspace",
         directoryId: "default",
@@ -160,11 +159,7 @@ export async function fixture(
         requestId: "native-operation",
         sessionId: "browser",
     } satisfies Omit<NativeSessionCommand, "action">;
-    const seed = async (
-        title: string,
-        additionalDirectories: readonly string[] = [],
-        cwd = workspace,
-    ): Promise<string> => {
+    const seed = async (title: string, cwd = workspace): Promise<string> => {
         const external = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -189,7 +184,6 @@ export async function fixture(
         try {
             await external.runPrompt({
                 agent,
-                additionalDirectories,
                 cwd,
                 signal: new AbortController().signal,
                 sessionId,

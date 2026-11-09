@@ -48,7 +48,6 @@ async function prepare(peer: RealDaemonPeer, sessionId: string, directoryId: str
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionPrepareCommand({
-            additionalDirectoryIds: [],
             agentId: NATIVE_AGENT_ID,
             bindingId: peer.bindingId,
             directoryId,

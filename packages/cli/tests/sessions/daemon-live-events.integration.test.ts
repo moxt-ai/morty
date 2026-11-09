@@ -345,7 +345,6 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
 
 function prompt(fixture: Fixture, text: string): SessionPromptCommand {
     return {
-        additionalDirectoryIds: [],
         agentId: fixture.agent.id,
         bindingId: fixture.config.bindingId,
         commandId: "test-turn",
@@ -464,7 +463,6 @@ async function activeTurn(fixture: Fixture, command: SessionPromptCommand) {
         fixture.socket,
         encodeNativeSessionRequest({
             action: "active-turn",
-            additionalDirectoryIds: [],
             agentId: fixture.agent.id,
             bindingId: fixture.config.bindingId,
             directoryId: "default",

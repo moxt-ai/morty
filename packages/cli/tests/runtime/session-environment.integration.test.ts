@@ -534,7 +534,6 @@ await import(${JSON.stringify(agentPeer)});
         socket.send(frame);
     };
     const base = (sessionId: string, agentId = "codex") => ({
-        additionalDirectoryIds: [],
         agentId,
         bindingId: config.bindingId,
         directoryId: "default",

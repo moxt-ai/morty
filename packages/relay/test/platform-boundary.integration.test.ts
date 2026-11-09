@@ -75,7 +75,6 @@ const readyAgents = [
         agentPath: "/usr/local/bin/codex",
         agentVersion: "codex 1.0.0",
         capabilities: {
-            additionalDirectories: true,
             audioPrompt: false,
             closeSession: true,
             deleteSession: true,
@@ -483,7 +482,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/active-turn`,
                         {
-                            body: JSON.stringify({ additionalDirectoryIds: [], agentId: "codex", directoryId: "root" }),
+                            body: JSON.stringify({ agentId: "codex", directoryId: "root" }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -583,7 +582,6 @@ describe.sequential("Platform Session-only boundary", () => {
                 host.send(
                     encodeNativeSessionRequest({
                         action,
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         directoryId,
@@ -638,7 +636,6 @@ describe.sequential("Platform Session-only boundary", () => {
                     targetSessionId: targetSessionId,
                     title: "Imported native session",
                     ready: {
-                        additionalDirectories: [],
                         agentId: "codex",
                         agentName: "Codex",
                         agentVersion: "1.0.0",
@@ -705,7 +702,6 @@ describe.sequential("Platform Session-only boundary", () => {
             host.send(JSON.stringify({ kind: "session.future.request", sessionId, value: "future" }));
             host.send(
                 encodeSessionConfigureCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: "workspace",
                     booleanValue: false,
@@ -739,7 +735,6 @@ describe.sequential("Platform Session-only boundary", () => {
             });
             host.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: "workspace",
                     commandId: "local-codex-command",
@@ -1610,7 +1605,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                         method: "POST",
                         headers: credentialHeaders(appCredential),
                         signal,
-                        body: JSON.stringify({ additionalDirectoryIds: [], agentId: "codex", directoryId: "root" }),
+                        body: JSON.stringify({ agentId: "codex", directoryId: "root" }),
                     },
                 ),
                 environment,
@@ -1636,7 +1631,6 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                         method: "POST",
                         headers: credentialHeaders(credentialTransform(text(sessionAccess, "credential"))),
                         body: JSON.stringify({
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             content: "Direct execution",
                             directoryId: "root",
@@ -1665,7 +1659,6 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns`,
                     {
                         body: JSON.stringify({
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             content: `Run ${idempotencyKey}`,
                             directoryId: "root",
@@ -2138,7 +2131,6 @@ describe.sequential("Platform Turn submission", () => {
                     requestId: query.requestId,
                     entries: [
                         {
-                            additionalDirectories: [],
                             agentId: "codex",
                             directoryId: "root",
                             directoryLabel: "/workspace",
@@ -2164,7 +2156,7 @@ describe.sequential("Platform Turn submission", () => {
             const read = runtime.appSessionRequest("/active-turn", {
                 method: "POST",
                 credential: sessionReader,
-                body: { additionalDirectoryIds: [], agentId: "codex", directoryId: "root" },
+                body: { agentId: "codex", directoryId: "root" },
             });
             const first = await Promise.race([
                 runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
@@ -2277,7 +2269,6 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionPromptCommand(
                     decodeSessionPromptCommand(
                         JSON.stringify({
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             attachments: [],
                             bindingId: "workspace",
@@ -2418,7 +2409,6 @@ describe.sequential("Platform Turn submission", () => {
             const response = runtime.appSessionRequest("/turns", {
                 method: "POST",
                 body: {
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     content: "Describe the pasted screenshot.",
                     directoryId: "root",
@@ -2812,7 +2802,6 @@ describe.sequential("Platform Turn submission", () => {
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns`,
                         {
                             body: JSON.stringify({
-                                additionalDirectoryIds: [],
                                 agentId: "codex",
                                 content,
                                 directoryId: "root",
@@ -2915,7 +2904,6 @@ describe.sequential("Platform Turn submission", () => {
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns`,
                     {
                         body: JSON.stringify({
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             content: "queue this follow-up",
                             directoryId: "root",
@@ -2955,7 +2943,6 @@ describe.sequential("Platform Turn submission", () => {
                             `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/turns`,
                             {
                                 body: JSON.stringify({
-                                    additionalDirectoryIds: [],
                                     agentId: "codex",
                                     content: "describe this",
                                     directoryId: "root",
@@ -3325,7 +3312,6 @@ it.each(["completed", "interrupted"] as const)(
             agentId: "codex",
             nativeSessionId: "native-source",
             directoryId: "default",
-            additionalDirectoryIds: [],
         };
         const operationId = "retained-fork-operation";
         try {
@@ -3349,7 +3335,6 @@ it.each(["completed", "interrupted"] as const)(
                     title: "Source",
                     directoryId: "default",
                     directoryLabel: "Workspace",
-                    additionalDirectories: [],
                     updatedAt: null,
                 },
             };
@@ -3377,7 +3362,6 @@ it.each(["completed", "interrupted"] as const)(
                             directoryId: "default",
                             directoryLabel: "Workspace",
                             configurationRevision: "revision-1",
-                            additionalDirectories: [],
                             capabilities: readyAgents[0]?.capabilities,
                             commands: [],
                             configOptions: [],
@@ -3407,7 +3391,6 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
         agentId: "codex",
         nativeSessionId: "native-source",
         directoryId: "default",
-        additionalDirectoryIds: [],
     };
     const operationId = "rejected-fork-operation";
     const forkCommand = async () => {
@@ -3430,7 +3413,6 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
                     title: "Source",
                     directoryId: "default",
                     directoryLabel: "Workspace",
-                    additionalDirectories: [],
                     updatedAt: null,
                 },
             }),
@@ -3483,7 +3465,6 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
                     directoryId: "default",
                     directoryLabel: "Workspace",
                     configurationRevision: "revision-1",
-                    additionalDirectories: [],
                     capabilities: readyAgents[0]?.capabilities,
                     commands: [],
                     configOptions: [],
@@ -3629,7 +3610,6 @@ describe("Runtime prompt acknowledgements", () => {
                             method: "POST",
                             headers: credentialHeaders(credential),
                             body: JSON.stringify({
-                                additionalDirectoryIds: [],
                                 agentId: "codex",
                                 attachments: [],
                                 content: `queued ${idempotencyKey}`,
