@@ -70,7 +70,7 @@ test("Given a Session whose directory was deleted, When a client queries it with
             specification,
             { MORTY_TEST_CONTROLLED_QUERY_PATH: process.execPath },
             async (peer) => {
-                const kept = await createSession(peer, "default");
+                const kept = await createSession(peer, ".");
                 const orphaned = await createSession(peer, deletedDirectory);
                 await rm(deleted, { recursive: true, force: true });
 
