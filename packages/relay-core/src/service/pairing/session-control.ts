@@ -1,5 +1,7 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeNativeSessionRequest,
+    decodeNativeSessionTarget,
     decodeSessionCancelBeforeStartCommand,
     decodeSessionCancelCommand,
     decodeSessionConfigReadCommand,
@@ -12,6 +14,7 @@ import {
     decodeSessionPromptDispositionCommand,
     decodeSessionQueryCommand,
     decodeSessionRenameCommand,
+    type NativeSessionTarget,
     ProtocolMessageError,
     RUNTIME_WORKSPACE_BINDING_ID,
     type SessionPromptCommand,
@@ -88,11 +91,11 @@ export interface SessionConfiguration extends SessionBindingRequest {
  */
 export class SessionControl {
     readonly #control: RuntimeControl;
-    readonly #sessionId: string;
+    readonly #target: NativeSessionTarget;
 
-    constructor(control: RuntimeControl, sessionId: string) {
+    constructor(control: RuntimeControl, target: NativeSessionTarget) {
         this.#control = control;
-        this.#sessionId = sessionId;
+        this.#target = decodeNativeSessionTarget(target);
     }
 
     readonly submitTurn = async (turn: TurnSubmission): Promise<TurnAdmission> => {
@@ -111,7 +114,7 @@ export class SessionControl {
                     kind: "session.prompt",
                     prompt: turn.content,
                     sessionConfigurations: turn.sessionConfigurations,
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                     targetCommandId: turn.targetCommandId,
                 }),
             );
@@ -136,7 +139,7 @@ export class SessionControl {
                     commandId: turnId,
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
         );
@@ -154,7 +157,7 @@ export class SessionControl {
                     commandId: turnId,
                     kind: "session.cancel-before-start",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
         );
@@ -171,7 +174,7 @@ export class SessionControl {
                     disposition: "steer",
                     kind: "session.prompt.disposition",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
         );
@@ -191,7 +194,7 @@ export class SessionControl {
                           optionId: response.optionId,
                           outcome: response.outcome,
                           requestId,
-                          sessionId: this.#sessionId,
+                          target: this.#target,
                       }),
                   )
                 : decodeSessionElicitationRespondCommand(
@@ -201,7 +204,7 @@ export class SessionControl {
                           interactionId,
                           kind: "session.elicitation.respond",
                           requestId,
-                          sessionId: this.#sessionId,
+                          target: this.#target,
                       }),
                   ),
         );
@@ -216,7 +219,7 @@ export class SessionControl {
                 JSON.stringify({
                     kind: "session.config.read",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
         );
@@ -236,7 +239,7 @@ export class SessionControl {
                     bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     kind: "session.configure",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
             permission,
@@ -249,7 +252,7 @@ export class SessionControl {
                 JSON.stringify({
                     kind: "session.rename",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                     title,
                 }),
             ),
@@ -269,8 +272,8 @@ export class SessionControl {
                     directoryId: identity.directoryId,
                     kind: "native.session.request",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
-                    targetSessionId: this.#sessionId,
+                    discoveryId: crypto.randomUUID(),
+                    target: this.#target,
                 }),
             ),
             permission,
@@ -298,7 +301,7 @@ export class SessionControl {
                     eventLimit: page.eventLimit,
                     kind: "session.preview-history.page.load",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
             permission,
@@ -318,7 +321,7 @@ export class SessionControl {
                     eventLimit: page.eventLimit,
                     kind: "session.live-history.v2.page.load",
                     requestId: crypto.randomUUID(),
-                    sessionId: this.#sessionId,
+                    target: this.#target,
                 }),
             ),
         );
@@ -341,6 +344,9 @@ export class SessionControl {
         permission: ProjectPermission,
     ): Promise<SessionExecutionIdentity> => {
         const { agentId, directoryId } = supplied;
+        if (agentId !== undefined && agentId !== this.#target.harness) {
+            throw new PairingDirectoryError("invalid_request", "The Session belongs to a different harness");
+        }
         if (agentId !== undefined && directoryId !== undefined) {
             return { agentId, directoryId };
         }
@@ -349,7 +355,7 @@ export class SessionControl {
                 JSON.stringify({
                     kind: "session.query",
                     requestId: crypto.randomUUID(),
-                    sessionIds: [this.#sessionId],
+                    targets: [this.#target],
                 }),
             ),
             permission,
@@ -357,7 +363,7 @@ export class SessionControl {
         if (queried.kind !== "session.queried") {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid Session query");
         }
-        const session = queried.entries.find((entry) => entry.sessionId === this.#sessionId);
+        const session = queried.entries.find((entry) => sameNativeSession(entry.target, this.#target));
         if (session === undefined) {
             throw new PairingDirectoryError("session_not_found", "The selected Session is unavailable");
         }

@@ -1,18 +1,21 @@
+import { NativeSessionMap } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
+
 export interface SessionEventIdAllocator {
-    readonly allocate: (sessionId: string, sessionGenerationId: string) => string;
+    readonly allocate: (sessionTarget: NativeSessionTarget, sessionGenerationId: string) => string;
 }
 
 export class InMemorySessionEventIdAllocator implements SessionEventIdAllocator {
-    readonly #allocations = new Map<string, { readonly nextId: number; readonly sessionGenerationId: string }>();
+    readonly #allocations = new NativeSessionMap<{ readonly nextId: number; readonly sessionGenerationId: string }>();
 
-    readonly allocate = (sessionId: string, sessionGenerationId: string): string => {
-        const current = this.#allocations.get(sessionId);
+    readonly allocate = (sessionTarget: NativeSessionTarget, sessionGenerationId: string): string => {
+        const current = this.#allocations.get(sessionTarget);
         const allocatedId =
             current === undefined || current.sessionGenerationId !== sessionGenerationId ? 1 : current.nextId;
         if (!Number.isSafeInteger(allocatedId)) {
             throw new Error("The Session event ID allocation is exhausted");
         }
-        this.#allocations.set(sessionId, { nextId: allocatedId + 1, sessionGenerationId });
+        this.#allocations.set(sessionTarget, { nextId: allocatedId + 1, sessionGenerationId });
         return `event-${sessionGenerationId}-${allocatedId.toString().padStart(16, "0")}`;
     };
 }

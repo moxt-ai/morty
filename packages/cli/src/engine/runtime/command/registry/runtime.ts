@@ -21,7 +21,6 @@ export const runtimeDiagnosticsCommand: RuntimeCommand = {
             send(socket, {
                 kind: "session.operation.failed",
                 requestId: message.requestId,
-                sessionId: "runtime",
                 code: "diagnostics_unavailable",
                 message: "Local diagnostics are unavailable.",
             });

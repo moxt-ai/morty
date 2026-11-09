@@ -90,7 +90,7 @@ async function openSessionView(slug: string) {
     expect(await daemonInbox.next()).toEqual({ kind: "runtime.liveness.ready" });
 
     const issued = await worker.fetch(
-        new Request(`${origin}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`, {
+        new Request(`${origin}/v1/computers/${computerId}/harnesses/claude/sessions/${sessionId}/access-credentials`, {
             method: "POST",
             headers: { authorization: `Bearer ${defaultCredential.credential}`, "content-type": "application/json" },
             body: JSON.stringify({ expiresInSeconds: 900 }),
@@ -101,7 +101,7 @@ async function openSessionView(slug: string) {
     const { credential: sessionCredential } = v.parse(v.object({ credential: v.string() }), await issued.json());
 
     const opened = await worker.fetch(
-        new Request(`${origin}/v1/computers/${computerId}/sessions/${sessionId}/events-v2`, {
+        new Request(`${origin}/v1/computers/${computerId}/harnesses/claude/sessions/${sessionId}/events-v2`, {
             headers: { authorization: `Bearer ${sessionCredential}`, Upgrade: "websocket" },
         }),
         env,
@@ -122,7 +122,7 @@ const liveEvent = (sessionId: string, eventId: string) => ({
     position: "1",
     recordedAt: new Date().toISOString(),
     sessionGenerationId: "generation-1",
-    sessionId,
+    target: { harness: "claude", sessionId: sessionId },
     type: "acp",
     payload: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "secret output" } },
 });

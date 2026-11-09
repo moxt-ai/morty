@@ -68,7 +68,7 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -106,7 +106,7 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                                 JSON.stringify({
                                     kind: "session.permission.respond",
                                     requestId: crypto.randomUUID(),
-                                    sessionId: peer.sessionId,
+                                    target: peer.target,
                                     interactionId: request.interactionId,
                                     optionId: option.optionId,
                                     outcome: "selected",
@@ -134,8 +134,8 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                         kind: "native.session.request",
                         action: "active-turn",
                         requestId,
-                        sessionId: peer.sessionId,
-                        targetSessionId: peer.sessionId,
+                        target: peer.target,
+                        discoveryId: randomUUID(),
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",

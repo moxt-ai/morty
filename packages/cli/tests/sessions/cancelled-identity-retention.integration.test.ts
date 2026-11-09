@@ -77,8 +77,8 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
             directoryId: "default",
             kind: "native.session.request",
             requestId,
-            sessionId: peer.sessionId,
-            targetSessionId: peer.sessionId,
+            discoveryId: crypto.randomUUID(),
+            target: peer.target,
         }),
     );
     for (;;) {
@@ -103,7 +103,7 @@ const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string) 
         disposition: "append",
         kind: "session.prompt",
         prompt,
-        sessionId: peer.sessionId,
+        target: peer.target,
     });
 
 const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
@@ -111,7 +111,7 @@ const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
         JSON.stringify({
             kind: "session.cancel-before-start",
             requestId: crypto.randomUUID(),
-            sessionId: peer.sessionId,
+            target: peer.target,
             commandId,
         }),
     );
@@ -182,7 +182,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                             JSON.stringify({
                                 kind: "session.cancel-before-start",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 commandId: id,
                             }),
                         );
@@ -196,7 +196,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                             disposition: "append",
                             kind: "session.prompt",
                             prompt: text,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         });
                     const original = prompt(commandId, "This command was already cancelled");
                     if (admission === "queued") {
@@ -240,7 +240,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                             JSON.stringify({
                                 kind: "session.cancel",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 commandId: "running-hold",
                             }),
                         );

@@ -15,19 +15,18 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             cancellation.signal,
         );
         const runtime = await platform.connectAgent(project.computerId);
-        const sessionId = `session-${crypto.randomUUID()}`;
-        await runtime.client.sessions.create(
+        const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
                 computerId: runtime.computerId,
-                sessionId,
+                operationId: crypto.randomUUID(),
             },
             cancellation.signal,
         );
         await runtime.client.turns.submitToRuntime(
-            sessionId,
+            sessionTarget,
             {
                 agentId: "claude",
                 content: "Remember this conversation",
@@ -41,14 +40,14 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         await expect(
             runtime.client.sessions.rename(
                 runtime.computerId,
-                sessionId,
+                sessionTarget,
                 "Renamed by the developer",
                 cancellation.signal,
             ),
         ).resolves.toEqual(
             expect.objectContaining({
                 kind: "session.renamed",
-                sessionId,
+                target: sessionTarget,
                 title: "Renamed by the developer",
             }),
         );
@@ -57,7 +56,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             expect.objectContaining({
                 agentId: "claude",
                 prompted: true,
-                sessionId,
+                target: sessionTarget,
                 status: { kind: "idle" },
                 title: "Renamed by the developer",
             }),
@@ -78,7 +77,12 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         expect(discovery).toEqual(
             expect.objectContaining({
                 action: "list",
-                entries: expect.arrayContaining([expect.objectContaining({ title: "Renamed by the developer" })]),
+                entries: expect.arrayContaining([
+                    expect.objectContaining({
+                        sessionId: sessionTarget.sessionId,
+                        title: "Renamed by the developer",
+                    }),
+                ]),
             }),
         );
     } finally {

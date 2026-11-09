@@ -33,7 +33,7 @@ const submit = (peer: RealDaemonPeer, commandId: string, prompt: string): void =
             disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt,
-            sessionId: peer.sessionId,
+            target: peer.target,
         }),
     );
 
@@ -58,8 +58,8 @@ const readExecution = async (peer: RealDaemonPeer, commandId?: string) => {
             ...(commandId === undefined ? {} : { deliveryCommandId: commandId }),
             kind: "native.session.request",
             requestId,
-            sessionId: peer.sessionId,
-            targetSessionId: peer.sessionId,
+            discoveryId: crypto.randomUUID(),
+            target: peer.target,
         }),
     );
     for (;;) {
@@ -152,7 +152,7 @@ test("Given a running turn and a later queued command, When the clock moves back
                         disposition: SessionPromptDisposition.Append,
                         kind: "session.prompt",
                         prompt: "Continue with the queued request",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -321,7 +321,7 @@ test.each([
                             disposition: SessionPromptDisposition.Append,
                             kind: "session.prompt",
                             prompt: instruction,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     for (;;) {
@@ -336,7 +336,7 @@ test.each([
                             disposition: SessionPromptDisposition.Steer,
                             kind: SESSION_PROMPT_DISPOSITION_KIND,
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     // The steering prompt and the turn it joined settle in either order.

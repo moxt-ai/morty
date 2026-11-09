@@ -7,11 +7,14 @@ import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 import {
     decodeMessageKind,
+    decodeNativeSessionResult,
     decodeSessionEventEnvelope,
     decodeSessionReadyEvent,
+    encodeNativeSessionCommand,
     encodeRuntimeLivenessReadyEvent,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
@@ -39,13 +42,12 @@ import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
 import { memoryRuntimeCredentials } from "../runtime-credentials.ts";
 
-export interface RealDaemonPeer {
+export interface DaemonConnectionPeer {
     /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
     readonly cli: (args: readonly string[]) => Promise<void>;
     readonly restart: (mode?: "crash", restoreFiles?: () => Promise<void>) => Promise<void>;
     readonly stateDirectory: string;
     readonly send: (message: string | Uint8Array) => void;
-    readonly sessionId: string;
     readonly workspace: string;
     readonly bindingId: string;
     readonly readDiagnostics: () => Promise<string>;
@@ -53,6 +55,10 @@ export interface RealDaemonPeer {
     readonly nextEvent: () => Promise<string>;
     readonly nextFrame: () => Promise<string | Buffer>;
     readonly nextMessage: () => Promise<string>;
+}
+
+export interface RealDaemonPeer extends DaemonConnectionPeer {
+    readonly target: NativeSessionTarget;
 }
 
 /** Controlled ACP harness registered explicitly, without changing real-Agent compatibility wiring. */
@@ -88,6 +94,45 @@ export async function withRealDaemon(
     workspaceDirectory?: string,
     timer: Timer = systemTimer,
     adapters: AdapterResolver = harnessAdapters,
+): Promise<void> {
+    await withDaemonConnection(
+        specification,
+        environment,
+        async (connection) => {
+            const target = await prepareNewRealSession(connection, specification.id);
+            await scenario({ ...connection, target });
+        },
+        launch,
+        workspaceDirectory,
+        timer,
+        adapters,
+    );
+}
+
+export const withControlledDaemonConnection = (
+    specification: LocalAgentSpecification,
+    environment: Readonly<Record<string, string>>,
+    scenario: (peer: DaemonConnectionPeer) => Promise<void>,
+    launch: "embedded" | "managed" = "embedded",
+): Promise<void> =>
+    withDaemonConnection(specification, environment, scenario, launch, undefined, systemTimer, acpAdapters);
+
+export const withRealDaemonConnection = (
+    specification: LocalAgentSpecification,
+    environment: Readonly<Record<string, string>>,
+    scenario: (peer: DaemonConnectionPeer) => Promise<void>,
+    launch: "embedded" | "managed" = "embedded",
+): Promise<void> =>
+    withDaemonConnection(specification, environment, scenario, launch, undefined, systemTimer, harnessAdapters);
+
+async function withDaemonConnection(
+    specification: LocalAgentSpecification,
+    environment: Readonly<Record<string, string>>,
+    scenario: (peer: DaemonConnectionPeer) => Promise<void>,
+    launch: "embedded" | "managed",
+    workspaceDirectory: string | undefined,
+    timer: Timer,
+    adapters: AdapterResolver,
 ): Promise<void> {
     const directory = await mkdtemp(join(tmpdir(), `morty-real-${specification.id}-`));
     const workspace = workspaceDirectory ?? join(directory, "workspace");
@@ -263,7 +308,6 @@ export async function withRealDaemon(
             return message;
         };
         const pendingEvents: string[] = [];
-        const sessionId = `real_${specification.id}_${randomUUID()}`;
         await scenario({
             restart: async (mode, restoreFiles) => {
                 messages.length = 0;
@@ -295,7 +339,6 @@ export async function withRealDaemon(
             cli: async (args) => await cli(args),
             readDiagnostics: async () => await readFile(join(directory, "logs", "daemon.log"), "utf8"),
             signal,
-            sessionId,
             workspace,
             send: (message) => {
                 if (socket === undefined) {
@@ -355,18 +398,67 @@ export async function withRealDaemon(
     }
 }
 
-/** Opens a new conversation through the same preparation command the Web uses. */
-export async function prepareNewRealSession(
-    peer: Parameters<Parameters<typeof withRealDaemon>[2]>[0],
+/** Opens an Agent-owned conversation through the same discovery and import boundary as the browser. */
+export async function importRealSession(
+    peer: DaemonConnectionPeer,
     agentId: string,
-): Promise<string> {
-    const requestId = randomUUID();
-    const sessionId = `draft-${randomUUID()}`;
+    sessionId: string,
+): Promise<NativeSessionTarget> {
+    const identity = {
+        kind: "native.session.request",
+        agentId,
+        bindingId: peer.bindingId,
+        directoryId: "default",
+        discoveryId: randomUUID(),
+    } as const;
+    const receive = async (requestId: string) => {
+        for (;;) {
+            const message = await peer.nextMessage();
+            const kind = decodeMessageKind(message);
+            if (kind === "session.operation.failed") {
+                throw new Error(message);
+            }
+            if (kind === "native.session.result") {
+                const result = decodeNativeSessionResult(message);
+                if (result.requestId === requestId) {
+                    return result;
+                }
+            }
+        }
+    };
+    const findId = randomUUID();
+    peer.send(encodeNativeSessionCommand({ ...identity, action: "find", requestId: findId, sessionId }));
+    const found = await receive(findId);
+    if (found.action !== "find") {
+        throw new Error("Expected a native Session discovery");
+    }
+    const importId = randomUUID();
     peer.send(
-        encodeSessionPrepareCommand({
-            kind: "session.prepare",
+        encodeNativeSessionCommand({
+            ...identity,
+            discoveryId: found.discoveryId,
+            directoryId: found.entry.directoryId,
+            action: "import",
+            entryId: found.entry.entryId,
+            requestId: importId,
+        }),
+    );
+    const imported = await receive(importId);
+    if (imported.action !== "import") {
+        throw new Error("Expected a native Session import");
+    }
+    return imported.target;
+}
+
+/** Opens a conversation through first-send creation; only the harness chooses its native ID. */
+export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId: string): Promise<NativeSessionTarget> {
+    const requestId = randomUUID();
+    peer.send(
+        encodeSessionCreateCommand({
+            kind: "session.create",
             requestId,
-            sessionId,
+            operationId: randomUUID(),
+            configurations: [],
             agentId,
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -382,7 +474,7 @@ export async function prepareNewRealSession(
         if (kind === "session.ready") {
             const ready = decodeSessionReadyEvent(message);
             if (ready.requestId === requestId) {
-                return ready.sessionId;
+                return ready.target;
             }
         }
     }

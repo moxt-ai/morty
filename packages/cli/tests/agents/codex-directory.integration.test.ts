@@ -7,13 +7,12 @@ import { previewCodexHistory } from "../support/codex-history-preview.ts";
 import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
 
 it("Given a saved Codex conversation with an active writer, When it is previewed, Then history keeps the harness message identities and the writer can continue", async () => {
-    const f = await codexFixture("native", "PREVIEW_REPLY", {}, harnessAdapters);
+    const f = await codexFixture("PREVIEW_REPLY", {}, harnessAdapters);
     try {
         const id = await f.seed("Preview this conversation");
         const options = {
             agent: f.agent,
             cwd: f.workspace,
-            sessionId: "preview",
             signal: AbortSignal.timeout(30_000),
         };
         const page = await f.sessions.previewNativeSessionEvents(options, id, 100, null);
@@ -34,7 +33,11 @@ it("Given a saved Codex conversation with an active writer, When it is previewed
         expect([...older.events, ...newest.events].map((event) => event.eventId)).toEqual(
             page.events.slice(-2).map((event) => event.eventId),
         );
-        const live = await f.sessions.loadSessionEvents({ ...options, sessionId: id }, 100, null);
+        const live = await f.sessions.loadSessionEvents(
+            { ...options, target: { harness: "codex", sessionId: id } },
+            100,
+            null,
+        );
         const liveMessageIds = live.events.flatMap((event) =>
             event.type === "acp" && event.payload.sessionUpdate === "agent_message_chunk"
                 ? [event.payload.messageId]
@@ -46,7 +49,7 @@ it("Given a saved Codex conversation with an active writer, When it is previewed
                 .filter((message) => message.sessionUpdate === "agent_message_chunk")
                 .map((message) => message.messageId),
         ).toEqual([...new Set(liveMessageIds)]);
-        await f.prompt(id, "Continue after preview");
+        await f.prompt({ harness: "codex", sessionId: id }, "Continue after preview");
         const continued = await f.sessions.previewNativeSessionEvents(options, id, 100, null);
         expect(continued.events).toContainEqual(
             expect.objectContaining({
@@ -73,7 +76,7 @@ it("Given saved Codex threads, When its directory is listed through the in-proce
         expect(entry.title).toBe("Thread from the Codex CLI");
         expect(typeof entry.updatedAt).toBe("string");
         const opened = await f.service.execute(
-            { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: "opened-codex-conversation" },
+            { ...f.identity, action: "import", entryId: entry.entryId },
             AbortSignal.timeout(30_000),
         );
         expect(opened.action).toBe("import");
@@ -84,7 +87,7 @@ it("Given saved Codex threads, When its directory is listed through the in-proce
             {
                 agent: f.agent,
                 cwd: f.workspace,
-                sessionId: opened.ready.sessionId,
+                target: opened.target,
                 signal: AbortSignal.timeout(30_000),
             },
             50,
@@ -124,29 +127,33 @@ it("Given a saved Codex thread with a long preview, When its directory is listed
 });
 
 it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
-    "Given Runtime uses native Session identities, When Chat requests %s with an assigned destination, Then Codex opens the selected source without returning native history",
+    "Given Runtime uses native Session identities, When Chat requests %s, Then Codex returns its own destination pair without returning native history",
     async (action) => {
-        const f = await codexFixture("native");
+        const f = await codexFixture();
         try {
             const sourceId = await f.seed("Selected source conversation");
             const entry = (await f.list()).entries[0];
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const targetSessionId = crypto.randomUUID();
             const result = await f.service.execute(
                 {
                     ...f.identity,
                     action,
                     entryId: entry.entryId,
-                    targetSessionId,
                 },
                 AbortSignal.timeout(30_000),
             );
-            expect(result).toMatchObject({
-                action,
-                ready: { sessionId: action === "import" ? sourceId : targetSessionId },
-            });
+            if (result.action !== action) {
+                throw new Error("Expected native open result");
+            }
+            expect(result.ready.target).toEqual(result.target);
+            expect(result.target.harness).toBe("codex");
+            if (action === "import") {
+                expect(result.target.sessionId).toBe(sourceId);
+            } else {
+                expect(result.target.sessionId).not.toBe(sourceId);
+            }
             expect("history" in result).toBe(false);
         } finally {
             await f.close();
@@ -155,11 +162,11 @@ it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
 );
 
 it("Given an open Codex conversation with fifteen turns, When history is read while the writer stays open, Then full history reaches the first turn and the writer can continue", async () => {
-    const f = await codexFixture("native");
+    const f = await codexFixture();
     try {
         const id = await f.seed("Question 1");
         for (let turn = 2; turn <= 15; turn++) {
-            await f.prompt(id, `Question ${turn}`);
+            await f.prompt({ harness: "codex", sessionId: id }, `Question ${turn}`);
         }
         const entry = (await f.list()).entries[0];
         if (entry === undefined) {
@@ -176,7 +183,7 @@ it("Given an open Codex conversation with fifteen turns, When history is read wh
                     : [],
             ),
         ).toEqual(Array.from({ length: 15 }, (_, index) => `Question ${index + 1}`));
-        await f.prompt(id, "Continue after history preview");
+        await f.prompt({ harness: "codex", sessionId: id }, "Continue after history preview");
         const resumed = await previewCodexHistory(f.agent, f.workspace, id);
         expect(resumed.events).toContainEqual(
             expect.objectContaining({
@@ -194,7 +201,7 @@ it("Given an open Codex conversation with fifteen turns, When history is read wh
 
 it("Given Codex saved tools and a large reply, When history is previewed, Then the complete reply and tool activities remain available as when opened", async () => {
     const answer = "Large reply ".repeat(30_000);
-    const f = await codexFixture("native", answer);
+    const f = await codexFixture(answer);
     try {
         const id = await f.seed(fakeProviderPrompts.twoTools);
         const history = await previewCodexHistory(f.agent, f.workspace, id);
@@ -217,7 +224,7 @@ it("Given Codex saved tools and a large reply, When history is previewed, Then t
 
 it("Given real Codex applies a patch, When saved history is read, Then the file change precedes the final reply", async () => {
     const prompt = "Use a tool to create the requested file";
-    const f = await codexFixture("native", "PATCH_REPLY", {
+    const f = await codexFixture("PATCH_REPLY", {
         patch: "*** Begin Patch\n*** Add File: result.txt\n+created by Codex\n*** End Patch",
         toolPrompt: prompt,
     });

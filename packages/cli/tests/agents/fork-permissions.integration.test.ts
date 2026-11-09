@@ -69,12 +69,12 @@ test.each(["codex", "claude"] as const)(
                     bindingId: peer.bindingId,
                     directoryId: "default",
                 };
-                const prompt = (sessionId: string, text: string, selectMode = false): void =>
+                const prompt = (sessionTarget: RealDaemonPeer["target"], text: string, selectMode = false): void =>
                     peer.send(
                         encodeSessionPromptCommand({
                             ...identity,
                             kind: "session.prompt",
-                            sessionId,
+                            target: sessionTarget,
                             commandId: randomUUID(),
                             disposition: SessionPromptDisposition.Append,
                             attachments: [],
@@ -88,10 +88,15 @@ test.each(["codex", "claude"] as const)(
                                 : {}),
                         }),
                     );
-                const ready = async (sessionId: string): Promise<void> => {
+                const ready = async (sessionTarget: RealDaemonPeer["target"]): Promise<void> => {
                     const requestId = randomUUID();
                     peer.send(
-                        encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, sessionId }),
+                        encodeSessionPrepareCommand({
+                            ...identity,
+                            kind: "session.prepare",
+                            requestId,
+                            target: sessionTarget,
+                        }),
                     );
                     for (;;) {
                         const message = await peer.nextMessage();
@@ -112,25 +117,23 @@ test.each(["codex", "claude"] as const)(
                         return;
                     }
                 };
-                prompt(peer.sessionId, "Remember this source conversation", true);
+                prompt(peer.target, "Remember this source conversation", true);
                 expect(await finish(peer, "reject_once")).toBe(0);
-                await ready(peer.sessionId);
+                await ready(peer.target);
                 for (const decision of ["reject_once", "allow_once"] as const) {
                     if (decision === "allow_once") {
                         await peer.restart();
                     }
                     const source = await nativeSource(peer, agentId, agent.environment["CLAUDE_CONFIG_DIR"]);
                     const requestId = randomUUID();
-                    const childId = randomUUID();
                     peer.send(
                         encodeNativeSessionCommand({
                             ...identity,
                             kind: "native.session.request",
-                            sessionId: peer.sessionId,
+                            discoveryId: source.discoveryId,
                             requestId,
                             action: "fork",
                             entryId: source.entryId,
-                            targetSessionId: childId,
                         }),
                     );
                     const fork = await nativeResult(peer, requestId);
@@ -140,12 +143,13 @@ test.each(["codex", "claude"] as const)(
                     expect(fork.ready.configOptions).toContainEqual(
                         expect.objectContaining({ id: "mode", currentValue: mode }),
                     );
-                    expect(fork.ready.sessionId).toBe(childId);
+                    expect(fork.ready.target).toEqual(fork.target);
+                    expect(fork.target.sessionId).not.toBe(peer.target.sessionId);
                     if (decision === "allow_once") {
                         await peer.restart();
                     }
-                    await ready(childId);
-                    prompt(childId, toolPrompt);
+                    await ready(fork.target);
+                    prompt(fork.target, toolPrompt);
                     expect(await finish(peer, decision)).toBe(1);
                     const file = join(peer.workspace, "fork-permission.txt");
                     if (decision === "allow_once") {
@@ -154,7 +158,7 @@ test.each(["codex", "claude"] as const)(
                     } else {
                         await expect(readFile(file, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
                     }
-                    await ready(peer.sessionId);
+                    await ready(peer.target);
                 }
             },
         );
@@ -183,7 +187,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
                     bindingId: peer.bindingId,
                     directoryId: "default",
                     kind: "native.session.request",
-                    sessionId: peer.sessionId,
+                    discoveryId: randomUUID(),
                     requestId,
                     action: "list",
                     cursor: null,
@@ -193,9 +197,9 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             if (listed.action !== "list") {
                 throw new Error("Expected native session list");
             }
-            const source = listed.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId));
+            const source = listed.entries.find((entry) => entry.sessionId === peer.target.sessionId);
             if (source !== undefined) {
-                return source;
+                return { ...source, discoveryId: listed.discoveryId };
             }
             if (watcher === undefined) {
                 throw new Error("Missing source Session");
@@ -244,7 +248,7 @@ async function finish(peer: RealDaemonPeer, decision: "allow_once" | "reject_onc
                 encodeSessionPermissionRespondCommand({
                     kind: "session.permission.respond",
                     requestId: crypto.randomUUID(),
-                    sessionId: event.sessionId,
+                    target: event.target,
                     interactionId: permission.interactionId,
                     optionId: choice.optionId,
                     outcome: "selected",

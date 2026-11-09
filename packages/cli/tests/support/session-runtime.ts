@@ -6,6 +6,7 @@ import type {
     AgentSettingsInspectionOptions,
     SessionConfigurationChange,
     SessionConfigureOptions,
+    SessionCreationOptions,
     SessionPrepareOptions,
     SessionSteerOptions,
     SessionTurnOptions,
@@ -62,8 +63,15 @@ export class SessionRuntimeFixture {
     readonly ensureSession = (options: TestSessionPrepareOptions) =>
         this.sessions.ensureSession({ ...options, adapter: this.adapters.resolve(options.agent) });
 
-    readonly createNativeSession = (options: TestSessionPrepareOptions) =>
+    readonly createNativeSession = (options: Omit<SessionCreationOptions, "adapter">) =>
         this.sessions.createNativeSession({ ...options, adapter: this.adapters.resolve(options.agent) });
+
+    readonly createSession = async (
+        options: Omit<SessionCreationOptions, "adapter">,
+    ): Promise<TestSessionPrepareOptions> => ({
+        ...options,
+        target: await this.createNativeSession(options),
+    });
 
     readonly inspectAgentSettings = (options: Omit<AgentSettingsInspectionOptions, "adapter">) =>
         this.sessions.inspectAgentSettings({ ...options, adapter: this.adapters.resolve(options.agent) });
@@ -80,31 +88,31 @@ export class SessionRuntimeFixture {
     readonly steerPrompt = (options: Omit<SessionSteerOptions, "adapter">) =>
         this.sessions.steerPrompt({ ...options, adapter: this.adapters.resolve(options.agent) });
 
-    readonly nativeSessionCapabilities = (options: TestSessionPrepareOptions) =>
+    readonly nativeSessionCapabilities = (options: Omit<SessionCreationOptions, "adapter">) =>
         this.adapters
             .resolve(options.agent)
             .getCapabilities(nativeSessionQuery({ ...options, adapter: this.adapters.resolve(options.agent) }));
 
-    readonly listNativeSessions = (options: TestSessionPrepareOptions, cursor: string | null) =>
+    readonly listNativeSessions = (options: Omit<SessionCreationOptions, "adapter">, cursor: string | null) =>
         this.adapters.resolve(options.agent).listSessions({
             query: nativeSessionQuery({ ...options, adapter: this.adapters.resolve(options.agent) }),
             cursor,
         });
 
     readonly previewNativeSessionEvents = (
-        options: TestSessionPrepareOptions,
-        nativeSessionId: string,
+        options: Omit<SessionCreationOptions, "adapter">,
+        sessionId: string,
         eventLimit: number,
         cursor: string | null,
     ) =>
         this.sessions.withNativeSessionOperation(
             { ...options, adapter: this.adapters.resolve(options.agent) },
-            nativeSessionId,
+            sessionId,
             (target) =>
                 target.adapter.readSessionHistory({
                     query: nativeSessionQuery(target),
                     request: {
-                        nativeSessionId,
+                        sessionId,
                         eventLimit,
                         cursor,
                     },
@@ -119,7 +127,7 @@ export class SessionRuntimeFixture {
         );
 
     readonly openNativeSession = (
-        options: TestSessionPrepareOptions,
+        options: Omit<SessionCreationOptions, "adapter">,
         origin: Parameters<SessionManager["openNativeSession"]>[1],
     ) =>
         this.sessions.openNativeSession(
@@ -155,8 +163,6 @@ export class SessionRuntimeFixture {
         this.sessions.sessionStatus(...args);
     readonly listSessions = (...args: Parameters<SessionManager["listSessions"]>) =>
         this.sessions.listSessions(...args);
-    readonly findLinkedSessions = (...args: Parameters<SessionManager["findLinkedSessions"]>) =>
-        this.sessions.findLinkedSessions(...args);
     readonly hasPreparedSession = (...args: Parameters<SessionManager["hasPreparedSession"]>) =>
         this.sessions.hasPreparedSession(...args);
 }

@@ -30,21 +30,21 @@ const submit = (peer: RealDaemonPeer, prompt: string) => {
             disposition: "append",
             kind: "session.prompt",
             prompt,
-            sessionId: peer.sessionId,
+            target: peer.target,
         }),
     );
     return commandId;
 };
 
 /** Sends a steer and returns the identifier its reply names. */
-const steer = (peer: RealDaemonPeer, commandId: string, sessionId = peer.sessionId): string => {
+const steer = (peer: RealDaemonPeer, commandId: string, sessionTarget = peer.target): string => {
     const requestId = randomUUID();
     peer.send(
         encodeSessionPromptDispositionCommand({
             kind: SESSION_PROMPT_DISPOSITION_KIND,
             requestId,
             commandId,
-            sessionId,
+            target: sessionTarget,
             disposition: SessionPromptDisposition.Steer,
         }),
     );
@@ -52,9 +52,7 @@ const steer = (peer: RealDaemonPeer, commandId: string, sessionId = peer.session
 };
 
 const cancel = (peer: RealDaemonPeer, commandId: string) =>
-    peer.send(
-        JSON.stringify({ kind: "session.cancel", requestId: randomUUID(), commandId, sessionId: peer.sessionId }),
-    );
+    peer.send(JSON.stringify({ kind: "session.cancel", requestId: randomUUID(), commandId, target: peer.target }));
 
 const observe = (peer: RealDaemonPeer) => {
     const events: SessionLiveEvent[] = [];
@@ -127,17 +125,18 @@ test("Given queued work has started or completed, When a client sends a late ste
         await observed.until(() => observed.failures.length === 1);
         expect(observed.failures[0]).toMatchObject({
             requestId: lateSteer,
-            sessionId: peer.sessionId,
+            target: peer.target,
             code: "turn_already_started",
         });
         cancel(peer, queued);
         await observed.lifecycle("prompt.completed", queued);
         const settledSteer = steer(peer, queued);
-        const foreignSteer = steer(peer, queued, "another-session");
+        const foreignTarget = { harness: peer.target.harness, sessionId: "another-session" };
+        const foreignSteer = steer(peer, queued, foreignTarget);
         await observed.until(() => observed.failures.length === 3);
         expect(observed.failures.slice(1)).toMatchObject([
-            { requestId: settledSteer, sessionId: peer.sessionId, code: "turn_already_started" },
-            { requestId: foreignSteer, sessionId: "another-session", code: "turn_not_active" },
+            { requestId: settledSteer, target: peer.target, code: "turn_already_started" },
+            { requestId: foreignSteer, target: foreignTarget, code: "turn_not_active" },
         ]);
         expect(
             observed.events.filter(

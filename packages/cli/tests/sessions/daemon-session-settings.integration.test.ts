@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     AGENT_SETTINGS_DISCOVER_KIND,
     AGENT_SETTINGS_DISCOVERED_KIND,
@@ -13,9 +14,12 @@ import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionOperationFailedEvent,
+    decodeSessionReadyEvent,
     encodeAgentSettingsDiscoverCommand,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     SESSION_EVENT_KIND,
     type SessionLiveEvent,
     type SessionPromptCommand,
@@ -105,6 +109,36 @@ class TerminalSessionResult {
 
 const bufferedSessionEvents = new WeakMap<ClientFrames, SessionLiveEvent[]>();
 
+async function createSession(
+    socket: Duplex,
+    frames: ClientFrames,
+    agentId: string,
+    bindingId: string,
+): Promise<NativeSessionTarget> {
+    sendText(
+        socket,
+        encodeSessionCreateCommand({
+            kind: "session.create",
+            requestId: crypto.randomUUID(),
+            operationId: crypto.randomUUID(),
+            agentId,
+            bindingId,
+            directoryId: "default",
+            configurations: [],
+        }),
+    );
+    for (;;) {
+        const message = await frames.next();
+        const kind = decodeMessageKind(message);
+        if (kind === "session.operation.failed") {
+            throw new Error(message);
+        }
+        if (kind === "session.ready") {
+            return decodeSessionReadyEvent(message).target;
+        }
+    }
+}
+
 function _readStringField(value: unknown, field: string): string {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return "";
@@ -115,7 +149,7 @@ function _readStringField(value: unknown, field: string): string {
 
 async function readTerminalSessionResult(
     frames: ClientFrames,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     commandId = "",
     includeAcpText = true,
 ): Promise<TerminalSessionResult> {
@@ -128,7 +162,11 @@ async function readTerminalSessionResult(
             const message = await frames.next();
             if (decodeMessageKind(message) === "session.operation.failed") {
                 const failure = decodeSessionOperationFailedEvent(message);
-                if (failure.sessionId === sessionId && (commandId === "" || failure.requestId === commandId)) {
+                if (
+                    failure.target !== undefined &&
+                    sameNativeSession(failure.target, sessionTarget) &&
+                    (commandId === "" || failure.requestId === commandId)
+                ) {
                     return new TerminalSessionResult("failed", text, failure.code, "");
                 }
             }
@@ -138,7 +176,7 @@ async function readTerminalSessionResult(
             events = [...decodeSessionEventEnvelope(message).events];
         }
         for (const [index, event] of events.entries()) {
-            if (event.sessionId !== sessionId) {
+            if (!sameNativeSession(event.target, sessionTarget)) {
                 continue;
             }
             if (event.type === "acp") {
@@ -166,7 +204,11 @@ async function readTerminalSessionResult(
         }
     }
 }
-async function readCommandActivity(frames: ClientFrames, sessionId: string, _commandId: string): Promise<void> {
+async function readCommandActivity(
+    frames: ClientFrames,
+    sessionTarget: NativeSessionTarget,
+    _commandId: string,
+): Promise<void> {
     for (;;) {
         const message = await frames.next();
         if (decodeMessageKind(message) !== SESSION_EVENT_KIND) {
@@ -175,7 +217,7 @@ async function readCommandActivity(frames: ClientFrames, sessionId: string, _com
         if (
             decodeSessionEventEnvelope(message).events.some(
                 (event) =>
-                    event.sessionId === sessionId &&
+                    sameNativeSession(event.target, sessionTarget) &&
                     event.type === "acp" &&
                     (event.payload.sessionUpdate === "tool_call" || event.payload.sessionUpdate === "tool_call_update"),
             )
@@ -823,7 +865,7 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionId = "steered_configured_conversation";
+            const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
                 agentId: agent.id,
@@ -841,10 +883,10 @@ describe("daemon session configuration boundary", () => {
                     { booleanValue: true, configId: "fast_mode", value: "", valueType: "boolean" },
                     { booleanValue: false, configId: "mode", value: "code", valueType: "select" },
                 ],
-                sessionId,
+                target: sessionTarget,
             };
             sendText(socket, encodeSessionPromptCommand(runningPrompt));
-            await readCommandActivity(frames, sessionId, runningCommandId);
+            await readCommandActivity(frames, sessionTarget, runningCommandId);
 
             const steeringPrompt: SessionPromptCommand = {
                 ...runningPrompt,
@@ -857,9 +899,14 @@ describe("daemon session configuration boundary", () => {
 
             // The steering Turn is accepted and then injected into the running
             // Turn, so only the running Turn carries the Agent's reply.
-            const steeringResult = await readTerminalSessionResult(frames, sessionId, steeringPrompt.commandId, false);
+            const steeringResult = await readTerminalSessionResult(
+                frames,
+                sessionTarget,
+                steeringPrompt.commandId,
+                false,
+            );
             expect(steeringResult).toMatchObject({ kind: "completed", text: "" });
-            const runningResult = await readTerminalSessionResult(frames, sessionId, runningCommandId);
+            const runningResult = await readTerminalSessionResult(frames, sessionTarget, runningCommandId);
             expect(runningResult.kind).toBe("completed");
             expect(runningResult.text).toContain("Steered: focus on the requested fix");
         } finally {
@@ -944,7 +991,7 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionId = "steered_drifted_settings_conversation";
+            const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
                 agentId: agent.id,
@@ -959,10 +1006,10 @@ describe("daemon session configuration boundary", () => {
                     { booleanValue: false, configId: "model", value: "test-small", valueType: "select" },
                     { booleanValue: false, configId: "reasoning_effort", value: "high", valueType: "select" },
                 ],
-                sessionId,
+                target: sessionTarget,
             };
             sendText(socket, encodeSessionPromptCommand(runningPrompt));
-            await readCommandActivity(frames, sessionId, runningCommandId);
+            await readCommandActivity(frames, sessionTarget, runningCommandId);
 
             // Steering cannot reconfigure a running Agent, so the member's newer effort
             // reaches this Turn as a snapshot the live Session does not hold yet.
@@ -981,9 +1028,14 @@ describe("daemon session configuration boundary", () => {
 
             // The steering Turn is accepted and then injected into the running
             // Turn, so only the running Turn carries the Agent's reply.
-            const steeringResult = await readTerminalSessionResult(frames, sessionId, steeringPrompt.commandId, false);
+            const steeringResult = await readTerminalSessionResult(
+                frames,
+                sessionTarget,
+                steeringPrompt.commandId,
+                false,
+            );
             expect(steeringResult).toMatchObject({ kind: "completed", code: "", text: "" });
-            const runningResult = await readTerminalSessionResult(frames, sessionId, runningCommandId);
+            const runningResult = await readTerminalSessionResult(frames, sessionTarget, runningCommandId);
             expect(runningResult.kind).toBe("completed");
             expect(runningResult.text).toContain("Steered: focus on the requested fix");
         } finally {

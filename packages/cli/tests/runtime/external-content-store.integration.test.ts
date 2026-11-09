@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { LocalExternalContentStore } from "../../src/engine/session/content/external-content-store.ts";
 
+const firstTarget = { harness: "claude", sessionId: "shared-native-id" };
+const secondTarget = { harness: "codex", sessionId: "shared-native-id" };
+const unrelatedTarget = { harness: "pi", sessionId: "shared-native-id" };
+
 test("Given two Sessions produce identical media, When each retrieves its granted reference, Then they share one file while an unrelated Session cannot read it", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date("2026-10-08T00:00:00Z"));
@@ -18,25 +22,25 @@ test("Given two Sessions produce identical media, When each retrieves its grante
             kind: "resource",
             mediaType: "text/plain",
             name: "report.PDF",
-            sessionId: "first",
+            target: firstTarget,
             signal,
         });
         const request = `morty-content:resource:${first.key}`;
         expect(first.key).toBe(createHash("sha256").update(bytes).digest("hex"));
-        const original = await cache.resolve("first", request, signal);
+        const original = await cache.resolve(firstTarget, request, signal);
         expect(original).not.toBeNull();
-        expect(await cache.resolve("second", request, signal)).toBeNull();
+        expect(await cache.resolve(secondTarget, request, signal)).toBeNull();
         const second = await cache.put({
             bytes,
             kind: "resource",
             mediaType: "text/plain",
             name: "report.PDF",
-            sessionId: "second",
+            target: secondTarget,
             signal,
         });
         expect(second).toEqual(first);
-        expect(await cache.resolve("second", request, signal)).toEqual(original);
-        expect(await cache.resolve("unrelated", request, signal)).toBeNull();
+        expect(await cache.resolve(secondTarget, request, signal)).toEqual(original);
+        expect(await cache.resolve(unrelatedTarget, request, signal)).toBeNull();
         if (original === null) {
             throw new Error("Expected a retrievable media file");
         }
@@ -44,7 +48,7 @@ test("Given two Sessions produce identical media, When each retrieves its grante
         expect(await readFile(original.path)).toEqual(bytes);
         expect((await stat(original.path)).mode & 0o777).toBe(0o600);
         vi.setSystemTime(new Date("2026-10-10T00:00:00Z"));
-        expect(await cache.resolve("first", request, signal)).toBeNull();
+        expect(await cache.resolve(firstTarget, request, signal)).toBeNull();
         await expect(stat(original.path)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
         vi.useRealTimers();
@@ -64,18 +68,18 @@ test("Given a daemon's disposable media cache, When the owner closes it, Then fi
             kind: "resource",
             mediaType: "text/plain",
             name: "result",
-            sessionId: "owner",
+            target: firstTarget,
             signal,
         });
         const request = `morty-content:resource:${reference.key}`;
-        const original = await cache.resolve("owner", request, signal);
+        const original = await cache.resolve(firstTarget, request, signal);
         if (original === null) {
             throw new Error("Expected a retrievable media file");
         }
         await cache[Symbol.asyncDispose]();
         await expect(stat(original.path)).rejects.toMatchObject({ code: "ENOENT" });
         await using restarted = new LocalExternalContentStore(directory);
-        expect(await restarted.resolve("owner", request, signal)).toBeNull();
+        expect(await restarted.resolve(firstTarget, request, signal)).toBeNull();
     } finally {
         vi.useRealTimers();
         await rm(directory, { force: true, recursive: true });

@@ -1,6 +1,7 @@
 import { existsSync, watch } from "node:fs";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import { describe, expect, it, vi } from "vitest";
 import { ClaudeAdapter } from "../../src/engine/acp/adapter/claude/adapter.ts";
 import type { AdapterResolver } from "../../src/engine/acp/native-history/preview-contract.ts";
@@ -33,7 +34,8 @@ const cannedHistoryAdapter: AdapterResolver = (agent, dependencies) => {
             events.close();
         },
         readSessionHistory: async ({ request }) => {
-            events.materialize(request.nativeSessionId, request.nativeSessionId, [
+            const target = { harness: agent.id, sessionId: request.sessionId };
+            events.materialize(target, request.sessionId, [
                 {
                     type: "acp",
                     payload: {
@@ -51,7 +53,7 @@ const cannedHistoryAdapter: AdapterResolver = (agent, dependencies) => {
                     },
                 },
             ]);
-            return events.page(request.nativeSessionId, request.eventLimit, request.cursor);
+            return events.page(target, request.eventLimit, request.cursor);
         },
     };
 };
@@ -60,16 +62,15 @@ describe("native session history", () => {
     it("Given a saved session requests permission and input during preview, When its history is read, Then both interactions are rejected without publishing live events", async () => {
         const f = await fixture("Claude Code", "load-only");
         try {
-            const nativeSessionId = await f.seed("Preview requiring interaction");
+            const sessionId = await f.seed("Preview requiring interaction");
             await writeFile(join(f.native, "interactions-during-preview"), "");
             const preview = await f.sessions.previewNativeSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: "read-only-preview",
                     signal: new AbortController().signal,
                 },
-                nativeSessionId,
+                sessionId,
                 50,
                 null,
             );
@@ -87,28 +88,26 @@ describe("native session history", () => {
         }
     });
     it("Given Codex already owns a native session writer, When Chat previews that session, Then Runtime reads history without requesting another writer", async () => {
-        const f = await fixture("Codex", "exclusive-writer", "assigned", cannedHistoryAdapter);
+        const f = await fixture("Codex", "exclusive-writer", cannedHistoryAdapter);
         const signal = new AbortController().signal;
         try {
-            const nativeSessionId = await f.seed("Writer-owned Codex session");
+            const sessionId = await f.seed("Writer-owned Codex session");
             await f.sessions.openNativeSession(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: "active-codex-session",
                     signal,
                 },
-                { kind: "import", nativeSessionId, title: "Writer-owned Codex session" },
+                { kind: "import", sessionId, title: "Writer-owned Codex session" },
             );
 
             const preview = await f.sessions.previewNativeSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: "codex-preview",
                     signal,
                 },
-                nativeSessionId,
+                sessionId,
                 50,
                 null,
             );
@@ -137,21 +136,20 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const sessionId = "imported-codex-session";
-            await f.service.execute(
-                { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: sessionId },
-                signal,
-            );
+            const opened = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            if (opened.action !== "import") {
+                throw new Error("Expected native import");
+            }
 
-            expect(f.sessions.listSessions(10).find((session) => session.sessionId === sessionId)?.title).toBe(
-                entry.title,
-            );
+            expect(
+                f.sessions.listSessions(10).find((session) => sameNativeSession(session.target, opened.target))?.title,
+            ).toBe(entry.title);
 
             const replay = await f.sessions.loadSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId,
+                    target: opened.target,
                     signal,
                 },
                 50,
@@ -182,17 +180,16 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const sessionId = "imported-claude-session";
-            await f.service.execute(
-                { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: sessionId },
-                signal,
-            );
+            const opened = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            if (opened.action !== "import") {
+                throw new Error("Expected native import");
+            }
 
             const replay = await f.sessions.loadSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId,
+                    target: opened.target,
                     signal,
                 },
                 50,
@@ -222,17 +219,16 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const sessionId = "forked-claude-session";
-            await f.service.execute(
-                { ...f.identity, action: "fork", entryId: entry.entryId, targetSessionId: sessionId },
-                signal,
-            );
+            const opened = await f.service.execute({ ...f.identity, action: "fork", entryId: entry.entryId }, signal);
+            if (opened.action !== "fork") {
+                throw new Error("Expected native fork");
+            }
 
             const replay = await f.sessions.loadSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId,
+                    target: opened.target,
                     signal,
                 },
                 50,
@@ -256,15 +252,14 @@ describe("native session history", () => {
     it("Given ACP replays committed native updates, When Runtime loads V2 source facts, Then every accepted notification is exposed once without V1 activity folding", async () => {
         const f = await fixture("Pi");
         try {
-            const nativeSessionId = await f.seed("Preserve this update");
+            const sessionId = await f.seed("Preserve this update");
             const replay = await f.sessions.previewNativeSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: "v2-history-query",
                     signal: new AbortController().signal,
                 },
-                nativeSessionId,
+                sessionId,
                 50,
                 null,
             );
@@ -300,10 +295,9 @@ describe("native session history", () => {
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: "v2-history-query",
                     signal: new AbortController().signal,
                 },
-                nativeSessionId,
+                sessionId,
                 4,
                 null,
             );
@@ -315,10 +309,9 @@ describe("native session history", () => {
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: "v2-history-query",
                     signal: new AbortController().signal,
                 },
-                nativeSessionId,
+                sessionId,
                 4,
                 newestMessage.nextCursor,
             );
@@ -340,17 +333,16 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing Pi conversation");
             }
-            const sessionId = "restored-pi-session";
-            await f.service.execute(
-                { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: sessionId },
-                signal,
-            );
+            const opened = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            if (opened.action !== "import") {
+                throw new Error("Expected native import");
+            }
 
             const replay = await f.sessions.loadSessionEvents(
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId,
+                    target: opened.target,
                     signal,
                 },
                 50,
@@ -372,10 +364,14 @@ describe("native session history", () => {
     });
 
     it("Given two clients request Pi history while its first session load is in progress, When that load completes, Then both clients receive the same history", async () => {
-        const f = await fixture("Pi", "replay-history-once", "native");
+        const f = await fixture("Pi");
         const signal = new AbortController().signal;
         try {
             const sessionId = await f.seed("Shared Pi history");
+            const opened = await f.sessions.openNativeSession(
+                { agent: f.agent, cwd: f.workspace, signal },
+                { kind: "import", sessionId: sessionId, title: "Shared Pi history" },
+            );
             await writeFile(join(f.native, "pause-load"), "");
             const paused = Promise.withResolvers<void>();
             const watcher = watch(f.native, () => {
@@ -387,7 +383,7 @@ describe("native session history", () => {
             const options = {
                 agent: f.agent,
                 cwd: f.workspace,
-                sessionId,
+                target: opened.target,
                 signal,
             };
             const first = f.sessions.loadSessionEvents(options, 50, null);
@@ -433,13 +429,15 @@ describe("native session history", () => {
                     ...f.identity,
                     action: "fork",
                     entryId: entry.entryId,
-                    targetSessionId: "forked-copy",
                 },
                 new AbortController().signal,
             );
+            if (fork.action !== "fork") {
+                throw new Error("Expected native fork");
+            }
             expect(fork).toMatchObject({
                 action: "fork",
-                ready: { sessionId: "forked-copy" },
+                ready: { target: fork.target },
             });
             expect((await f.list()).entries).toHaveLength(2);
             expect(await readFile(join(f.native, source), "utf8")).toBe(original);
@@ -458,11 +456,11 @@ describe("native session history", () => {
             }
 
             const first = await f.service.execute(
-                { ...f.identity, action: "fork", entryId: entry.entryId, targetSessionId: "first-forked-copy" },
+                { ...f.identity, action: "fork", entryId: entry.entryId, requestId: crypto.randomUUID() },
                 new AbortController().signal,
             );
             const second = await f.service.execute(
-                { ...f.identity, action: "fork", entryId: entry.entryId, targetSessionId: "second-forked-copy" },
+                { ...f.identity, action: "fork", entryId: entry.entryId, requestId: crypto.randomUUID() },
                 new AbortController().signal,
             );
 
@@ -492,13 +490,15 @@ describe("native session history", () => {
                         ...f.identity,
                         action,
                         entryId: entry.entryId,
-                        targetSessionId: `${action}-without-history`,
                     },
                     new AbortController().signal,
                 );
+                if (result.action !== action) {
+                    throw new Error("Expected native open result");
+                }
                 expect(result).toMatchObject({
                     action,
-                    ready: { sessionId: `${action}-without-history` },
+                    ready: { target: result.target },
                 });
                 expect("history" in result).toBe(false);
                 expect(await readdir(f.native)).not.toContain("load-paused");

@@ -127,7 +127,7 @@ test("Given a saved title differs from the native session listing, When reopenin
     timeout: 30_000,
 }, async () => {
     const title = "Agent generated title";
-    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["title-review"]) });
+    const app = await createTestApp({ connectAgent: true, sessionIds: new Set(["title-review"]) });
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
     const initialDialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
     // The first native session is selected and previewed automatically.

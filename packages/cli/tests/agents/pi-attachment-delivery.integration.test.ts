@@ -46,7 +46,7 @@ test("Given real Pi receives a file attachment, When the Agent reads its local l
                 attachments: [attachment],
                 kind: "session.prompt",
                 prompt: toolPrompt,
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         let text = "";
@@ -68,7 +68,7 @@ test("Given real Pi receives a file attachment, When the Agent reads its local l
                         interactionId: event.payload.event.interactionId,
                         optionId: option.optionId,
                         outcome: "selected",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
             } else if (

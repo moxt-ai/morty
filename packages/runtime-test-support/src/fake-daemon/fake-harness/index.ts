@@ -72,7 +72,7 @@ class ControlledAgentState {
 
     constructor(options: FakeAgentHarnessOptions) {
         this.#options = options;
-        for (const sessionId of options.nativeSessionIds ?? []) {
+        for (const sessionId of options.sessionIds ?? []) {
             this.#sessions.set(sessionId, 1);
         }
     }

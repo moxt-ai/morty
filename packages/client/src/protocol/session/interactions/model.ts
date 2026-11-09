@@ -1,6 +1,6 @@
 import { z } from "zod";
-
 import { identifierSchema } from "../../shared/identifier.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 import { elicitationFieldSchema, permissionOptionSchema } from "./index.ts";
 
 const timestampSchema = z.string().datetime({ offset: true });
@@ -82,7 +82,7 @@ const interactionSchema = z
         attemptId: identifierSchema,
         interactionId: identifierSchema,
         request: interactionRequestSchema,
-        sessionId: identifierSchema,
+        target: nativeSessionTargetSchema,
         state: interactionStateSchema,
         turnId: identifierSchema,
     })

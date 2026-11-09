@@ -39,7 +39,7 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "Complete before the edit reaches the Runtime",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -59,7 +59,7 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                         commandId,
                         kind: "session.cancel-before-start",
                         requestId: withdrawal,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 const reply = await peer.nextMessage();
@@ -102,7 +102,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         attachments: [],
                         kind: "session.prompt",
                         prompt: text,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     });
                 peer.send(prompt(running, "hold after first delta"));
                 for (;;) {
@@ -128,7 +128,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         commandId: running,
                         kind: "session.cancel-before-start",
                         requestId: runningWithdrawal,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 peer.send(
@@ -136,7 +136,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         commandId: queued,
                         kind: "session.cancel-before-start",
                         requestId: crypto.randomUUID(),
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 peer.send(
@@ -144,7 +144,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         commandId: running,
                         kind: "session.cancel",
                         requestId: crypto.randomUUID(),
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 const completed = new Map<string, string>();
@@ -225,7 +225,7 @@ test("Given an unacknowledged command, When Stop arrives before its prompt, Then
                         commandId: stopped,
                         kind: "session.cancel-before-start",
                         requestId: withdrawal,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 let cancelled = false;
@@ -263,7 +263,7 @@ test("Given an unacknowledged command, When Stop arrives before its prompt, Then
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "This request completes normally",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     });
                 peer.send(prompt(stopped));
                 const next = randomUUID();
@@ -334,7 +334,7 @@ test("Given a prompt still loading its conversation's saved history, When the cl
                         attachments: [],
                         kind: "session.prompt",
                         prompt: text,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     });
                 const completed = async (commandId: string): Promise<void> => {
                     for (;;) {
@@ -366,7 +366,7 @@ test("Given a prompt still loading its conversation's saved history, When the cl
                         commandId: withdrawn,
                         kind: "session.cancel-before-start",
                         requestId: withdrawal,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
 

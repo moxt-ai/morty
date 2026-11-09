@@ -37,10 +37,9 @@ const nativeListInput = v.strictObject({
     discoveryId: v.nullable(platformIdentifier),
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
-const nativePreviewInput = v.strictObject({ ...nativeIdentity, nativeSessionId: platformIdentifier });
+const nativePreviewInput = v.strictObject({ ...nativeIdentity, sessionId: platformIdentifier });
 const directoryInput = v.strictObject({ directoryId: nativeDirectoryId });
 const nativeContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
-const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
 const sessionConfiguration = v.strictObject({
     booleanValue: v.boolean(),
     configId: platformIdentifier,
@@ -60,8 +59,9 @@ const agentSettingsInput = v.strictObject({
     agentRef: platformIdentifier,
     workspaceRef: v.optional(nativeDirectoryId),
 });
+const nativeSessionTargetInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const accessInput = v.union([
-    v.strictObject({ conversationId: platformIdentifier }),
+    nativeSessionTargetInput,
     v.strictObject({
         agentRef: platformIdentifier,
         conversationKey: platformIdentifier,
@@ -244,11 +244,11 @@ export function createBotChatRoutes() {
             authenticatedSession,
             issuesSessionCredential,
             authorizedChat(),
-            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionInput>(nativeSessionInput),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionTargetInput>(nativeSessionTargetInput),
             async (context) => {
                 const input = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.nativeSessionAccess(context.get("chatScope"), input.sessionId),
+                    await context.env.services.chat.nativeSessionAccess(context.get("chatScope"), input),
                 );
             },
         )
@@ -256,23 +256,21 @@ export function createBotChatRoutes() {
             "/bots/:botId/managed-session",
             authenticatedSession,
             authorizedChat(),
-            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionInput>(nativeSessionInput),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionTargetInput>(nativeSessionTargetInput),
             async (context) => {
                 const input = context.req.valid("json");
-                return privateJson(
-                    await context.env.services.chat.managedSession(context.get("chatScope"), input.sessionId),
-                );
+                return privateJson(await context.env.services.chat.managedSession(context.get("chatScope"), input));
             },
         )
         .post(
             "/bots/:botId/managed-session/archive",
             authenticatedSession,
             authorizedChat(),
-            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionInput>(nativeSessionInput),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeSessionTargetInput>(nativeSessionTargetInput),
             async (context) => {
                 const input = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.archiveManagedSession(context.get("chatScope"), input.sessionId),
+                    await context.env.services.chat.archiveManagedSession(context.get("chatScope"), input),
                 );
             },
         )

@@ -1,8 +1,7 @@
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { type OpenMortySession, type SelectedMortySession, selectedSession } from "./open-session.ts";
 
-type ConversationTarget =
-    | { readonly kind: "conversation"; readonly conversationId: string }
-    | { readonly kind: "session"; readonly sessionId: string };
+type ConversationTarget = { readonly kind: "session"; readonly identity: NativeSessionTarget };
 
 export type ConversationSelectionState =
     | { readonly kind: "draft"; readonly key: string }
@@ -37,12 +36,10 @@ export type ConversationSelectionEvent =
           readonly target: ConversationTarget;
       }
     | { readonly kind: "retry-requested" }
-    | { readonly kind: "conversation-created"; readonly conversationId: string; readonly session: OpenMortySession };
+    | { readonly kind: "conversation-created"; readonly session: OpenMortySession };
 
 function sameTarget(left: ConversationTarget, right: ConversationTarget): boolean {
-    return left.kind === "conversation"
-        ? right.kind === "conversation" && left.conversationId === right.conversationId
-        : right.kind === "session" && left.sessionId === right.sessionId;
+    return left.identity.harness === right.identity.harness && left.identity.sessionId === right.identity.sessionId;
 }
 
 export function transitionConversationSelection(
@@ -71,15 +68,18 @@ export function transitionConversationSelection(
                 ? {
                       kind: "ready",
                       session: selectedSession(event.session),
-                      target: { conversationId: event.conversationId, kind: "conversation" },
+                      target: {
+                          kind: "session",
+                          identity: {
+                              harness: event.session.result.ready.agentId,
+                              sessionId: event.session.entry.sessionId,
+                          },
+                      },
                   }
                 : state;
     }
 }
 
-export function selectedConversationId(state: ConversationSelectionState): string {
-    if (state.kind === "draft") {
-        return "";
-    }
-    return state.target.kind === "conversation" ? state.target.conversationId : state.target.sessionId;
+export function selectedConversationTarget(state: ConversationSelectionState): NativeSessionTarget | null {
+    return state.kind === "draft" ? null : state.target.identity;
 }

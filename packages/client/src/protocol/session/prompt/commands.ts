@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import {
     assertKind,
@@ -14,6 +13,7 @@ import {
 } from "../../shared/message-codec.ts";
 import type { SessionConfigurationSelection } from "../configuration/index.ts";
 import { decodeSessionConfigurationSelections } from "../configuration/index.ts";
+import { type NativeSessionTarget, nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_PROMPT_KIND = "session.prompt";
 export const SESSION_PROMPT_DISPOSITION_KIND = "session.prompt.disposition";
@@ -49,7 +49,7 @@ export type SessionPromptCommand = {
     readonly kind: typeof SESSION_PROMPT_KIND;
     readonly prompt: string;
     readonly sessionConfigurations?: readonly SessionConfigurationSelection[];
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 } & SessionPromptPlacement;
 
 /*
@@ -63,7 +63,7 @@ export interface SessionCancelCommand {
     readonly commandId: string;
     readonly kind: typeof SESSION_CANCEL_KIND;
     readonly requestId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 /**
@@ -74,7 +74,7 @@ export interface SessionCancelBeforeStartCommand {
     readonly commandId: string;
     readonly kind: typeof SESSION_CANCEL_BEFORE_START_KIND;
     readonly requestId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export function decodeSessionCancelBeforeStartCommand(encoded: string): SessionCancelBeforeStartCommand {
@@ -84,7 +84,7 @@ export function decodeSessionCancelBeforeStartCommand(encoded: string): SessionC
         commandId: readIdentifier(value, "commandId"),
         kind: SESSION_CANCEL_BEFORE_START_KIND,
         requestId: readIdentifier(value, "requestId"),
-        sessionId: readIdentifier(value, "sessionId"),
+        target: decodeZodValue(value["target"], nativeSessionTargetSchema),
     };
 }
 
@@ -97,7 +97,7 @@ export interface SessionPromptDispositionCommand {
     readonly disposition: typeof SessionPromptDisposition.Steer;
     readonly kind: typeof SESSION_PROMPT_DISPOSITION_KIND;
     readonly requestId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export const promptAttachmentSchema = z
@@ -168,7 +168,7 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
         kind: SESSION_PROMPT_KIND,
         prompt,
         ...(hasSessionConfigurations ? { sessionConfigurations } : {}),
-        sessionId: readIdentifier(value, "sessionId"),
+        target: decodeZodValue(value["target"], nativeSessionTargetSchema),
         ...placement,
     };
 }
@@ -181,7 +181,7 @@ export function decodeSessionCancelCommand(encoded: string): SessionCancelComman
         commandId: readIdentifier(value, "commandId"),
         kind: SESSION_CANCEL_KIND,
         requestId: readIdentifier(value, "requestId"),
-        sessionId: readIdentifier(value, "sessionId"),
+        target: decodeZodValue(value["target"], nativeSessionTargetSchema),
     };
 }
 
@@ -196,7 +196,7 @@ export function decodeSessionPromptDispositionCommand(encoded: string): SessionP
         disposition: SessionPromptDisposition.Steer,
         kind: SESSION_PROMPT_DISPOSITION_KIND,
         requestId: readIdentifier(value, "requestId"),
-        sessionId: readIdentifier(value, "sessionId"),
+        target: decodeZodValue(value["target"], nativeSessionTargetSchema),
     };
 }
 
@@ -215,7 +215,7 @@ export function encodeSessionPromptDispositionCommand(message: SessionPromptDisp
 const turnReplyFields = {
     commandId: IDENTIFIER,
     requestId: IDENTIFIER,
-    sessionId: IDENTIFIER,
+    target: nativeSessionTargetSchema,
 } as const;
 
 const sessionPromptSteeredEventSchema = z

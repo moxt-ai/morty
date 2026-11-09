@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     CONTENT_AVAILABLE_KIND,
     CONTENT_COMMIT_KIND,
@@ -30,14 +31,14 @@ export function createContentWriteCommands(context: CommandContext): ContentWrit
     const pending = new Map<string, PendingWrite>();
     const operations = new Set<Promise<void>>();
 
-    const fail = (command: Pick<ContentWriteCommand, "requestId" | "sessionId">, error: unknown): void => {
+    const fail = (command: Pick<ContentWriteCommand, "requestId" | "target">, error: unknown): void => {
         pending.delete(command.requestId);
         send(context.socket, {
             code: "content_write_failed",
             kind: FILE_FAILED_KIND,
             message: error instanceof Error ? error.message : "The content could not be stored",
             requestId: command.requestId,
-            sessionId: command.sessionId,
+            target: command.target,
         });
     };
 
@@ -65,7 +66,7 @@ export function createContentWriteCommands(context: CommandContext): ContentWrit
             send(context.socket, {
                 kind: CONTENT_READY_KIND,
                 requestId: message.requestId,
-                sessionId: message.sessionId,
+                target: message.target,
             });
         },
     };
@@ -77,7 +78,7 @@ export function createContentWriteCommands(context: CommandContext): ContentWrit
                 throw new Error("Command kind mismatch");
             }
             const state = pending.get(message.requestId);
-            if (state === undefined || state.command.sessionId !== message.sessionId) {
+            if (state === undefined || !sameNativeSession(state.command.target, message.target)) {
                 fail(message, new Error("The content upload is unavailable"));
                 return;
             }
@@ -95,7 +96,7 @@ export function createContentWriteCommands(context: CommandContext): ContentWrit
                         kind: state.command.contentKind,
                         mediaType: state.command.mediaType,
                         name: state.command.name,
-                        sessionId: state.command.sessionId,
+                        target: state.command.target,
                         signal: context.signal,
                     });
                     if (stored.key !== state.command.contentKey || stored.byteLength !== state.command.byteLength) {
@@ -106,7 +107,7 @@ export function createContentWriteCommands(context: CommandContext): ContentWrit
                         contentKey: stored.key,
                         kind: CONTENT_AVAILABLE_KIND,
                         requestId: message.requestId,
-                        sessionId: message.sessionId,
+                        target: message.target,
                     });
                 } catch (error) {
                     if (!context.signal.aborted) {

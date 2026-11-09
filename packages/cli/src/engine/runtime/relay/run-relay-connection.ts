@@ -4,6 +4,7 @@ import {
     RUNTIME_HEARTBEAT_ACK_KIND,
     RUNTIME_LIVENESS_READY_KIND,
     type RuntimeUpgradeResult,
+    readNativeSessionTarget,
 } from "@morty-build/client/protocol";
 import { type MessageEvent, WebSocket } from "undici";
 import type { ResolveAgent } from "../../session/api/session-api.ts";
@@ -11,6 +12,7 @@ import type { ExternalContentStore } from "../../session/content/external-conten
 import type { SessionManager } from "../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../session/native/native-session-browser.ts";
 import type { PromptLifecycle } from "../../session/prompt/prompt-lifecycle.ts";
+import type { SessionCreations } from "../../session/record/session-creations.ts";
 import type { ExecutionReceipts } from "../../session/turn/execution-receipts.ts";
 import type { SessionTurns } from "../../session/turn/session-turns.ts";
 import type { WorkspaceDirectoryService } from "../../session/workspace/workspace-directory.ts";
@@ -52,6 +54,7 @@ export interface RelayConnectionOptions {
     ) => Promise<void>;
     readonly directories: WorkspaceDirectoryService;
     readonly sessions: SessionManager;
+    readonly sessionCreations: SessionCreations;
     readonly nativeSessions: NativeSessionService;
     readonly operations: ExecutionReceipts;
     readonly publisher: RuntimeSessionEventPublisher;
@@ -71,6 +74,7 @@ export async function runRelayConnection({
     reportUpgradeAvailability,
     directories,
     sessionTurns,
+    sessionCreations,
     nativeSessions,
     operations,
     publisher,
@@ -104,6 +108,7 @@ export async function runRelayConnection({
         eventProjection,
         externalContent,
         sessionTurns,
+        sessionCreations,
         diagnostics,
         socket,
         signal: connectionController.signal,
@@ -315,14 +320,14 @@ function refuseUnsupportedRequest(socket: WebSocket, encoded: string): void {
         return;
     }
     const requestId: unknown = Reflect.get(value, "requestId");
-    const sessionId: unknown = Reflect.get(value, "sessionId");
+    const target = readNativeSessionTarget(Reflect.get(value, "target"));
     if (!isIdentifier(requestId)) {
         return;
     }
     replyFailure(
         socket,
         requestId,
-        isIdentifier(sessionId) ? sessionId : "",
+        target ?? undefined,
         "unsupported_operation",
         "This Morty Runtime does not support the requested operation.",
     );

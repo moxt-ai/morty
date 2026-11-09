@@ -60,7 +60,7 @@ test.each(["new", "imported"] as const)(
         await using agent = await PiFixture.create(provider);
         await agent.installExtension("questions.js", questionExtension);
         await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
-            const sessionId = origin === "imported" ? await importSavedSession(peer, agent) : peer.sessionId;
+            const sessionTarget = origin === "imported" ? await importSavedSession(peer, agent) : peer.target;
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
@@ -72,7 +72,7 @@ test.each(["new", "imported"] as const)(
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Ask all the native questions",
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             const answers = [forest, "yes", "no", unicodeName, "", editedDraft, ""];
@@ -111,7 +111,7 @@ test.each(["new", "imported"] as const)(
                                 interactionId: request.interactionId,
                                 kind: "session.elicitation.respond",
                                 requestId: crypto.randomUUID(),
-                                sessionId,
+                                target: sessionTarget,
                             }),
                         );
                         requests += 1;
@@ -160,7 +160,7 @@ test.each(["new", "imported"] as const)(
     },
 );
 
-async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promise<string> {
+async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promise<RealDaemonPeer["target"]> {
     const seedPrompt = "Save this native conversation for import";
     await agent.seedSession(peer.workspace, seedPrompt, peer.signal);
     const identity = { agentId: "pi", bindingId: peer.bindingId, directoryId: "default" };
@@ -173,7 +173,7 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
             cursor: null,
             kind: "native.session.request",
             requestId: listId,
-            sessionId: discoveryId,
+            discoveryId,
         }),
     );
     let entryId = "";
@@ -190,12 +190,10 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
         if (source === undefined) {
             throw new Error("Missing saved Pi session");
         }
-        expect(source.mortySessionIds).toEqual([]);
         entryId = source.entryId;
         break;
     }
     const importId = randomUUID();
-    const sessionId = randomUUID();
     peer.send(
         encodeNativeSessionCommand({
             ...identity,
@@ -203,8 +201,7 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
             entryId,
             kind: "native.session.request",
             requestId: importId,
-            sessionId: discoveryId,
-            targetSessionId: sessionId,
+            discoveryId,
         }),
     );
     for (;;) {
@@ -218,12 +215,12 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
         const result = decodeNativeSessionResult(message);
         if (result.action === "import" && result.requestId === importId) {
             expect(result.ready.restored).toBe(true);
-            return result.ready.sessionId;
+            return result.target;
         }
     }
 }
 
-function sendQuestionPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): string {
+function sendQuestionPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): string {
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
@@ -235,7 +232,7 @@ function sendQuestionPrompt(peer: RealDaemonPeer, sessionId: string, prompt: str
             attachments: [],
             kind: "session.prompt",
             prompt,
-            sessionId,
+            target: sessionTarget,
         }),
     );
     return commandId;
@@ -276,14 +273,14 @@ for (const ending of ["stop", "timeout"] as const) {
                 new PiAgentSpecification(),
                 agent.environment,
                 async (peer) => {
-                    const sessionId = await prepareNewRealSession(peer, "pi");
+                    const sessionTarget = await prepareNewRealSession(peer, "pi");
                     if (ending === "timeout") {
                         vi.useFakeTimers({
                             now: new Date("2026-10-24T00:00:00Z"),
                             toFake: ["Date", "setTimeout", "clearTimeout"],
                         });
                     }
-                    const commandId = sendQuestionPrompt(peer, sessionId, prompt);
+                    const commandId = sendQuestionPrompt(peer, sessionTarget, prompt);
                     let interactionId = "";
                     for (;;) {
                         const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
@@ -308,7 +305,7 @@ for (const ending of ["stop", "timeout"] as const) {
                                 commandId,
                                 kind: "session.cancel",
                                 requestId: crypto.randomUUID(),
-                                sessionId,
+                                target: sessionTarget,
                             }),
                         );
                     } else {
@@ -356,7 +353,7 @@ for (const ending of ["stop", "timeout"] as const) {
                             interactionId,
                             kind: "session.elicitation.respond",
                             requestId: crypto.randomUUID(),
-                            sessionId,
+                            target: sessionTarget,
                         }),
                     );
                     for (;;) {
@@ -368,7 +365,11 @@ for (const ending of ["stop", "timeout"] as const) {
                         expect(failure.code).toBe("elicitation_request_not_found");
                         break;
                     }
-                    const followup = sendQuestionPrompt(peer, sessionId, "Continue after the question was cancelled");
+                    const followup = sendQuestionPrompt(
+                        peer,
+                        sessionTarget,
+                        "Continue after the question was cancelled",
+                    );
                     let reply = "";
                     for (;;) {
                         const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
@@ -422,7 +423,7 @@ test("Given real Pi asks a question before a daemon disconnect, When the daemon 
     }`,
     );
     await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
-        const interruptedCommandId = sendQuestionPrompt(peer, peer.sessionId, prompt);
+        const interruptedCommandId = sendQuestionPrompt(peer, peer.target, prompt);
         let interactionId = "";
         for (;;) {
             const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
@@ -435,7 +436,7 @@ test("Given real Pi asks a question before a daemon disconnect, When the daemon 
             }
         }
         await peer.restart();
-        const commandId = sendQuestionPrompt(peer, peer.sessionId, "Continue after reconnect without asking again");
+        const commandId = sendQuestionPrompt(peer, peer.target, "Continue after reconnect without asking again");
         let interrupted = false;
         let reply = "";
         for (;;) {
@@ -472,7 +473,7 @@ test("Given real Pi asks a question before a daemon disconnect, When the daemon 
                 interactionId,
                 kind: "session.elicitation.respond",
                 requestId: crypto.randomUUID(),
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         for (;;) {
@@ -508,7 +509,7 @@ test("Given real Pi is waiting for an answer, When its process exits unexpectedl
         }`,
     );
     await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
-        const commandId = sendQuestionPrompt(peer, peer.sessionId, prompt);
+        const commandId = sendQuestionPrompt(peer, peer.target, prompt);
         let interactionId = "";
         let resolved = 0;
         for (;;) {
@@ -561,7 +562,7 @@ test("Given real Pi requests fields outside the supported bounds, When the quest
     }`,
     );
     await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
-        const commandId = sendQuestionPrompt(peer, peer.sessionId, prompt);
+        const commandId = sendQuestionPrompt(peer, peer.target, prompt);
         let text = "";
         let result = "";
         for (;;) {
@@ -624,7 +625,7 @@ test("Given real Pi asks dialogs with empty titles or confirmation bodies, When 
     }`,
     );
     await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
-        sendQuestionPrompt(peer, peer.sessionId, prompt);
+        sendQuestionPrompt(peer, peer.target, prompt);
         const answers = ["yes", "no", "B", "", ""];
         let requests = 0;
         let output = "";
@@ -641,7 +642,7 @@ test("Given real Pi asks dialogs with empty titles or confirmation bodies, When 
                             interactionId: request.interactionId,
                             kind: "session.elicitation.respond",
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     requests += 1;
@@ -680,7 +681,7 @@ test.each(["answer", "stop"] as const)(
         );
         await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
             for (const topic of ["archaeology", "bicycles", "coffee"]) {
-                sendQuestionPrompt(peer, peer.sessionId, `Talk about ${topic} with some detail`);
+                sendQuestionPrompt(peer, peer.target, `Talk about ${topic} with some detail`);
                 for (;;) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                     if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {
@@ -691,7 +692,7 @@ test.each(["answer", "stop"] as const)(
                     }
                 }
             }
-            const commandId = sendQuestionPrompt(peer, peer.sessionId, "/compact");
+            const commandId = sendQuestionPrompt(peer, peer.target, "/compact");
             let requests = 0;
             let cancelled = 0;
             let interactionId = "";
@@ -709,7 +710,7 @@ test.each(["answer", "stop"] as const)(
                                     commandId,
                                     kind: "session.cancel",
                                     requestId: crypto.randomUUID(),
-                                    sessionId: peer.sessionId,
+                                    target: peer.target,
                                 }),
                             );
                         } else {
@@ -720,7 +721,7 @@ test.each(["answer", "stop"] as const)(
                                     interactionId: request.interactionId,
                                     kind: "session.elicitation.respond",
                                     requestId: crypto.randomUUID(),
-                                    sessionId: peer.sessionId,
+                                    target: peer.target,
                                 }),
                             );
                         }
@@ -761,7 +762,7 @@ test.each(["answer", "stop"] as const)(
                         interactionId,
                         kind: "session.elicitation.respond",
                         requestId: crypto.randomUUID(),
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -772,7 +773,7 @@ test.each(["answer", "stop"] as const)(
                     }
                 }
             }
-            sendQuestionPrompt(peer, peer.sessionId, "Continue after manual compaction");
+            sendQuestionPrompt(peer, peer.target, "Continue after manual compaction");
             let reply = "";
             for (;;) {
                 const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));

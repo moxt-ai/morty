@@ -65,7 +65,7 @@ if (process.argv.includes("--version")) {
                         directoryId: "default",
                         kind: "session.prepare",
                         requestId: "prepare-external-image-session",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -83,7 +83,7 @@ if (process.argv.includes("--version")) {
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "Seed native history",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -98,7 +98,7 @@ if (process.argv.includes("--version")) {
                         eventLimit: 50,
                         kind: "session.live-history.v2.page.load",
                         requestId: "load-external-image-history",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 let imageKey = "";
@@ -143,7 +143,7 @@ if (process.argv.includes("--version")) {
                             maxBytes: 2_000_000,
                             path: `morty-content:${kind}:${key}`,
                             requestId: `read-external-${kind}`,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     const chunks: Buffer[] = [];

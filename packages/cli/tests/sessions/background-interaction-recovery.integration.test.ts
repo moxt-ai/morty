@@ -6,8 +6,8 @@ import * as acp from "@agentclientprotocol/sdk";
 import {
     decodeDaemonToServiceMessage,
     encodeNativeSessionRequest,
+    encodeSessionCreateCommand,
     encodeSessionPermissionRespondCommand,
-    encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     SESSION_EVENT_KIND,
@@ -130,28 +130,33 @@ test("Given a completed foreground turn, When its Agent requests background perm
     try {
         const socket = await connected.promise;
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "background_interaction";
         const identity = {
             agentId: "claude",
             bindingId: config.bindingId,
             directoryId: "default",
-            sessionId,
         };
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 ...identity,
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "prepare",
-                transient: true,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        while ((await next()).kind !== "session.ready") {
-            /* Wait for the public readiness response. */
+        let created = await next();
+        while (created.kind !== "session.ready") {
+            if (created.kind === "session.operation.failed") {
+                throw new Error(created.message);
+            }
+            created = await next();
         }
+        const sessionTarget = created.target;
         socket.send(
             encodeSessionPromptCommand({
                 ...identity,
                 commandId: "foreground",
+                target: sessionTarget,
                 disposition: "append",
                 attachments: [],
                 kind: "session.prompt",
@@ -173,7 +178,8 @@ test("Given a completed foreground turn, When its Agent requests background perm
                     action: "active-turn",
                     kind: "native.session.request",
                     requestId,
-                    targetSessionId: sessionId,
+                    discoveryId: crypto.randomUUID(),
+                    target: sessionTarget,
                 }),
             );
             for (;;) {
@@ -194,7 +200,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         });
         socket.send(
             encodeSessionPermissionRespondCommand({
-                sessionId,
+                target: sessionTarget,
                 interactionId: requested.payload.event.interactionId,
                 kind: "session.permission.respond",
                 requestId: crypto.randomUUID(),

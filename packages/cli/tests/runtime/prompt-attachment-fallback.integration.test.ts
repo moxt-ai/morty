@@ -73,7 +73,7 @@ test("Given unsupported attachments, When a prompt has text, Then the daemon del
                             disposition: SessionPromptDisposition.Append,
                             kind: "session.prompt",
                             prompt,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     return finish(commandId);

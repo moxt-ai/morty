@@ -1,7 +1,9 @@
 import { conversationTitleFromText } from "@morty-build/client";
-import type { SessionInteractionSnapshot } from "@morty-build/client/protocol";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     type AgentModelEffort,
+    isIdentifier,
+    type NativeSessionTarget,
     SESSION_COMMANDS_UPDATED_KIND,
     SESSION_CONFIG_UPDATED_KIND,
     SESSION_INFO_UPDATED_KIND,
@@ -9,6 +11,7 @@ import {
     type SessionCommand,
     type SessionConfigOption,
     type SessionEventPayload,
+    type SessionInteractionSnapshot,
 } from "@morty-build/client/protocol";
 import { AcpExecutionError, AcpPromptExecutionError } from "../../acp/acp-error.ts";
 import { RetryableAcpInitializationError, validateAgentRuntime } from "../../acp/adapter/agent-initialization.ts";
@@ -38,6 +41,7 @@ import {
     type SessionConfigurationChange,
     type SessionConfigurationSnapshot,
     type SessionConfigureOptions,
+    type SessionCreationOptions,
     type SessionObserver,
     type SessionPrepareOptions,
     type SessionRecovery,
@@ -48,7 +52,7 @@ import type { SessionEventPage } from "../history/session-event-store.ts";
 import { HistoryReplayCapture } from "../history/session-history.ts";
 import { SessionInteractions } from "../interaction/session-interactions.ts";
 import { waitForSharedOperation } from "../manager/operation-drain.ts";
-import { type SessionStore, StoredSession } from "../record/session-store.ts";
+import { FoundStoredSession, MissingStoredSession, type SessionStore, StoredSession } from "../record/session-store.ts";
 import type { SettledTurn } from "../turn/execution-receipts.ts";
 import type { AgentSessionRestore } from "./agent-session-restore.ts";
 import { configurationRevision } from "./configuration-revision.ts";
@@ -61,9 +65,9 @@ const SESSION_CONTROL_COMMAND_ID = "session-control";
 /** What the Session's execution authority tells its Agent session. */
 export interface SessionExecutionRecord {
     /** The command whose prompt the Session's Agent holds. */
-    readonly agentCommand: (sessionId: string) => string | undefined;
+    readonly agentCommand: (target: NativeSessionTarget) => string | undefined;
     /** The Session's settled turns, which a replayed history places among the Agent's own events. */
-    readonly settledTurns: (sessionId: string) => readonly SettledTurn[];
+    readonly settledTurns: (target: NativeSessionTarget) => readonly SettledTurn[];
 }
 
 type SessionLoadState =
@@ -92,6 +96,10 @@ interface LoadedSession {
     readonly opened: AdapterSessionOpened;
 }
 
+type SessionAddress =
+    | { readonly kind: "awaiting-native" }
+    | { readonly kind: "established"; readonly target: NativeSessionTarget };
+
 export class AgentSession implements AgentSessionRestore {
     // The restore surface: AgentSessionRestore members expose private state to
     // session-restore.ts only. The class keeps the fields private.
@@ -110,8 +118,14 @@ export class AgentSession implements AgentSessionRestore {
     get restored(): boolean {
         return this.#restored;
     }
-    get sessionId(): string {
-        return this.#mortySessionId;
+    get target(): NativeSessionTarget {
+        if (this.#address.kind === "established") {
+            return this.#address.target;
+        }
+        if (this.#nativeIdentity.kind === "bound") {
+            return { harness: this.#agentId, sessionId: this.#nativeIdentity.sessionId };
+        }
+        throw new AcpExecutionError("The harness has not established a Session", {}, "invalid_agent_session");
     }
     get store(): SessionStore {
         return this.#store;
@@ -124,11 +138,11 @@ export class AgentSession implements AgentSessionRestore {
     #modelEffort: AgentModelEffort | null = null;
     readonly #scope: AdapterSessionScope;
     readonly #subscriber: AdapterSessionSubscriber;
-    #nativeIdentity: { readonly kind: "unbound" } | { readonly kind: "bound"; readonly nativeSessionId: string } = {
+    #nativeIdentity: { readonly kind: "unbound" } | { readonly kind: "bound"; readonly sessionId: string } = {
         kind: "unbound",
     };
-    get #nativeSessionId(): string {
-        return this.#nativeIdentity.kind === "bound" ? this.#nativeIdentity.nativeSessionId : "";
+    get #sessionId(): string {
+        return this.#nativeIdentity.kind === "bound" ? this.#nativeIdentity.sessionId : "";
     }
     readonly #adapter: Adapter;
     readonly #agentId: string;
@@ -138,7 +152,7 @@ export class AgentSession implements AgentSessionRestore {
     readonly #agentCommand: () => string | undefined;
     readonly #settledTurns: () => readonly SettledTurn[];
     readonly #interactions: SessionInteractions;
-    #mortySessionId: string;
+    readonly #address: SessionAddress;
     readonly #metrics: OperationMetrics;
     readonly #store: SessionStore;
     #agentName = "";
@@ -160,7 +174,7 @@ export class AgentSession implements AgentSessionRestore {
     private constructor(
         agent: AcpAgentDefinition,
         cwd: string,
-        mortySessionId: string,
+        address: SessionAddress,
         getObserver: () => SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
@@ -168,21 +182,21 @@ export class AgentSession implements AgentSessionRestore {
         adapter: Adapter,
         externalize: SessionPrepareOptions["externalizeSessionUpdate"],
     ) {
-        this.#agentCommand = () => execution.agentCommand(this.#mortySessionId);
-        this.#settledTurns = () => execution.settledTurns(this.#mortySessionId);
+        this.#agentCommand = () => execution.agentCommand(this.target);
+        this.#settledTurns = () => execution.settledTurns(this.target);
         this.#adapter = adapter;
         this.#agentId = agent.id;
         this.#commands = [];
         this.#cwd = cwd;
         this.#environment = agent.environment;
-        this.#mortySessionId = mortySessionId;
+        this.#address = address;
         this.#metrics = metrics;
         this.#store = store;
         this.#getObserver = getObserver;
         this.#interactions = new SessionInteractions({
             cwd: () => this.#cwd,
-            getToolCall: (toolCallId) => this.#store.events.getToolCall(this.#mortySessionId, toolCallId),
-            sessionId: () => this.#mortySessionId,
+            getToolCall: (toolCallId) => this.#store.events.getToolCall(this.target, toolCallId),
+            target: () => this.target,
             commandId: () => this.#agentCommand() ?? SESSION_CONTROL_COMMAND_ID,
             assertNativeSession: this.assertNativeSession,
             observer: getObserver,
@@ -193,14 +207,23 @@ export class AgentSession implements AgentSessionRestore {
             cwd,
             ...(externalize === undefined
                 ? {}
-                : { externalizeUpdate: (update, signal) => externalize(this.#mortySessionId, update, signal) }),
+                : {
+                      externalizeUpdate: (sessionId, update, signal) => {
+                          if (this.#nativeIdentity.kind === "unbound") {
+                              this.selectNativeSession(sessionId);
+                          } else {
+                              this.assertNativeSession(sessionId);
+                          }
+                          return externalize(this.target, update, signal);
+                      },
+                  }),
         };
         this.#subscriber = {
-            onSessionEvent: async (nativeSessionId, event) => {
-                if (this.#nativeSessionId.length === 0) {
-                    this.selectNativeSession(nativeSessionId);
+            onSessionEvent: async (sessionId, event) => {
+                if (this.#sessionId.length === 0) {
+                    this.selectNativeSession(sessionId);
                 } else {
-                    this.assertNativeSession(nativeSessionId);
+                    this.assertNativeSession(sessionId);
                 }
                 await this.#processEvent(event);
             },
@@ -232,7 +255,8 @@ export class AgentSession implements AgentSessionRestore {
     }
 
     static async #start(
-        options: SessionPrepareOptions,
+        options: SessionCreationOptions,
+        address: SessionAddress,
         getObserver: () => SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
@@ -240,6 +264,13 @@ export class AgentSession implements AgentSessionRestore {
         metrics: OperationMetrics,
         adapter: Adapter,
     ): Promise<AgentSession> {
+        if (address.kind === "established" && address.target.harness !== options.agent.id) {
+            throw new AcpExecutionError(
+                "The native Session belongs to a different harness",
+                {},
+                "session_identity_mismatch",
+            );
+        }
         for (let attempt = 1; attempt <= 2; attempt += 1) {
             await metrics.measure(
                 "executable-validation",
@@ -251,7 +282,7 @@ export class AgentSession implements AgentSessionRestore {
                     new AgentSession(
                         options.agent,
                         options.cwd,
-                        options.sessionId,
+                        address,
                         getObserver,
                         execution,
                         store,
@@ -264,7 +295,13 @@ export class AgentSession implements AgentSessionRestore {
                 await initialize(runtime);
                 return runtime;
             } catch (error) {
-                await runtime.closeProcess();
+                try {
+                    await runtime.closeProcess();
+                } finally {
+                    if (address.kind === "awaiting-native" && runtime.#nativeIdentity.kind === "bound") {
+                        store.remove(runtime.target);
+                    }
+                }
                 options.signal.throwIfAborted();
                 if (error instanceof RetryableAcpInitializationError && attempt === 1) {
                     console.warn(`[${options.agent.id}-acp] ACP agent initialization failed; retrying once`);
@@ -293,6 +330,7 @@ export class AgentSession implements AgentSessionRestore {
     ): Promise<AgentSession> =>
         await AgentSession.#start(
             options,
+            { kind: "established", target: options.target },
             getObserver,
             execution,
             store,
@@ -304,6 +342,76 @@ export class AgentSession implements AgentSessionRestore {
             adapter,
         );
 
+    static readonly create = async (
+        options: SessionCreationOptions,
+        getObserver: () => SessionObserver,
+        execution: SessionExecutionRecord,
+        store: SessionStore,
+        metrics: OperationMetrics,
+    ): Promise<AgentSession> =>
+        await AgentSession.#start(
+            options,
+            { kind: "awaiting-native" },
+            getObserver,
+            execution,
+            store,
+            async (runtime) => {
+                const opened = await runtime.#writeNativeHistory(
+                    async () => await runtime.createSession(options.signal),
+                );
+                runtime.selectNativeSession(opened.sessionId);
+                runtime.setNativeHistoryOwnership({ kind: "fresh-session" });
+                runtime.applySessionOpened(opened);
+                options.signal.throwIfAborted();
+                runtime.writeStoredSession(new Date().toISOString());
+            },
+            metrics,
+            options.adapter,
+        );
+
+    static readonly fork = async (
+        options: SessionCreationOptions,
+        origin: Extract<NativeSessionOrigin, { readonly kind: "fork" }>,
+        capabilities: SessionCapabilities,
+        getObserver: () => SessionObserver,
+        execution: SessionExecutionRecord,
+        store: SessionStore,
+        metrics: OperationMetrics,
+    ): Promise<AgentSession> =>
+        await AgentSession.#start(
+            options,
+            { kind: "awaiting-native" },
+            getObserver,
+            execution,
+            store,
+            async (runtime) => {
+                runtime.#capabilities = capabilities;
+                const source = store.read({ harness: options.agent.id, sessionId: origin.sessionId });
+                const opened = await runtime.#writeNativeHistory(
+                    async () => await runtime.forkSession(origin.sessionId, options.signal),
+                );
+                if (opened.sessionId === origin.sessionId) {
+                    throw new AcpExecutionError(
+                        "The harness did not create an independent fork",
+                        {},
+                        "invalid_native_session_response",
+                    );
+                }
+                runtime.selectNativeSession(opened.sessionId);
+                runtime.applySessionOpened(opened);
+                runtime.setSessionTitle(origin.title);
+                runtime.setPrompted(true);
+                runtime.setRestored(true);
+                if (source instanceof FoundStoredSession) {
+                    await runtime.restoreStoredConfigurations(source.session, options.signal, "fork");
+                }
+                options.signal.throwIfAborted();
+                runtime.writeStoredSession(new Date().toISOString());
+            },
+            metrics,
+            options.adapter,
+        );
+
     readonly belongsTo = (agentId: string, cwd: string): boolean => this.#agentId === agentId && this.#cwd === cwd;
 
     readonly usesEnvironment = (environment: Readonly<Record<string, string>>): boolean =>
@@ -312,9 +420,7 @@ export class AgentSession implements AgentSessionRestore {
     readonly writeStoredSession = (updatedAt: string): void => {
         this.#store.write(
             new StoredSession(
-                this.#mortySessionId,
-                this.#agentId,
-                this.#nativeSessionId,
+                this.target,
                 this.#cwd,
                 this.#prompted,
                 this.#sessionTitle ?? "",
@@ -339,8 +445,8 @@ export class AgentSession implements AgentSessionRestore {
         if (normalized.length === 0) {
             throw new AcpExecutionError("The Session title cannot be empty", {}, "invalid_session_title");
         }
-        const nativeSessionId = this.#nativeSessionId;
-        if (nativeSessionId.length > 0) {
+        const sessionId = this.#sessionId;
+        if (sessionId.length > 0) {
             await this.#writeNativeHistory(
                 async () => await this.#adapter.renameSession({ ...this.#target(), title: normalized, signal }),
             );
@@ -359,7 +465,7 @@ export class AgentSession implements AgentSessionRestore {
 
     readonly #captureSelectedConfigurationValues = (): void => {
         this.#sessionConfigurations.capture(this.#configOptions);
-        if (this.#nativeSessionId.length > 0) {
+        if (this.#sessionId.length > 0) {
             this.writeStoredSession(new Date().toISOString());
         }
     };
@@ -449,12 +555,12 @@ export class AgentSession implements AgentSessionRestore {
     async #completedHistory(signal: AbortSignal): Promise<HistoryReplayCapture> {
         if (!this.#prompted && this.#nativeHistoryOwnership.kind === "fresh-session") {
             if (this.#sessionLoad.kind === "not-requested") {
-                this.#store.events.reset(this.#mortySessionId);
+                this.#store.events.reset(this.target);
                 this.#sessionLoad = {
-                    history: new HistoryReplayCapture(this.#store.events, this.#mortySessionId),
+                    history: new HistoryReplayCapture(this.#store.events, this.target),
                     kind: "loaded",
                     opened: {
-                        nativeSessionId: this.nativeSessionId(),
+                        sessionId: this.sessionId(),
                         capabilities: this.#capabilities,
                         configOptions: [],
                         agentName: this.#agentName,
@@ -477,15 +583,15 @@ export class AgentSession implements AgentSessionRestore {
         if (this.#sessionLoad.kind === "capturing") {
             return await waitForSharedOperation(this.#sessionLoad.completion, signal);
         }
-        this.#store.events.reset(this.#mortySessionId);
-        const history = new HistoryReplayCapture(this.#store.events, this.#mortySessionId, this.#settledTurns());
+        this.#store.events.reset(this.target);
+        const history = new HistoryReplayCapture(this.#store.events, this.target, this.#settledTurns());
         const completion = Promise.resolve().then(async (): Promise<LoadedSession> => {
             try {
                 const opened = await this.#writeNativeHistory(
                     async () =>
                         await this.#adapter.openSessionWithReplay({
                             ...this.#sessionParams(signal),
-                            nativeSessionId: this.nativeSessionId(),
+                            sessionId: this.sessionId(),
                         }),
                 );
                 signal.throwIfAborted();
@@ -601,28 +707,7 @@ export class AgentSession implements AgentSessionRestore {
         }
     };
 
-    readonly nativeSessionId = (): string => this.#nativeSessionId;
-
-    readonly adoptNativeSessionId = (sessionId: string): void => {
-        if (this.#prompted || this.#nativeSessionId !== sessionId) {
-            throw new AcpExecutionError("The new native Session cannot be adopted", {}, "session_identity_mismatch");
-        }
-        const previousSessionId = this.#mortySessionId;
-        this.#store.write(
-            new StoredSession(
-                sessionId,
-                this.#agentId,
-                sessionId,
-                this.#cwd,
-                false,
-                "",
-                new Date().toISOString(),
-                this.#sessionConfigurations.stored(),
-            ),
-        );
-        this.#store.remove(previousSessionId);
-        this.#mortySessionId = sessionId;
-    };
+    readonly sessionId = (): string => this.#sessionId;
 
     readonly #applyConfiguration = async (
         selection: SessionConfigurationSelection,
@@ -681,7 +766,7 @@ export class AgentSession implements AgentSessionRestore {
 
     readonly #publishConfiguration = async (): Promise<void> => {
         // Use the existing v2 ACP event vocabulary so old observers can still decode the stream.
-        const event = this.#store.events.append(this.#mortySessionId, {
+        const event = this.#store.events.append(this.target, {
             type: "acp",
             payload: {
                 sessionUpdate: "config_option_update",
@@ -701,7 +786,7 @@ export class AgentSession implements AgentSessionRestore {
     };
 
     readonly #target = (): AdapterSessionTarget => ({
-        nativeSessionId: this.#nativeSessionId,
+        sessionId: this.#sessionId,
         cwd: this.#cwd,
     });
 
@@ -710,9 +795,9 @@ export class AgentSession implements AgentSessionRestore {
         if (!this.#capabilities.loadSession && this.#sessionLoad.kind === "not-requested") {
             this.#sessionLoad = {
                 kind: "loaded",
-                history: new HistoryReplayCapture(this.#store.events, this.#mortySessionId),
+                history: new HistoryReplayCapture(this.#store.events, this.target),
                 opened: {
-                    nativeSessionId: this.nativeSessionId(),
+                    sessionId: this.sessionId(),
                     capabilities: this.#capabilities,
                     configOptions: [],
                     agentName: this.#agentName,
@@ -907,7 +992,7 @@ export class AgentSession implements AgentSessionRestore {
     };
 
     readonly interactionSnapshot = (): SessionInteractionSnapshot => {
-        const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(this.#mortySessionId);
+        const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(this.target);
         return { sessionGenerationId, throughPosition, interactions: this.#interactions.snapshot() };
     };
 
@@ -935,14 +1020,36 @@ export class AgentSession implements AgentSessionRestore {
     };
 
     readonly selectNativeSession = (sessionId: string): void => {
-        if (this.#nativeSessionId.length > 0 && this.#nativeSessionId !== sessionId) {
+        if (
+            this.#address.kind === "awaiting-native" &&
+            this.#nativeIdentity.kind === "unbound" &&
+            (!isIdentifier(sessionId) ||
+                !(this.#store.read({ harness: this.#agentId, sessionId: sessionId }) instanceof MissingStoredSession))
+        ) {
+            throw new AcpExecutionError(
+                "The Agent returned an invalid new Session ID",
+                {},
+                "invalid_native_session_response",
+            );
+        }
+        if (this.#sessionId.length > 0 && this.#sessionId !== sessionId) {
             throw new AcpExecutionError(
                 "ACP agent attempted to replace the selected session",
                 {},
                 "invalid_agent_session",
             );
         }
-        this.#nativeIdentity = { kind: "bound", nativeSessionId: sessionId };
+        if (
+            this.#address.kind === "established" &&
+            !sameNativeSession(this.#address.target, { harness: this.#agentId, sessionId: sessionId })
+        ) {
+            throw new AcpExecutionError(
+                "The harness returned a different native Session",
+                {},
+                "session_identity_mismatch",
+            );
+        }
+        this.#nativeIdentity = { kind: "bound", sessionId: sessionId };
         this.#nativeHistoryOwnership = { kind: "agent-owned" };
     };
 
@@ -972,7 +1079,7 @@ export class AgentSession implements AgentSessionRestore {
                 await this.#getObserver().onCommands({
                     commands: this.#commands,
                     kind: SESSION_COMMANDS_UPDATED_KIND,
-                    sessionId: this.#mortySessionId,
+                    target: this.target,
                 });
                 return;
             case "configuration":
@@ -990,12 +1097,12 @@ export class AgentSession implements AgentSessionRestore {
                             break;
                     }
                 }
-                if (this.#nativeSessionId.length > 0) {
+                if (this.#sessionId.length > 0) {
                     this.writeStoredSession(new Date().toISOString());
                 }
                 await this.#getObserver().onInfo({
                     kind: SESSION_INFO_UPDATED_KIND,
-                    sessionId: this.#mortySessionId,
+                    target: this.target,
                     title: this.#sessionTitle,
                     updatedAt: this.#sessionUpdatedAt,
                 });
@@ -1013,7 +1120,7 @@ export class AgentSession implements AgentSessionRestore {
                 await this.closeProcess();
             }
         }
-        if (this.#nativeSessionId.length === 0) {
+        if (this.#sessionId.length === 0) {
             await this.closeProcess();
             return;
         }
@@ -1037,10 +1144,10 @@ export class AgentSession implements AgentSessionRestore {
         this.#adapter.createSession(this.#sessionParams(signal));
 
     readonly forkSession = (sourceSessionId: string, signal: AbortSignal): Promise<AdapterSessionOpened> =>
-        this.#adapter.forkSession({ ...this.#sessionParams(signal), sourceNativeSessionId: sourceSessionId });
+        this.#adapter.forkSession({ ...this.#sessionParams(signal), sourceSessionId: sourceSessionId });
 
     readonly openSession = (signal: AbortSignal): Promise<AdapterSessionOpened> =>
-        this.#adapter.openSession({ ...this.#sessionParams(signal), nativeSessionId: this.nativeSessionId() });
+        this.#adapter.openSession({ ...this.#sessionParams(signal), sessionId: this.sessionId() });
 
     readonly openSessionWithReplay = async (signal: AbortSignal): Promise<AdapterSessionOpened> =>
         (await this.#loadSession(signal)).opened;
@@ -1066,7 +1173,7 @@ export class AgentSession implements AgentSessionRestore {
     }
 
     readonly assertNativeSession = (sessionId: string): void => {
-        if (sessionId !== this.#nativeSessionId) {
+        if (sessionId !== this.#sessionId) {
             throw new AcpExecutionError("ACP agent referenced an unknown session", {}, "invalid_agent_session");
         }
     };
@@ -1077,7 +1184,7 @@ export class AgentSession implements AgentSessionRestore {
             configurationRevision: configurationRevision(this.#configOptions),
             kind: SESSION_CONFIG_UPDATED_KIND,
             requestId: `agent-update-${crypto.randomUUID()}`,
-            sessionId: this.#mortySessionId,
+            target: this.target,
         });
     };
 }

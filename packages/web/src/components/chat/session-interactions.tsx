@@ -498,7 +498,7 @@ function PermissionCard({
                                         interactionId: permission.interactionId,
                                         optionId: option.optionId,
                                         outcome: "selected",
-                                        sessionId: permission.sessionId,
+                                        target: permission.target,
                                     });
                                 }}
                                 size="sm"
@@ -581,7 +581,7 @@ function ElicitationCard({
             action,
             content: "",
             interactionId: elicitation.interactionId,
-            sessionId: elicitation.sessionId,
+            target: elicitation.target,
         });
     };
     if (answered && elicitation.mode === "form") {
@@ -657,7 +657,7 @@ function ElicitationCard({
                                                     action: "accept",
                                                     content: "",
                                                     interactionId: elicitation.interactionId,
-                                                    sessionId: elicitation.sessionId,
+                                                    target: elicitation.target,
                                                 });
                                             }}
                                             size="sm"
@@ -707,7 +707,7 @@ function ElicitationCard({
                                     action: "accept",
                                     content: encodeElicitationAnswers(elicitation.fields, draft),
                                     interactionId: elicitation.interactionId,
-                                    sessionId: elicitation.sessionId,
+                                    target: elicitation.target,
                                 });
                             }}
                         >

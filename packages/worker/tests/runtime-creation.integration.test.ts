@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
-test("Given a Session still applying initial settings, When another caller creates it, Then it is busy until initialization settles and a retry creates a retained Session", {
+test("Given a creation operation still applying initial settings, When another caller changes its inputs, Then the conflict is refused and a corrected retry after initialization fails creates a retained native Session", {
     timeout: 60000,
 }, async () => {
     const cloud = await createIdentityFixture();
@@ -22,12 +22,12 @@ test("Given a Session still applying initial settings, When another caller creat
             },
         ]);
         const signal = AbortSignal.timeout(30000);
-        const sessionId = crypto.randomUUID();
+        const operationId = crypto.randomUUID();
         const input = {
             agentId: "configuration-test",
             directoryId: "default",
             computerId: runtime.computerId,
-            sessionId,
+            operationId,
         };
         const refused = runtime.client.sessions
             .create(
@@ -49,16 +49,18 @@ test("Given a Session still applying initial settings, When another caller creat
             await expect(
                 runtime.client.sessions.create({ ...input, configurations: [] }, signal),
             ).rejects.toMatchObject({
-                code: "session_busy",
+                code: "idempotency_conflict",
             });
         } finally {
             release.resolve();
         }
         expect(await refused).toMatchObject({ ok: false, cause: { code: "session_configuration_conflict" } });
-        expect(await runtime.client.runtimes.querySessions([sessionId], signal)).toHaveLength(0);
+        await expect(runtime.client.sessions.readCreation(operationId, signal)).rejects.toMatchObject({
+            code: "session_creation_unavailable",
+        });
         const successful = await runtime.client.sessions.create({ ...input, configurations: [] }, signal);
-        expect(successful.sessionId).toBe(sessionId);
-        expect(await runtime.client.runtimes.querySessions([sessionId], signal)).toHaveLength(1);
+        expect(successful.target.sessionId).not.toBe(operationId);
+        expect(await runtime.client.runtimes.querySessions([successful.target], signal)).toHaveLength(1);
     } finally {
         release.resolve();
         await cloud.close();

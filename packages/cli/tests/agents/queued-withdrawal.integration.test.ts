@@ -44,7 +44,7 @@ test.each(["pi", "claude", "codex"] as const)(
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         agentId,
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -75,7 +75,7 @@ test.each(["pi", "claude", "codex"] as const)(
                             JSON.stringify({
                                 kind: "session.permission.respond",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 interactionId: request.interactionId,
                                 outcome: "selected",
                                 optionId: option.optionId,
@@ -110,7 +110,7 @@ test.each(["pi", "claude", "codex"] as const)(
                     kind: "session.cancel-before-start",
                     requestId: crypto.randomUUID(),
                     commandId: queued,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             while (!completed.has(queued)) {

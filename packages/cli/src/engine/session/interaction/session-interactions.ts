@@ -6,6 +6,7 @@ import type {
     RequestPermissionResponse,
 } from "@agentclientprotocol/sdk";
 import {
+    type NativeSessionTarget,
     SESSION_ELICITATION_REQUESTED_KIND,
     SESSION_ELICITATION_RESOLVED_KIND,
     SESSION_PERMISSION_REQUESTED_KIND,
@@ -26,7 +27,7 @@ import type { ElicitationResponseOptions, PermissionResponseOptions, SessionObse
 import { PendingElicitation, PendingPermission } from "./pending-interactions.ts";
 
 interface SessionInteractionContext {
-    readonly sessionId: () => string;
+    readonly target: () => NativeSessionTarget;
     readonly cwd: () => string;
     /**
      * The tool call the event history projection holds for this identifier,
@@ -112,7 +113,7 @@ export class SessionInteractions {
             kind: SESSION_PERMISSION_RESOLVED_KIND,
             optionId: options.outcome === "selected" ? options.optionId : "",
             outcome: options.outcome,
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
         });
     };
 
@@ -152,7 +153,7 @@ export class SessionInteractions {
             action: options.action,
             interactionId: options.interactionId,
             kind: SESSION_ELICITATION_RESOLVED_KIND,
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
         });
     };
 
@@ -192,7 +193,7 @@ export class SessionInteractions {
             interactionId,
             kind: SESSION_PERMISSION_REQUESTED_KIND,
             options,
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
             title: truncate(title ?? "Permission required", 500),
             toolCallId: truncate(request.toolCall.toolCallId, 255),
             toolKind: truncate(kind ?? "other", 64),
@@ -247,7 +248,7 @@ export class SessionInteractions {
             kind: SESSION_ELICITATION_REQUESTED_KIND,
             message: truncate(request.message, 2_000),
             mode: request.mode,
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
             url:
                 request.mode === "url" && typeof Reflect.get(request, "url") === "string"
                     ? truncate(readString(Reflect.get(request, "url")), 4_096)
@@ -278,7 +279,7 @@ export class SessionInteractions {
             action: "complete",
             interactionId: accepted.interactionId,
             kind: SESSION_ELICITATION_RESOLVED_KIND,
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
         });
     };
 
@@ -293,7 +294,7 @@ export class SessionInteractions {
             kind: SESSION_PERMISSION_RESOLVED_KIND,
             optionId: "",
             outcome: "cancelled",
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
         });
     };
 
@@ -307,7 +308,7 @@ export class SessionInteractions {
             action: "cancel",
             interactionId,
             kind: SESSION_ELICITATION_RESOLVED_KIND,
-            sessionId: this.#context.sessionId(),
+            target: this.#context.target(),
         });
     };
 
@@ -329,7 +330,7 @@ export class SessionInteractions {
                 action: "cancel",
                 interactionId,
                 kind: SESSION_ELICITATION_RESOLVED_KIND,
-                sessionId: this.#context.sessionId(),
+                target: this.#context.target(),
             });
         }
     };

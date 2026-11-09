@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AcpSessionUpdate, NativeSessionCommand, SessionLiveEvent } from "@morty-build/client/protocol";
@@ -9,8 +9,11 @@ import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.
 import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { NativeSessionService } from "../../src/engine/session/native/native-session-browser.ts";
+import { SessionCreations } from "../../src/engine/session/record/session-creations.ts";
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { WorkspaceDirectoryService } from "../../src/engine/session/workspace/workspace-directory.ts";
+import { SessionCreationTable } from "../../src/engine/storage/session/session-creation-table.ts";
+import { openAcpSessionDatabase } from "../../src/engine/storage/sqlite/local-databases.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
@@ -65,7 +68,6 @@ export async function fixture(
         | "invalid-fork"
         | "exclusive-writer"
         | "persist-after-first-prompt" = "supported",
-    sessionIdentity: "assigned" | "native" = "assigned",
     adapters: AdapterResolver = acpAdapters,
 ) {
     const temporary = await realpath(await mkdtemp(join(tmpdir(), "morty-native-boundary-")));
@@ -114,15 +116,14 @@ export async function fixture(
         observer,
         store,
         adapters,
-        sessionIdentity,
         onSessionStatusChanged: () => undefined,
-        contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+        contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,
                 kind: content.kind,
                 mediaType: content.mediaType,
                 name: content.name,
-                sessionId,
+                target: sessionTarget,
                 signal,
             }),
         ),
@@ -140,11 +141,14 @@ export async function fixture(
         new RuntimeLocalContext(workspace, process.env),
     );
     const directories = new WorkspaceDirectoryService("workspace", workspace);
+    const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));
+    const creations = new SessionCreations(new SessionCreationTable(database));
     let service = new NativeSessionService(
         config.bindingId,
         (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
         directories,
         sessions.sessions,
+        creations,
         async () => ({
             turn: null,
             queued: [],
@@ -157,49 +161,47 @@ export async function fixture(
         directoryId: "default",
         kind: "native.session.request",
         requestId: "native-operation",
-        sessionId: "browser",
+        discoveryId: "browser",
     } satisfies Omit<NativeSessionCommand, "action">;
     const seed = async (title: string, cwd = workspace): Promise<string> => {
         const external = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
             timer: systemTimer,
             maxProcesses: null,
         });
-        const sessionId = crypto.randomUUID();
-        const before = new Set(await readdir(native));
         try {
+            const target = await external.createNativeSession({
+                agent,
+                cwd,
+                signal: AbortSignal.timeout(10_000),
+            });
             await external.runPrompt({
                 agent,
                 cwd,
                 signal: new AbortController().signal,
-                sessionId,
+                target,
                 commandId: crypto.randomUUID(),
                 prompt: title,
                 images: [],
                 resources: [],
             });
+            return target.sessionId;
         } finally {
             await external.close();
         }
-        const created = (await readdir(native)).find((file) => file.endsWith(".json") && !before.has(file));
-        if (created === undefined) {
-            throw new Error("The fake Agent did not persist its native session");
-        }
-        return decodeURIComponent(created.slice(0, -5));
     };
     const list = async (cursor: string | null = null) => {
         const result = await service.execute({ ...identity, action: "list", cursor }, new AbortController().signal);
@@ -211,6 +213,8 @@ export async function fixture(
     const close = async (): Promise<void> => {
         await service.close();
         await sessions.close();
+        await creations.settle();
+        database.close();
         if (previous === undefined) {
             delete process.env["MORTY_FAKE_ACP_STATE_DIRECTORY"];
         } else {
@@ -240,15 +244,14 @@ export async function fixture(
                 observer,
                 store,
                 adapters,
-                sessionIdentity,
                 onSessionStatusChanged: () => undefined,
-                contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+                contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                     new UnretainedExternalContentStore().put({
                         bytes: content.bytes,
                         kind: content.kind,
                         mediaType: content.mediaType,
                         name: content.name,
-                        sessionId,
+                        target: sessionTarget,
                         signal,
                     }),
                 ),
@@ -260,6 +263,7 @@ export async function fixture(
                 (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
                 directories,
                 sessions.sessions,
+                creations,
                 async () => ({
                     turn: null,
                     queued: [],

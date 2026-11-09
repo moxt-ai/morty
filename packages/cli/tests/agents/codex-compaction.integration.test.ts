@@ -33,7 +33,7 @@ test("Given Codex auto-compacts a conversation, When the daemon relays the turns
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {

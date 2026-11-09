@@ -12,10 +12,12 @@ import {
     decodeSessionHistoryPageLoaded,
     decodeSessionOperationFailedEvent,
     decodeSessionPromptCommand,
+    decodeSessionReadyEvent,
     encodeFileReadCommand,
     encodeNativeSessionCommand,
     encodeRuntimeLivenessReadyEvent,
     encodeSessionCancelCommand,
+    encodeSessionCreateCommand,
     encodeSessionHistoryPageLoad,
     encodeSessionPromptCommand,
     FILE_END_KIND,
@@ -130,7 +132,25 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        const sessionId = "new_codex_live_turn";
+        socket.send(
+            encodeSessionCreateCommand({
+                kind: "session.create",
+                requestId: randomUUID(),
+                operationId: randomUUID(),
+                agentId: "codex",
+                bindingId: config.bindingId,
+                directoryId: "default",
+                configurations: [],
+            }),
+        );
+        let created = await messages.next();
+        while (decodeMessageKind(created) !== "session.ready") {
+            if (decodeMessageKind(created) === "session.operation.failed") {
+                throw new Error(created);
+            }
+            created = await messages.next();
+        }
+        const sessionTarget = decodeSessionReadyEvent(created).target;
         for (const _turnNumber of [1, 2]) {
             providerEntered = Promise.withResolvers<void>();
             releaseProvider = Promise.withResolvers<void>();
@@ -145,7 +165,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Use a shell tool successfully, then reply using the configured model",
-                sessionId,
+                target: sessionTarget,
             });
             socket.send(originalPrompt);
             let started = false;
@@ -181,8 +201,8 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                             directoryId: `path-${Buffer.from(config.defaultWorkspace).toString("base64url")}`,
                             kind: "native.session.request",
                             requestId: "queued_snapshot",
-                            sessionId,
-                            targetSessionId: sessionId,
+                            target: sessionTarget,
+                            discoveryId: randomUUID(),
                         }),
                     );
                     continue;
@@ -204,7 +224,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                                 commandId: queuedCommandId,
                                 kind: SESSION_CANCEL_KIND,
                                 requestId: crypto.randomUUID(),
-                                sessionId,
+                                target: sessionTarget,
                             }),
                         );
                         continue;
@@ -232,7 +252,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         encodeSessionHistoryPageLoad({
                             kind: "session.live-history.v2.page.load",
                             requestId: randomUUID(),
-                            sessionId,
+                            target: sessionTarget,
                             cursor: null,
                             eventLimit: 200,
                         }),
@@ -271,7 +291,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                                 attachments: [],
                                 kind: "session.prompt",
                                 prompt: "This queued prompt should not run",
-                                sessionId,
+                                target: sessionTarget,
                             }),
                         );
                     } else if (
@@ -302,8 +322,8 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                                     directoryId: "default",
                                     kind: "native.session.request",
                                     requestId: randomUUID(),
-                                    sessionId,
-                                    targetSessionId: sessionId,
+                                    target: sessionTarget,
+                                    discoveryId: randomUUID(),
                                 }),
                             );
                         } else {
@@ -354,7 +374,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                 }
                 expect(decodeSessionOperationFailedEvent(message)).toMatchObject({
                     requestId: commandId,
-                    sessionId,
+                    target: sessionTarget,
                     code: "command_identity_conflict",
                 });
                 refused = true;
@@ -363,7 +383,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                 encodeSessionHistoryPageLoad({
                     kind: "session.live-history.v2.page.load",
                     requestId: randomUUID(),
-                    sessionId,
+                    target: sessionTarget,
                     cursor: null,
                     eventLimit: 200,
                 }),
@@ -419,7 +439,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             encodeFileReadCommand({
                 kind: "file.read",
                 requestId: randomUUID(),
-                sessionId,
+                target: sessionTarget,
                 path: "badge.png",
                 maxBytes: 1024,
             }),

@@ -282,7 +282,7 @@ test("Given a saved-session entry is still loading, When the user selects New Se
     try {
         const app = await createTestApp({
             connectAgent: true,
-            page: { kind: "managed-session", sessionId: "chat_missing_session" },
+            page: { kind: "managed-session", harness: "claude", sessionId: "chat_missing_session" },
         });
         const composer = await app.queryElementByTestId(
             dataTestId.messageComposer,
@@ -954,7 +954,7 @@ test("Given a stale Session link, When the user opens it, Then the Session failu
     const sessionId = `chat_${"0".repeat(64)}`;
     const app = await createTestApp({
         connectAgent: true,
-        page: { kind: "managed-session", sessionId },
+        page: { kind: "managed-session", harness: "claude", sessionId: sessionId },
     });
 
     const failure = await app.queryElementByTestId(dataTestId.sessionLoadFailure);

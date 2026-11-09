@@ -1,15 +1,34 @@
+import { RequestError } from "@agentclientprotocol/sdk";
 import { z } from "zod";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { AdapterSessionOpened, AdapterSessionScope } from "../native-history/preview-contract.ts";
-import { nativeSessionIdSchema } from "../protocol/native-session.ts";
+import { sessionIdSchema } from "../protocol/native-session.ts";
 import type { AcpExecutionConnection } from "./execution-connections.ts";
 
 export function sessionWorkspace(scope: AdapterSessionScope) {
     return { cwd: scope.cwd, mcpServers: [] };
 }
 
-export function createdNativeSessionId(response: unknown): string {
-    const decoded = z.object({ sessionId: nativeSessionIdSchema }).safeParse(response);
+/** Only protocol-level rejection before admission permits repeating Session creation. */
+export async function sessionCreationResponse(operation: Promise<unknown>, signal: AbortSignal): Promise<unknown> {
+    try {
+        return await operation;
+    } catch (cause) {
+        signal.throwIfAborted();
+        const rejection = cause instanceof AcpExecutionError ? cause.cause : cause;
+        if (rejection instanceof RequestError && (rejection.code === -32601 || rejection.code === -32602)) {
+            throw new AcpExecutionError(
+                "The Agent refused the Session creation request before admission",
+                { cause },
+                "session_creation_refused",
+            );
+        }
+        throw cause;
+    }
+}
+
+export function createdSessionId(response: unknown): string {
+    const decoded = z.object({ sessionId: sessionIdSchema }).safeParse(response);
     if (!decoded.success) {
         throw new AcpExecutionError(
             "The Agent returned an invalid native session",
@@ -22,7 +41,7 @@ export function createdNativeSessionId(response: unknown): string {
 
 export async function normalizeOpenedSession(
     session: AcpExecutionConnection,
-    nativeSessionId: string,
+    sessionId: string,
     response: unknown,
     signal: AbortSignal,
 ): Promise<AdapterSessionOpened> {
@@ -34,7 +53,7 @@ export async function normalizeOpenedSession(
     signal.throwIfAborted();
     const initialized = await session.connection.initializeAgent(signal);
     return {
-        nativeSessionId,
+        sessionId,
         agentName: initialized.agentName,
         agentVersion: initialized.agentVersion,
         agentSettingsModelEffort: session.connection.agentSettingsModelEffort(),

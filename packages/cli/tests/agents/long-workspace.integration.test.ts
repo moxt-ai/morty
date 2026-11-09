@@ -56,7 +56,7 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 let response = "";
@@ -83,7 +83,7 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
                     encodeSessionHistoryPageLoad({
                         kind: "session.live-history.v2.page.load",
                         requestId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         cursor: null,
                         eventLimit: 100,
                     }),

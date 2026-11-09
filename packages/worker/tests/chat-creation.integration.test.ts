@@ -6,6 +6,8 @@ import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime
 import worker, { fetchPublicApplication } from "../src/application.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
+const targetSchema = v.object({ harness: v.string(), sessionId: v.string() });
+
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(AUTH_TIME);
@@ -38,10 +40,10 @@ test.beforeAll(async ({ cloud }) => {
 async function createChatFixture(
     cloud: Awaited<ReturnType<typeof createIdentityFixture>>,
     agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],
-    nativeSessionIds: ReadonlySet<string> = new Set(),
+    sessionIds: ReadonlySet<string> = new Set(),
 ) {
     const identity = await cloud.createAnonymousUser();
-    const runtime = await cloud.connectAgent(identity.computerId, agents, nativeSessionIds);
+    const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
     const environment = cloud.environment();
     const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
         worker.fetch(
@@ -82,6 +84,7 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
         ).status,
     ).toBe(202);
     const unowned = await fixture.request(`chat/bots/${fixture.botId}/session-access`, {
+        harness: "codex",
         sessionId: "chat_unowned_security_audit",
     });
     expect(unowned.status).toBe(404);
@@ -94,17 +97,44 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
-    const access = await fixture.request(`chat/bots/${fixture.botId}/session-access`, { sessionId });
+    const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
+    const access = await fixture.request(`chat/bots/${fixture.botId}/session-access`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
     expect(access.status).toBe(200);
-    expect(await access.json()).toMatchObject({ sessionId, credential: expect.stringMatching(/^msession_/u) });
+    expect(await access.json()).toMatchObject({
+        target: { harness: "codex", sessionId: sessionId },
+        credential: expect.stringMatching(/^msession_/u),
+    });
 
     // A Machine identifier that is not the caller's own opens nothing, even for a Session the caller owns.
-    const otherMachine = await fixture.request(`chat/bots/bot_${crypto.randomUUID()}/session-access`, { sessionId });
+    const otherMachine = await fixture.request(`chat/bots/bot_${crypto.randomUUID()}/session-access`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
     expect(otherMachine.status).toBe(404);
+
+    const otherHarness = await fixture.request(`chat/bots/${fixture.botId}/session-access`, {
+        harness: "pi",
+        sessionId: sessionId,
+    });
+    expect(otherHarness.status).toBe(404);
+    expect(await otherHarness.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+        harness: "pi",
+        sessionId: sessionId,
+    });
+    expect(archived.status).toBe(200);
+    expect(await archived.json()).toEqual({ close: "unconfirmed" });
+    const retained = await fixture.request(`chat/bots/${fixture.botId}/session-access`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
+    expect(retained.status).toBe(200);
 });
 
-test("Given a draft Bot, When its owner configures and opens it, Then setup lists Runtime options and the Runtime endpoint exposes only the configured Runtime", async ({
+test("Given a draft Bot, When its owner sends the first message's creation request, Then the harness supplies the real session identity on the configured Runtime", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -171,10 +201,10 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
     });
     expect(opened.status).toBe(200);
     const access = v.parse(
-        v.object({ sessionId: v.string(), credential: v.string(), ready: v.unknown() }),
+        v.object({ target: targetSchema, credential: v.string(), ready: v.unknown() }),
         await opened.json(),
     );
-    expect(access.sessionId).toMatch(/^chat_[0-9a-f]{64}$/u);
+    expect(access.target.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu);
     expect(access.credential).toMatch(/^msession_/u);
 
     const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
@@ -184,7 +214,7 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
             sessions: v.array(
                 v.object({
                     createdAt: v.pipe(v.string(), v.isoTimestamp()),
-                    id: v.string(),
+                    target: targetSchema,
                     status: v.object({ kind: v.string() }),
                     updatedAt: v.pipe(v.string(), v.isoTimestamp()),
                 }),
@@ -195,7 +225,7 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
     expect(sessions).toMatchObject({
         sessions: [
             {
-                id: access.sessionId,
+                target: access.target,
                 status: { kind: "idle" },
                 updatedAt: AUTH_TIME.toISOString(),
             },
@@ -240,7 +270,7 @@ for (const { reason, ...configuration } of [
         const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations });
         expect(opened.status).toBe(200);
         const access = v.parse(
-            v.object({ sessionId: v.string(), credential: v.string(), ready: v.unknown() }),
+            v.object({ target: targetSchema, credential: v.string(), ready: v.unknown() }),
             await opened.json(),
         );
         expect(access.credential).toMatch(/^msession_/u);
@@ -254,14 +284,14 @@ for (const { reason, ...configuration } of [
         expect(access.ready).toMatchObject(expectedReady);
         const retried = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations });
         expect(retried.status).toBe(200);
-        expect(await retried.json()).toMatchObject({ sessionId: access.sessionId, ready: expectedReady });
+        expect(await retried.json()).toMatchObject({ target: access.target, ready: expectedReady });
         expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
-            sessions: [{ id: access.sessionId }],
+            sessions: [{ target: access.target }],
         });
     });
 }
 
-test("Given the answer to a new conversation's Session creation is lost, When its owner retries the start, Then the conversation is owned and listed once and the retry opens the created Session", async ({
+test("Given the answer to a new conversation's Session creation is lost, When the Runtime restarts and its owner retries the start, Then the conversation is owned and listed once and the retry opens the created Session", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -283,16 +313,50 @@ test("Given the answer to a new conversation's Session creation is lost, When it
     expect(failed.status).toBeGreaterThanOrEqual(500);
     const listed = async () =>
         v.parse(
-            v.object({ sessions: v.array(v.object({ id: v.string() })) }),
+            v.object({ sessions: v.array(v.object({ target: targetSchema })) }),
             await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json(),
         ).sessions;
     const [owned, ...others] = await listed();
     expect(others).toEqual([]);
+    expect(owned).toBeDefined();
+    await fixture.runtime.disconnect();
+    await fixture.runtime.reconnect();
 
     const retried = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
     expect(retried.status).toBe(200);
-    expect(await retried.json()).toMatchObject({ sessionId: owned?.id });
-    expect(await listed()).toEqual([expect.objectContaining({ id: owned?.id })]);
+    expect(await retried.json()).toMatchObject({ target: owned?.target });
+    expect(await listed()).toEqual([expect.objectContaining({ target: owned?.target })]);
+});
+
+test("Given a completed creation operation, When its first-send settings are changed on retry, Then Chat refuses the reused operation and keeps the original native conversation", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                computerId: fixture.runtime.computerId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const input = {
+        agentRef: "codex",
+        conversationKey: "conflicting-creation",
+        workspaceRef: "default",
+        configurations: [],
+    };
+    const first = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
+    expect(first.status).toBe(200);
+    const { target } = v.parse(v.object({ target: targetSchema }), await first.json());
+    const refused = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        ...input,
+        configurations: [{ configId: "model", valueType: "select", value: "test-large", booleanValue: false }],
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
+    const listed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+    expect(await listed.json()).toMatchObject({ sessions: [{ target }] });
 });
 
 test("Given a new conversation whose Session creation never reached the Runtime, When its owner lists conversations, Then none is listed until a retry creates it", async ({
@@ -321,15 +385,15 @@ test("Given a new conversation whose Session creation never reached the Runtime,
     expect(failed.status).toBeGreaterThanOrEqual(500);
     const listed = async () =>
         v.parse(
-            v.object({ sessions: v.array(v.object({ id: v.string(), title: v.string() })) }),
+            v.object({ sessions: v.array(v.object({ target: targetSchema, title: v.string() })) }),
             await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json(),
         ).sessions;
     expect(await listed()).toEqual([]);
 
     const retried = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
     expect(retried.status).toBe(200);
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await retried.json());
-    expect(await listed()).toEqual([expect.objectContaining({ id: sessionId })]);
+    const { target } = v.parse(v.object({ target: targetSchema }), await retried.json());
+    expect(await listed()).toEqual([expect.objectContaining({ target })]);
 });
 
 test("Given an Agent whose model decides its effort levels, When Chat starts a conversation that lists the effort before the model, Then the new Session holds both selections", async ({
@@ -396,8 +460,8 @@ for (const configured of [false, true]) {
     test(`Given a Bot ${configured ? "bound to another Runtime" : "without a Runtime"}, When its owner browses or opens native sessions using a client-selected Runtime, Then Chat rejects every operation without creating sessions or ownership records`, async ({
         cloud,
     }) => {
-        const nativeSessionId = crypto.randomUUID();
-        await using fixture = await createChatFixture(cloud, undefined, new Set([nativeSessionId]));
+        const sessionId = crypto.randomUUID();
+        await using fixture = await createChatFixture(cloud, undefined, new Set([sessionId]));
         await using bound = configured ? await createChatFixture(cloud) : null;
         const owner = bound ?? fixture;
         if (bound !== null) {
@@ -414,17 +478,20 @@ for (const configured of [false, true]) {
         const identity = { agentId: "codex", directoryId: "default" };
         // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
         // attributed to a nonexistent Runtime, entry, or discovery.
-        const found = await fixture.runtime.client.runtimes.findNativeSessionByNativeSessionId(
-            { ...identity, nativeSessionId },
+        const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
+            { ...identity, sessionId },
             AbortSignal.timeout(10_000),
         );
         const before = await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000));
         const entry = { ...identity, computerId, directoryId: found.entry.directoryId };
         const paths = [
             { path: "native-sessions", input: { ...entry, action: "list", cursor: null, discoveryId: null } },
-            { path: `native-session/${found.entry.entryId}`, input: { ...entry, nativeSessionId } },
-            { path: `native-session/${found.entry.entryId}/import`, input: { ...entry, discoveryId: found.sessionId } },
-            { path: "native-session-forks/fork-operation", input: { ...entry, nativeSessionId } },
+            { path: `native-session/${found.entry.entryId}`, input: { ...entry, sessionId } },
+            {
+                path: `native-session/${found.entry.entryId}/import`,
+                input: { ...entry, discoveryId: found.discoveryId },
+            },
+            { path: "native-session-forks/fork-operation", input: { ...entry, sessionId } },
         ];
         const responses = [];
         for (const { path, input } of paths) {
@@ -478,11 +545,12 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
-    const access = v.parse(v.object({ agentRef: v.string(), sessionId: v.string() }), await opened.json());
+    const access = v.parse(v.object({ agentRef: v.string(), target: targetSchema }), await opened.json());
     expect(access.agentRef).toBe("pi");
 
     const restored = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, {
-        sessionId: access.sessionId,
+        harness: "pi",
+        sessionId: access.target.sessionId,
     });
     expect(restored.status).toBe(200);
     expect(await restored.json()).toMatchObject({ agentRef: "pi" });
@@ -507,7 +575,7 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     expect(listed.status).toBe(200);
     const discovery = v.parse(
         v.object({
-            sessionId: v.string(),
+            discoveryId: v.string(),
             entries: v.array(v.object({ directoryId: v.string(), entryId: v.string() })),
         }),
         await listed.json(),
@@ -515,21 +583,21 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     const entry = v.parse(v.object({ directoryId: v.string(), entryId: v.string() }), discovery.entries[0]);
     const entryId = entry.entryId;
     const path = `chat/bots/${fixture.botId}/native-session/${entryId}/import`;
-    const input = { ...identity, directoryId: entry.directoryId, discoveryId: discovery.sessionId };
+    const input = { ...identity, directoryId: entry.directoryId, discoveryId: discovery.discoveryId };
     const first = await fixture.request(path, input);
     expect(first.status).toBe(200);
-    const opened = v.parse(v.object({ ready: v.object({ sessionId: v.string() }) }), await first.json());
+    const opened = v.parse(v.object({ ready: v.object({ target: targetSchema }) }), await first.json());
     const second = await fixture.request(path, input);
     expect(second.status).toBe(200);
-    expect(await second.json()).toMatchObject({ ready: { sessionId: opened.ready.sessionId } });
+    expect(await second.json()).toMatchObject({ ready: { target: opened.ready.target } });
     const handoff = await fixture.request(`chat/bots/${fixture.botId}/continue-native-session`, {
         harness: "codex",
         sessionId: nativeId,
     });
     expect(handoff.status).toBe(200);
-    expect(await handoff.json()).toMatchObject({ result: { ready: { sessionId: opened.ready.sessionId } } });
+    expect(await handoff.json()).toMatchObject({ result: { ready: { target: opened.ready.target } } });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
-    expect(await managed.json()).toMatchObject({ sessions: [{ id: opened.ready.sessionId }] });
+    expect(await managed.json()).toMatchObject({ sessions: [{ target: opened.ready.target }] });
 });
 
 test("Given a managed Chat session is still running, When its owner archives it, Then Chat stops the Agent process and removes the session", async ({
@@ -546,9 +614,9 @@ test("Given a managed Chat session is still running, When its owner archives it,
         conversationKey: "busy-archive",
         workspaceRef: "default",
     });
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+    const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
     await fixture.runtime.client.turns.submitToRuntime(
-        sessionId,
+        { harness: "codex", sessionId: sessionId },
         {
             agentId: "codex",
             content: "wait for steering",
@@ -559,7 +627,10 @@ test("Given a managed Chat session is still running, When its owner archives it,
         AbortSignal.timeout(10_000),
     );
 
-    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
 
     expect(archived.status).toBe(200);
     expect(await archived.json()).toEqual({ close: "confirmed" });
@@ -581,19 +652,28 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
         conversationKey: "idle-archive",
         workspaceRef: "default",
     });
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+    const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
 
-    const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
+    const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
     expect(reopened.status).toBe(200);
-    expect(await reopened.json()).toMatchObject({ sessionId });
+    expect(await reopened.json()).toMatchObject({ target: { harness: "codex", sessionId: sessionId } });
 
-    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
 
     expect(archived.status).toBe(200);
     expect(await archived.json()).toEqual({ close: "confirmed" });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
-    const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
+    const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
     expect(rejected.status).toBe(404);
     expect(await rejected.json()).toMatchObject({
         error: {
@@ -603,8 +683,11 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
         },
     });
     await expect(
-        fixture.runtime.client.sessions.restore(sessionId, AbortSignal.timeout(10_000)),
-    ).resolves.toMatchObject({ ready: { sessionId } });
+        fixture.runtime.client.sessions.restore(
+            { harness: "codex", sessionId: sessionId },
+            AbortSignal.timeout(10_000),
+        ),
+    ).resolves.toMatchObject({ ready: { target: { harness: "codex", sessionId: sessionId } } });
 });
 
 for (const operation of ["access", "managed-session"]) {
@@ -622,23 +705,34 @@ for (const operation of ["access", "managed-session"]) {
             conversationKey: "concurrent-archive",
             workspaceRef: "default",
         });
-        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+        const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
 
         const [reopened, archived] = await Promise.all([
-            fixture.request(
-                `chat/bots/${fixture.botId}/${operation}`,
-                operation === "access" ? { conversationId: sessionId } : { sessionId },
-            ),
-            fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId }),
+            fixture.request(`chat/bots/${fixture.botId}/${operation}`, {
+                harness: "codex",
+                sessionId: sessionId,
+            }),
+            fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+                harness: "codex",
+                sessionId: sessionId,
+            }),
         ]);
 
         expect([200, 404]).toContain(reopened.status);
         expect(archived.status).toBe(200);
         expect(await archived.json()).toEqual({ close: "confirmed" });
         await expect(
-            fixture.runtime.client.sessions.rename(computerId, sessionId, "Still closed", AbortSignal.timeout(10_000)),
+            fixture.runtime.client.sessions.rename(
+                computerId,
+                { harness: "codex", sessionId: sessionId },
+                "Still closed",
+                AbortSignal.timeout(10_000),
+            ),
         ).rejects.toMatchObject({ code: "session_closed" });
-        const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
+        const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            harness: "codex",
+            sessionId: sessionId,
+        });
         expect(rejected.status).toBe(404);
         const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
         expect(await managed.json()).toEqual({ sessions: [] });
@@ -659,16 +753,22 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
         conversationKey: "unavailable-close-archive",
         workspaceRef: "default",
     });
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+    const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
     await fixture.runtime[Symbol.asyncDispose]();
 
-    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+    const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
 
     expect(archived.status).toBe(200);
     expect(await archived.json()).toEqual({ close: "unconfirmed" });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
-    const repeated = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+    const repeated = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, {
+        harness: "codex",
+        sessionId: sessionId,
+    });
     expect(repeated.status).toBe(200);
     expect(await repeated.json()).toEqual({ close: "unconfirmed" });
 });
@@ -693,7 +793,7 @@ test("Given a chat opened with a Session credential, When the machine's owner re
     });
     expect(opened.status).toBe(200);
     const access = v.parse(
-        v.object({ endpoint: v.string(), computerId: v.string(), sessionId: v.string(), credential: v.string() }),
+        v.object({ endpoint: v.string(), computerId: v.string(), target: targetSchema, credential: v.string() }),
         await opened.json(),
     );
     const client = new MortyClient({
@@ -702,7 +802,7 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         credentialProvider: { credential: async () => access.credential },
     });
     const readHistory = () =>
-        client.events.list(access.sessionId, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
+        client.events.list(access.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
     const revoked = await fixture.request("identity/revoke-all-access", {});
@@ -741,7 +841,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         conversationKey: "followed-while-revoked",
         workspaceRef: "default",
     });
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+    const { target } = v.parse(v.object({ target: targetSchema }), await opened.json());
     const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
         headers: { Origin: APP_ORIGIN, Upgrade: "websocket" },
     });
@@ -778,7 +878,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
 
     expect((await fixture.request("identity/revoke-all-access", {})).status).toBe(200);
     await fixture.runtime.client.turns.submitToRuntime(
-        sessionId,
+        target,
         {
             agentId: "codex",
             content: "Reply after revoke",
@@ -840,7 +940,7 @@ test("Given two browsers joined through links, When one disconnects the other br
     });
     expect(opened.status).toBe(200);
     const window = v.parse(
-        v.object({ endpoint: v.string(), computerId: v.string(), sessionId: v.string(), credential: v.string() }),
+        v.object({ endpoint: v.string(), computerId: v.string(), target: targetSchema, credential: v.string() }),
         await opened.json(),
     );
     const readHistory = () =>
@@ -848,7 +948,7 @@ test("Given two browsers joined through links, When one disconnects the other br
             endpoint: window.endpoint,
             computerId: window.computerId,
             credentialProvider: { credential: async () => window.credential },
-        }).events.list(window.sessionId, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
+        }).events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
     const ended = await asBrowser(owner, `computers/${fixture.computerId}/identity/v1/other-browser-access`, "DELETE");
@@ -922,21 +1022,24 @@ test("Given an existing owned conversation, When a repeated start is refused, Th
     const input = { agentRef: "configuration-test", conversationKey: "audit-retry", workspaceRef: "default" };
     const started = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations: [] });
     expect(started.status).toBe(200);
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await started.json());
+    const { target } = v.parse(v.object({ target: targetSchema }), await started.json());
     expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
-        sessions: [{ id: sessionId }],
+        sessions: [{ target }],
     });
     const repeated = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations: [] });
     expect(repeated.status).toBe(200);
-    expect(await repeated.json()).toMatchObject({ sessionId });
+    expect(await repeated.json()).toMatchObject({ target });
     const refused = await fixture.request(`chat/bots/${fixture.botId}/access`, {
         ...input,
         configurations: [{ configId: "removed-setting", valueType: "select", value: "default", booleanValue: false }],
     });
     expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({ error: { code: "session_configuration_conflict" } });
-    const access = await fixture.request(`chat/bots/${fixture.botId}/session-access`, { sessionId });
+    expect(await refused.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
+    const access = await fixture.request(`chat/bots/${fixture.botId}/session-access`, {
+        harness: "configuration-test",
+        sessionId: target.sessionId,
+    });
     const listed = await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json();
     expect(access.status).toBe(200);
-    expect(listed).toMatchObject({ sessions: [{ id: sessionId }] });
+    expect(listed).toMatchObject({ sessions: [{ target }] });
 });

@@ -84,7 +84,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
     readonly #onSessionUpdate: (notification: CodexSessionNotification) => Promise<void>;
     readonly #onBackgroundActivity: InProcessAcpEndpointOptions["onBackgroundActivity"];
     readonly #onPromptDelegation: InProcessAcpEndpointOptions["onPromptDelegation"];
-    #nativeSessionId = "";
+    #sessionId = "";
     #sessionAgent: CodexSessionAgent;
 
     constructor(options: CodexEndpointOptions) {
@@ -108,7 +108,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
         this.#sessionAgent = new CodexOwnedAcpAgent({
             client: this.#appServer,
             settings: this.#settings,
-            threadId: () => this.#nativeSessionId,
+            threadId: () => this.#sessionId,
             connection: () => this.#connection,
             emit: this.#emit,
             onBackgroundActivity: (activity) => {
@@ -156,9 +156,9 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                         AbortSignal.any([context.signal, AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS)]),
                     ),
                 );
-                this.#nativeSessionId = created.thread.id;
+                this.#sessionId = created.thread.id;
                 this.#settings.selectNewThread(created);
-                await this.#settings.probeCollaborationMode(this.#nativeSessionId, context.signal);
+                await this.#settings.probeCollaborationMode(this.#sessionId, context.signal);
                 this.#advertiseCompactCommand();
                 // The settings Morty discovers come from this response. Without them the Run
                 // settings panel has nothing to render and saved selections cannot be re-applied.
@@ -197,9 +197,9 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                         AbortSignal.any([context.signal, AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS)]),
                     ),
                 );
-                this.#nativeSessionId = forked.thread.id;
+                this.#sessionId = forked.thread.id;
                 this.#settings.selectRestoredThread(forked);
-                await this.#settings.probeCollaborationMode(this.#nativeSessionId, context.signal);
+                await this.#settings.probeCollaborationMode(this.#sessionId, context.signal);
                 this.#advertiseCompactCommand();
                 return { configOptions: this.#settings.configOptions(), sessionId: forked.thread.id };
             })
@@ -337,7 +337,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 await this.#onPromptDelegation?.(stage);
             });
             await queued.initialize(signal);
-            this.#nativeSessionId = threadId;
+            this.#sessionId = threadId;
             this.#settings.selectRestoredThread({
                 thread: { id: threadId },
                 model: saved.thread.model,
@@ -347,9 +347,9 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
             this.#sessionAgent = queued;
             return;
         }
-        this.#nativeSessionId = resumed.thread.id;
+        this.#sessionId = resumed.thread.id;
         this.#settings.selectRestoredThread(resumed);
-        await this.#settings.probeCollaborationMode(this.#nativeSessionId, signal);
+        await this.#settings.probeCollaborationMode(this.#sessionId, signal);
     };
 
     /** What the session response tells Morty about the session behavior selected while opening it. */
@@ -361,7 +361,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
     // ACP load requires chronological replay. Resume only restores execution;
     // native pages supply history without a single full-transcript response.
     readonly #replaySavedHistory = async (signal: AbortSignal): Promise<void> => {
-        await replayCodexHistory(this.#appServer, this.#nativeSessionId, this.#emit, signal);
+        await replayCodexHistory(this.#appServer, this.#sessionId, this.#emit, signal);
     };
 
     /** Announces the manual compact command after every session entry point —
@@ -386,11 +386,11 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
 
     readonly #emit = async (update: CodexSessionUpdate): Promise<void> => {
         const connection = this.#connection;
-        if (connection === null || this.#nativeSessionId.length === 0) {
+        if (connection === null || this.#sessionId.length === 0) {
             return;
         }
         await this.#onSessionUpdate({
-            sessionId: this.#nativeSessionId,
+            sessionId: this.#sessionId,
             update,
         });
     };

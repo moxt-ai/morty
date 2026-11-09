@@ -21,15 +21,14 @@ describe("Agent setting capabilities", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -51,12 +50,11 @@ describe("Agent setting capabilities", () => {
                     options,
                 ),
         );
-        const session = {
+        const session = await manager.createSession({
             agent,
             cwd: process.cwd(),
-            sessionId: "controlled-provider-default-effort",
             signal: new AbortController().signal,
-        };
+        });
 
         try {
             const prepared = await manager.prepareSession(session);
@@ -100,15 +98,14 @@ describe("Agent setting capabilities", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -130,12 +127,11 @@ describe("Agent setting capabilities", () => {
                     options,
                 ),
         );
-        const session = {
+        const session = await manager.createSession({
             agent,
             cwd: process.cwd(),
-            sessionId: "controlled-without-effort",
             signal: new AbortController().signal,
-        };
+        });
 
         try {
             const prepared = await manager.prepareSession(session);
@@ -162,15 +158,14 @@ describe("Agent setting capabilities", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -197,7 +192,11 @@ describe("Agent setting capabilities", () => {
             const prepared = await manager.prepareSession({
                 agent,
                 cwd: process.cwd(),
-                sessionId: "pi-native-settings-only",
+                target: await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
             expect(prepared.configOptions).not.toEqual(
@@ -217,15 +216,14 @@ describe("Agent setting capabilities", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -247,12 +245,11 @@ describe("Agent setting capabilities", () => {
                     options,
                 ),
         );
-        const session = {
+        const session = await manager.createSession({
             agent,
             cwd: process.cwd(),
-            sessionId: "ignored-setting-update",
             signal: new AbortController().signal,
-        };
+        });
 
         try {
             await manager.prepareSession(session);

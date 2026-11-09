@@ -11,7 +11,7 @@ it("Given a permission request without its execution context, When it crosses th
         kind: "session.permission.requested",
         commandId: "command-1",
         interactionId: "interaction-1",
-        sessionId: "session-1",
+        target: { harness: "agent-1", sessionId: "session-1" },
         title: "Read file",
         toolCallId: "tool-1",
         toolKind: "read",
@@ -52,7 +52,7 @@ it("Given history holding a turn's lifecycle, When a client decodes it, Then the
     const fields = {
         recordedAt: "2026-11-08T00:00:00.000Z",
         sessionGenerationId: "generation-1",
-        sessionId: "session-1",
+        target: { harness: "agent-1", sessionId: "session-1" },
     };
     const page = {
         events: [
@@ -91,6 +91,7 @@ it("Given a session list entry without status, When a client decodes it, Then it
         directoryLabel: "Workspace",
         prompted: false,
         sessionId: "session-1",
+        target: { harness: "agent-1", sessionId: "session-1" },
         title: "Session",
         updatedAt: "2026-11-07T00:00:00.000Z",
     };
@@ -98,4 +99,28 @@ it("Given a session list entry without status, When a client decodes it, Then it
     expect(() => decodeSessionsListedEvent(JSON.stringify(page))).toThrow();
     const current = { ...page, entries: [{ ...entry, status: { kind: "idle" } }] };
     expect(decodeSessionsListedEvent(JSON.stringify(current))).toEqual(current);
+});
+
+it("Given a Session's metadata disagrees with its native pair, When it crosses the protocol boundary, Then the client rejects the conflicting identity", () => {
+    const entry = {
+        agentId: "claude",
+        directoryId: "default",
+        directoryLabel: "Workspace",
+        prompted: false,
+        sessionId: "native-1",
+        target: { harness: "claude", sessionId: "native-1" },
+        status: { kind: "idle" },
+        title: "Session",
+        updatedAt: "2026-11-07T00:00:00.000Z",
+    };
+    for (const conflicting of [
+        { ...entry, agentId: "codex" },
+        { ...entry, sessionId: "native-2" },
+    ]) {
+        expect(() =>
+            decodeSessionsListedEvent(
+                JSON.stringify({ kind: "session.listed", entries: [conflicting], requestId: "request-1" }),
+            ),
+        ).toThrow();
+    }
 });

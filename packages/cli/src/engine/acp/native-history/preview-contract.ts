@@ -1,5 +1,6 @@
 import type {
     AgentModelEffort,
+    NativeSessionTarget,
     PromptMetadata,
     PromptUsage,
     SessionCapabilities,
@@ -28,28 +29,28 @@ export interface SessionEventPage {
 
 /** What the session's event store offers an adapter materializing projected history. */
 export interface SessionEventStore {
-    readonly append: (sessionId: string, event: SessionEventPayload) => SessionLiveEvent;
+    readonly append: (sessionTarget: NativeSessionTarget, event: SessionEventPayload) => SessionLiveEvent;
     readonly close: () => void;
     /**
      * The projected tool call announced with this identifier in its current
      * merged form, or `undefined` when no such announcement is recorded.
      */
-    readonly getToolCall: (sessionId: string, toolCallId: string) => ProjectedToolCall | undefined;
+    readonly getToolCall: (sessionTarget: NativeSessionTarget, toolCallId: string) => ProjectedToolCall | undefined;
     /** Records projected events without publishing them live. */
     readonly materialize: (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         sessionGenerationId: string,
         events: readonly SessionEventPayload[],
     ) => void;
     /** Reads one page of recorded events. */
-    readonly page: (sessionId: string, eventLimit: number, cursor: string | null) => SessionEventPage;
-    readonly remove: (sessionId: string) => void;
-    readonly reset: (sessionId: string) => void;
+    readonly page: (sessionTarget: NativeSessionTarget, eventLimit: number, cursor: string | null) => SessionEventPage;
+    readonly remove: (sessionTarget: NativeSessionTarget) => void;
+    readonly reset: (sessionTarget: NativeSessionTarget) => void;
 }
 
 /** What a caller wants to preview from a saved native session. */
 export interface NativeSessionPreviewRequest {
-    readonly nativeSessionId: string;
+    readonly sessionId: string;
     readonly eventLimit: number;
     readonly cursor: string | null;
 }
@@ -78,7 +79,7 @@ export interface NativeSessionLookupBudget {
 }
 
 export interface AdapterSessionTarget {
-    readonly nativeSessionId: string;
+    readonly sessionId: string;
     readonly cwd: string;
 }
 
@@ -90,7 +91,7 @@ export interface AdapterPromptResult {
 
 /** Normalized lifecycle output; no harness response escapes into business state. */
 export interface AdapterSessionOpened {
-    readonly nativeSessionId: string;
+    readonly sessionId: string;
     readonly capabilities: SessionCapabilities;
     readonly configOptions: readonly SessionConfigOption[];
     readonly agentName: string;
@@ -110,11 +111,11 @@ export interface AdapterSessionCreateParams extends AdapterSessionSubscriber {
 }
 
 interface AdapterSessionOpenParams extends AdapterSessionCreateParams {
-    readonly nativeSessionId: string;
+    readonly sessionId: string;
 }
 
 interface AdapterSessionForkParams extends AdapterSessionCreateParams {
-    readonly sourceNativeSessionId: string;
+    readonly sourceSessionId: string;
 }
 
 interface AdapterSessionOperation extends AdapterSessionTarget {
@@ -162,7 +163,7 @@ export interface Adapter {
     }) => Promise<NativeSessionPage>;
     readonly findSession: (params: {
         readonly query: NativeSessionQuery;
-        readonly nativeSessionId: string;
+        readonly sessionId: string;
         readonly budget: NativeSessionLookupBudget;
     }) => Promise<NativeSessionInfo>;
     readonly readSessionHistory: (params: {

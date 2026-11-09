@@ -38,12 +38,12 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
             outputLimitBytes: 1_048_576,
         });
         const started = z.object({ type: z.literal("thread.started"), thread_id: z.string().min(1) });
-        const nativeSessionId = seeded.stdout
+        const sessionId = seeded.stdout
             .split("\n")
             .filter((line) => line.trim().length > 0)
             .map((line) => started.safeParse(JSON.parse(line)))
             .find((result) => result.success)?.data?.thread_id;
-        if (nativeSessionId === undefined) {
+        if (sessionId === undefined) {
             throw new Error(`Native Codex did not report its session ID: ${seeded.stdout}`);
         }
 
@@ -52,7 +52,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
             bindingId: peer.bindingId,
             directoryId: "default",
             kind: "native.session.request",
-            sessionId: randomUUID(),
+            discoveryId: randomUUID(),
         } as const;
         const nextResult = async (requestId: string) => {
             for (;;) {
@@ -74,7 +74,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
             encodeNativeSessionCommand({
                 ...identity,
                 action: "find",
-                nativeSessionId,
+                sessionId,
                 requestId: findRequestId,
             }),
         );
@@ -82,9 +82,8 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
         if (found.action !== "find") {
             throw new Error("Expected the native handoff session");
         }
-        expect(found.entry.nativeSessionId).toBe(nativeSessionId);
+        expect(found.entry.sessionId).toBe(sessionId);
 
-        const sessionId = randomUUID();
         const importRequestId = randomUUID();
         peer.send(
             encodeNativeSessionCommand({
@@ -92,18 +91,24 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
                 action: "import",
                 entryId: found.entry.entryId,
                 requestId: importRequestId,
-                targetSessionId: sessionId,
             }),
         );
         const imported = await nextResult(importRequestId);
-        expect(imported).toMatchObject({ action: "import", ready: { restored: true }, targetSessionId: sessionId });
+        expect(imported).toMatchObject({
+            action: "import",
+            ready: { restored: true },
+            target: { harness: "codex", sessionId },
+        });
+        if (imported.action !== "import") {
+            throw new Error("Expected native import");
+        }
 
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId,
-                sessionId,
+                target: imported.target,
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",

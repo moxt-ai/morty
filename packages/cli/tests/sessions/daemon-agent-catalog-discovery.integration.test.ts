@@ -15,7 +15,7 @@ import {
     decodeSessionOperationFailedEvent,
     decodeSessionReadyEvent,
     encodeAgentCatalogDiscoverCommand,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     MORTY_API_PREFIX,
 } from "@morty-build/client/protocol";
 import { listen, port, sendText } from "@morty-build/platform-test-support/websocket";
@@ -467,13 +467,14 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         const prepareRequestId = "prepare-racing-catalog-discovery";
         sendText(
             socket,
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 agentId: "controlled-acp",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: prepareRequestId,
-                sessionId: "session-catalog-discovery-race",
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
 
@@ -592,13 +593,14 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         const prepareRequestId = "prepare-discovery-reply-snapshot";
         sendText(
             socket,
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 agentId: "controlled-acp",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: prepareRequestId,
-                sessionId: "session-catalog-discovery-reply",
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
         // Complete the resolver's probe before releasing the publication's HTTP response.

@@ -1,19 +1,12 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "b69726a3-566f-44c4-87d7-aa559cb8362c",
+    "id": "893a00b1-d3b9-419a-8263-3e64073ab6a4",
     "prevId": "a2874692-2452-4b6d-bcd1-b06735823b84",
     "tables": {
         "acp_session": {
             "name": "acp_session",
             "columns": {
-                "session_id": {
-                    "name": "session_id",
-                    "type": "text",
-                    "primaryKey": true,
-                    "notNull": true,
-                    "autoincrement": false
-                },
                 "agent_id": {
                     "name": "agent_id",
                     "type": "text",
@@ -21,8 +14,8 @@
                     "notNull": true,
                     "autoincrement": false
                 },
-                "native_session_id": {
-                    "name": "native_session_id",
+                "session_id": {
+                    "name": "session_id",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": true,
@@ -30,6 +23,13 @@
                 },
                 "cwd": {
                     "name": "cwd",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "additional_directories": {
+                    "name": "additional_directories",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": true,
@@ -67,7 +67,12 @@
             },
             "indexes": {},
             "foreignKeys": {},
-            "compositePrimaryKeys": {},
+            "compositePrimaryKeys": {
+                "acp_session_agent_id_session_id_pk": {
+                    "columns": ["agent_id", "session_id"],
+                    "name": "acp_session_agent_id_session_id_pk"
+                }
+            },
             "uniqueConstraints": {},
             "checkConstraints": {}
         },
@@ -165,6 +170,37 @@
                     "type": "text",
                     "primaryKey": false,
                     "notNull": true,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "checkConstraints": {}
+        },
+        "session_creation": {
+            "name": "session_creation",
+            "columns": {
+                "operation_id": {
+                    "name": "operation_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "request_hash": {
+                    "name": "request_hash",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "result_json": {
+                    "name": "result_json",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
                     "autoincrement": false
                 }
             },

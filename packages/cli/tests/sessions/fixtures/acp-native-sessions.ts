@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
 import { exitsAfterSessionCreation, persistsEmptySessions } from "../../support/acp-process.ts";
@@ -17,6 +17,27 @@ import {
 
 let listCommandsAnnounced = false;
 
+/** The controlled harness owns allocation; independent harness stores have independent namespaces. */
+function allocateSessionId(): string {
+    const directory = process.env["MORTY_FAKE_ACP_STATE_DIRECTORY"];
+    if (directory === undefined) {
+        return crypto.randomUUID();
+    }
+    const allocations = join(directory, "native-session-allocations");
+    mkdirSync(allocations, { recursive: true });
+    for (let sequence = 1; sequence < 1_000_000_000_000; sequence += 1) {
+        try {
+            writeFileSync(join(allocations, String(sequence)), "", { flag: "wx" });
+            return `00000000-0000-4000-8000-${String(sequence).padStart(12, "0")}`;
+        } catch (cause) {
+            if (!(cause instanceof Error && "code" in cause && cause.code === "EEXIST")) {
+                throw cause;
+            }
+        }
+    }
+    throw new Error("Controlled harness native Session allocation is exhausted");
+}
+
 /** Like Claude Code, a new session starts with the model its working directory's `.claude/settings.json` names. */
 function projectModel(cwd: string): string | undefined {
     const path = join(cwd, ".claude", "settings.json");
@@ -33,7 +54,7 @@ export function registerNativeSessions(agent: ReturnType<typeof acp.agent>) {
             if (process.argv.includes("--authentication-required")) {
                 throw acp.RequestError.authRequired();
             }
-            const sessionId = crypto.randomUUID();
+            const sessionId = allocateSessionId();
             acquireWriter(sessionId);
             const state = new ControlledSessionState(0, projectModel(context.params.cwd));
             nativeMetadata.set(sessionId, {
@@ -66,6 +87,12 @@ export function registerNativeSessions(agent: ReturnType<typeof acp.agent>) {
                         configOptions: configOptions(state),
                         sessionUpdate: "config_option_update",
                     },
+                });
+            }
+            if (process.argv.includes("--announce-title-while-creating")) {
+                await context.client.notify(acp.methods.client.session.update, {
+                    sessionId,
+                    update: { sessionUpdate: "session_info_update", title: "Harness-created conversation" },
                 });
             }
             if (exitsAfterSessionCreation()) {

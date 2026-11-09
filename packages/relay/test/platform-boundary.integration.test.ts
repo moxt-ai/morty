@@ -28,6 +28,7 @@ import {
     encodeSessionStatusChangedEvent,
     encodeSessionTurnStoppedEvent,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
@@ -52,7 +53,9 @@ import {
     type PlatformRelayBindings,
 } from "../src/worker.ts";
 
-function liveEvent(sessionId: string, text: string): string {
+const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
+
+function liveEvent(sessionTarget: NativeSessionTarget, text: string): string {
     return encodeSessionEventEnvelope({
         kind: "session.event.v2",
         events: [
@@ -61,7 +64,7 @@ function liveEvent(sessionId: string, text: string): string {
                 position: "1",
                 recordedAt: "2026-09-18T00:00:00.000Z",
                 sessionGenerationId: "session-generation-1",
-                sessionId,
+                target: sessionTarget,
                 type: "acp",
                 payload: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
             },
@@ -277,7 +280,7 @@ describe.sequential("Platform Session-only boundary", () => {
 
         const response = await worker.fetch(
             new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/local-session/files/content?maxBytes=33554432&path=%2Fworkspace%2Fpackage.json`,
+                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/local-session/files/content?maxBytes=33554432&path=%2Fworkspace%2Fpackage.json`,
                 {
                     headers: {
                         "access-control-request-headers": "authorization",
@@ -302,7 +305,7 @@ describe.sequential("Platform Session-only boundary", () => {
 
         const response = await worker.fetch(
             new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/local-session/interactions`,
+                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/local-session/interactions`,
                 { headers: { authorization: "Bearer app_credential" } },
             ),
             bindings(),
@@ -441,7 +444,7 @@ describe.sequential("Platform Session-only boundary", () => {
             expect(JSON.parse(await hostMessages.next())).toEqual(rollback);
             const closeResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/session-to-close/close`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/session-to-close/close`,
                     {
                         body: "{}",
                         headers: credentialHeaders(appCredential),
@@ -453,7 +456,7 @@ describe.sequential("Platform Session-only boundary", () => {
             const closeCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
             expect(closeCommand).toMatchObject({
                 kind: "session.close",
-                sessionId: "session-to-close",
+                target: nativeTarget("session-to-close"),
             });
             if (closeCommand.kind !== "session.close") {
                 throw new Error("Expected a Session close command");
@@ -463,24 +466,24 @@ describe.sequential("Platform Session-only boundary", () => {
                 encodeSessionClosedEvent({
                     kind: "session.closed",
                     requestId: closeCommand.requestId,
-                    sessionId: "session-to-close",
+                    target: nativeTarget("session-to-close"),
                 }),
             );
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
                 kind: "session.closed",
                 requestId: closeCommand.requestId,
-                sessionId: "session-to-close",
+                target: nativeTarget("session-to-close"),
             });
             expect(await responseJson(await closeResponse, 200)).toEqual({
                 kind: "session.closed",
                 requestId: closeCommand.requestId,
-                sessionId: "session-to-close",
+                target: nativeTarget("session-to-close"),
             });
             // Native HTTP probes use request-reply connections, while this viewer keeps its live subscription.
             for (const outcome of ["idle", "busy"] as const) {
                 const activeTurnResponse = worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/active-turn`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/active-turn`,
                         {
                             body: JSON.stringify({ agentId: "codex", directoryId: "root" }),
                             headers: credentialHeaders(appCredential),
@@ -500,8 +503,8 @@ describe.sequential("Platform Session-only boundary", () => {
                               kind: "native.session.result",
                               action: "active-turn",
                               requestId: query.requestId,
-                              sessionId,
-                              targetSessionId: sessionId,
+                              discoveryId: query.discoveryId,
+                              target: nativeTarget(sessionId),
                               turn: null,
                               queued: [],
                               queuedCancellation: "before-start",
@@ -510,7 +513,7 @@ describe.sequential("Platform Session-only boundary", () => {
                         : encodeSessionOperationFailedEvent({
                               kind: "session.operation.failed",
                               requestId: query.requestId,
-                              sessionId,
+                              target: nativeTarget(sessionId),
                               code: "native_session_busy",
                               message: "Another native session operation is running",
                           });
@@ -578,7 +581,6 @@ describe.sequential("Platform Session-only boundary", () => {
             for (const action of ["import", "fork"] as const) {
                 const requestId = `native-${action}-request`;
                 const directoryId = action === "fork" ? `root-${"d".repeat(2000)}` : "root";
-                const targetSessionId = `native-${action}-session`;
                 host.send(
                     encodeNativeSessionRequest({
                         action,
@@ -588,8 +590,7 @@ describe.sequential("Platform Session-only boundary", () => {
                         entryId: "native-entry",
                         kind: "native.session.request",
                         requestId,
-                        sessionId: "discovery-session",
-                        targetSessionId,
+                        discoveryId: "discovery-session",
                     }),
                 );
                 expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("native.session.request");
@@ -623,7 +624,9 @@ describe.sequential("Platform Session-only boundary", () => {
             for (const action of ["import", "fork"] as const) {
                 const requestId = `native-${action}-request`;
                 const directoryId = action === "fork" ? `root-${"d".repeat(2000)}` : "root";
-                const targetSessionId = `native-${action}-session`;
+                const sessionTarget = nativeTarget(
+                    action === "import" ? "original-native-session" : "forked-native-session",
+                );
                 const capabilities = readyAgents[0]?.capabilities;
                 if (capabilities === undefined) {
                     throw new Error("Expected the connected Agent capabilities");
@@ -632,8 +635,8 @@ describe.sequential("Platform Session-only boundary", () => {
                     action,
                     kind: "native.session.result",
                     requestId,
-                    sessionId: "discovery-session",
-                    targetSessionId: targetSessionId,
+                    discoveryId: "discovery-session",
+                    target: sessionTarget,
                     title: "Imported native session",
                     ready: {
                         agentId: "codex",
@@ -648,7 +651,7 @@ describe.sequential("Platform Session-only boundary", () => {
                         kind: "session.ready",
                         requestId,
                         restored: true,
-                        sessionId: action === "import" ? "original-native-session" : targetSessionId,
+                        target: sessionTarget,
                     },
                 });
                 daemon.send(result);
@@ -656,7 +659,12 @@ describe.sequential("Platform Session-only boundary", () => {
                     hostMessages.next().then((message) => decodeDaemonToServiceMessage(message)),
                     closed.promise,
                 ]);
-                expect(received).toMatchObject({ kind: "native.session.result", action, requestId, targetSessionId });
+                expect(received).toMatchObject({
+                    kind: "native.session.result",
+                    action,
+                    requestId,
+                    target: sessionTarget,
+                });
                 expect(daemon.readyState).toBe(WebSocket.OPEN);
                 // The caller owns operation expiry and duplicate handling.
                 vi.setSystemTime(new Date("2030-01-01T00:06:00.000Z"));
@@ -665,7 +673,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     kind: "native.session.result",
                     action,
                     requestId,
-                    targetSessionId,
+                    target: sessionTarget,
                 });
                 expect(daemon.readyState).toBe(WebSocket.OPEN);
             }
@@ -692,14 +700,18 @@ describe.sequential("Platform Session-only boundary", () => {
             expect(JSON.parse(await hostMessages.next())).toEqual(settingsBarrier);
             vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
             // Unknown Runtime output keeps its explicit Session route and payload.
-            daemon.send(JSON.stringify({ kind: "session.future.changed", sessionId, value: "future" }));
+            daemon.send(
+                JSON.stringify({ kind: "session.future.changed", target: nativeTarget(sessionId), value: "future" }),
+            );
             expect(JSON.parse(await hostMessages.next())).toEqual({
                 kind: "session.future.changed",
-                sessionId,
+                target: nativeTarget(sessionId),
                 value: "future",
             });
             // Unknown client commands still cannot bypass Relay authorization.
-            host.send(JSON.stringify({ kind: "session.future.request", sessionId, value: "future" }));
+            host.send(
+                JSON.stringify({ kind: "session.future.request", target: nativeTarget(sessionId), value: "future" }),
+            );
             host.send(
                 encodeSessionConfigureCommand({
                     agentId: "codex",
@@ -710,7 +722,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     expectedConfigurationRevision: "configuration-revision",
                     kind: "session.configure",
                     requestId: "local-config-request",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     value: "model-deepseek-v4.1-flash",
                     valueType: "select",
                 }),
@@ -723,7 +735,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     configurationRevision: "revision-1",
                     kind: "session.config.updated",
                     requestId: "local-config-request",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                 }),
             );
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual({
@@ -731,7 +743,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 configurationRevision: "revision-1",
                 kind: "session.config.updated",
                 requestId: "local-config-request",
-                sessionId,
+                target: nativeTarget(sessionId),
             });
             host.send(
                 encodeSessionPromptCommand({
@@ -743,7 +755,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "show the local answer",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                 }),
             );
             const prompt = decodeServiceToDaemonMessage(await daemonMessages.next());
@@ -752,7 +764,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 throw new Error("Expected the prompt to reach the local Runtime");
             }
             expect(decodeSessionPromptCommand(JSON.stringify(prompt)).prompt).toBe("show the local answer");
-            const answer = liveEvent(sessionId, "local answer");
+            const answer = liveEvent(nativeTarget(sessionId), "local answer");
             daemon.send(answer);
             const received = decodeSessionEventEnvelope(await hostMessages.next());
             expect(JSON.stringify(received.events.map((event) => event.payload))).toContain("local answer");
@@ -769,7 +781,7 @@ describe.sequential("Platform Session-only boundary", () => {
             const browserAccess = await responseJson(
                 await worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                         {
                             body: JSON.stringify({ expiresInSeconds: 900 }),
                             headers: credentialHeaders(appCredential),
@@ -782,7 +794,7 @@ describe.sequential("Platform Session-only boundary", () => {
             );
             const v2Response = await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/events-v2`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
                     {
                         headers: {
                             authorization: `Bearer ${text(browserAccess, "credential")}`,
@@ -809,7 +821,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 position: "1",
                 recordedAt: "2026-09-18T00:00:00.000Z",
                 sessionGenerationId: "session-generation-1",
-                sessionId,
+                target: nativeTarget(sessionId),
                 type: "acp" as const,
             };
             const historicalEvent = {
@@ -817,7 +829,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 payload: rawEvent.payload,
                 recordedAt: rawEvent.recordedAt,
                 sessionGenerationId: rawEvent.sessionGenerationId,
-                sessionId: rawEvent.sessionId,
+                target: rawEvent.target,
                 type: rawEvent.type,
             };
             const secondRawEvent = { ...rawEvent, eventId: "event-v2-2", position: "2" };
@@ -839,7 +851,7 @@ describe.sequential("Platform Session-only boundary", () => {
             expect(JSON.parse(await v2Messages.next())).toEqual([futureEvent]);
             const historyResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/events-v2?limit=50`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2?limit=50`,
                     { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
                 ),
                 environment,
@@ -852,19 +864,19 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(
                 encodeSessionStatusChangedEvent({
                     kind: "session.status.changed",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     status: { commandId: "command-1", kind: "working" },
                 }),
             );
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual({
                 kind: "session.status.changed",
-                sessionId,
+                target: nativeTarget(sessionId),
                 status: { commandId: "command-1", kind: "working" },
             });
             daemon.send(
                 encodeSessionInfoUpdatedEvent({
                     kind: "session.info.updated",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     title: "Renamed session",
                     updatedAt: "2026-09-18T00:01:00.000Z",
                 }),
@@ -872,7 +884,7 @@ describe.sequential("Platform Session-only boundary", () => {
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual({
                 kind: "session.info.updated",
                 computerId,
-                sessionId,
+                target: nativeTarget(sessionId),
                 title: "Renamed session",
                 updatedAt: "2026-09-18T00:01:00.000Z",
             });
@@ -891,7 +903,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 },
                 kind: "session.live-history.v2.page.loaded",
                 requestId: historyLoad.requestId,
-                sessionId,
+                target: nativeTarget(sessionId),
             });
             daemon.send(historyPage);
             expect(await responseJson(await historyResponse, 200)).toEqual({
@@ -909,7 +921,7 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(historyPage);
             const previewHistoryResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/native-events-preview?agentId=codex&directoryId=root&eventLimit=50`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?agentId=codex&directoryId=root&eventLimit=50`,
                     { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
                 ),
                 environment,
@@ -934,7 +946,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 },
                 kind: "session.preview-history.page.loaded",
                 requestId: previewHistoryLoad.requestId,
-                sessionId,
+                target: nativeTarget(sessionId),
             });
             daemon.send(previewHistoryPage);
             expect(await responseJson(await previewHistoryResponse, 200)).toEqual({
@@ -954,7 +966,7 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(previewHistoryPage);
             const failedPreviewHistoryResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/native-events-preview?agentId=codex&directoryId=root&eventLimit=50`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?agentId=codex&directoryId=root&eventLimit=50`,
                     { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
                 ),
                 environment,
@@ -969,7 +981,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     kind: "session.operation.failed",
                     message: "The Codex thread is not loaded",
                     requestId: failedPreviewHistoryLoad.requestId,
-                    sessionId,
+                    target: nativeTarget(sessionId),
                 }),
             );
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
@@ -988,7 +1000,7 @@ describe.sequential("Platform Session-only boundary", () => {
             // client can offer to reopen the Session instead of retrying the load.
             const closedHistoryResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/events-v2?limit=50`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2?limit=50`,
                     { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
                 ),
                 environment,
@@ -1003,7 +1015,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     kind: "session.operation.failed",
                     message: "The Session is closed",
                     requestId: closedHistoryLoad.requestId,
-                    sessionId,
+                    target: nativeTarget(sessionId),
                 }),
             );
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
@@ -1032,7 +1044,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 JSON.stringify({
                     headers: [["authorization", `Bearer ${text(browserAccess, "credential")}`]],
                     kind: "session.events.subscribe",
-                    path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/events-v2`,
+                    path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
                     subscriptionId: "subscription-1",
                 }),
             );
@@ -1057,7 +1069,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 JSON.stringify({
                     headers: [["authorization", `Bearer ${text(browserAccess, "credential")}`]],
                     kind: "session.events.subscribe",
-                    path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/events-v2`,
+                    path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
                     subscriptionId: "subscription-2",
                 }),
             );
@@ -1175,7 +1187,7 @@ describe.sequential("Platform Session-only boundary", () => {
             const sessionAccess = await responseJson(
                 await worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                         {
                             body: JSON.stringify({ expiresInSeconds: 900 }),
                             headers: credentialHeaders(appCredential),
@@ -1189,7 +1201,7 @@ describe.sequential("Platform Session-only boundary", () => {
             const liveTarget = await responseJson(
                 await worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/live-event-subscription-target`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/live-event-subscription-target`,
                         { headers: credentialHeaders(text(sessionAccess, "credential")) },
                     ),
                     environment,
@@ -1384,7 +1396,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     const sessionAccess = await responseJson(
         await worker.fetch(
             new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
+                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                 {
                     body: JSON.stringify({ expiresInSeconds: 900 }),
                     headers: credentialHeaders(appCredential),
@@ -1405,7 +1417,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 environment,
             ),
         computerId,
-        sessionId,
+        sessionTarget: nativeTarget(sessionId),
         deleteApp: () => retireMortyService(env.PLATFORM_DIRECTORY_DATABASE, app.appId),
         revokeSessionAccess: () =>
             worker.fetch(
@@ -1428,7 +1440,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         subscribe: () =>
             worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/events-v2`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
                     {
                         headers: { authorization: `Bearer ${text(sessionAccess, "credential")}`, Upgrade: "websocket" },
                     },
@@ -1458,7 +1470,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         ) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${init.computerId ?? computerId}/daemon/sessions/${sessionId}${path}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${init.computerId ?? computerId}/daemon/harnesses/codex/sessions/${sessionId}${path}`,
                     {
                         method: init.method,
                         headers: credentialHeaders(init.credential ?? appCredential),
@@ -1470,7 +1482,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         sessionControlRequest: async (path: string, body: unknown, credential = text(sessionAccess, "credential")) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}${path}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}${path}`,
                     {
                         method: "POST",
                         headers: credentialHeaders(credential),
@@ -1491,7 +1503,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         ) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/content/${contentKey}?${new URLSearchParams({ uri: metadata.uri }).toString()}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/content/${contentKey}?${new URLSearchParams({ uri: metadata.uri }).toString()}`,
                     {
                         body: bytes,
                         headers: {
@@ -1558,7 +1570,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                             position,
                             recordedAt: new Date().toISOString(),
                             sessionGenerationId: "session-generation-1",
-                            sessionId,
+                            target: nativeTarget(sessionId),
                             type: "lifecycle-metadata",
                             payload: {
                                 attemptId: `${commandId}-attempt`,
@@ -1574,7 +1586,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: commandId,
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     state: "running",
                 }),
             );
@@ -1584,7 +1596,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 await responseJson(
                     await worker.fetch(
                         new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
+                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                             {
                                 method: "POST",
                                 headers: credentialHeaders(issuer),
@@ -1600,7 +1612,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         queryActiveTurn: async (signal: AbortSignal) =>
             worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/active-turn`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/active-turn`,
                     {
                         method: "POST",
                         headers: credentialHeaders(appCredential),
@@ -1613,7 +1625,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         readFile: async (path: string) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/files/content?${new URLSearchParams({ maxBytes: "1024", path }).toString()}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/files/content?${new URLSearchParams({ maxBytes: "1024", path }).toString()}`,
                     { headers: credentialHeaders(text(sessionAccess, "credential")) },
                 ),
                 environment,
@@ -1626,7 +1638,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         ) =>
             env.COMPUTER_RELAY.getByName(destinationComputerId).fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${requestedSessionId}/turns`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${requestedSessionId}/turns`,
                     {
                         method: "POST",
                         headers: credentialHeaders(credentialTransform(text(sessionAccess, "credential"))),
@@ -1643,7 +1655,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         readSessionExecution: (commandId?: string) =>
             env.COMPUTER_RELAY.getByName(computerId).fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/active-turn?${new URLSearchParams(
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/active-turn?${new URLSearchParams(
                         {
                             agentId: "codex",
                             directoryId: "root",
@@ -1656,7 +1668,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         submitTurn: (idempotencyKey: string) =>
             worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                     {
                         body: JSON.stringify({
                             agentId: "codex",
@@ -1722,7 +1734,7 @@ it.each(["text", "binary"])(
                 await Promise.all(pending);
             });
         try {
-            await deliver(liveEvent(runtime.sessionId, "before revocation"));
+            await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
                 state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE ON runtime_connection_state
@@ -1751,7 +1763,7 @@ it.each(["text", "binary"])(
             expect(await refusal).toMatchObject({ code: 1008, reason: "Runtime revoked" });
             await deliver(
                 format === "text"
-                    ? liveEvent(runtime.sessionId, "after revocation")
+                    ? liveEvent(runtime.sessionTarget, "after revocation")
                     : encodeContentChunkFrame({
                           bytes: new Uint8Array([1, 2]),
                           requestId: "revoked-file",
@@ -1791,8 +1803,8 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId: query.requestId,
-                sessionId: runtime.sessionId,
-                targetSessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
+                discoveryId: "active-turn",
                 turn: null,
                 queued: [],
                 command: { state: "completed", stopReason: "end_turn" },
@@ -1831,8 +1843,8 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId: query.requestId,
-                sessionId: runtime.sessionId,
-                targetSessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
+                discoveryId: "active-turn",
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
@@ -1882,7 +1894,7 @@ describe.sequential("Platform Turn submission", () => {
                         commandId: turnId,
                         kind: "session.cancel",
                         requestId: expect.any(String),
-                        sessionId: runtime.sessionId,
+                        target: runtime.sessionTarget,
                     });
                     if (cancellation.kind !== "session.cancel") {
                         throw new Error("Expected a cancellation");
@@ -1892,7 +1904,7 @@ describe.sequential("Platform Turn submission", () => {
                             commandId: turnId,
                             kind: "session.turn.stopped",
                             requestId: cancellation.requestId,
-                            sessionId: runtime.sessionId,
+                            target: runtime.sessionTarget,
                             stopReason,
                         }),
                     );
@@ -1920,7 +1932,7 @@ describe.sequential("Platform Turn submission", () => {
                     commandId: "queued-command",
                     kind: "session.cancel-before-start",
                     requestId: expect.any(String),
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                 });
                 if (withdrawal.kind !== "session.cancel-before-start") {
                     throw new Error("Expected a withdrawal");
@@ -1929,7 +1941,7 @@ describe.sequential("Platform Turn submission", () => {
                     encodeSessionOperationFailedEvent({
                         kind: "session.operation.failed",
                         requestId: withdrawal.requestId,
-                        sessionId: runtime.sessionId,
+                        target: runtime.sessionTarget,
                         code: "turn_already_started",
                         message: "The message already started and could not be withdrawn",
                     }),
@@ -2010,12 +2022,12 @@ describe.sequential("Platform Turn submission", () => {
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
-            expect(command).toMatchObject({ ...operation.command, sessionId: runtime.sessionId });
+            expect(command).toMatchObject({ ...operation.command, target: runtime.sessionTarget });
             if (!("requestId" in command)) {
                 throw new Error("Expected the command to name its own request");
             }
             runtime.daemon.send(
-                JSON.stringify({ ...operation.reply, requestId: command.requestId, sessionId: runtime.sessionId }),
+                JSON.stringify({ ...operation.reply, requestId: command.requestId, target: runtime.sessionTarget }),
             );
             expect(await responseJson(await response, 200)).toMatchObject(operation.expected);
         } finally {
@@ -2040,7 +2052,7 @@ describe.sequential("Platform Turn submission", () => {
             const command = decodeServiceToDaemonMessage(first.message);
             expect(command).toMatchObject({
                 kind: "session.live-history.v2.page.load",
-                sessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
                 eventLimit: 2,
                 cursor: "previous-event",
             });
@@ -2060,7 +2072,7 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionHistoryPageLoaded({
                     kind: "session.live-history.v2.page.loaded",
                     requestId: command.requestId,
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     events: { events: page, queuedPromptRequests: [] },
                 }),
             );
@@ -2081,14 +2093,14 @@ describe.sequential("Platform Turn submission", () => {
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
-            expect(command).toMatchObject({ kind: "session.config.read", sessionId: runtime.sessionId });
+            expect(command).toMatchObject({ kind: "session.config.read", target: runtime.sessionTarget });
             if (command.kind !== "session.config.read") {
                 throw new Error("Expected a configuration request");
             }
             const result: SessionConfigReadResult = {
                 kind: "session.config.read.result",
                 requestId: command.requestId,
-                sessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
                 configurationRevision: "revision-1",
                 configOptions: [],
             };
@@ -2136,7 +2148,8 @@ describe.sequential("Platform Turn submission", () => {
                             directoryLabel: "/workspace",
                             prompted: true,
                             status: { kind: "idle" },
-                            sessionId: runtime.sessionId,
+                            sessionId: runtime.sessionTarget.sessionId,
+                            target: runtime.sessionTarget,
                             title: "",
                             updatedAt: "2026-11-01T00:00:00.000Z",
                         },
@@ -2174,8 +2187,8 @@ describe.sequential("Platform Turn submission", () => {
                     kind: "native.session.result",
                     action: "active-turn",
                     requestId: activeTurn.requestId,
-                    sessionId: runtime.sessionId,
-                    targetSessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
+                    discoveryId: "active-turn",
                     turn: null,
                     queued: [],
                     queuedCancellation: "before-start",
@@ -2278,7 +2291,7 @@ describe.sequential("Platform Turn submission", () => {
                             kind: "session.prompt",
                             prompt: "Sent without Session write access",
                             sessionConfigurations: [],
-                            sessionId: runtime.sessionId,
+                            target: runtime.sessionTarget,
                         }),
                     ),
                 ),
@@ -2349,7 +2362,7 @@ describe.sequential("Platform Turn submission", () => {
                 contentKey,
                 contentKind: "image",
                 kind: "content.write",
-                sessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
             });
             if (write.kind !== "content.write") {
                 throw new Error("Expected a content write command");
@@ -2358,7 +2371,7 @@ describe.sequential("Platform Turn submission", () => {
                 encodeContentReadyEvent({
                     kind: "content.ready",
                     requestId: write.requestId,
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                 }),
             );
             const chunks: Uint8Array[] = [];
@@ -2393,7 +2406,7 @@ describe.sequential("Platform Turn submission", () => {
                     contentKey,
                     kind: "content.available",
                     requestId: write.requestId,
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                 }),
             );
             const attachment = await responseJson(await upload, 200);
@@ -2454,7 +2467,7 @@ describe.sequential("Platform Turn submission", () => {
                     modifiedAt: "2026-09-18T00:00:00.000Z",
                     name: "image.png",
                     requestId: read.requestId,
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                 }),
             );
             const response = await pending;
@@ -2481,8 +2494,8 @@ describe.sequential("Platform Turn submission", () => {
                     queuedCancellation: "before-start",
                     interactionState: null,
                     requestId: command.requestId,
-                    sessionId: runtime.sessionId,
-                    targetSessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
+                    discoveryId: "active-turn",
                     turn: null,
                 }),
             );
@@ -2652,7 +2665,7 @@ describe.sequential("Platform Turn submission", () => {
                     const connect = async (credential: string) =>
                         await rotated.fetch(
                             new Request(
-                                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/sessions/${runtime.sessionId}/events-v2`,
+                                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/harnesses/${runtime.sessionTarget.harness}/sessions/${runtime.sessionTarget.sessionId}/events-v2`,
                                 { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
                             ),
                         );
@@ -2785,7 +2798,7 @@ describe.sequential("Platform Turn submission", () => {
             const sessionAccess = await responseJson(
                 await worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                         {
                             body: JSON.stringify({ expiresInSeconds: 900 }),
                             headers: credentialHeaders(appCredential),
@@ -2799,7 +2812,7 @@ describe.sequential("Platform Turn submission", () => {
             const submitTurn = (idempotencyKey: string, content: string, attachments: readonly unknown[]) =>
                 worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                         {
                             body: JSON.stringify({
                                 agentId: "codex",
@@ -2828,7 +2841,7 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: delivered.commandId,
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     state: "running",
                 }),
             );
@@ -2841,7 +2854,7 @@ describe.sequential("Platform Turn submission", () => {
             // cancels, or another Turn's lifecycle, leaves it waiting.
             const cancelTurn = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns/long-first-turn/cancel`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns/long-first-turn/cancel`,
                     {
                         body: JSON.stringify({}),
                         headers: credentialHeaders(text(sessionAccess, "credential")),
@@ -2861,7 +2874,7 @@ describe.sequential("Platform Turn submission", () => {
                     kind: "session.operation.failed",
                     message: "The local agent could not complete the request",
                     requestId: "long-first-turn",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                 }),
             );
             daemon.send(
@@ -2873,7 +2886,7 @@ describe.sequential("Platform Turn submission", () => {
                             position: "3",
                             recordedAt: "2026-09-18T00:00:02.000Z",
                             sessionGenerationId: "session-generation-1",
-                            sessionId,
+                            target: nativeTarget(sessionId),
                             type: "lifecycle-metadata",
                             payload: {
                                 commandId: "long-first-turn",
@@ -2889,7 +2902,7 @@ describe.sequential("Platform Turn submission", () => {
                     commandId: "long-first-turn",
                     kind: "session.turn.stopped",
                     requestId: cancellation.requestId,
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     stopReason: "cancelled",
                 }),
             );
@@ -2901,7 +2914,7 @@ describe.sequential("Platform Turn submission", () => {
             // An appended Turn the Runtime queues is answered as queued.
             const queuedTurn = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                     {
                         body: JSON.stringify({
                             agentId: "codex",
@@ -2921,7 +2934,7 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "queued-follow-up",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     state: "queued",
                 }),
             );
@@ -2940,7 +2953,7 @@ describe.sequential("Platform Turn submission", () => {
                 await responseJson(
                     await worker.fetch(
                         new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/turns`,
+                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/turns`,
                             {
                                 body: JSON.stringify({
                                     agentId: "codex",
@@ -2965,7 +2978,7 @@ describe.sequential("Platform Turn submission", () => {
                 await responseJson(
                     await worker.fetch(
                         new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/configuration`,
+                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/configuration`,
                             {
                                 body: JSON.stringify({ configId: "model", valueType: "select", value: "gpt" }),
                                 headers: credentialHeaders(text(sessionAccess, "credential")),
@@ -3049,7 +3062,7 @@ describe.sequential("Platform Turn submission", () => {
         const sessionAccess = await responseJson(
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                     {
                         body: JSON.stringify({ expiresInSeconds: 900 }),
                         headers: credentialHeaders(appCredential),
@@ -3090,7 +3103,7 @@ describe.sequential("Platform Turn submission", () => {
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
             const steer = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/turns/some-active-turn/disposition`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns/some-active-turn/disposition`,
                     {
                         body: JSON.stringify({ disposition: "steer" }),
                         headers: credentialHeaders(sessionCredential),
@@ -3100,7 +3113,7 @@ describe.sequential("Platform Turn submission", () => {
                 environment,
             );
             const forwarded = decodeServiceToDaemonMessage(await daemonMessages.next());
-            expect(forwarded).toMatchObject({ kind: "session.prompt.disposition", sessionId });
+            expect(forwarded).toMatchObject({ kind: "session.prompt.disposition", target: nativeTarget(sessionId) });
             if (forwarded.kind !== "session.prompt.disposition") {
                 throw new Error("Expected the steer to reach the Runtime");
             }
@@ -3110,7 +3123,7 @@ describe.sequential("Platform Turn submission", () => {
                     kind: "session.operation.failed",
                     message: "The selected agent does not support mid-turn steering",
                     requestId: forwarded.requestId,
-                    sessionId,
+                    target: nativeTarget(sessionId),
                 }),
             );
             expect(await responseJson(await steer, 409)).toMatchObject({
@@ -3122,7 +3135,7 @@ describe.sequential("Platform Turn submission", () => {
             // itself, exactly as it does for Agents without the extension.
             const rename = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/rename`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/rename`,
                     {
                         body: JSON.stringify({ title: "Renamed despite the withheld capability" }),
                         headers: credentialHeaders(sessionCredential),
@@ -3132,19 +3145,19 @@ describe.sequential("Platform Turn submission", () => {
                 environment,
             );
             const renameCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
-            expect(renameCommand).toMatchObject({ kind: "session.rename", sessionId });
+            expect(renameCommand).toMatchObject({ kind: "session.rename", target: nativeTarget(sessionId) });
             daemon.send(
                 encodeSessionRenamedEvent({
                     kind: "session.renamed",
                     requestId: renameCommand.kind === "session.rename" ? renameCommand.requestId : "",
-                    sessionId,
+                    target: nativeTarget(sessionId),
                     title: "Renamed despite the withheld capability",
                     updatedAt: "2030-01-01T00:00:00.000Z",
                 }),
             );
             expect(await responseJson(await rename, 200)).toMatchObject({
                 kind: "session.renamed",
-                sessionId,
+                target: nativeTarget(sessionId),
                 title: "Renamed despite the withheld capability",
             });
         } finally {
@@ -3310,28 +3323,27 @@ it.each(["completed", "interrupted"] as const)(
         const runtime = await connectRuntimeDaemon(`fork-receipt-${outcome}`);
         const input = {
             agentId: "codex",
-            nativeSessionId: "native-source",
+            sessionId: "native-source",
             directoryId: "default",
         };
         const operationId = "retained-fork-operation";
         try {
             const first = runtime.forkNative(operationId, input);
-            // Independent v1 peer: the new HTTP operation still sends the existing find/fork wire messages.
+            // The controlled daemon owns fork allocation; the request never carries a destination.
             const find = record(JSON.parse(await runtime.daemonMessages.next()));
             expect(find).toMatchObject({
                 kind: "native.session.request",
                 action: "find",
-                nativeSessionId: "native-source",
+                sessionId: "native-source",
             });
             const source = {
                 kind: "native.session.result",
                 action: "find",
                 requestId: text(find, "requestId"),
-                sessionId: text(find, "sessionId"),
+                discoveryId: text(find, "discoveryId"),
                 entry: {
                     entryId: "native-entry",
-                    nativeSessionId: "native-source",
-                    mortySessionIds: [],
+                    sessionId: "native-source",
                     title: "Source",
                     directoryId: "default",
                     directoryLabel: "Workspace",
@@ -3341,6 +3353,8 @@ it.each(["completed", "interrupted"] as const)(
             runtime.daemon.send(JSON.stringify(source));
             const fork = record(JSON.parse(await runtime.daemonMessages.next()));
             expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", entryId: "native-entry" });
+            expect(fork).not.toHaveProperty("targetSessionId");
+            const forkTarget = nativeTarget("harness-fork-destination");
             const concurrent = runtime.forkNative(operationId, input);
             if (outcome === "completed") {
                 runtime.daemon.send(
@@ -3348,13 +3362,13 @@ it.each(["completed", "interrupted"] as const)(
                         kind: "native.session.result",
                         action: "fork",
                         requestId: text(fork, "requestId"),
-                        sessionId: text(fork, "sessionId"),
-                        targetSessionId: text(fork, "targetSessionId"),
+                        discoveryId: text(fork, "discoveryId"),
+                        target: forkTarget,
                         title: "Source (fork 1)",
                         ready: {
                             kind: "session.ready",
                             requestId: text(fork, "requestId"),
-                            sessionId: text(fork, "targetSessionId"),
+                            target: forkTarget,
                             agentId: "codex",
                             agentName: "Codex",
                             agentVersion: "1.0.0",
@@ -3389,7 +3403,7 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
     const runtime = await connectRuntimeDaemon("fork-rejected");
     const input = {
         agentId: "codex",
-        nativeSessionId: "native-source",
+        sessionId: "native-source",
         directoryId: "default",
     };
     const operationId = "rejected-fork-operation";
@@ -3398,18 +3412,17 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
         expect(find).toMatchObject({
             kind: "native.session.request",
             action: "find",
-            nativeSessionId: "native-source",
+            sessionId: "native-source",
         });
         runtime.daemon.send(
             JSON.stringify({
                 kind: "native.session.result",
                 action: "find",
                 requestId: text(find, "requestId"),
-                sessionId: text(find, "sessionId"),
+                discoveryId: text(find, "discoveryId"),
                 entry: {
                     entryId: "native-entry",
-                    nativeSessionId: "native-source",
-                    mortySessionIds: [],
+                    sessionId: "native-source",
                     title: "Source",
                     directoryId: "default",
                     directoryLabel: "Workspace",
@@ -3430,14 +3443,7 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
                 code: "native_session_unsupported",
                 message: "This Agent does not support session forking",
                 requestId: text(rejected, "requestId"),
-                sessionId: text(rejected, "sessionId"),
             }),
-        );
-        // The rejection is final only when the Runtime holds no target for it.
-        const query = record(JSON.parse(await runtime.daemonMessages.next()));
-        expect(query).toMatchObject({ kind: "session.query", sessionIds: [text(rejected, "targetSessionId")] });
-        runtime.daemon.send(
-            JSON.stringify({ kind: "session.queried", requestId: text(query, "requestId"), entries: [] }),
         );
         expect(await responseJson(await first, 503)).toEqual({
             error: { code: "native_session_unsupported", message: "This Agent does not support session forking" },
@@ -3445,19 +3451,21 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
 
         const retried = runtime.forkNative(operationId, input);
         const fork = await forkCommand();
-        expect(text(fork, "targetSessionId")).not.toBe(text(rejected, "targetSessionId"));
+        expect(text(fork, "requestId")).toBe(text(rejected, "requestId"));
+        expect(fork).not.toHaveProperty("targetSessionId");
+        const forkTarget = nativeTarget("harness-fork-after-refusal");
         runtime.daemon.send(
             JSON.stringify({
                 kind: "native.session.result",
                 action: "fork",
                 requestId: text(fork, "requestId"),
-                sessionId: text(fork, "sessionId"),
-                targetSessionId: text(fork, "targetSessionId"),
+                discoveryId: text(fork, "discoveryId"),
+                target: forkTarget,
                 title: "Source (fork 1)",
                 ready: {
                     kind: "session.ready",
                     requestId: text(fork, "requestId"),
-                    sessionId: text(fork, "targetSessionId"),
+                    target: forkTarget,
                     agentId: "codex",
                     agentName: "Codex",
                     agentVersion: "1.0.0",
@@ -3472,7 +3480,7 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
             }),
         );
         const forked = await responseJson(await retried, 200);
-        expect(forked).toMatchObject({ result: { action: "fork", targetSessionId: text(fork, "targetSessionId") } });
+        expect(forked).toMatchObject({ result: { action: "fork", target: forkTarget } });
         expect(await responseJson(await runtime.forkNative(operationId, input), 200)).toEqual(forked);
     } finally {
         runtime.daemon.close(1000, "Fork rejection scenario completed");
@@ -3494,8 +3502,10 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
         MORTY_API_PREFIX +
         "/v1/computers/" +
         runtime.computerId +
+        "/harnesses/" +
+        runtime.sessionTarget.harness +
         "/sessions/" +
-        runtime.sessionId +
+        runtime.sessionTarget.sessionId +
         "/content/" +
         "a".repeat(64);
     // Alter the first character of the 43-character signature. Its last character carries two
@@ -3553,7 +3563,7 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
             encodeContentReadyEvent({
                 kind: "content.ready",
                 requestId: command.requestId,
-                sessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
             }),
         );
         const frame = await runtime.daemonMessages.nextFrame();
@@ -3568,7 +3578,7 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
             encodeContentAvailableEvent({
                 kind: "content.available",
                 requestId: command.requestId,
-                sessionId: runtime.sessionId,
+                target: runtime.sessionTarget,
                 contentKey: "a".repeat(64),
                 byteLength: 1,
             }),
@@ -3582,7 +3592,12 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
 });
 
 describe("Runtime prompt acknowledgements", () => {
-    const lifecycleFrame = (sessionId: string, eventId: string, position: string, payload: Record<string, unknown>) =>
+    const lifecycleFrame = (
+        sessionTarget: NativeSessionTarget,
+        eventId: string,
+        position: string,
+        payload: Record<string, unknown>,
+    ) =>
         encodeSessionEventEnvelope({
             kind: "session.event.v2",
             events: [
@@ -3591,7 +3606,7 @@ describe("Runtime prompt acknowledgements", () => {
                     position,
                     recordedAt: new Date().toISOString(),
                     sessionGenerationId: "session-generation-1",
-                    sessionId,
+                    target: sessionTarget,
                     type: "lifecycle-metadata",
                     payload: payload as never,
                 },
@@ -3605,7 +3620,7 @@ describe("Runtime prompt acknowledgements", () => {
             const queue = (idempotencyKey: string) =>
                 env.COMPUTER_RELAY.getByName(runtime.computerId).fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/sessions/${runtime.sessionId}/turns`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/harnesses/${runtime.sessionTarget.harness}/sessions/${runtime.sessionTarget.sessionId}/turns`,
                         {
                             method: "POST",
                             headers: credentialHeaders(credential),
@@ -3630,12 +3645,12 @@ describe("Runtime prompt acknowledgements", () => {
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "other-command",
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     state: "queued",
                 }),
             );
             runtime.daemon.send(
-                lifecycleFrame(runtime.sessionId, "rejected-failed", "1", {
+                lifecycleFrame(runtime.sessionTarget, "rejected-failed", "1", {
                     code: "agent_unavailable",
                     commandId: "rejected-command",
                     kind: "prompt.failed-before-start",
@@ -3648,7 +3663,7 @@ describe("Runtime prompt acknowledgements", () => {
                     kind: "session.operation.failed",
                     message: "The Agent is unavailable",
                     requestId: "rejected-command",
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                 }),
             );
             const failure = await rejected;
@@ -3663,7 +3678,7 @@ describe("Runtime prompt acknowledgements", () => {
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "admitted-command",
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     state: "queued",
                 }),
             );
@@ -3687,7 +3702,7 @@ describe("Runtime prompt acknowledgements", () => {
             runtime.startTurn("retried-command", "1");
             expect((await first).status).toBe(200);
             runtime.daemon.send(
-                lifecycleFrame(runtime.sessionId, "retried-completed", "2", {
+                lifecycleFrame(runtime.sessionTarget, "retried-completed", "2", {
                     commandId: "retried-command",
                     kind: "prompt.completed",
                     stopReason: "end_turn",
@@ -3703,7 +3718,7 @@ describe("Runtime prompt acknowledgements", () => {
                 JSON.stringify({
                     kind: "session.prompt.accepted",
                     requestId: "retried-command",
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     state: "settled",
                 }),
             );
@@ -3725,7 +3740,7 @@ describe("Runtime prompt acknowledgements", () => {
                 JSON.stringify({
                     kind: "session.prompt.accepted",
                     requestId: "settled-command",
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     state: "settled",
                 }),
             );
@@ -3760,7 +3775,7 @@ describe("Runtime prompt acknowledgements", () => {
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "preparing-command",
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     state: "settled",
                 }),
             );
@@ -3769,7 +3784,7 @@ describe("Runtime prompt acknowledgements", () => {
                     commandId: "preparing-command",
                     kind: "session.turn.stopped",
                     requestId: cancellation.requestId,
-                    sessionId: runtime.sessionId,
+                    target: runtime.sessionTarget,
                     stopReason: "cancelled",
                 }),
             );

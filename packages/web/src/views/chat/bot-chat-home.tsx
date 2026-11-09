@@ -1,3 +1,4 @@
+import { nativeSessionKey } from "@morty-build/client/native-session";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
@@ -26,6 +27,7 @@ import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import {
+    type BotChatHomeStore,
     botConnectionStatus,
     homeCanStartConversation,
     newConversationPresentation,
@@ -40,7 +42,7 @@ import {
     conversationCreationStatus,
     queuedDraftMessage,
 } from "../../view-models/chat/conversation-creation-machine.ts";
-import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
+import { selectedConversationTarget } from "../../view-models/chat/conversation-selection-machine.ts";
 import type { DraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 import { activeHarnessMark, pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { pendingConversationPresentation } from "../../view-models/chat/pending-conversation-presentation.ts";
@@ -211,11 +213,11 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
         draftControls.settings.kind === "waiting-agent" ||
         draftControls.settings.kind === "switching";
     const showNewSessionTitle = model.selection.kind === "draft";
-    const activeConversationId = selectedConversationId(model.selection);
+    const activeConversationTarget = selectedConversationTarget(model.selection);
     const sessionDiagnostics: DaemonDiagnosticsSource = {
         botId: workspace.botId,
-        sessionId: activeConversationId,
-        nativeSessionId: null,
+        harness: activeConversationTarget?.harness ?? null,
+        sessionId: activeConversationTarget?.sessionId ?? null,
         context: () => chatDiagnostics(workspace),
         read: (signal) => requests.daemonDiagnostics(workspace.botId, signal),
         readNetwork: (signal) => requests.networkDiagnostic(workspace.botId, signal),
@@ -231,8 +233,8 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const newConversation = () => {
         store.getState().newConversation();
     };
-    const openManaged = (id: string) => {
-        store.getState().openManaged(id);
+    const openManaged: BotChatHomeStore["openManaged"] = (target) => {
+        store.getState().openManaged(target);
     };
     const pendingTitle = showNewSessionTitle ? (
         <NewSessionTitle
@@ -257,11 +259,11 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             <ConversationSidebar
                 botId={workspace.botId}
                 workspace={workspace}
-                activeId={activeConversationId}
+                activeTarget={activeConversationTarget}
                 connectionStatus={connectionStatus}
                 onConnectAgent={model.pairing.kind === "unpaired" ? store.getState().showPairingDialog : null}
                 requests={requests}
-                onOpen={(session) => openManaged(session.id)}
+                onOpen={(session) => openManaged(session.target)}
                 onNewConversation={newConversation}
             />
             {workspace.deviceAccess !== null && workspace.linkedDevices !== null && (
@@ -286,7 +288,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     {model.selection.kind === "ready" ? (
                         <div
                             className={chatSessionPaneEnterClassName}
-                            key={model.selection.session.result.ready.sessionId}
+                            key={nativeSessionKey(model.selection.session.result.ready.target)}
                         >
                             <MortySessionPane workspace={workspace} />
                         </div>

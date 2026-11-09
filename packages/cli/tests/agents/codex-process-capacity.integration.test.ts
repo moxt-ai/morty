@@ -20,13 +20,17 @@ const evictingEnvironment = (environment: Readonly<Record<string, string>>): Rea
     MORTY_MAX_ACP_PROCESSES: "2",
 });
 
-async function promptRealSession(peer: RealDaemonPeer, sessionId: string, text: string): Promise<void> {
+async function promptRealSession(
+    peer: RealDaemonPeer,
+    sessionTarget: RealDaemonPeer["target"],
+    text: string,
+): Promise<void> {
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
             kind: "session.prompt",
             commandId,
-            sessionId,
+            target: sessionTarget,
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -50,7 +54,7 @@ async function promptRealSession(peer: RealDaemonPeer, sessionId: string, text: 
         }
         if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed") {
             expect(event.payload.commandId).toBe(commandId);
-            expect(event.sessionId).toBe(sessionId);
+            expect(event.target).toEqual(sessionTarget);
             expect(event.payload.stopReason).toBe("end_turn");
             expect(output).toContain("RESTORED_REPLY");
             return;
@@ -62,17 +66,17 @@ test("Given a real Codex conversation, When more Sessions are opened than the da
     await using provider = await FakeOpenAiProvider.start("morty-test-model", "RESTORED_REPLY");
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), evictingEnvironment(agent.environment), async (peer) => {
-        const sessionId = await prepareNewRealSession(peer, "codex");
-        await promptRealSession(peer, sessionId, "Original conversation before opening other Sessions");
+        const sessionTarget = await prepareNewRealSession(peer, "codex");
+        await promptRealSession(peer, sessionTarget, "Original conversation before opening other Sessions");
         for (let index = 0; index < 11; index += 1) {
             await prepareNewRealSession(peer, "codex");
         }
-        await promptRealSession(peer, sessionId, "Continue the original conversation after opening other Sessions");
+        await promptRealSession(peer, sessionTarget, "Continue the original conversation after opening other Sessions");
         peer.send(
             encodeSessionHistoryPageLoad({
                 kind: "session.live-history.v2.page.load",
                 requestId: randomUUID(),
-                sessionId,
+                target: sessionTarget,
                 cursor: null,
                 eventLimit: 200,
             }),

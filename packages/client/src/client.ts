@@ -2,6 +2,7 @@ import {
     decodeKnownDaemonToServiceMessage,
     decodeMessageKind,
     decodeRuntimeStatusEvent,
+    type NativeSessionTarget,
     RUNTIME_STATUS_KIND,
     type SessionElicitationRespondCommand,
     type SessionPermissionResolvedEvent,
@@ -27,14 +28,14 @@ export interface PermissionResponseRequest {
     readonly interactionId: string;
     readonly optionId: string;
     readonly outcome: SessionPermissionResolvedEvent["outcome"];
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export interface ElicitationResponseRequest {
     readonly action: SessionElicitationRespondCommand["action"];
     readonly content: string;
     readonly interactionId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export class MortyClientError extends Error {

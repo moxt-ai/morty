@@ -2,6 +2,7 @@ import {
     type DaemonToServiceMessage,
     encodeContentChunkFrame,
     encodeDaemonToServiceMessage,
+    type NativeSessionTarget,
 } from "@morty-build/client/protocol";
 import { WebSocket } from "undici";
 
@@ -25,7 +26,7 @@ export function sendContentChunk(socket: WebSocket, requestId: string, sequence:
 export function reportOperationFailure(
     socket: WebSocket,
     requestId: string,
-    sessionId: string,
+    target: NativeSessionTarget | undefined,
     error: unknown,
     runtimeTimings: readonly DurationMetric[] = [],
 ): void {
@@ -38,6 +39,6 @@ export function reportOperationFailure(
         message: operationErrorMessage(error),
         requestId,
         ...(runtimeTimings.length === 0 ? {} : { runtimeTimings }),
-        sessionId,
+        ...(target === undefined ? {} : { target }),
     });
 }

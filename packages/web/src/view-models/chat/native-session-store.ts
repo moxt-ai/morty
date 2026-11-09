@@ -73,10 +73,13 @@ export interface NativeSessionStore {
 /** Linked native entries use the same current Session titles as the sidebar, without caching a presentation. */
 export function nativeSessionPresentation(model: NativeSessionStore, sessions: readonly ManagedChatSession[]) {
     const present = (entry: NativeSessionEntry) => {
-        // Several Morty Sessions can link to one native session; prefer the most recently updated one.
-        const linked = sessions
-            .filter((session) => entry.mortySessionIds.includes(session.id) && session.title.trim().length > 0)
-            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id));
+        const linked = sessions.filter(
+            (session) =>
+                model.directory.kind === "ready" &&
+                session.target.harness === model.directory.agentRef &&
+                session.target.sessionId === entry.sessionId &&
+                session.title.trim().length > 0,
+        );
         return { ...entry, displayTitle: linked[0]?.title ?? (entry.title || "Untitled session") };
     };
     return {
@@ -109,7 +112,7 @@ function relistMatch(
     }
     return (
         entries.find((entry) => entry.entryId === previewed.entryId) ??
-        entries.find((entry) => entry.nativeSessionId === previewed.nativeSessionId) ??
+        entries.find((entry) => entry.sessionId === previewed.sessionId) ??
         entries.find((entry) => entry.title === previewed.title && entry.directoryId === previewed.directoryId)
     );
 }
@@ -204,7 +207,7 @@ export const createNativeSessionStore = (
                     directory: {
                         kind: "ready",
                         computerId: agent.computerId,
-                        discoveryId: result.sessionId,
+                        discoveryId: result.discoveryId,
                         agentRef: agent.agentRef,
                         capabilities: result.capabilities,
                         entries,
@@ -279,7 +282,7 @@ export const createNativeSessionStore = (
                         agentId: directory.agentRef,
                         directoryId: entry.directoryId,
                         entryId: entry.entryId,
-                        nativeSessionId: entry.nativeSessionId,
+                        sessionId: entry.sessionId,
                     },
                     signal,
                 );
@@ -317,7 +320,7 @@ export const createNativeSessionStore = (
                 const input = {
                     agentId: directory.agentRef,
                     directoryId: preview.entry.directoryId,
-                    nativeSessionId: preview.entry.nativeSessionId,
+                    sessionId: preview.entry.sessionId,
                 };
                 const retained = get().forkIntent;
                 const target = JSON.stringify([directory.computerId, input]);

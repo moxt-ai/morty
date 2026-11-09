@@ -20,13 +20,13 @@ test("Given a newly created real Codex Session, When Chat requests its V2 histor
     await using provider = await FakeOpenAiProvider.start("morty-test-model", "UNUSED_REPLY");
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
-        const sessionId = await prepareNewRealSession(peer, "codex");
+        const sessionTarget = await prepareNewRealSession(peer, "codex");
         const requestId = randomUUID();
         peer.send(
             encodeSessionHistoryPageLoad({
                 kind: "session.live-history.v2.page.load",
                 requestId,
-                sessionId,
+                target: sessionTarget,
                 cursor: null,
                 eventLimit: 50,
             }),
@@ -51,7 +51,7 @@ test("Given a newly created real Codex Session, When Chat requests its V2 histor
                     queuedPromptRequests: [],
                 },
                 requestId,
-                sessionId,
+                target: sessionTarget,
             });
             break;
         }
@@ -79,7 +79,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: nativeId,
+                        target: nativeId,
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -112,7 +112,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                         event.payload.commandId === commandId
                     ) {
                         expect(event.payload.commandId).toBe(commandId);
-                        expect(event.sessionId).toBe(nativeId);
+                        expect(event.target).toEqual(nativeId);
                         expect(event.payload.stopReason).toBe(reason);
                         return text;
                     }
@@ -152,7 +152,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
                     commandId: active,
-                    sessionId: nativeId,
+                    target: nativeId,
                 }),
             );
             await finish(active, "cancelled");

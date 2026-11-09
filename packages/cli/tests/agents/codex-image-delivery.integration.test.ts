@@ -148,13 +148,12 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
             join(directory, `rollout-2026-10-09T06-58-30-${sessionId}.jsonl`),
             `${payloads.map((entry, ordinal) => JSON.stringify({ timestamp, ordinal, ...entry })).join("\n")}\n`,
         );
-        const managedSessionId = "imported-image-session";
         const identity = {
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
             kind: "native.session.request",
-            sessionId: managedSessionId,
+            discoveryId: crypto.randomUUID(),
         } as const;
         const resultFor = async (requestId: string): Promise<NativeSessionResult> => {
             for (;;) {
@@ -177,7 +176,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
         if (listed.action !== "list") {
             throw new Error("Expected native Session directory");
         }
-        const source = listed.entries.find((entry) => entry.nativeSessionId === sessionId);
+        const source = listed.entries.find((entry) => entry.sessionId === sessionId);
         if (source === undefined) {
             throw new Error("Missing saved image Session");
         }
@@ -187,14 +186,16 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
                 action: "import",
                 entryId: source.entryId,
                 requestId: "image-import",
-                targetSessionId: managedSessionId,
             }),
         );
         const imported = await resultFor("image-import");
+        if (imported.action !== "import") {
+            throw new Error("Expected native import");
+        }
         expect(imported).toMatchObject({
             action: "import",
-            ready: { restored: true, sessionId: managedSessionId },
-            targetSessionId: managedSessionId,
+            ready: { restored: true, target: { harness: "codex", sessionId: sessionId } },
+            target: { harness: "codex", sessionId: sessionId },
         });
         const key = createHash("sha256").update(image).digest("hex");
         const sendPrompt = (commandId: string, prompt: string): void =>
@@ -208,7 +209,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: managedSessionId,
+                    target: imported.target,
                 }),
             );
         const finish = async (): Promise<readonly SessionLiveEvent[]> => {
@@ -239,7 +240,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
                 eventLimit: 50,
                 kind: "session.live-history.v2.page.load",
                 requestId: "image-history",
-                sessionId: managedSessionId,
+                target: imported.target,
             }),
         );
         for (;;) {
@@ -263,7 +264,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
                 maxBytes: 2_000_000,
                 path: `morty-content:image:${key}`,
                 requestId: "image-download",
-                sessionId: managedSessionId,
+                target: imported.target,
             }),
         );
         const chunks: Buffer[] = [];

@@ -29,7 +29,8 @@ function heldSessionCreation() {
             holding = true;
         },
         release: () => gate.resolve(),
-        reject: () => gate.reject(new Error("The controlled Agent could not create a Session")),
+        reject: () =>
+            gate.reject(RequestError.invalidParams("The controlled Agent refused Session creation before admission")),
         agent: {
             id: "settings-test",
             label: "Settings Agent",
@@ -238,3 +239,5 @@ test("Given I left a new conversation while it was being created, When I attach 
     await openConversation(app, "Created while away");
     await app.waitForView(() => getByRole(document.body, "button", { name: "Remove kept.json" }));
 });
+
+import { RequestError } from "@agentclientprotocol/sdk";

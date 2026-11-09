@@ -60,7 +60,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
         const finish = async (): Promise<readonly SessionLiveEvent[]> => {
@@ -88,7 +88,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
                                 encodeSessionPermissionRespondCommand({
                                     kind: "session.permission.respond",
                                     requestId: crypto.randomUUID(),
-                                    sessionId: peer.sessionId,
+                                    target: peer.target,
                                     interactionId: event.payload.event.interactionId,
                                     optionId: option.optionId,
                                     outcome: "selected",
@@ -123,7 +123,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
                 eventLimit: 50,
                 kind: "session.live-history.v2.page.load",
                 requestId: "image-history",
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         for (;;) {
@@ -144,7 +144,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
                 maxBytes: 2_000_000,
                 path: `morty-content:image:${key}`,
                 requestId: "image-download",
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         const chunks: Buffer[] = [];

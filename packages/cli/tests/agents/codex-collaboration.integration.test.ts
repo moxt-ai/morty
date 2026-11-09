@@ -8,7 +8,9 @@ import {
     type AcpSessionUpdate,
     decodeMessageKind,
     decodeSessionEventEnvelope,
+    decodeSessionReadyEvent,
     encodeRuntimeLivenessReadyEvent,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
@@ -113,7 +115,26 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        const sessionId = "codex_collaboration";
+        const requestId = randomUUID();
+        socket.send(
+            encodeSessionCreateCommand({
+                kind: "session.create",
+                requestId,
+                operationId: randomUUID(),
+                agentId: "codex",
+                bindingId: config.bindingId,
+                directoryId: "default",
+                configurations: [],
+            }),
+        );
+        let created = await messages.next();
+        while (decodeMessageKind(created) !== "session.ready") {
+            if (decodeMessageKind(created) === "session.operation.failed") {
+                throw new Error(created);
+            }
+            created = await messages.next();
+        }
+        const sessionTarget = decodeSessionReadyEvent(created).target;
         const commandId = randomUUID();
         socket.send(
             encodeSessionPromptCommand({
@@ -125,7 +146,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
                 attachments: [],
                 kind: "session.prompt",
                 prompt,
-                sessionId,
+                target: sessionTarget,
             }),
         );
 

@@ -100,12 +100,12 @@ async function project(_name = "Runtime pairing") {
         computerId,
         credentialId: defaultCredential.credentialId,
         issueSession: () =>
-            request(`/v1/computers/${computerId}/sessions/revoke-test/access-credentials`, "POST", {
+            request(`/v1/computers/${computerId}/harnesses/codex/sessions/revoke-test/access-credentials`, "POST", {
                 expiresInSeconds: 900,
             }),
         checkSession: (token: string) =>
             request(
-                `/v1/computers/${computerId}/sessions/revoke-test/live-event-subscription-target`,
+                `/v1/computers/${computerId}/harnesses/codex/sessions/revoke-test/live-event-subscription-target`,
                 "GET",
                 undefined,
                 token,

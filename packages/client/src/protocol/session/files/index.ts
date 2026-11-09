@@ -1,7 +1,7 @@
 import { z } from "zod";
-
 import { identifierStringSchema as IDENTIFIER, isIdentifier } from "../../shared/identifier.ts";
 import { decodeZodMessage as decode, encodeZodMessage as encode } from "../../shared/message-codec.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const FILE_READ_KIND = "file.read";
 export const FILE_BEGIN_KIND = "file.begin";
@@ -27,7 +27,7 @@ const fileReadCommandSchema = z
             .positive()
             .max(128 * 1024 * 1024),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         path: z.string().min(1).max(4_096),
     })
     .readonly();
@@ -46,7 +46,7 @@ const fileBeginEventSchema = z
         modifiedAt: z.iso.datetime({ offset: true }),
         name: z.string().min(1).max(500),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -61,7 +61,7 @@ const contentWriteCommandSchema = z
         mediaType: z.string().min(1).max(255),
         name: z.string().min(1).max(500),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -71,7 +71,7 @@ const contentCommitCommandSchema = z
     .object({
         kind: z.literal(CONTENT_COMMIT_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -81,7 +81,7 @@ const contentReadyEventSchema = z
     .object({
         kind: z.literal(CONTENT_READY_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -93,7 +93,7 @@ const contentAvailableEventSchema = z
         contentKey: z.string().regex(/^[a-f0-9]{64}$/u),
         kind: z.literal(CONTENT_AVAILABLE_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -168,7 +168,7 @@ const fileEndEventSchema = z
     .object({
         kind: z.literal(FILE_END_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -180,7 +180,7 @@ const fileFailedEventSchema = z
         kind: z.literal(FILE_FAILED_KIND),
         message: z.string().min(1).max(500),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 

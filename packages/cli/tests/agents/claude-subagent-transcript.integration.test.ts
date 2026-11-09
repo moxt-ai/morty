@@ -43,7 +43,7 @@ test("Given Claude Code dispatches a subagent that runs tools, When the turn str
                 attachments: [],
                 kind: "session.prompt",
                 prompt: DISPATCH_PROMPT,
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         const observed = await observeTurn(peer, commandId);
@@ -102,7 +102,7 @@ async function observeTurn(peer: RealDaemonPeer, commandId: string): Promise<Obs
                         requestId: crypto.randomUUID(),
                         optionId: option.optionId,
                         outcome: "selected",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
             } else if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {

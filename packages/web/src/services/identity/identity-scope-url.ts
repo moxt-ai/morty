@@ -80,6 +80,7 @@ export function leaveComputerAddress(): void {
     destination.pathname = "/chat";
     destination.searchParams.delete("identity");
     destination.searchParams.delete("sessionId");
+    destination.searchParams.delete("harness");
     destination.hash = "";
     window.history.replaceState(window.history.state, "", destination);
 }

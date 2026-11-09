@@ -4,7 +4,9 @@ import {
     decodeTurn,
     type Identifier,
     isIdentifier,
+    type NativeSessionTarget,
     type PromptAttachment,
+    readNativeSessionTarget,
     type SessionCapabilities,
     type SessionConfigurationSelection,
     type SessionPromptDisposition,
@@ -75,7 +77,7 @@ export class MortySessionAccess {
     readonly credential: string;
     readonly credentialId: string;
     readonly computerId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
     readonly expiresAt: string;
     constructor(value: unknown) {
         const resource = record(value, "Session access");
@@ -85,7 +87,11 @@ export class MortySessionAccess {
         }
         this.credentialId = identifierField(resource, "credentialId");
         this.computerId = identifierField(resource, "computerId");
-        this.sessionId = identifierField(resource, "sessionId");
+        const target = readNativeSessionTarget(resource["target"]);
+        if (target === null) {
+            throw invalidResponse("The service returned an invalid native Session target");
+        }
+        this.target = target;
         this.expiresAt = validateTimestamp(stringField(resource, "expiresAt", 128), "expiresAt");
     }
 }
@@ -99,17 +105,13 @@ export class MortySessionAccessRevocation {
     }
 }
 
-/**
- * Creates a Session with the settings it starts with. The Runtime applies `configurations` as part of creating the
- * Session, so a created Session holds every selection, and a refused one leaves nothing behind. Creating the same
- * `sessionId` again is safe: it returns that Session with the stated settings applied.
- */
+/** Creates an Agent-owned Session with its initial settings. Reuse the operation ID after response loss. */
 export interface CreateMortySessionRequest {
     readonly agentId: string;
     readonly configurations: readonly SessionConfigurationSelection[];
     readonly directoryId: string;
     readonly computerId: string;
-    readonly sessionId: string;
+    readonly operationId: string;
 }
 
 /**
@@ -637,7 +639,7 @@ export class MortyTurn {
     readonly bindingId: string;
     readonly idempotencyKey: string;
     readonly request: TurnRequest;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
     readonly state: MortyTurnState;
     readonly turnId: string;
 
@@ -646,7 +648,7 @@ export class MortyTurn {
         bindingId: string,
         content: string,
         idempotencyKey: string,
-        sessionId: string,
+        target: NativeSessionTarget,
         sessionConfigurations: readonly SessionConfigurationSelection[],
         state: MortyTurnState,
         turnId: string,
@@ -656,7 +658,7 @@ export class MortyTurn {
         this.bindingId = bindingId;
         this.idempotencyKey = idempotencyKey;
         this.request = request;
-        this.sessionId = sessionId;
+        this.target = target;
         this.state = state;
         this.turnId = turnId;
     }
@@ -709,7 +711,7 @@ export function decodeMortyTurn(value: unknown): MortyTurn | null {
         turn.bindingId,
         turn.request.kind === "prompt" ? turn.request.content : "",
         turn.idempotencyKey,
-        turn.sessionId,
+        turn.target,
         turn.request.kind === "prompt" ? turn.request.sessionConfigurations : [],
         state,
         turn.turnId,

@@ -8,7 +8,7 @@ describe("Morty resource contract", () => {
             bindingId: "binding-a",
             idempotencyKey: "submit-a",
             request: { kind: "not_retained" },
-            sessionId: "session-a",
+            target: { harness: "claude", sessionId: "session-a" },
             turnId: "turn-a",
         };
         const terminalStates = [
@@ -58,7 +58,7 @@ describe("Morty resource contract", () => {
                 toolCallId: "tool-call-a",
                 toolKind: "bash",
             },
-            sessionId: "session-a",
+            target: { harness: "claude", sessionId: "session-a" },
             state: {
                 kind: "responded",
                 respondedAt: "2026-09-07T00:00:02.000Z",

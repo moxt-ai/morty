@@ -1,4 +1,5 @@
-import { decodeSessionEvent, type SessionEvent } from "@morty-build/client/protocol";
+import { NativeSessionSet, nativeSessionKey } from "@morty-build/client/native-session";
+import { decodeSessionEvent, type NativeSessionTarget, type SessionEvent } from "@morty-build/client/protocol";
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 import { z } from "zod";
@@ -11,12 +12,12 @@ const cachedEventOrdinalRowSchema = z.object({ eventJson: z.string(), ordinal: z
 interface SessionEventCacheBatch {
     readonly events: readonly { readonly event: SessionEvent; readonly ordinal: number }[];
     readonly sessionGenerationId: string;
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
 }
 
 export class SessionEventCacheTable {
     readonly #database: NodeSQLiteDatabase;
-    readonly #ignoredPersistedSessions = new Set<string>();
+    readonly #ignoredPersistedSessions = new NativeSessionSet();
     readonly #localDatabase: LocalSqliteDatabase;
     #isAvailable = true;
 
@@ -53,7 +54,7 @@ export class SessionEventCacheTable {
                 eventId: event.eventId,
                 generationId: batch.sessionGenerationId,
                 ordinal,
-                sessionId: batch.sessionId,
+                sessionId: nativeSessionKey(batch.sessionTarget),
             })),
         );
         if (values.length === 0) {
@@ -85,11 +86,11 @@ export class SessionEventCacheTable {
      * next flush overwrites them with the merged payloads.
      */
     readonly readByEventIds = (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         sessionGenerationId: string,
         eventIds: readonly string[],
     ): ReadonlyMap<string, SessionEvent> => {
-        if (eventIds.length === 0 || this.#ignoredPersistedSessions.has(sessionId)) {
+        if (eventIds.length === 0 || this.#ignoredPersistedSessions.has(sessionTarget)) {
             return new Map();
         }
         let rows: { readonly eventId: string; readonly eventJson: string }[];
@@ -100,7 +101,7 @@ export class SessionEventCacheTable {
                 .where(
                     and(
                         eq(sessionEvent.generationId, sessionGenerationId),
-                        eq(sessionEvent.sessionId, sessionId),
+                        eq(sessionEvent.sessionId, nativeSessionKey(sessionTarget)),
                         inArray(sessionEvent.eventId, eventIds),
                     ),
                 )
@@ -123,12 +124,12 @@ export class SessionEventCacheTable {
     };
 
     readonly read = (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         sessionGenerationId: string,
         startOrdinal: number,
         endOrdinal: number,
     ): readonly { readonly event: SessionEvent; readonly ordinal: number }[] => {
-        if (this.#ignoredPersistedSessions.has(sessionId)) {
+        if (this.#ignoredPersistedSessions.has(sessionTarget)) {
             return [];
         }
         return this.#database
@@ -137,7 +138,7 @@ export class SessionEventCacheTable {
             .where(
                 and(
                     eq(sessionEvent.generationId, sessionGenerationId),
-                    eq(sessionEvent.sessionId, sessionId),
+                    eq(sessionEvent.sessionId, nativeSessionKey(sessionTarget)),
                     gte(sessionEvent.ordinal, startOrdinal),
                     lte(sessionEvent.ordinal, endOrdinal),
                 ),
@@ -150,9 +151,9 @@ export class SessionEventCacheTable {
             });
     };
 
-    readonly delete = (sessionId: string, sessionGenerationId?: string): void => {
+    readonly delete = (sessionTarget: NativeSessionTarget, sessionGenerationId?: string): void => {
         if (!this.#isAvailable) {
-            this.#ignoredPersistedSessions.add(sessionId);
+            this.#ignoredPersistedSessions.add(sessionTarget);
             return;
         }
         try {
@@ -160,17 +161,17 @@ export class SessionEventCacheTable {
                 .delete(sessionEvent)
                 .where(
                     sessionGenerationId === undefined
-                        ? eq(sessionEvent.sessionId, sessionId)
+                        ? eq(sessionEvent.sessionId, nativeSessionKey(sessionTarget))
                         : and(
                               eq(sessionEvent.generationId, sessionGenerationId),
-                              eq(sessionEvent.sessionId, sessionId),
+                              eq(sessionEvent.sessionId, nativeSessionKey(sessionTarget)),
                           ),
                 )
                 .run();
-            this.#ignoredPersistedSessions.delete(sessionId);
+            this.#ignoredPersistedSessions.delete(sessionTarget);
         } catch (cause) {
             this.#isAvailable = false;
-            this.#ignoredPersistedSessions.add(sessionId);
+            this.#ignoredPersistedSessions.add(sessionTarget);
             console.warn("Morty V2 Session event cache writes are unavailable; retaining events in memory", cause);
         }
     };

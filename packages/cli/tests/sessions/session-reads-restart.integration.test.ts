@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -41,38 +41,19 @@ async function controlledAgent(
     return { agent, stateDirectory };
 }
 
-/** Seeds the fake peer's persisted native-session state for `session/load`. */
-async function seedPeerSession(stateDirectory: string, sessionId: string): Promise<void> {
-    await writeFile(
-        join(stateDirectory, `${encodeURIComponent(sessionId)}.json`),
-        JSON.stringify({
-            fastMode: false,
-            history: [],
-            mode: "code",
-            model: "test-small",
-            reasoningEffort: "medium",
-            turnCount: 0,
-        }),
-    );
-}
-
-function createManager(
-    store: MemorySessionStore | SqliteSessionStore,
-    sessionIdentity: "assigned" | "native" = "assigned",
-): SessionManager {
+function createManager(store: MemorySessionStore | SqliteSessionStore): SessionManager {
     return new SessionManager({
         observer: new NullSessionObserver(),
         store,
         adapters: acpAdapters,
-        sessionIdentity,
         onSessionStatusChanged: () => undefined,
-        contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+        contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,
                 kind: content.kind,
                 mediaType: content.mediaType,
                 name: content.name,
-                sessionId,
+                target: sessionTarget,
                 signal,
             }),
         ),
@@ -85,20 +66,24 @@ describe("Session settings reads after a daemon restart", () => {
     it("Given a stored session, When an unknown session is read, Then the lookup reports it missing", async () => {
         const manager = createManager(new MemorySessionStore());
         try {
-            expect(manager.findSessions(["missing-session"])).toHaveLength(0);
+            expect(manager.findSessions([{ harness: "claude", sessionId: "missing-session" }])).toHaveLength(0);
         } finally {
             await manager.close();
         }
     });
 
     it("Given an Agent without history loading, When its stored session's settings are read through the config-read path, Then the read resolves with the current configuration", async () => {
-        const sessionId = "no-load-config-read-session";
         // The controlled peer advertises loadSession: false with this flag, so
         // any history-required preparation would fail with
         // native_history_unsupported before reaching the configuration.
         const { agent } = await controlledAgent("controlled-config-read", ["--no-load-session"]);
         const store = new MemorySessionStore();
         const manager = createManager(store);
+        const sessionTarget = await manager.createNativeSession({
+            agent,
+            cwd: process.cwd(),
+            signal: AbortSignal.timeout(10_000),
+        });
         try {
             await manager.runPrompt({
                 agent,
@@ -106,7 +91,7 @@ describe("Session settings reads after a daemon restart", () => {
                 cwd: process.cwd(),
                 images: [],
                 resources: [],
-                sessionId,
+                target: sessionTarget,
                 prompt: "Complete this turn",
                 signal: AbortSignal.timeout(10_000),
             });
@@ -118,22 +103,22 @@ describe("Session settings reads after a daemon restart", () => {
 
         const reader = createManager(store);
         try {
-            const [found] = reader.findSessions([sessionId]);
-            expect(found?.sessionId).toBe(sessionId);
+            const [found] = reader.findSessions([sessionTarget]);
+            expect(found?.target).toEqual(sessionTarget);
             // The history-required path the read must not use: without load
             // support it fails before any configuration is reachable.
             await expect(
                 reader.restoreSession({
                     agent,
                     cwd: process.cwd(),
-                    sessionId,
+                    target: sessionTarget,
                     signal: AbortSignal.timeout(10_000),
                 }),
             ).rejects.toMatchObject({ code: "native_history_unsupported" });
             const prepared = await reader.prepareSession({
                 agent,
                 cwd: process.cwd(),
-                sessionId,
+                target: sessionTarget,
                 signal: AbortSignal.timeout(10_000),
             });
             const model = prepared.configOptions.find((option) => option.id === "model");
@@ -149,31 +134,33 @@ describe("Session settings reads after a daemon restart", () => {
     it("Given a native chat session whose process the daemon retired, When it is looked up after a restart, Then it is still known with its title and a prepare restores its configured settings", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-config-read-retired-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
-        // Native chat session ids are the Agent's own UUIDs for codex/claude/pi;
-        // the morty session id doubles as the native id for imported sessions.
-        const sessionId = crypto.randomUUID();
         const { agent, stateDirectory } = await controlledAgent("claude");
-        await seedPeerSession(stateDirectory, sessionId);
+        const seed = createManager(new MemorySessionStore());
+        const sessionTarget = await seed.createNativeSession({
+            agent,
+            cwd: process.cwd(),
+            signal: AbortSignal.timeout(10_000),
+        });
+        await seed.close();
         const store = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
-        const first = createManager(store, "native");
+        const first = createManager(store);
         try {
             const imported = await first.openNativeSession(
                 {
                     agent,
                     cwd: process.cwd(),
-                    sessionId,
                     signal: AbortSignal.timeout(10_000),
                 },
-                { kind: "import", nativeSessionId: sessionId, title: "Imported native session" },
+                { kind: "import", sessionId: sessionTarget.sessionId, title: "Imported native session" },
             );
-            expect(imported.sessionId).toBe(sessionId);
+            expect(imported.target).toEqual(sessionTarget);
             await first.runPrompt({
                 agent,
                 commandId: "config-read-retired-command",
                 cwd: process.cwd(),
                 images: [],
                 resources: [],
-                sessionId,
+                target: sessionTarget,
                 prompt: "Complete this turn",
                 signal: AbortSignal.timeout(10_000),
             });
@@ -184,7 +171,7 @@ describe("Session settings reads after a daemon restart", () => {
                 configId: "model",
                 cwd: process.cwd(),
                 requestId: "config-read-retired-configure",
-                sessionId,
+                target: sessionTarget,
                 signal: AbortSignal.timeout(10_000),
                 value: "test-large",
                 valueType: "select",
@@ -194,14 +181,14 @@ describe("Session settings reads after a daemon restart", () => {
             await first.close();
         }
 
-        const restarted = createManager(store, "native");
+        const restarted = createManager(store);
         try {
-            const [found] = restarted.findSessions([sessionId]);
-            expect(found).toMatchObject({ sessionId, title: "Imported native session", prompted: true });
+            const [found] = restarted.findSessions([sessionTarget]);
+            expect(found).toMatchObject({ target: sessionTarget, title: "Imported native session", prompted: true });
             const prepared = await restarted.prepareSession({
                 agent,
                 cwd: process.cwd(),
-                sessionId,
+                target: sessionTarget,
                 signal: AbortSignal.timeout(10_000),
             });
             const model = prepared.configOptions.find((option) => option.id === "model");
@@ -211,6 +198,7 @@ describe("Session settings reads after a daemon restart", () => {
             expect(model.currentValue).toBe("test-large");
         } finally {
             await restarted.close();
+            await rm(stateDirectory, { force: true, recursive: true });
             await rm(temporaryDirectory, { force: true, recursive: true });
         }
     });

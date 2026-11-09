@@ -1,9 +1,11 @@
+import { nativeSessionKey } from "@morty-build/client/native-session";
 import {
     type DaemonToRelayMessage,
     decodeDaemonToRelayMessage,
     decodeKnownServiceToDaemonMessage,
     encodeRuntimeStatusEvent,
     encodeServiceToDaemonMessage,
+    type NativeSessionTarget,
     RUNTIME_LIVENESS_READY_KIND,
     RUNTIME_STATUS_KIND,
     type RuntimeLivenessReadyEvent,
@@ -44,7 +46,8 @@ export type RuntimeSocketIdentity =
               readonly issuedAt: number;
           } | null;
           readonly computerId: string;
-          readonly sessionFilter: string;
+
+          readonly sessionFilter: NativeSessionTarget;
       }
     | {
           readonly role: "relay";
@@ -54,7 +57,8 @@ export type RuntimeSocketIdentity =
           readonly role: "host";
           readonly credential: HostCredential;
           readonly nativeRequestId?: string;
-          readonly sessionFilter?: string;
+          readonly sessionFilter?: NativeSessionTarget;
+
           readonly computerId: string;
       }
     | {
@@ -581,8 +585,8 @@ export class RuntimeService {
      */
     private readonly daemonMessageLanes = (message: DaemonToRelayMessage): readonly string[] => {
         if (message.kind === SESSION_EVENT_KIND) {
-            const sessionIds = new Set(message.events.map((event) => event.sessionId));
-            return sessionIds.size === 0 ? ["session:unknown"] : [...sessionIds].map((id) => `session:${id}`);
+            const sessionKeys = new Set(message.events.map((event) => nativeSessionKey(event.target)));
+            return sessionKeys.size === 0 ? ["session:unknown"] : [...sessionKeys].map((key) => `session:${key}`);
         }
         return ["runtime"];
     };

@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
 import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { expect, it } from "vitest";
 import { startTestPlatform } from "../support/platform.ts";
@@ -20,38 +21,43 @@ for (const client of ["SDK", "HTTP"] as const) {
                 cancellation.signal,
             );
             const runtime = await platform.connectAgent(project.computerId);
-            const sessionId = `session-${crypto.randomUUID()}`;
             const request = {
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
                 computerId: runtime.computerId,
-                sessionId,
+                operationId: crypto.randomUUID(),
             };
-            if (client === "SDK") {
-                await runtime.client.sessions.create(request, cancellation.signal);
-            } else {
-                const response = await platform.app.request(
-                    new Request(`${platform.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`, {
-                        method: "POST",
-                        headers: {
-                            authorization: `Bearer ${platform.appCredential}`,
-                            "content-type": "application/json",
-                        },
-                        body: JSON.stringify(request),
-                        signal: cancellation.signal,
-                    }),
-                );
-                expect(response.status).toBe(200);
-                expect(await response.json()).toMatchObject({
-                    kind: "session.ready",
-                    sessionId,
-                    agentId: "claude",
-                    directoryId: "default",
-                });
-            }
+            const ready =
+                client === "SDK"
+                    ? await runtime.client.sessions.create(request, cancellation.signal)
+                    : await (async () => {
+                          const response = await platform.app.request(
+                              new Request(
+                                  `${platform.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`,
+                                  {
+                                      method: "POST",
+                                      headers: {
+                                          authorization: `Bearer ${platform.appCredential}`,
+                                          "content-type": "application/json",
+                                      },
+                                      body: JSON.stringify(request),
+                                      signal: cancellation.signal,
+                                  },
+                              ),
+                          );
+                          expect(response.status).toBe(200);
+                          return decodeSessionReadyEvent(await response.text());
+                      })();
+            const { target: sessionTarget } = ready;
+            expect(ready).toMatchObject({
+                kind: "session.ready",
+                target: sessionTarget,
+                agentId: "claude",
+                directoryId: "default",
+            });
             await runtime.client.turns.submitToRuntime(
-                sessionId,
+                sessionTarget,
                 {
                     agentId: "claude",
                     attachments: [],
@@ -67,8 +73,9 @@ for (const client of ["SDK", "HTTP"] as const) {
                     agentId: "claude",
                     directoryId: expect.any(String),
                     prompted: true,
-                    sessionId,
-                    status: { kind: "idle" },
+                    target: sessionTarget,
+                    // Admission does not wait for completion; either live state describes this conversation.
+                    status: expect.objectContaining({ kind: expect.stringMatching(/^(idle|working)$/u) }),
                     title: "Remember this conversation",
                 }),
             ]);
@@ -131,18 +138,17 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             expect(listing.parentDirectoryId.length).toBeGreaterThan(2048);
         }
         const identity = { agentId: "claude", directoryId };
-        const sessionId = `session-${crypto.randomUUID()}`;
-        await runtime.client.sessions.create(
+        const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 ...identity,
                 configurations: [],
                 computerId: runtime.computerId,
-                sessionId,
+                operationId: crypto.randomUUID(),
             },
             signal,
         );
         await runtime.client.turns.submitToRuntime(
-            sessionId,
+            sessionTarget,
             {
                 ...identity,
                 content: "Remember the long workspace conversation",
@@ -152,7 +158,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             signal,
         );
         expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
-            expect.objectContaining({ sessionId, directoryId, directoryLabel: canonical, prompted: true }),
+            expect.objectContaining({ target: sessionTarget, directoryId, directoryLabel: canonical, prompted: true }),
         );
         const discovery = await runtime.client.runtimes.nativeSessions(
             { ...identity, action: "list", cursor: null, discoveryId: null },
@@ -161,9 +167,13 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         if (discovery.action !== "list" || discovery.entries[0] === undefined) {
             throw new Error("Missing native conversation in the long workspace");
         }
-        expect(discovery.entries[0]).toMatchObject({ directoryId, directoryLabel: canonical });
+        expect(discovery.entries[0]).toMatchObject({
+            sessionId: sessionTarget.sessionId,
+            directoryId,
+            directoryLabel: canonical,
+        });
         const events = await runtime.client.sessions.previewRuntimeNativeEvents(
-            discovery.entries[0].nativeSessionId,
+            sessionTarget,
             identity,
             { cursor: null, eventLimit: 100 },
             signal,
@@ -191,18 +201,17 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
             signal,
         );
         const runtime = await platform.connectAgent(project.computerId);
-        const sessionId = `session-${crypto.randomUUID()}`;
-        await runtime.client.sessions.create(
+        const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 agentId: "claude",
                 configurations: [],
                 directoryId,
                 computerId: runtime.computerId,
-                sessionId,
+                operationId: crypto.randomUUID(),
             },
             signal,
         );
-        const access = await runtime.client.sessions.createAccess(sessionId, 900, signal);
+        const access = await runtime.client.sessions.createAccess(sessionTarget, 900, signal);
         const session = new MortyClient({
             endpoint: platform.baseUrl,
             computerId: project.computerId,
@@ -211,7 +220,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
         });
 
         const turn = await session.turns.submit(
-            sessionId,
+            sessionTarget,
             {
                 attachments: [],
                 content: "Remember the selected workspace",
@@ -219,9 +228,9 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
             },
             signal,
         );
-        await expect(session.sessions.readSessionExecution(sessionId, {}, signal, turn.turnId)).resolves.toHaveProperty(
-            "command",
-        );
+        await expect(
+            session.sessions.readSessionExecution(sessionTarget, {}, signal, turn.turnId),
+        ).resolves.toHaveProperty("command");
 
         expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({
@@ -229,7 +238,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
                 directoryId,
                 directoryLabel,
                 prompted: true,
-                sessionId,
+                target: sessionTarget,
                 title: "Remember the selected workspace",
             }),
         );

@@ -1,3 +1,5 @@
+import { nativeSessionKey } from "@morty-build/client/native-session";
+import { decodeNativeSessionTarget, type NativeSessionTarget } from "@morty-build/client/protocol";
 import { and, asc, desc, eq, inArray, lt, max } from "drizzle-orm";
 import { z } from "zod";
 import { command, commandOutcome } from "../../schema/acp-session-store/index.ts";
@@ -21,7 +23,7 @@ export type SettledFate = Extract<CommandFate, { readonly outcome: unknown }>["k
 
 export type LedgerCommand = Readonly<{
     commandId: string;
-    sessionId: string;
+    target: NativeSessionTarget;
     commandHash: string;
     attemptId: string;
     admissionOrder: number;
@@ -30,7 +32,7 @@ export type LedgerCommand = Readonly<{
 
 export type CommandIdentity = Readonly<{
     commandId: string;
-    sessionId: string;
+    target: NativeSessionTarget;
     commandHash: string;
     attemptId: string;
 }>;
@@ -48,7 +50,14 @@ const rowSchema = z
     })
     .readonly();
 
-function ledgerCommand({ fate, startedAt, outcome, ...identity }: z.infer<typeof rowSchema>): LedgerCommand {
+function readNativeSessionKey(key: string): NativeSessionTarget {
+    const decoded: unknown = JSON.parse(key);
+    const [harness, sessionId] = z.tuple([z.string(), z.string()]).parse(decoded);
+    return decodeNativeSessionTarget({ harness, sessionId });
+}
+
+function ledgerCommand({ fate, startedAt, outcome, sessionId, ...columns }: z.infer<typeof rowSchema>): LedgerCommand {
+    const identity = { ...columns, target: readNativeSessionKey(sessionId) };
     const invalid = (): never => {
         throw new Error("The command ledger holds an invalid row", { cause: { commandId: identity.commandId, fate } });
     };
@@ -102,9 +111,9 @@ export class CommandLedgerTable {
     };
 
     /** The Session's commands in admission order. */
-    readonly session = (sessionId: string): readonly LedgerCommand[] =>
+    readonly session = (target: NativeSessionTarget): readonly LedgerCommand[] =>
         this.#select()
-            .where(eq(command.sessionId, sessionId))
+            .where(eq(command.sessionId, nativeSessionKey(target)))
             .orderBy(asc(command.admissionOrder))
             .all()
             .map((row) => ledgerCommand(rowSchema.parse(row)));
@@ -141,7 +150,14 @@ export class CommandLedgerTable {
             }
             this.#database.orm
                 .insert(command)
-                .values({ ...identity, admissionOrder: this.#nextAdmissionOrder(), fate: "pending" })
+                .values({
+                    commandId: identity.commandId,
+                    commandHash: identity.commandHash,
+                    attemptId: identity.attemptId,
+                    sessionId: nativeSessionKey(identity.target),
+                    admissionOrder: this.#nextAdmissionOrder(),
+                    fate: "pending",
+                })
                 .run();
         });
     };
@@ -179,10 +195,17 @@ export class CommandLedgerTable {
         this.#database.transaction(() => {
             this.#database.orm
                 .insert(command)
-                .values({ ...identity, admissionOrder: this.#nextAdmissionOrder(), fate: "cancelled" })
+                .values({
+                    commandId: identity.commandId,
+                    commandHash: identity.commandHash,
+                    attemptId: identity.attemptId,
+                    sessionId: nativeSessionKey(identity.target),
+                    admissionOrder: this.#nextAdmissionOrder(),
+                    fate: "cancelled",
+                })
                 .run();
             this.#database.orm.insert(commandOutcome).values({ commandId: identity.commandId, outcome }).run();
-            return this.#dropOutcomes(identity.sessionId);
+            return this.#dropOutcomes(nativeSessionKey(identity.target));
         });
 
     readonly #nextAdmissionOrder = (): number =>

@@ -6,6 +6,7 @@ import {
     isDirectoryIdentifier,
     isIdentifier,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     type TurnState,
 } from "@morty-build/client/protocol";
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
@@ -97,6 +98,13 @@ function sessionOperations(context: { readonly env: PlatformApplicationBindings 
     return context.env.MORTY_RUNTIME_EXECUTION.operations;
 }
 
+function nativeTarget(request: { readonly param: (name: string) => string | undefined }): NativeSessionTarget {
+    return {
+        harness: validateIdentifier(request.param("harness") ?? "", "harness"),
+        sessionId: validateIdentifier(request.param("sessionId") ?? "", "session_id"),
+    };
+}
+
 /** Session operations on the Runtime a Session credential authorized. */
 /** Session operations through a Session credential, each authorized for its own permission on that Session. */
 function authorizedSessionControl(
@@ -106,13 +114,18 @@ function authorizedSessionControl(
         readonly req: { readonly raw: Request };
     },
     access: SessionAccess,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
 ): SessionControl {
     const scope = new ComputerScope(access.computerId);
     return new SessionControl(async (command, permission) => {
         await access.authorize(permission, context.req.raw.signal);
-        return await sessionOperations(context).requestComputerScopeControl(scope, command, context.req.raw.signal);
-    }, sessionId);
+        return await sessionOperations(context).requestComputerScopeControl(
+            scope,
+
+            command,
+            context.req.raw.signal,
+        );
+    }, sessionTarget);
 }
 
 /**
@@ -229,7 +242,7 @@ export function createPlatformApplication(
                         .all("/storage-placement/", controlHandler)
                         .all("/audit-events", controlHandler)
                         .all("/audit-events/", controlHandler)
-                        .all("/sessions/*", controlHandler),
+                        .all("/harnesses/*", controlHandler),
                 ),
         );
     const sessionRoutes = new Hono<DispatchEnvironment>()
@@ -314,12 +327,12 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const eventLimit = v.parse(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
                 Number(context.req.query("eventLimit") ?? "50"),
             );
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const events = await control.previewEvents(sessionBindingQuery(context.req), {
                 cursor: context.req.query("cursor") ?? null,
                 eventLimit,
@@ -340,8 +353,8 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
-            const control = authorizedSessionControl(context, access, sessionId);
+            const sessionTarget = nativeTarget(context.req);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.readConfiguration();
             context.header("Cache-Control", "no-store");
             return context.json(result);
@@ -359,10 +372,10 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const binding = sessionBindingQuery(context.req);
             const commandId = context.req.query("commandId");
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.activeTurn(
                 binding,
                 commandId === undefined ? undefined : v.parse(sessionIdentifier, commandId),
@@ -383,9 +396,9 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const body = decodeSessionRequest(turnSubmissionRequest, await context.req.json());
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const accepted = await control.submitTurn({ ...body, commandId: body.idempotencyKey });
             const acceptedAt = new Date().toISOString();
             context.header("Cache-Control", "no-store");
@@ -398,7 +411,7 @@ export function createPlatformApplication(
                     kind: "prompt",
                     sessionConfigurations: body.sessionConfigurations,
                 },
-                sessionId,
+                target: sessionTarget,
                 state: submittedTurnState(accepted.state, acceptedAt),
                 turnId: accepted.commandId,
             });
@@ -416,10 +429,10 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
             decodeSessionRequest(turnSteerRequest, await context.req.json());
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             await control.steerTurn(turnId);
             context.header("Cache-Control", "no-store");
             return context.json({ turnId });
@@ -437,7 +450,7 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const path = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(4096)), context.req.query("path"));
             const maxBytes = v.parse(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(128 * 1024 * 1024)),
@@ -446,7 +459,13 @@ export function createPlatformApplication(
             return await sessionOperations(context).readProjectSessionFile(
                 new ComputerScope(access.computerId),
                 decodeFileReadCommand(
-                    JSON.stringify({ kind: "file.read", maxBytes, path, requestId: crypto.randomUUID(), sessionId }),
+                    JSON.stringify({
+                        kind: "file.read",
+                        maxBytes,
+                        path,
+                        requestId: crypto.randomUUID(),
+                        target: sessionTarget,
+                    }),
                 ),
                 context.req.raw.signal,
             );
@@ -456,7 +475,7 @@ export function createPlatformApplication(
             if (authorized instanceof Response) {
                 return authorized;
             }
-            const { access, sessionId, contentKey } = authorized;
+            const { access, target, contentKey } = authorized;
             const byteLength = v.parse(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(CONTENT_WRITE_MAX_BYTES)),
                 Number(context.req.header("x-morty-byte-length") ?? ""),
@@ -493,7 +512,7 @@ export function createPlatformApplication(
                         mediaType,
                         name,
                         requestId: crypto.randomUUID(),
-                        sessionId,
+                        target,
                     }),
                 ),
                 body,
@@ -522,9 +541,9 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const body = decodeSessionRequest(sessionConfigurationRequest, await context.req.json());
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.configure(body);
             context.header("Cache-Control", "no-store");
             return context.json(result);
@@ -542,9 +561,9 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const body = decodeSessionRequest(sessionRenameRequest, await context.req.json());
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.rename(body.title);
             context.header("Cache-Control", "no-store");
             return context.json(result);
@@ -562,9 +581,9 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             await control.withdrawTurn(turnId);
             context.header("Cache-Control", "no-store");
             return context.json({ turnId });
@@ -582,9 +601,9 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             const { stopReason } = await control.cancelTurn(turnId);
             context.header("Cache-Control", "no-store");
             return context.json({ turnId, stopReason });
@@ -602,10 +621,10 @@ export function createPlatformApplication(
                 credential,
                 context.req.raw.signal,
             );
-            const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
+            const sessionTarget = nativeTarget(context.req);
             const interactionId = v.parse(sessionIdentifier, context.req.param("interactionId"));
             const body = decodeSessionRequest(interactionResponseRequest, await context.req.json());
-            const control = authorizedSessionControl(context, access, sessionId);
+            const control = authorizedSessionControl(context, access, sessionTarget);
             await control.respond(interactionId, body);
             context.header("Cache-Control", "no-store");
             return context.json({ accepted: true });
@@ -624,11 +643,7 @@ export function createPlatformApplication(
                 context.req.raw.signal,
             );
             if (context.req.header("upgrade")?.toLowerCase() !== "websocket") {
-                const events = await authorizedSessionControl(
-                    context,
-                    target,
-                    v.parse(sessionIdentifier, context.req.param("sessionId")),
-                ).liveEvents({
+                const events = await authorizedSessionControl(context, target, nativeTarget(context.req)).liveEvents({
                     cursor: context.req.query("cursor") ?? null,
                     eventLimit: v.parse(
                         v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
@@ -640,7 +655,8 @@ export function createPlatformApplication(
             }
             return await sessionOperations(context).openPublicSessionEvents(
                 new ComputerScope(target.computerId),
-                context.req.param("sessionId"),
+
+                nativeTarget(context.req),
                 {
                     credentialId: target.credentialId,
                     signingKeyId: target.signingKeyId,
@@ -678,7 +694,7 @@ export function createPlatformApplication(
         return context.json(revoked);
     });
     const projectRoutes = new Hono<DispatchEnvironment>()
-        .route("/sessions", sessionRoutes)
+        .route("/harnesses/:harness/sessions", sessionRoutes)
         .route("/session-access", sessionAccessRoutes)
         .all("/pairings/*", projectHandler)
         .all("/*", projectHandler);

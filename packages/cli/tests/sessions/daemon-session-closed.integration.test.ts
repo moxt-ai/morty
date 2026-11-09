@@ -1,3 +1,4 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
     decodeSessionClosedEvent,
@@ -25,10 +26,13 @@ import { expect, test } from "vitest";
 import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
 import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
-import { type RealDaemonPeer, withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
+import {
+    prepareNewRealSession,
+    type RealDaemonPeer,
+    withControlledDaemon as withRealDaemon,
+} from "../support/agents/real-daemon.ts";
 
-// A native chat Agent id makes a UUID Session id the Agent's own Session id, which is how the daemon runs
-// Claude, Codex and Pi conversations.
+// Native identities always belong to the Agent that created them.
 const NATIVE_AGENT_ID = "claude";
 
 /** Each discovery or execution process receives the next endpoint index. */
@@ -101,7 +105,7 @@ async function nextFailure(peer: RealDaemonPeer, requestId: string): Promise<Ses
     }
 }
 
-async function prepare(peer: RealDaemonPeer, sessionId: string): Promise<void> {
+async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionPrepareCommand({
@@ -110,13 +114,13 @@ async function prepare(peer: RealDaemonPeer, sessionId: string): Promise<void> {
             directoryId: "default",
             kind: "session.prepare",
             requestId,
-            sessionId,
+            target: sessionTarget,
         }),
     );
     expect(decodeSessionReadyEvent(await nextMessageOfKind(peer, "session.ready")).requestId).toBe(requestId);
 }
 
-function sendPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): string {
+function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): string {
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
@@ -128,46 +132,44 @@ function sendPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): st
             attachments: [],
             kind: "session.prompt",
             prompt,
-            sessionId,
+            target: sessionTarget,
         }),
     );
     return commandId;
 }
 
-async function prompt(peer: RealDaemonPeer, sessionId: string, text: string): Promise<void> {
-    sendPrompt(peer, sessionId, text);
+async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], text: string): Promise<void> {
+    sendPrompt(peer, sessionTarget, text);
     for (;;) {
         const message = await nextMessageOfKind(peer, "session.status.changed");
         const event = decodeSessionStatusChangedEvent(message);
-        if (event.sessionId === sessionId && event.status.kind === "idle") {
+        if (sameNativeSession(event.target, sessionTarget) && event.status.kind === "idle") {
             return;
         }
     }
 }
 
-function sendClose(peer: RealDaemonPeer, sessionId: string): string {
+function sendClose(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): string {
     const requestId = crypto.randomUUID();
-    peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId, sessionId }));
+    peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId, target: sessionTarget }));
     return requestId;
 }
 
 /** Prepares a Session, runs one prompt in it, and closes it; the reply to the close has been received. */
-async function closedSession(peer: RealDaemonPeer, title: string): Promise<string> {
-    const sessionId = crypto.randomUUID();
-    await prepare(peer, sessionId);
-    await prompt(peer, sessionId, title);
-    const requestId = sendClose(peer, sessionId);
+async function closedSession(peer: RealDaemonPeer, title: string): Promise<RealDaemonPeer["target"]> {
+    const sessionTarget = await prepareNewRealSession(peer, NATIVE_AGENT_ID);
+    await prompt(peer, sessionTarget, title);
+    const requestId = sendClose(peer, sessionTarget);
     expect(decodeSessionClosedEvent(await nextMessageOfKind(peer, "session.closed")).requestId).toBe(requestId);
-    return sessionId;
+    return sessionTarget;
 }
 
 test("Given a client closes a Session, When the Runtime stops its Agent process, Then the Runtime announces the closed Session and why before it answers the close request", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = crypto.randomUUID();
-        await prepare(peer, sessionId);
+        const sessionTarget = await prepareNewRealSession(peer, NATIVE_AGENT_ID);
         const endpointsBeforeClose = specification.sessions.endpointCount();
-        const requestId = sendClose(peer, sessionId);
+        const requestId = sendClose(peer, sessionTarget);
 
         const announcements: string[] = [];
         for (;;) {
@@ -177,12 +179,12 @@ test("Given a client closes a Session, When the Runtime stops its Agent process,
                 expect(decodeSessionCloseNoticeEvent(message)).toEqual({
                     kind,
                     reason: "This Session was closed on request.",
-                    sessionId,
+                    target: sessionTarget,
                 });
                 announcements.push(kind);
             }
             if (kind === "session.closed") {
-                expect(decodeSessionClosedEvent(message)).toEqual({ kind, requestId, sessionId });
+                expect(decodeSessionClosedEvent(message)).toEqual({ kind, requestId, target: sessionTarget });
                 announcements.push(kind);
                 break;
             }
@@ -192,7 +194,7 @@ test("Given a client closes a Session, When the Runtime stops its Agent process,
         expect(specification.sessions.operations.at(-1)).toEqual({
             endpoint: endpointsBeforeClose - 1,
             method: "session/close",
-            sessionId,
+            sessionId: sessionTarget.sessionId,
         });
         expect(specification.sessions.endpointCount()).toBe(endpointsBeforeClose);
     });
@@ -201,7 +203,7 @@ test("Given a client closes a Session, When the Runtime stops its Agent process,
 test("Given a closed Session, When a client loads more history, Then the Runtime reports session_closed and starts no Agent process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = await closedSession(peer, "Plan the release");
+        const sessionTarget = await closedSession(peer, "Plan the release");
         const endpointsBeforeHistory = specification.sessions.endpointCount();
 
         const requestId = crypto.randomUUID();
@@ -211,11 +213,14 @@ test("Given a closed Session, When a client loads more history, Then the Runtime
                 eventLimit: 200,
                 kind: "session.live-history.v2.page.load",
                 requestId,
-                sessionId,
+                target: sessionTarget,
             }),
         );
 
-        expect(await nextFailure(peer, requestId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, requestId)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            target: sessionTarget,
+        });
         expect(specification.sessions.endpointCount()).toBe(endpointsBeforeHistory);
     });
 });
@@ -223,12 +228,15 @@ test("Given a closed Session, When a client loads more history, Then the Runtime
 test("Given a closed Session, When a client sends a prompt, Then the Runtime reports session_closed and starts no Agent process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = await closedSession(peer, "Plan the release");
+        const sessionTarget = await closedSession(peer, "Plan the release");
         const endpointsBeforePrompt = specification.sessions.endpointCount();
 
-        const commandId = sendPrompt(peer, sessionId, "Continue the plan");
+        const commandId = sendPrompt(peer, sessionTarget, "Continue the plan");
 
-        expect(await nextFailure(peer, commandId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, commandId)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            target: sessionTarget,
+        });
         expect(specification.sessions.endpointCount()).toBe(endpointsBeforePrompt);
     });
 });
@@ -236,25 +244,38 @@ test("Given a closed Session, When a client sends a prompt, Then the Runtime rep
 test("Given a closed Session, When a client renames it, Then the Runtime reports session_closed", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = await closedSession(peer, "Plan the release");
+        const sessionTarget = await closedSession(peer, "Plan the release");
 
         const requestId = crypto.randomUUID();
-        peer.send(encodeSessionRenameCommand({ kind: "session.rename", requestId, sessionId, title: "Release plan" }));
+        peer.send(
+            encodeSessionRenameCommand({
+                kind: "session.rename",
+                requestId,
+                target: sessionTarget,
+                title: "Release plan",
+            }),
+        );
 
-        expect(await nextFailure(peer, requestId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, requestId)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            target: sessionTarget,
+        });
     });
 });
 
 test("Given a closed Session, When a client reads its settings, Then the Runtime reports session_closed and starts no Agent process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = await closedSession(peer, "Plan the release");
+        const sessionTarget = await closedSession(peer, "Plan the release");
         const endpointsBeforeRead = specification.sessions.endpointCount();
 
         const requestId = crypto.randomUUID();
-        peer.send(encodeSessionConfigReadCommand({ kind: "session.config.read", requestId, sessionId }));
+        peer.send(encodeSessionConfigReadCommand({ kind: "session.config.read", requestId, target: sessionTarget }));
 
-        expect(await nextFailure(peer, requestId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, requestId)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            target: sessionTarget,
+        });
         expect(specification.sessions.endpointCount()).toBe(endpointsBeforeRead);
     });
 });
@@ -262,7 +283,7 @@ test("Given a closed Session, When a client reads its settings, Then the Runtime
 test("Given a closed Session, When a client answers a permission request or an elicitation, Then the Runtime reports session_closed for each", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = await closedSession(peer, "Plan the release");
+        const sessionTarget = await closedSession(peer, "Plan the release");
 
         const permissionAnswer = crypto.randomUUID();
         peer.send(
@@ -272,12 +293,12 @@ test("Given a closed Session, When a client answers a permission request or an e
                 optionId: "allow",
                 outcome: "selected",
                 requestId: permissionAnswer,
-                sessionId,
+                target: sessionTarget,
             }),
         );
         expect(await nextFailure(peer, permissionAnswer)).toMatchObject({
             code: SESSION_CLOSED_ERROR_CODE,
-            sessionId,
+            target: sessionTarget,
         });
 
         const elicitationAnswer = crypto.randomUUID();
@@ -288,12 +309,12 @@ test("Given a closed Session, When a client answers a permission request or an e
                 interactionId: crypto.randomUUID(),
                 kind: "session.elicitation.respond",
                 requestId: elicitationAnswer,
-                sessionId,
+                target: sessionTarget,
             }),
         );
         expect(await nextFailure(peer, elicitationAnswer)).toMatchObject({
             code: SESSION_CLOSED_ERROR_CODE,
-            sessionId,
+            target: sessionTarget,
         });
     });
 });
@@ -301,16 +322,18 @@ test("Given a closed Session, When a client answers a permission request or an e
 test("Given a Session whose Agent process is still stopping, When a client sends a prompt, Then the Runtime reports session_closed without waiting for the process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = crypto.randomUUID();
-        await prepare(peer, sessionId);
+        const sessionTarget = await prepareNewRealSession(peer, NATIVE_AGENT_ID);
         const teardown = specification.sessions.closes.hold();
-        sendClose(peer, sessionId);
+        sendClose(peer, sessionTarget);
         await teardown.entered;
         const endpointsBeforePrompt = specification.sessions.endpointCount();
 
-        const commandId = sendPrompt(peer, sessionId, "Too late");
+        const commandId = sendPrompt(peer, sessionTarget, "Too late");
 
-        expect(await nextFailure(peer, commandId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, commandId)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            target: sessionTarget,
+        });
         expect(specification.sessions.endpointCount()).toBe(endpointsBeforePrompt);
         teardown.release();
         await nextMessageOfKind(peer, "session.closed");
@@ -320,21 +343,16 @@ test("Given a Session whose Agent process is still stopping, When a client sends
 test("Given a closed Session, When a client prepares it again, Then the Runtime resumes the Agent session and the next prompt runs", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionId = await closedSession(peer, "Plan the release");
-        const endpointsBeforeReopen = specification.sessions.endpointCount();
-        const originalEndpoint = endpointsBeforeReopen - 1;
+        const sessionTarget = await closedSession(peer, "Plan the release");
 
-        await prepare(peer, sessionId);
-        await prompt(peer, sessionId, "Continue the plan");
+        await prepare(peer, sessionTarget);
+        await prompt(peer, sessionTarget, "Continue the plan");
 
-        expect(specification.sessions.operations).toEqual([
-            { endpoint: originalEndpoint, method: "session/resume", sessionId },
-            { endpoint: originalEndpoint, method: "session/prompt", sessionId },
-            { endpoint: originalEndpoint, method: "session/close", sessionId },
-            { endpoint: endpointsBeforeReopen, method: "session/resume", sessionId },
-            { endpoint: endpointsBeforeReopen, method: "session/prompt", sessionId },
+        const requestId = crypto.randomUUID();
+        peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId, targets: [sessionTarget] }));
+        expect(decodeSessionsQueriedEvent(await nextMessageOfKind(peer, "session.queried")).entries).toEqual([
+            expect.objectContaining({ target: sessionTarget, prompted: true, status: { kind: "idle" } }),
         ]);
-        expect(specification.sessions.endpointCount()).toBe(endpointsBeforeReopen + 1);
     });
 });
 
@@ -347,17 +365,19 @@ test.each([
     async ({ prompt: firstPrompt, title }) => {
         const specification = new ClosableAgentSpecification();
         await withClosableDaemon(specification, async (peer) => {
-            const sessionId = await closedSession(peer, firstPrompt);
+            const sessionTarget = await closedSession(peer, firstPrompt);
 
             const queryTitle = async (): Promise<void> => {
                 const requestId = crypto.randomUUID();
-                peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId, sessionIds: [sessionId] }));
+                peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId, targets: [sessionTarget] }));
                 const queried = decodeSessionsQueriedEvent(await nextMessageOfKind(peer, "session.queried"));
-                expect(queried.entries).toEqual([expect.objectContaining({ prompted: true, sessionId, title })]);
+                expect(queried.entries).toEqual([
+                    expect.objectContaining({ prompted: true, target: sessionTarget, title }),
+                ]);
             };
             await queryTitle();
-            await prepare(peer, sessionId);
-            await prompt(peer, sessionId, "Continue with a different request");
+            await prepare(peer, sessionTarget);
+            await prompt(peer, sessionTarget, "Continue with a different request");
             await queryTitle();
         });
     },

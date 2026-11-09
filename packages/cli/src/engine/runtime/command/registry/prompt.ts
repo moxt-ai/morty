@@ -20,7 +20,7 @@ export const sessionPromptCommand: RuntimeCommand = {
                 requestId: message.commandId,
                 kind: "session.operation.failed",
                 message: "The Runtime is upgrading. Retry after it reconnects.",
-                sessionId: message.sessionId,
+                target: message.target,
             });
             return;
         }
@@ -28,11 +28,11 @@ export const sessionPromptCommand: RuntimeCommand = {
         // appended prompt is always admitted: the Session runs or queues it.
         const receipt = context.operations.claimExecution(
             message.commandId,
-            message.sessionId,
+            message.target,
             encodeSessionPromptCommand(message),
             () =>
                 message.disposition === SessionPromptDisposition.Append ||
-                context.sessions.acceptsSteering(message.sessionId, message.targetCommandId),
+                context.sessions.acceptsSteering(message.target, message.targetCommandId),
         );
         if (receipt.kind === "refused") {
             send(context.socket, {
@@ -40,7 +40,7 @@ export const sessionPromptCommand: RuntimeCommand = {
                 requestId: message.commandId,
                 kind: "session.operation.failed",
                 message: "The turn to steer is not running.",
-                sessionId: message.sessionId,
+                target: message.target,
             });
             return;
         }
@@ -50,7 +50,7 @@ export const sessionPromptCommand: RuntimeCommand = {
                 requestId: message.commandId,
                 kind: "session.operation.failed",
                 message: "This command identifier was already used for a different request.",
-                sessionId: message.sessionId,
+                target: message.target,
             });
             return;
         }
@@ -60,18 +60,18 @@ export const sessionPromptCommand: RuntimeCommand = {
             reply(context.socket, {
                 kind: "session.prompt.accepted",
                 requestId: message.commandId,
-                sessionId: message.sessionId,
+                target: message.target,
                 state:
                     receipt.state === "settled"
                         ? "settled"
-                        : context.sessionTurns.get(message.commandId, message.sessionId)?.isQueued() === true
+                        : context.sessionTurns.get(message.commandId, message.target)?.isQueued() === true
                           ? "queued"
                           : "running",
             });
             const outcome =
                 receipt.state === "settled" ? context.operations.restatedOutcome(message.commandId) : undefined;
             if (outcome !== undefined) {
-                context.eventProjection.restateOutcome(message.sessionId, outcome);
+                context.eventProjection.restateOutcome(message.target, outcome);
             }
             return;
         }
@@ -82,19 +82,19 @@ export const sessionPromptCommand: RuntimeCommand = {
                 kind: "session.operation.failed",
                 message:
                     "This command already started. Its execution result is no longer available; it will not run again.",
-                sessionId: message.sessionId,
+                target: message.target,
             });
             return;
         }
         const turn = context.sessionTurns.start(message, receipt.attemptId);
         context.eventProjection.requested(message);
-        const { commandId, sessionId } = message;
+        const { commandId, target } = message;
         // A prompt is answered once, at the first of: it entered the queue, it started, or it ended without starting.
         let answered = false;
         const accepted = (state: "queued" | "running" | "settled"): void => {
             if (!answered) {
                 answered = true;
-                reply(context.socket, { kind: "session.prompt.accepted", requestId: commandId, sessionId, state });
+                reply(context.socket, { kind: "session.prompt.accepted", requestId: commandId, target, state });
             }
         };
         const ended = (): void => {
@@ -107,11 +107,11 @@ export const sessionPromptCommand: RuntimeCommand = {
                 return;
             }
             answered = true;
-            replySettledFailure(context.socket, commandId, sessionId, settled);
+            replySettledFailure(context.socket, commandId, target, settled);
         };
         const waiting = new AbortController();
         context.operations
-            .progress(commandId, sessionId, AbortSignal.any([waiting.signal, context.signal]))
+            .progress(commandId, target, AbortSignal.any([waiting.signal, context.signal]))
             .then((progress) => {
                 if (progress === "started") {
                     accepted("running");
@@ -119,7 +119,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             })
             .catch(() => undefined);
         const queueChanged = (): void => {
-            void context.eventProjection.queueChanged(sessionId, commandId).catch((error: unknown) => {
+            void context.eventProjection.queueChanged(target, commandId).catch((error: unknown) => {
                 console.error("Could not record queue change", error);
             });
         };
@@ -129,7 +129,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             resolveAgent: context.resolveAgent,
             readArtifact: async (attachment, signal) => {
                 const artifact = await context.externalContent.read(
-                    message.sessionId,
+                    message.target,
                     `morty-content:${attachment.kind}:${attachment.contentKey}`,
                     signal,
                 );
@@ -158,7 +158,7 @@ export const sessionPromptCommand: RuntimeCommand = {
                 waiting.abort();
                 ended();
                 context.sessionTurns.finish(turn);
-                context.eventProjection.publishTerminal(message.sessionId, message.commandId);
+                context.eventProjection.publishTerminal(message.target, message.commandId);
                 // Only a prompt that entered the queue changes it by leaving.
                 if (turn.enteredQueue()) {
                     queueChanged();

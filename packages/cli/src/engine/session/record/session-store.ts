@@ -1,33 +1,35 @@
+import { nativeSessionKey } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { AcpSessionRow, AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { MemorySessionEventStore, type SessionEventStore } from "../history/session-event-store.ts";
 import { decodeStoredSessionConfigurations, type StoredSessionConfiguration } from "../live/session-configurations.ts";
 
 export class StoredSession {
-    readonly agentId: string;
+    readonly target: NativeSessionTarget;
+    get agentId(): string {
+        return this.target.harness;
+    }
     readonly configurations: readonly StoredSessionConfiguration[];
     readonly cwd: string;
-    readonly nativeSessionId: string;
+    get sessionId(): string {
+        return this.target.sessionId;
+    }
     readonly prompted: boolean;
-    readonly sessionId: string;
     readonly title: string;
     readonly updatedAt: string;
 
     constructor(
-        sessionId: string,
-        agentId: string,
-        nativeSessionId: string,
+        target: NativeSessionTarget,
         cwd: string,
         prompted: boolean,
         title: string,
         updatedAt = new Date().toISOString(),
         configurations: readonly StoredSessionConfiguration[] = [],
     ) {
-        this.agentId = agentId;
+        this.target = target;
         this.cwd = cwd;
         this.configurations = configurations.map((configuration) => ({ ...configuration }));
-        this.nativeSessionId = nativeSessionId;
         this.prompted = prompted;
-        this.sessionId = sessionId;
         this.title = title;
         this.updatedAt = updatedAt;
     }
@@ -54,10 +56,9 @@ export class FoundStoredSession extends StoredSessionLookup {
 export interface SessionStore {
     readonly close: () => void;
     readonly events: SessionEventStore;
-    readonly findNative: (agentId: string, nativeSessionId: string) => readonly StoredSession[];
     readonly list: () => readonly StoredSession[];
-    readonly read: (sessionId: string) => StoredSessionLookup;
-    readonly remove: (sessionId: string) => void;
+    readonly read: (target: NativeSessionTarget) => StoredSessionLookup;
+    readonly remove: (target: NativeSessionTarget) => void;
     readonly write: (session: StoredSession) => void;
 }
 
@@ -74,26 +75,21 @@ export class MemorySessionStore implements SessionStore {
         this.events.close();
     };
 
-    readonly findNative = (agentId: string, nativeSessionId: string): readonly StoredSession[] =>
-        [...this.#sessions.values()].filter(
-            (session) => session.agentId === agentId && session.nativeSessionId === nativeSessionId,
-        );
-
     readonly list = (): readonly StoredSession[] =>
         [...this.#sessions.values()].toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
-    readonly read = (sessionId: string): StoredSessionLookup => {
-        const session = this.#sessions.get(sessionId);
+    readonly read = (target: NativeSessionTarget): StoredSessionLookup => {
+        const session = this.#sessions.get(nativeSessionKey(target));
         return session === undefined ? new MissingStoredSession() : new FoundStoredSession(session);
     };
 
-    readonly remove = (sessionId: string): void => {
-        this.#sessions.delete(sessionId);
-        this.events.remove(sessionId);
+    readonly remove = (target: NativeSessionTarget): void => {
+        this.#sessions.delete(nativeSessionKey(target));
+        this.events.remove(target);
     };
 
     readonly write = (session: StoredSession): void => {
-        this.#sessions.set(session.sessionId, session);
+        this.#sessions.set(nativeSessionKey(session.target), session);
     };
 }
 
@@ -101,9 +97,7 @@ function decodeStoredSession(row: AcpSessionRow): StoredSession {
     const decodedConfigurations: unknown = JSON.parse(row.configurations);
     const configurations = decodeStoredSessionConfigurations(decodedConfigurations);
     return new StoredSession(
-        row.sessionId,
-        row.agentId,
-        row.nativeSessionId,
+        { harness: row.agentId, sessionId: row.sessionId },
         row.cwd,
         row.prompted,
         row.title,
@@ -129,19 +123,16 @@ export class SqliteSessionStore implements SessionStore {
         }
     };
 
-    readonly findNative = (agentId: string, nativeSessionId: string): readonly StoredSession[] =>
-        this.#table.findNative(agentId, nativeSessionId).map(decodeStoredSession);
-
     readonly list = (): readonly StoredSession[] => this.#table.list().map(decodeStoredSession);
 
-    readonly read = (sessionId: string): StoredSessionLookup => {
-        const row = this.#table.read(sessionId);
+    readonly read = (target: NativeSessionTarget): StoredSessionLookup => {
+        const row = this.#table.read(target);
         return row === undefined ? new MissingStoredSession() : new FoundStoredSession(decodeStoredSession(row));
     };
 
-    readonly remove = (sessionId: string): void => {
-        this.#table.remove(sessionId);
-        this.events.remove(sessionId);
+    readonly remove = (target: NativeSessionTarget): void => {
+        this.#table.remove(target);
+        this.events.remove(target);
     };
 
     readonly write = (session: StoredSession): void => {
@@ -149,9 +140,8 @@ export class SqliteSessionStore implements SessionStore {
             agentId: session.agentId,
             configurations: JSON.stringify(session.configurations),
             cwd: session.cwd,
-            nativeSessionId: session.nativeSessionId,
-            prompted: session.prompted,
             sessionId: session.sessionId,
+            prompted: session.prompted,
             title: session.title,
             updatedAt: session.updatedAt,
         });

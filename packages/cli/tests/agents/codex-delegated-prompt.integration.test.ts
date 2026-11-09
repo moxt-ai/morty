@@ -76,9 +76,9 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
             await entered.promise;
             await owner.request("turn/interrupt", { threadId: thread.id, turnId: interrupted }, peer.signal);
             expect((await completed.promise).turn.status).toBe("interrupted");
-            await importThread(peer, thread.id);
+            const sessionTarget = await importThread(peer, thread.id);
 
-            const withdrawn = sendPrompt(peer, "Waits in the paused queue");
+            const withdrawn = sendPrompt(peer, sessionTarget, "Waits in the paused queue");
             await nextEvent(peer, (event) => delegation(event, withdrawn) === "queued");
             const queue = z.object({ data: z.array(z.unknown()) });
             expect(
@@ -89,7 +89,7 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
                     commandId: withdrawn,
-                    sessionId: peer.sessionId,
+                    target: sessionTarget,
                 }),
             );
             await nextEvent(
@@ -112,7 +112,7 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
             expect((await completed.promise).turn.status).toBe("completed");
 
             // The owner is idle after a completed turn, so it starts queued input at once.
-            const delegated = sendPrompt(peer, "Started by the owner");
+            const delegated = sendPrompt(peer, sessionTarget, "Started by the owner");
             await nextEvent(peer, (event) => delegation(event, delegated) === "queued");
             await nextEvent(peer, (event) => delegation(event, delegated) === "started");
             await nextEvent(peer, (event) => userText(event) === "Started by the owner");
@@ -131,7 +131,7 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
     });
 });
 
-function sendPrompt(peer: RealDaemonPeer, prompt: string): string {
+function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): string {
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
@@ -143,7 +143,7 @@ function sendPrompt(peer: RealDaemonPeer, prompt: string): string {
             disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt,
-            sessionId: peer.sessionId,
+            target: sessionTarget,
         }),
     );
     return commandId;
@@ -188,18 +188,16 @@ async function nextEvent(peer: RealDaemonPeer, matches: (event: SessionLiveEvent
     }
 }
 
-async function importThread(peer: RealDaemonPeer, threadId: string): Promise<void> {
+async function importThread(peer: RealDaemonPeer, threadId: string): Promise<RealDaemonPeer["target"]> {
     const identity = {
         agentId: "codex",
         bindingId: peer.bindingId,
         directoryId: "default",
         kind: "native.session.request",
-        sessionId: peer.sessionId,
+        discoveryId: crypto.randomUUID(),
     } as const;
     const findId = randomUUID();
-    peer.send(
-        encodeNativeSessionCommand({ ...identity, requestId: findId, action: "find", nativeSessionId: threadId }),
-    );
+    peer.send(encodeNativeSessionCommand({ ...identity, requestId: findId, action: "find", sessionId: threadId }));
     const found = await nativeResult(peer, findId);
     if (found.action !== "find" || found.entry === null) {
         throw new Error("The native conversation was not found");
@@ -211,13 +209,17 @@ async function importThread(peer: RealDaemonPeer, threadId: string): Promise<voi
             requestId: importId,
             action: "import",
             entryId: found.entry.entryId,
-            targetSessionId: peer.sessionId,
         }),
     );
-    expect(await nativeResult(peer, importId)).toMatchObject({
+    const imported = await nativeResult(peer, importId);
+    expect(imported).toMatchObject({
         action: "import",
         ready: { capabilities: { steering: false } },
     });
+    if (imported.action !== "import") {
+        throw new Error("Expected native import");
+    }
+    return imported.target;
 }
 
 async function nativeResult(peer: RealDaemonPeer, requestId: string) {

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
+    decodeMessageKind,
     decodeSessionLiveEvent,
+    decodeSessionReadyEvent,
+    encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
@@ -20,7 +23,7 @@ test("Given a real Codex conversation, When the user sends slash-prefixed text o
                 encodeSessionPromptCommand({
                     kind: "session.prompt",
                     commandId,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
@@ -68,7 +71,7 @@ test("Given a real Codex conversation with content, When the user sends /compact
                 encodeSessionPromptCommand({
                     kind: "session.prompt",
                     commandId: randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
@@ -80,8 +83,31 @@ test("Given a real Codex conversation with content, When the user sends /compact
         };
 
         let compactAdvertised = false;
-        // Seed a turn so compaction has content to summarize. The compact command
-        // advertisement rides on session creation and is observed during it.
+        const requestId = randomUUID();
+        peer.send(
+            encodeSessionPrepareCommand({
+                kind: "session.prepare",
+                requestId,
+                target: peer.target,
+                agentId: "codex",
+                bindingId: peer.bindingId,
+                directoryId: "default",
+            }),
+        );
+        for (;;) {
+            const message = await peer.nextMessage();
+            const kind = decodeMessageKind(message);
+            if (kind === "session.operation.failed") {
+                throw new Error(message);
+            }
+            if (kind === "session.ready") {
+                compactAdvertised = decodeSessionReadyEvent(message).commands.some(
+                    (command) => command.name === "compact",
+                );
+                break;
+            }
+        }
+        // Seed a turn so compaction has content to summarize.
         sendPrompt("Talk about something first");
         for (;;) {
             const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
@@ -133,7 +159,7 @@ test("Given a real Codex conversation with content, When the manual /compact's s
                 encodeSessionPromptCommand({
                     kind: "session.prompt",
                     commandId: randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",

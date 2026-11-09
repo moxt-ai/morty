@@ -2,10 +2,10 @@ import { z } from "zod";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { Adapter, NativeSessionLookupBudget, NativeSessionQuery } from "../native-history/preview-contract.ts";
 import type { NativeSessionInfo } from "../protocol/native-session.ts";
-import { nativeSessionIdSchema } from "../protocol/native-session.ts";
+import { sessionIdSchema } from "../protocol/native-session.ts";
 
 const lookupSchema = z.object({
-    nativeSessionId: nativeSessionIdSchema,
+    sessionId: sessionIdSchema,
     budget: z.object({
         maximumPages: z.number().int().min(1).max(500),
         maximumEntries: z.number().int().positive().nullable(),
@@ -16,10 +16,10 @@ const lookupSchema = z.object({
 export async function findNativeSession(
     list: Adapter["listSessions"],
     query: NativeSessionQuery,
-    nativeSessionId: string,
+    sessionId: string,
     budget: NativeSessionLookupBudget,
 ): Promise<NativeSessionInfo> {
-    const decoded = lookupSchema.safeParse({ nativeSessionId, budget });
+    const decoded = lookupSchema.safeParse({ sessionId, budget });
     if (!decoded.success) {
         throw new AcpExecutionError(
             "The native session lookup is invalid",
@@ -36,7 +36,7 @@ export async function findNativeSession(
         const page = await list({ query, cursor });
         query.signal.throwIfAborted();
         inspected += page.sessions.length;
-        const found = page.sessions.find((session) => session.sessionId === decoded.data.nativeSessionId);
+        const found = page.sessions.find((session) => session.sessionId === decoded.data.sessionId);
         if (found !== undefined) {
             return found;
         }

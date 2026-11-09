@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { RUNTIME_WORKSPACE_BINDING_ID } from "@morty-build/client/protocol";
+import { type NativeSessionTarget, RUNTIME_WORKSPACE_BINDING_ID } from "@morty-build/client/protocol";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
 import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
@@ -58,10 +58,7 @@ export interface RuntimeConfig {
     readonly relayUrl: URL;
     readonly credentials: RuntimeCredentials;
     /** Stable embedding context for one Session; applied to a copied Agent before process reuse is checked. */
-    readonly sessionEnvironment?: (context: {
-        readonly sessionId: string;
-        readonly agentId: string;
-    }) => Readonly<Record<string, string>>;
+    readonly sessionEnvironment?: (context: NativeSessionTarget) => Readonly<Record<string, string>>;
     /**
      * Serves the definition a command should run against, re-discoving the Agent when its
      * executable changed since the catalog snapshot was taken. Undefined keeps the boot-time

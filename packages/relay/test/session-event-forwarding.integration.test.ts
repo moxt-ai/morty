@@ -92,11 +92,11 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
     }
 }
 
-it("Given independently versioned daemon content, When a mixed-session batch is relayed, Then each browser receives every field only for its subscribed sessions and the daemon stays connected", async () => {
+it("Given extensible native-pair daemon content, When a mixed-session batch is relayed, Then each browser receives every field only for its subscribed sessions and the daemon stays connected", async () => {
     await withRuntimeRelay(async (connect) => {
         const daemon = await connect("daemon");
         const all = await connect("host");
-        const selected = await connect("host?sessionId=session-1");
+        const selected = await connect("host?harness=claude&sessionId=session-1");
         expect(await all.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
         expect(await selected.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
         const events = ["session-2", "session-1"].map((sessionId) => ({
@@ -104,7 +104,7 @@ it("Given independently versioned daemon content, When a mixed-session batch is 
             position: "1",
             recordedAt: "2026-10-27T00:00:00.000Z",
             sessionGenerationId: "generation-1",
-            sessionId,
+            target: { harness: "claude", sessionId: sessionId },
             type: "acp",
             futureEventField: { retained: true },
             payload: {
@@ -119,7 +119,7 @@ it("Given independently versioned daemon content, When a mixed-session batch is 
         expect(await all.inbox.next()).toEqual(envelope);
         expect(await selected.inbox.next()).toEqual({
             ...envelope,
-            events: events.filter((event) => event.sessionId === "session-1"),
+            events: events.filter((event) => event.target.sessionId === "session-1"),
         });
     });
 });
@@ -133,7 +133,11 @@ it("Given future unroutable daemon variants, When the Relay receives them, Then 
         for (const message of [
             { version: 3, message: { kind: "future" } },
             { kind: "future.runtime.event", value: true },
-            { kind: "session.status.changed", sessionId: "", status: { kind: "future-status" } },
+            {
+                kind: "session.status.changed",
+                target: { harness: "claude", sessionId: "" },
+                status: { kind: "future-status" },
+            },
             {
                 kind: "runtime.upgrade.result",
                 requestId: "upgrade-1",
@@ -145,14 +149,18 @@ it("Given future unroutable daemon variants, When the Relay receives them, Then 
                 kind: "native.session.result",
                 action: "future-action",
                 requestId: "native-1",
-                sessionId: "",
+                discoveryId: "",
             },
         ]) {
             daemon.socket.send(JSON.stringify(message));
         }
         daemon.socket.send(new Uint8Array([255, 0, 3]));
 
-        const status = { kind: "session.status.changed", sessionId: "session-1", status: { kind: "idle" } };
+        const status = {
+            kind: "session.status.changed",
+            target: { harness: "claude", sessionId: "session-1" },
+            status: { kind: "idle" },
+        };
         daemon.socket.send(JSON.stringify(status));
         expect(await host.inbox.next()).toEqual(status);
         vi.setSystemTime(start + 60_000);
@@ -166,7 +174,7 @@ it("Given future fields and routable events, When peers use the Relay, Then thei
     await withRuntimeRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host");
-        const selected = await connect("host?sessionId=session-1");
+        const selected = await connect("host?harness=claude&sessionId=session-1");
         const sender = await connect("live-history");
         await sender.inbox.next();
         await host.inbox.next();
@@ -179,8 +187,12 @@ it("Given future fields and routable events, When peers use the Relay, Then thei
         // Hosts also receive the control command broadcast before its reply.
         expect(await host.inbox.next()).toEqual(command);
         expect(await host.inbox.next()).toEqual(reply);
-        const future = { kind: "session.future.changed", sessionId: "session-1", payload: { newFormat: [1, 2, 3] } };
-        const otherSession = { ...future, sessionId: "session-2" };
+        const future = {
+            kind: "session.future.changed",
+            target: { harness: "claude", sessionId: "session-1" },
+            payload: { newFormat: [1, 2, 3] },
+        };
+        const otherSession = { ...future, target: { harness: "claude", sessionId: "session-2" } };
         daemon.socket.send(JSON.stringify(otherSession));
         expect(await host.inbox.next()).toEqual(otherSession);
         daemon.socket.send(JSON.stringify(future));
@@ -207,7 +219,7 @@ it("Given a Session message with unknown variants and fields, When the Relay for
                     position: "3",
                     recordedAt: "2026-10-27T00:00:00.000Z",
                     sessionGenerationId: "generation-1",
-                    sessionId: "session-1",
+                    target: { harness: "claude", sessionId: "session-1" },
                     type: "future-event",
                     futureEventField: { retained: true },
                     payload: {
@@ -220,7 +232,7 @@ it("Given a Session message with unknown variants and fields, When the Relay for
                     position: "4",
                     recordedAt: "2026-10-27T00:00:00.000Z",
                     sessionGenerationId: "generation-1",
-                    sessionId: "session-1",
+                    target: { harness: "claude", sessionId: "session-1" },
                     type: "acp",
                     futureEventField: "retained",
                     payload: {

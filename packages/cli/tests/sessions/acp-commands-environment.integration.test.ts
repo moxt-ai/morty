@@ -22,15 +22,14 @@ describe("acp commands environment", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -57,7 +56,11 @@ describe("acp commands environment", () => {
             const prepared = await manager.prepareSession({
                 agent,
                 cwd: process.cwd(),
-                sessionId: "controlled-compact-session",
+                target: await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -74,15 +77,14 @@ describe("acp commands environment", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -99,7 +101,11 @@ describe("acp commands environment", () => {
                 images: [],
                 prompt: "advertise commands",
                 resources: [],
-                sessionId: `${agentId}-compact-session`,
+                target: await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -128,15 +134,14 @@ describe("acp commands environment", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -165,7 +170,11 @@ describe("acp commands environment", () => {
                 images: [],
                 prompt: "generate markdown image",
                 resources: [],
-                sessionId: "login-shell-session",
+                target: await manager.createNativeSession({
+                    agent: config.catalog.find("codex"),
+                    cwd: workspace,
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 

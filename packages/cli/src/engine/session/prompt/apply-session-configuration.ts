@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { SessionConfigOption, SessionConfigurationSelection } from "@morty-build/client/protocol";
+import type {
+    NativeSessionTarget,
+    SessionConfigOption,
+    SessionConfigurationSelection,
+} from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
 import type { Adapter } from "../../acp/native-history/preview-contract.ts";
@@ -140,7 +144,7 @@ async function applySessionConfigurationSelection(
     adapter: Adapter,
     cwd: string,
     commandId: string,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     signal: AbortSignal,
 ): Promise<readonly SessionConfigOption[]> {
     const option = options.find((candidate) => candidate.id === selection.configId);
@@ -154,7 +158,7 @@ async function applySessionConfigurationSelection(
         warnIgnoredSetting(
             "session_configuration_setting_ignored",
             commandId,
-            sessionId,
+            sessionTarget,
             agent.id,
             selection,
             option?.category ?? unavailableSessionConfigurationCategory(selection),
@@ -173,7 +177,7 @@ async function applySessionConfigurationSelection(
             configId: selection.configId,
             cwd,
             requestId: `cfg_${randomUUID()}`,
-            sessionId,
+            target: sessionTarget,
             signal,
             value: selection.value,
             valueType: selection.valueType,
@@ -194,7 +198,7 @@ export async function applyCompleteSessionConfiguration(
     adapter: Adapter,
     cwd: string,
     commandId: string,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     signal: AbortSignal,
 ): Promise<void> {
     let options = initialOptions;
@@ -208,7 +212,7 @@ export async function applyCompleteSessionConfiguration(
             adapter,
             cwd,
             commandId,
-            sessionId,
+            sessionTarget,
             signal,
         );
     }
@@ -218,7 +222,7 @@ export async function applyCompleteSessionConfiguration(
 function warnIgnoredSetting(
     event: string,
     commandId: string,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     agentId: string,
     selection: SessionConfigurationSelection,
     category: string,
@@ -231,5 +235,5 @@ function warnIgnoredSetting(
         reason,
         requestedValue: selection.value,
     };
-    process.stderr.write(`Morty daemon warning ${JSON.stringify({ commandId, event, sessionId, ...details })}\n`);
+    process.stderr.write(`Morty daemon warning ${JSON.stringify({ commandId, event, sessionTarget, ...details })}\n`);
 }

@@ -15,15 +15,14 @@ it("Given two clients holding one configuration revision, When they edit concurr
             },
             cancellation.signal,
         );
-        const sessionId = crypto.randomUUID();
-        const runtime = await platform.connectAgent(project.computerId, undefined, new Set([sessionId]));
+        const runtime = await platform.connectAgent(project.computerId);
         const ready = await runtime.client.sessions.create(
             {
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
                 computerId: runtime.computerId,
-                sessionId,
+                operationId: crypto.randomUUID(),
             },
             cancellation.signal,
         );
@@ -38,10 +37,10 @@ it("Given two clients holding one configuration revision, When they edit concurr
             valueType: "select" as const,
         };
         const results = await Promise.allSettled([
-            runtime.client.sessions.updateConfiguration(runtime.computerId, ready.sessionId, edit, cancellation.signal),
+            runtime.client.sessions.updateConfiguration(runtime.computerId, ready.target, edit, cancellation.signal),
             runtime.client.sessions.updateConfiguration(
                 runtime.computerId,
-                ready.sessionId,
+                ready.target,
                 { ...edit, value: "test-small" },
                 cancellation.signal,
             ),
@@ -58,11 +57,11 @@ it("Given two clients holding one configuration revision, When they edit concurr
         }
         expect(committed.value.configurationRevision).not.toBe(ready.configurationRevision);
         await expect(
-            runtime.client.sessions.updateConfiguration(runtime.computerId, ready.sessionId, edit, cancellation.signal),
+            runtime.client.sessions.updateConfiguration(runtime.computerId, ready.target, edit, cancellation.signal),
         ).rejects.toMatchObject({ code: "session_configuration_conflict", status: 409 });
         const current = await runtime.client.sessions.readConfiguration(
             runtime.computerId,
-            ready.sessionId,
+            ready.target,
             cancellation.signal,
         );
         expect(current.configOptions).toEqual(committed.value.configOptions);

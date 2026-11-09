@@ -25,7 +25,7 @@ test("Given Claude Code compacts a conversation with content, When the daemon re
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
         };

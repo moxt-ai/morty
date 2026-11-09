@@ -1,11 +1,17 @@
-import { decodeSessionAccessCredential, ProtocolMessageError } from "@morty-build/client/protocol";
+import { sameNativeSession } from "@morty-build/client/native-session";
+import {
+    decodeNativeSessionTarget,
+    decodeSessionAccessCredential,
+    type NativeSessionTarget,
+    ProtocolMessageError,
+} from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
 import type { PlatformControlPlaneService } from "./platform-control-plane-service.ts";
 
 export type SessionAccessTarget =
-    | { readonly kind: "session"; readonly computerId: string; readonly sessionId: string }
+    | { readonly kind: "session"; readonly computerId: string; readonly target: NativeSessionTarget }
     | { readonly kind: "unavailable" };
 
 /** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
@@ -73,11 +79,12 @@ export class SessionAccessService {
         readonly credentialId: string;
         readonly expiresAt: string;
         readonly computerId: string;
-        readonly sessionId: string;
+        readonly target: NativeSessionTarget;
     }> => {
         if (target.kind !== "session") {
             throw new ProjectAuthenticationError("project_permission_denied", "A selected Session is required");
         }
+        const nativeTarget = decodeNativeSessionTarget(target.target);
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
@@ -102,14 +109,14 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
             purpose: "session-access",
-            sessionId: target.sessionId,
+            target: nativeTarget,
         });
         return {
             credential,
             credentialId: `sac_${crypto.randomUUID()}`,
             expiresAt: new Date(expiresAtEpochMilliseconds).toISOString(),
             computerId: target.computerId,
-            sessionId: target.sessionId,
+            target: nativeTarget,
         };
     };
 
@@ -191,7 +198,7 @@ export class SessionAccessService {
             }
             throw cause;
         }
-        if (claims.computerId !== target.computerId || claims.sessionId !== target.sessionId) {
+        if (claims.computerId !== target.computerId || !sameNativeSession(claims.target, target.target)) {
             throw new ProjectAuthenticationError(
                 "project_permission_denied",
                 "The credential authorizes only the selected Session",

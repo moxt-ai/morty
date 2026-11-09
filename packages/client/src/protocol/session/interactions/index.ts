@@ -1,9 +1,9 @@
 import { z } from "zod";
-
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodMessage as decode, encodeZodMessage as encode } from "../../shared/message-codec.ts";
 import { boundedJsonSchema, toolCallLocationSchema } from "../../shared/tool-input.ts";
 import { SHORT_TEXT } from "../shared/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_PERMISSION_REQUESTED_KIND = "session.permission.requested";
 export const SESSION_PERMISSION_RESPOND_KIND = "session.permission.respond";
@@ -70,7 +70,7 @@ export const sessionPermissionRequestedEventSchema = z
         interactionId: IDENTIFIER,
         kind: z.literal(SESSION_PERMISSION_REQUESTED_KIND),
         options: z.array(permissionOptionSchema).min(1).max(20).readonly(),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         title: z.string().min(1).max(500),
         toolCallId: z.string().min(1).max(255),
         toolKind: z.string().max(64),
@@ -86,7 +86,7 @@ const sessionPermissionRespondCommandSchema = z
         optionId: z.string().max(255),
         outcome: z.enum(["cancelled", "selected"]),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -98,7 +98,7 @@ export const sessionPermissionResolvedEventSchema = z
         kind: z.literal(SESSION_PERMISSION_RESOLVED_KIND),
         optionId: z.string().max(255),
         outcome: z.enum(["cancelled", "selected"]),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -114,7 +114,7 @@ export const sessionElicitationRequestedEventSchema = z
         kind: z.literal(SESSION_ELICITATION_REQUESTED_KIND),
         message: z.string().min(1).max(2_000),
         mode: z.enum(["form", "url"]),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         url: z.string().max(4_096),
     })
     .readonly();
@@ -128,7 +128,7 @@ const sessionElicitationRespondCommandSchema = z
         interactionId: IDENTIFIER,
         kind: z.literal(SESSION_ELICITATION_RESPOND_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -139,7 +139,7 @@ export const sessionElicitationResolvedEventSchema = z
         action: z.enum(["accept", "cancel", "decline", "complete"]),
         interactionId: IDENTIFIER,
         kind: z.literal(SESSION_ELICITATION_RESOLVED_KIND),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -151,7 +151,7 @@ const sessionInteractionAnsweredEventSchema = z
         interactionId: IDENTIFIER,
         kind: z.literal(SESSION_INTERACTION_ANSWERED_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 

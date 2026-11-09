@@ -11,8 +11,8 @@ export function createRuntimeAdapterRegistry(
     linkedResources: ConstructorParameters<typeof AcpContentExternalizer>[1],
 ) {
     const contentExternalizer = new AcpContentExternalizer(externalize, linkedResources);
-    const externalizeSessionUpdate: AcpContentExternalizer["update"] = (sessionId, update, signal) =>
-        contentExternalizer.update(sessionId, update, signal);
+    const externalizeSessionUpdate: AcpContentExternalizer["update"] = (sessionTarget, update, signal) =>
+        contentExternalizer.update(sessionTarget, update, signal);
     return {
         adapters: new AdapterRegistry(adapters, { processes, contentExternalizer }),
         externalizeSessionUpdate,

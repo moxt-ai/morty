@@ -61,7 +61,7 @@ export async function verifyImageDelivery(
                 attachments: [],
                 kind: "session.prompt",
                 prompt,
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
     const finish = async (): Promise<readonly SessionLiveEvent[]> => {
@@ -95,7 +95,7 @@ export async function verifyImageDelivery(
                             kind: "session.permission.respond",
                             requestId: crypto.randomUUID(),
                             interactionId: event.payload.event.interactionId,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             optionId: option.optionId,
                             outcome: "selected",
                         }),
@@ -117,7 +117,7 @@ export async function verifyImageDelivery(
             eventLimit: 50,
             kind: "session.live-history.v2.page.load",
             requestId: "image-history",
-            sessionId: peer.sessionId,
+            target: peer.target,
         }),
     );
     for (;;) {
@@ -140,7 +140,7 @@ export async function verifyImageDelivery(
             maxBytes: 2_000_000,
             path: input.reference,
             requestId: "image-download",
-            sessionId: peer.sessionId,
+            target: peer.target,
         }),
     );
     const chunks: Buffer[] = [];
