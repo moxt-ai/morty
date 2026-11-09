@@ -60,7 +60,7 @@ describe("Runtime diagnostics SDK", () => {
     });
 
     // @no-uc: Technical regression; an unvalidated identifier must be rejected before any request path is built.
-    it("Given an invalid Runtime identifier, When a consumer reads diagnostics, Then the SDK rejects it before making a request", async () => {
+    it("Given an invalid computer identifier, When a consumer reads diagnostics, Then the SDK rejects it before making a request", async () => {
         const received: string[] = [];
         const server = createServer((request: IncomingMessage, response: ServerResponse) => {
             received.push(request.url ?? "");
@@ -77,7 +77,7 @@ describe("Runtime diagnostics SDK", () => {
         const client = new MortyClient({
             credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
-            computerId: "project-1",
+            computerId: "../other-computer",
         });
         const signal = new AbortController().signal;
         try {
