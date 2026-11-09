@@ -330,6 +330,13 @@
             "when": 1794216235157,
             "tag": "0058_abnormal_swordsman",
             "breakpoints": true
+        },
+        {
+            "idx": 59,
+            "version": "6",
+            "when": 1794222689966,
+            "tag": "0059_computer_storage",
+            "breakpoints": true
         }
     ]
 }

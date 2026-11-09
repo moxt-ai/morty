@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { validateIdentifier } from "../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../entity/pairing/pairing-identity.ts";
 import type { CredentialMatch } from "../entity/pairing/pairing-records.ts";
@@ -7,11 +7,10 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     channelAccessGrant,
     channelHostCredential,
+    computer,
     daemonCredential,
-    pairedDaemon,
     projectBrowserCredential,
     runtimePairingRequest,
-    runtimeRegistration,
 } from "../schema/project-do/index.ts";
 import { hostCredentialValid } from "./host-credential-validity.ts";
 
@@ -29,12 +28,12 @@ export async function credentialMatches(
     const computerId = validateIdentifier(credential.computerId, "computer_id");
     const [hosts, browsers] = await Promise.all([
         orm
-            .select({ computer_id: pairedDaemon.computerId })
+            .select({ computer_id: computer.computerId })
             .from(channelHostCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelHostCredential.computerId))
+            .innerJoin(computer, eq(computer.computerId, channelHostCredential.computerId))
             .where(
                 and(
-                    eq(pairedDaemon.computerId, computerId),
+                    eq(computer.computerId, computerId),
                     eq(channelHostCredential.tokenHash, credential.tokenHash),
                     hostCredentialValid(orm),
                 ),
@@ -65,9 +64,9 @@ async function credentialRows(
     switch (credential.kind) {
         case "host":
             return orm
-                .select({ computer_id: pairedDaemon.computerId })
+                .select({ computer_id: computer.computerId })
                 .from(channelHostCredential)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelHostCredential.computerId))
+                .innerJoin(computer, eq(computer.computerId, channelHostCredential.computerId))
                 .where(
                     and(
                         eq(channelHostCredential.computerId, validateIdentifier(credential.computerId, "computer_id")),
@@ -77,22 +76,22 @@ async function credentialRows(
                 );
         case "daemon":
             return orm
-                .select({ computer_id: pairedDaemon.computerId })
-                .from(pairedDaemon)
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
-                .innerJoin(daemonCredential, eq(daemonCredential.computerId, pairedDaemon.computerId))
+                .select({ computer_id: computer.computerId })
+                .from(computer)
+                .innerJoin(daemonCredential, eq(daemonCredential.computerId, computer.computerId))
                 .where(
                     and(
-                        eq(pairedDaemon.computerId, validateIdentifier(credential.computerId, "computer_id")),
+                        eq(computer.computerId, validateIdentifier(credential.computerId, "computer_id")),
                         eq(daemonCredential.tokenHash, credential.tokenHash),
-                        isNull(pairedDaemon.revokedAt),
+                        isNotNull(computer.claimedAt),
+                        isNull(computer.revokedAt),
                     ),
                 );
         case "pairing":
             return orm
-                .select({ computer_id: pairedDaemon.computerId })
+                .select({ computer_id: computer.computerId })
                 .from(runtimePairingRequest)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimePairingRequest.computerId))
+                .innerJoin(computer, eq(computer.computerId, runtimePairingRequest.computerId))
                 .where(
                     and(
                         eq(runtimePairingRequest.computerId, validateIdentifier(credential.computerId, "computer_id")),
@@ -101,15 +100,15 @@ async function credentialRows(
                 );
         case "pairing-code":
             return orm
-                .select({ computer_id: pairedDaemon.computerId })
+                .select({ computer_id: computer.computerId })
                 .from(runtimePairingRequest)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimePairingRequest.computerId))
+                .innerJoin(computer, eq(computer.computerId, runtimePairingRequest.computerId))
                 .where(eq(runtimePairingRequest.pairingCodeHash, credential.codeHash));
         case "grant":
             return orm
-                .select({ computer_id: pairedDaemon.computerId })
+                .select({ computer_id: computer.computerId })
                 .from(channelAccessGrant)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelAccessGrant.computerId))
+                .innerJoin(computer, eq(computer.computerId, channelAccessGrant.computerId))
                 .where(
                     and(
                         eq(channelAccessGrant.computerId, validateIdentifier(credential.computerId, "computer_id")),

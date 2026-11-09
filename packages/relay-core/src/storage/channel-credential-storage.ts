@@ -1,8 +1,8 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type { ChannelCredentialIdentity } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { channelHostCredential, pairedDaemon, runtimeRegistration } from "../schema/project-do/index.ts";
+import { channelHostCredential, computer } from "../schema/project-do/index.ts";
 import { hostCredentialValid } from "./host-credential-validity.ts";
 
 /** Whether a Runtime, or a host credential reaching it, is still active in the Project's own storage. */
@@ -19,14 +19,13 @@ export class ChannelCredentialStorage {
     ): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
         const runtimes = await database
-            .select({ computerId: pairedDaemon.computerId })
-            .from(pairedDaemon)
-            .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
+            .select({ computerId: computer.computerId })
+            .from(computer)
             .where(
                 and(
-                    eq(pairedDaemon.computerId, identity.computerId),
-                    eq(pairedDaemon.computerId, identity.computerId),
-                    isNull(pairedDaemon.revokedAt),
+                    eq(computer.computerId, identity.computerId),
+                    isNotNull(computer.claimedAt),
+                    isNull(computer.revokedAt),
                 ),
             )
             .limit(1);
@@ -38,13 +37,12 @@ export class ChannelCredentialStorage {
         const credentials = await database
             .select({ credentialId: channelHostCredential.credentialId })
             .from(channelHostCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelHostCredential.computerId))
+            .innerJoin(computer, eq(computer.computerId, channelHostCredential.computerId))
             .where(
                 and(
                     eq(channelHostCredential.credentialId, identity.credentialId),
                     eq(channelHostCredential.computerId, identity.computerId),
-                    eq(pairedDaemon.computerId, identity.computerId),
-                    eq(pairedDaemon.computerId, identity.computerId),
+                    eq(computer.computerId, identity.computerId),
                     hostCredentialValid(database),
                 ),
             )

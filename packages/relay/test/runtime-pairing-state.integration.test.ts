@@ -1,7 +1,11 @@
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "@morty-build/relay-core";
+import {
+    DurableObjectDatabaseAdapter,
+    DurableObjectSqlDatabase,
+    runtimeConnectionDurableObjectMigrations,
+} from "@morty-build/relay-core";
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { channelAccessGrant, channelHostCredential, daemonCredential } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
@@ -153,7 +157,7 @@ it("Given pending reservations at capacity, When their deadline passes without e
     });
     // Expiry is the passage of time. Neither reading it nor reclaiming capacity
     // may require persisting a lifecycle transition, even when that write fails.
-    await app.sql(`CREATE TRIGGER reject_expiry_maintenance BEFORE INSERT ON runtime_pairing_audit_events
+    await app.sql(`CREATE TRIGGER reject_expiry_maintenance BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.expired'
         BEGIN SELECT RAISE(ABORT, 'Expiry maintenance is unavailable'); END`);
     vi.setSystemTime(new Date(first.expiresAt));
@@ -202,7 +206,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
 it("Given a claim whose audit cannot commit, When the caller retries after recovery, Then the request is still pending and can be claimed once", async () => {
     const app = await project();
     const pairing = await app.pair("claim-rollback");
-    await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON runtime_pairing_audit_events
+    await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.claimed'
         BEGIN SELECT RAISE(ABORT, 'Controlled claim failure'); END`);
     expect((await app.claim(pairing)).status).toBe(500);
@@ -243,7 +247,9 @@ it.each(["redeem"] as const)(
         });
         expect(
             await app.storage((storage) =>
-                storage.sql.exec("SELECT action FROM runtime_pairing_audit_events ORDER BY action").toArray(),
+                storage.sql
+                    .exec("SELECT action FROM audit_events WHERE category = 'pairing' ORDER BY action")
+                    .toArray(),
             ),
         ).toEqual([{ action: "runtime_pairing.claimed" }, { action: "runtime_pairing.requested" }]);
         expect((await app.revoke(pairing)).status).toBe(204);
@@ -261,7 +267,7 @@ it("Given a revocation whose audit cannot commit, When it is retried, Then acces
         v.object({ runtimeCredential: v.string() }),
         await responseJson(await app.claim(pairing), 200),
     );
-    await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON runtime_pairing_audit_events
+    await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.revoked'
         BEGIN SELECT RAISE(ABORT, 'Controlled revocation failure'); END`);
     expect((await app.revoke(pairing)).status).toBe(500);
@@ -465,6 +471,7 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
         credential("ctl_lease", "linked", null);
         credential("ctlX_owner", "owner", null);
         credential("lnk_device", "linked", "grant-device");
+        applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
         applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
         return database.query("SELECT credential_id FROM channel_host_credentials ORDER BY credential_id");
     });
@@ -522,3 +529,42 @@ it.each(["", "morty-pairing-v1\0"])(
         expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
     },
 );
+
+it("migrates the registered computer, live connection and independent audit IDs together", async () => {
+    const app = await project();
+    await app.storage(async (storage) => {
+        await storage.deleteAll();
+        const cutover = computerDurableObjectMigrations.findIndex(
+            (entry) => entry.name === "0013_computer_storage.sql",
+        );
+        expect(cutover).toBeGreaterThan(0);
+        applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations.slice(0, cutover));
+        storage.sql.exec(`
+            INSERT INTO runtimes (computer_id, created_at) VALUES ('machine', 10);
+            INSERT INTO runtime_registrations (computer_id, claimed_at, machine_name, workspace_name, agents_json)
+                VALUES ('machine', 11, 'laptop', 'work', '[]');
+            INSERT INTO runtime_connection_state (singleton, computer_id, connection_epoch, connection_id, state, connected_at)
+                VALUES (1, 'machine', 7, 'current', 'online', 12);
+            INSERT INTO runtime_pairing_audit_events (audit_id,computer_id,actor_kind,actor_id,action,details_json,recorded_at)
+                VALUES ('same','machine','runtime','machine','runtime_pairing.claimed','{}',11);
+            INSERT INTO platform_audit_events (audit_id,project_id,app_id,actor_kind,actor_id,actor_ref,action,subject_id,outcome,details_json,recorded_at)
+                VALUES ('same','machine','service','application','owner','owner','project.created','machine','succeeded','{}',10);
+        `);
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
+        expect(storage.sql.exec("SELECT * FROM computer").one()).toMatchObject({
+            computer_id: "machine",
+            claimed_at: 11,
+            machine_name: "laptop",
+            workspace_name: "work",
+            agents_json: "[]",
+            connection_id: "current",
+            connection_epoch: 7,
+            state: "online",
+            connected_at: 12,
+        });
+        expect(
+            storage.sql.exec("SELECT category FROM audit_events WHERE audit_id='same' ORDER BY category").toArray(),
+        ).toEqual([{ category: "pairing" }, { category: "platform" }]);
+    });
+});

@@ -4,7 +4,7 @@ import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const nativeSessionFork = sqliteTable(
     "native_session_forks",
     {
-        computerId: text("project_id").notNull(),
+        computerId: text("computer_id").notNull(),
         operationId: text("operation_id").notNull(),
         requestHash: text("request_hash").notNull(),
         // The first attempt's identity survives losing the Runtime reply. Older rows remain unrecoverable.

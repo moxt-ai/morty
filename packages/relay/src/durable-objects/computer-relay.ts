@@ -62,6 +62,8 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
 
     constructor(state: DurableObjectState, environment: ConfiguredPlatformRelayBindings) {
         super(state, environment);
+        applyDurableObjectMigrations(state.storage, runtimeConnectionDurableObjectMigrations, "connections/");
+        applyDurableObjectMigrations(state.storage, computerDurableObjectMigrations);
         state.setWebSocketAutoResponse(
             new WebSocketRequestResponsePair(RUNTIME_HEARTBEAT_MESSAGE, RUNTIME_HEARTBEAT_ACK_MESSAGE),
         );
@@ -97,8 +99,6 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
             return null;
         }
         if (this.#store === null) {
-            applyDurableObjectMigrations(this.ctx.storage, computerDurableObjectMigrations);
-            applyDurableObjectMigrations(this.ctx.storage, runtimeConnectionDurableObjectMigrations, "connections/");
             this.#store = new SqlitePlatformProjectStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),

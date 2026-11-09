@@ -5,7 +5,7 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     channelAccessGrant,
     channelHostCredential,
-    pairedDaemon,
+    computer,
     projectBrowserCredential,
 } from "../schema/project-do/index.ts";
 import { hostCredentialValid } from "./host-credential-validity.ts";
@@ -25,12 +25,12 @@ export class PairingStorage {
         const database = relayDrizzle(this.#database, signal);
         const rows = await database
             .select({
-                computer_id: pairedDaemon.computerId,
+                computer_id: computer.computerId,
                 credential_id: channelHostCredential.credentialId,
                 authority: channelHostCredential.authority,
             })
             .from(channelHostCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelHostCredential.computerId))
+            .innerJoin(computer, eq(computer.computerId, channelHostCredential.computerId))
             .where(
                 and(
                     eq(channelHostCredential.computerId, computerId),
@@ -136,13 +136,10 @@ export class PairingStorage {
                     gt(channelAccessGrant.expiresAt, now),
                     exists(
                         database
-                            .select({ computerId: pairedDaemon.computerId })
-                            .from(pairedDaemon)
+                            .select({ computerId: computer.computerId })
+                            .from(computer)
                             .where(
-                                and(
-                                    eq(pairedDaemon.computerId, channelAccessGrant.computerId),
-                                    isNull(pairedDaemon.revokedAt),
-                                ),
+                                and(eq(computer.computerId, channelAccessGrant.computerId), isNull(computer.revokedAt)),
                             ),
                     ),
                 ),
@@ -183,10 +180,10 @@ export class PairingStorage {
             .select({
                 expires_at: channelAccessGrant.expiresAt,
                 redeemed_at: channelAccessGrant.redeemedAt,
-                runtime_revoked_at: pairedDaemon.revokedAt,
+                runtime_revoked_at: computer.revokedAt,
             })
             .from(channelAccessGrant)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelAccessGrant.computerId))
+            .innerJoin(computer, eq(computer.computerId, channelAccessGrant.computerId))
             .where(
                 and(
                     eq(channelAccessGrant.grantId, grantId),

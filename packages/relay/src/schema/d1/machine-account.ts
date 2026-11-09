@@ -5,7 +5,7 @@ import { check, index, integer, sqliteTable, text, unique } from "drizzle-orm/sq
 export const machineAccount = sqliteTable(
     "machine_accounts",
     {
-        computerId: text("account_id").primaryKey(),
+        computerId: text("computer_id").primaryKey(),
         appId: text("service_id").notNull(),
         displayName: text("display_name").notNull(),
         clientReference: text("client_reference").notNull(),

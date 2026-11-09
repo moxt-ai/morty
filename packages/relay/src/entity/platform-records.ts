@@ -4,7 +4,7 @@ import * as v from "valibot";
 const nonNegativeInteger = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
 const lifecycle = v.picklist(["active", "deleted"]);
 
-const AuditRowSchema = v.object({
+export const AuditRowSchema = v.object({
     action: v.string(),
     actor_id: v.string(),
     actor_kind: v.string(),
