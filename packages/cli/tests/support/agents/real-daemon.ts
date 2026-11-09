@@ -30,6 +30,10 @@ import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery
 import { RuntimeAgentDependencies } from "../../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
+import {
+    HEARTBEAT_ACK_TIMEOUT_MILLISECONDS,
+    HEARTBEAT_INTERVAL_MILLISECONDS,
+} from "../../../src/engine/runtime/relay/liveness.ts";
 import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
@@ -61,6 +65,19 @@ export const withControlledDaemon = (
     timer: Timer = systemTimer,
 ): Promise<void> =>
     withRealDaemon(specification, environment, scenario, launch, workspaceDirectory, timer, acpAdapters);
+
+/**
+ * Scenarios own time: the relay heartbeat's wall-clock deadlines never expire, so a slow host cannot close the
+ * connection in the middle of a scenario. The connection liveness tests drive those deadlines with their own clock.
+ */
+function withoutRelayLivenessDeadlines(timer: Timer): Timer {
+    return {
+        schedule: (callback, milliseconds) =>
+            milliseconds === HEARTBEAT_ACK_TIMEOUT_MILLISECONDS || milliseconds === HEARTBEAT_INTERVAL_MILLISECONDS
+                ? { cancel: () => undefined }
+                : timer.schedule(callback, milliseconds),
+    };
+}
 
 /** Production daemon and discovery; the peer only sends and observes the public protocol. */
 export async function withRealDaemon(
@@ -96,6 +113,7 @@ export async function withRealDaemon(
         }
     });
     const server = new WebSocketServer({ server: relay });
+    const runtimeTimer = withoutRelayLivenessDeadlines(timer);
     let runtime: Promise<void> | undefined;
     let execution = new AbortController();
     const cliEnvironment = { ...process.env, ...environment, MORTY_STATE_DIRECTORY: join(directory, "state") };
@@ -215,7 +233,7 @@ export async function withRealDaemon(
                 await cli(["start"]);
             } else {
                 execution = new AbortController();
-                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), timer);
+                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), runtimeTimer);
                 void runtime.catch((error: unknown) => {
                     connected.reject(error);
                     waiter?.reject(error);
