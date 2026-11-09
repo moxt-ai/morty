@@ -105,6 +105,11 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
+    # Playwright's image carries the browsers and their system libraries for exactly the suite's Playwright version,
+    # so no shard downloads them: an apt fetch of those libraries once took 18 minutes. Runs as the runner's user.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-resolute@sha256:f76885029244e5a384243a930ff283cef67d90653978ee27a77dd4cff8882fb4
+      options: --user 1001
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,18 +123,18 @@ jobs:
       - run: pnpm build:cli
       - name: Install the accepted real Codex boundary dependency
         run: npm install --global @openai/codex@0.166.0
-      - run: pnpm --filter @morty-build/e2e exec playwright install --with-deps chromium webkit
       - run: pnpm test:e2e --shard=${{ matrix.shard }}/8
         env:
-          # A failed journey keeps its trace, page, screenshot and process logs here for the failure artifact.
-          MORTY_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/morty-e2e
+          # A failed journey keeps its trace, page, screenshot and process logs here for the failure artifact. The path
+          # is relative to the suite in packages/e2e: in a container job, runner paths name the host, not the container.
+          MORTY_E2E_ARTIFACT_ROOT: e2e-diagnostics
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: browser-failure-${{ matrix.shard }}
           path: |
             packages/e2e/test-results
-            ${{ runner.temp }}/morty-e2e
+            packages/e2e/e2e-diagnostics
           if-no-files-found: ignore
 
   # Packing does not depend on test results, so the archive is built and accepted
