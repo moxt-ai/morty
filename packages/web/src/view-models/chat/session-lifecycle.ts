@@ -1,9 +1,5 @@
-import type {
-    MortyClient,
-    SessionElicitationRequestedEvent,
-    SessionPermissionRequestedEvent,
-} from "@morty-build/client";
-import { promptCompletion, type SessionInteractionSnapshot, type SessionLiveEvent } from "@morty-build/client/protocol";
+import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client";
+import { promptCompletion, type SessionLiveEvent } from "@morty-build/client/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
 // The Session pane reads Morty lifecycle metadata only through this module, so
@@ -100,13 +96,4 @@ export function requestedInteraction(
         default:
             return event satisfies never;
     }
-}
-
-export type SessionInteractionRecovery = SessionInteractionSnapshot | null;
-
-/** A missing Session has no actionable requests to restore. */
-export function sessionInteractionRecovery(
-    execution: Awaited<ReturnType<MortyClient["sessions"]["readSessionExecution"]>>,
-): SessionInteractionRecovery {
-    return execution.interactionState;
 }

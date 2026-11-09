@@ -61,6 +61,7 @@ import { pendingExecutionContext, sessionExecutionContext } from "../../view-mod
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
+import { noSessionExecution } from "../../view-models/chat/session-execution.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { AccessTerm } from "./access-term.tsx";
 import {
@@ -466,6 +467,7 @@ export function ConversationSidebar({
     const pane = workspace.sessionPane();
     const paneSource = useStore(pane?.store ?? workspace.home);
     const paneDelivery = useStore(pane?.delivery ?? noSessionDelivery, (state) => state.state);
+    const paneExecution = useStore(pane?.execution ?? noSessionExecution, (state) => state.state);
     const executionContext =
         home.selection.kind === "ready" && pane !== null && "connection" in paneSource
             ? sessionExecutionContext(pane.session, home, paneSource.connection)
@@ -517,8 +519,13 @@ export function ConversationSidebar({
         connectionStatus,
         sessionStatuses,
         openPane:
-            home.selection.kind === "ready" && pane !== null && "turn" in paneSource
-                ? { sessionTarget: pane.session.result.ready.target, pane: paneSource, delivery: paneDelivery }
+            home.selection.kind === "ready" && pane !== null && "connection" in paneSource
+                ? {
+                      sessionTarget: pane.session.result.ready.target,
+                      pane: paneSource,
+                      execution: paneExecution,
+                      delivery: paneDelivery,
+                  }
                 : null,
         onConnectAgent,
         onOpen: openSession,

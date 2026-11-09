@@ -33,7 +33,7 @@ type QueueFeedback =
           readonly message: string;
       };
 
-/** A withdrawn message stays hidden until an authoritative queue snapshot no longer lists it. */
+/** A withdrawn message stays hidden, whatever a read that began before its withdrawal still lists. */
 type QueuedMessageRequest = "steering" | "deleting" | "withdrawn";
 
 /**
@@ -62,7 +62,23 @@ export interface SessionMessageQueueStore {
     readonly dismissFailure: () => void;
     /** Resolves whether the Runtime took the message into the running turn. */
     readonly steerMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<boolean>;
-    readonly reconcile: (queuedCommandIds: readonly string[]) => void;
+}
+
+/**
+ * The failure of the user's last request on the queue. A failure to steer a message says nothing once the message has
+ * left the Runtime's `queued` messages.
+ */
+export function queueFailure(
+    queue: Pick<SessionMessageQueueStore, "feedback">,
+    queued: readonly QueuedCommand[],
+): string | null {
+    const { feedback } = queue;
+    if (feedback.kind !== "failed") {
+        return null;
+    }
+    return feedback.operation === "steer" && !queued.some((message) => message.commandId === feedback.commandId)
+        ? null
+        : feedback.message;
 }
 
 /** The Runtime's queue, enriched from the Session's sole copy of local submitted messages. */
@@ -131,12 +147,9 @@ export const createSessionMessageQueueStore = (options: {
             }));
             return true;
         };
-        /** The message left the queue at the user's request; it stays hidden until a snapshot drops it. */
+        /** The message left the queue at the user's request; it stays hidden from then on. */
         const left = (commandId: string): void => {
-            set((state) => ({
-                // A snapshot may already have removed the request while its HTTP response was in flight.
-                requests: withRequest(state.requests, commandId, state.requests.has(commandId) ? "withdrawn" : null),
-            }));
+            set((state) => ({ requests: withRequest(state.requests, commandId, "withdrawn") }));
         };
         /** Sends a request on the queue within its own budget, through whichever pane follows the Session. */
         const send = async (
@@ -234,33 +247,18 @@ export const createSessionMessageQueueStore = (options: {
                     left(commandId);
                     return true;
                 }
+                // Execution events and queue reads may show the message gone before the HTTP refusal arrives, which
+                // `queueFailure` then leaves unreported.
                 set((state) => ({
-                    // Execution events and queue snapshots may arrive before the HTTP refusal.
-                    ...(state.requests.has(commandId)
-                        ? {
-                              feedback: {
-                                  kind: "failed",
-                                  operation: "steer",
-                                  commandId,
-                                  message: formatError(outcome.cause, "The queued message could not steer the task."),
-                              },
-                          }
-                        : {}),
+                    feedback: {
+                        kind: "failed",
+                        operation: "steer",
+                        commandId,
+                        message: formatError(outcome.cause, "The queued message could not steer the task."),
+                    },
                     requests: withRequest(state.requests, commandId, null),
                 }));
                 return false;
-            },
-            reconcile: (commandIds) => {
-                const queued = new Set(commandIds);
-                set((state) => ({
-                    requests: new Map([...state.requests].filter(([commandId]) => queued.has(commandId))),
-                    feedback:
-                        state.feedback.kind === "failed" &&
-                        state.feedback.operation === "steer" &&
-                        !queued.has(state.feedback.commandId)
-                            ? { kind: "none" }
-                            : state.feedback,
-                }));
             },
         };
     });

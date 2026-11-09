@@ -51,7 +51,7 @@ export function sessionDeliveryPresentation(
     const current = currentMessage(delivery.state);
     const candidates: readonly LocalMessage[] = [
         ...(current === null ? [] : [current]),
-        ...delivery.accepted.map(({ message }): LocalMessage => ({ kind: "accepted", message })),
+        ...delivery.accepted.map((message): LocalMessage => ({ kind: "accepted", message })),
     ];
     const local = candidates.filter(({ message }) => {
         if (claimed.has(message.commandId)) {
