@@ -75,6 +75,8 @@ export class SessionManager {
     readonly #lastTurn: (sessionId: string) => LastTurnOutcome | undefined;
     readonly #agentSettingsObserver = new NullSessionObserver();
     readonly #nativeOperations = new Set<string>();
+    /** A creation owns initialization and failure cleanup until its whole operation settles. */
+    readonly #sessionCreations = new Set<string>();
     readonly #sessionClosures = new Map<string, Promise<void>>();
     readonly #sessionRetirements = new Map<string, Promise<void>>();
     /** Sessions that were closed and not reopened since. Only a prepare or restore of the Session reopens it. */
@@ -468,24 +470,37 @@ export class SessionManager {
      * Creates a Session with the initial settings `configure` applies, and answers with the configured snapshot. A
      * Session this call created that cannot take its settings is discarded, so a refused creation leaves nothing
      * behind. A Session that already existed, such as one whose creation answer was lost, is configured again and kept.
+     * Concurrent creates are busy until initialization and cleanup finish; none may acknowledge a Session another
+     * creation can still discard.
      */
     readonly createSession = async (
         options: SessionPrepareOptions,
-        configure: (prepared: PreparedSession) => Promise<void>,
+        configure: (prepared: PreparedSession, signal: AbortSignal) => Promise<void>,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
         closed: ClosedSessionHandling = "reopen",
-    ): Promise<PreparedSession> => {
-        const created = !this.#isKnownSession(options.sessionId);
-        try {
-            await configure(await this.prepareSession(options, metrics, closed));
-            return await this.prepareSession(options, metrics, closed);
-        } catch (error) {
-            if (created) {
-                await this.#discardCreatedSession(options.sessionId);
+    ): Promise<PreparedSession> =>
+        this.#operations.run(options, async (options) => {
+            if (this.#sessionCreations.has(options.sessionId)) {
+                throw new AcpExecutionError(
+                    "The Session is still being created; retry after it finishes",
+                    {},
+                    "session_busy",
+                );
             }
-            throw error;
-        }
-    };
+            const created = !this.#isKnownSession(options.sessionId);
+            this.#sessionCreations.add(options.sessionId);
+            try {
+                await configure(await this.prepareSession(options, metrics, closed), options.signal);
+                return await this.prepareSession(options, metrics, closed);
+            } catch (error) {
+                if (created) {
+                    await this.#discardCreatedSession(options.sessionId);
+                }
+                throw error;
+            } finally {
+                this.#sessionCreations.delete(options.sessionId);
+            }
+        });
 
     async #discardCreatedSession(sessionId: string): Promise<void> {
         const runtime = this.#executionProcesses.get(sessionId);
