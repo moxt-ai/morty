@@ -97,8 +97,8 @@ it retains local identity, pairings, workspaces, and Agent history.
   ID and title; the history itself is fetched from the daemon on your computer each
   time you open a session. When that computer is offline, the history is not
   available in the browser. That is the design, not a cache miss.
-- **Cloud Recording is off.** Morty reads conversation history from the connected
-  machine and does not retain it as a cloud archive.
+- **No cloud copy of your history.** Morty reads conversation history from the
+  connected machine and never stores it in the cloud.
 - **The relay carries traffic; it is not a vault.** Session traffic reaches your
   machine through the Morty relay. **Morty is not end-to-end encrypted** — the
   relay is a trusted component in this design. If end-to-end encryption is a

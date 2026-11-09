@@ -45,9 +45,9 @@ writer before continuing it elsewhere.
 ## Data ownership and recovery
 
 Live output favors responsiveness over guaranteed delivery. Disconnects and restarts
-can leave gaps; catch-up depends on native Agent history. Morty does not enable
-cloud recording. Agent-owned history stays in the Agent's directories; Morty
-uninstall must never remove it.
+can leave gaps; catch-up depends on native Agent history. Morty keeps no cloud
+copy of conversation history. Agent-owned history stays in the Agent's directories;
+Morty uninstall must never remove it.
 
 Morty's state directory is `~/Library/Application Support/Morty/v2` on macOS,
 `%LOCALAPPDATA%\Morty\v2` on Windows, and `$XDG_STATE_HOME/morty/v2` (or

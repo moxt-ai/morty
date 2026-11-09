@@ -184,11 +184,10 @@ at a boundary.
 
 ### History
 
-Morty can present history from the live Session, the Agent's Native Session, or an
-optional Morty Recording. These sources have different ownership and recovery
-guarantees. Morty production keeps cloud Recording disabled, so a managed record in
-the sidebar is not proof that full history is available while the Machine is
-offline.
+Morty presents history from the live Session and the Agent's Native Session. These
+sources have different ownership and recovery guarantees. Morty keeps no cloud copy
+of history, so a managed record in the sidebar is not proof that full history is
+available while the Machine is offline.
 
 ### Turn, queue, and interaction
 
