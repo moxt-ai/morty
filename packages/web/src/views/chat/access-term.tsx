@@ -27,7 +27,7 @@ const accessNoticeIndentedRowClassName = "flex items-start gap-2";
 const accessNoticeTitleClassName = "text-13 font-semibold leading-5 max-sm:truncate";
 const accessNoticeDetailClassName = "[font-size:var(--text-12)] leading-4 text-muted-foreground";
 export const sidebarAccessNoticeActionClassName = "max-w-full whitespace-normal";
-const accessNoticeActionsClassName = "flex flex-wrap items-center gap-1.5 pt-2 pb-1";
+const accessNoticeActionsClassName = "flex flex-wrap items-center gap-1.5 pt-2 pb-1 max-sm:pt-1";
 /** Menu surface is bg-background (#fafafb); fill sits between that and user-message-surface (#e6e8eb). */
 const accessTermMenuCardClassName = "flex items-start gap-2 rounded-[16px] bg-[#eceef0] px-3 py-2.5";
 /** The menu card is already gray, so its placeholders are darker than ones drawn on white. */
