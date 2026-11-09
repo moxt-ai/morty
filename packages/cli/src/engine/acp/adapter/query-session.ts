@@ -121,7 +121,6 @@ export class AcpQuerySession {
             this.#connection.connection.agent.request(
                 methods.agent.session.load,
                 {
-                    additionalDirectories: [...this.#options.additionalDirectories],
                     cwd: this.#options.cwd,
                     mcpServers: [],
                     sessionId: sessionId,

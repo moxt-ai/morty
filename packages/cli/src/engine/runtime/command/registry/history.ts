@@ -19,7 +19,7 @@ import type { SessionEventPage } from "../../../session/history/session-event-st
 import type { SessionManager } from "../../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
 import type { PromptLifecycle } from "../../../session/prompt/prompt-lifecycle.ts";
-import { resolveSessionDirectories } from "../../../session/workspace/resolve-session-directories.ts";
+import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
 import type { RuntimeConfig } from "../../config.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
@@ -113,15 +113,8 @@ async function executeSessionHistoryPageLoad(
             throw new SessionError("session_not_found", "The Session was not found");
         }
         agentId = entry.agentId;
-        const resolved = await resolveSessionDirectories(
-            directories,
-            config.bindingId,
-            entry.directoryId,
-            entry.additionalDirectories.map((directory) => directory.directoryId),
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(directories, config.bindingId, entry.directoryId, signal);
         const loadOptions = {
-            additionalDirectories: resolved.additionalDirectories,
             ...(await resolveAgent(entry.agentId, signal, command.target)),
             cwd: resolved.cwd,
             target: command.target,
@@ -170,15 +163,8 @@ async function executeSessionPreviewHistoryPageLoad(
     signal: AbortSignal,
 ): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectories(
-            directories,
-            config.bindingId,
-            command.directoryId,
-            command.additionalDirectoryIds,
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(directories, config.bindingId, command.directoryId, signal);
         const loadOptions = {
-            additionalDirectories: resolved.additionalDirectories,
             ...(await resolveAgent(command.agentId, signal, command.target)),
             cwd: resolved.cwd,
             target: command.target,

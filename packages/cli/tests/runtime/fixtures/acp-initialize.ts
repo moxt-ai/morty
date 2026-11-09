@@ -53,7 +53,6 @@ export function registerInitialization(agent: ReturnType<typeof acp.agent>) {
                     image: !process.argv.includes("--no-image-prompt"),
                 },
                 sessionCapabilities: {
-                    ...(process.argv.includes("--no-additional-directories") ? {} : { additionalDirectories: {} }),
                     close: {},
                     ...(process.argv.includes("--load-only") ? {} : { resume: {} }),
                     ...(process.argv.includes("--no-native-sessions")

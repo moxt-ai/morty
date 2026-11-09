@@ -35,7 +35,6 @@ if (process.argv.includes("--version")) {
     "--agent-version", "1.0.0",
     "--no-load-session",
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -58,7 +57,6 @@ if (process.argv.includes("--version")) {
                 const requestId = "prepare-with-agent-initialization-failure";
                 peer.send(
                     encodeSessionCreateCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",

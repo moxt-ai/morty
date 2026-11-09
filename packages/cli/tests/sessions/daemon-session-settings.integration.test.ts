@@ -124,7 +124,6 @@ async function createSession(
             agentId,
             bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             configurations: [],
         }),
     );
@@ -869,7 +868,6 @@ describe("daemon session configuration boundary", () => {
             const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: runningCommandId,
@@ -996,7 +994,6 @@ describe("daemon session configuration boundary", () => {
             const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: runningCommandId,

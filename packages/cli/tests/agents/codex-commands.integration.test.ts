@@ -27,7 +27,6 @@ test("Given a real Codex conversation, When the user sends slash-prefixed text o
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     attachments: [],
                     prompt,
                     disposition: SessionPromptDisposition.Append,
@@ -76,7 +75,6 @@ test("Given a real Codex conversation with content, When the user sends /compact
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     attachments: [],
                     prompt,
                     disposition: SessionPromptDisposition.Append,
@@ -94,7 +92,6 @@ test("Given a real Codex conversation with content, When the user sends /compact
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
             }),
         );
         for (;;) {
@@ -166,7 +163,6 @@ test("Given a real Codex conversation with content, When the manual /compact's s
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     attachments: [],
                     prompt,
                     disposition: SessionPromptDisposition.Append,

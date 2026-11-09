@@ -201,7 +201,6 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         disposition: "append",
                     }),
@@ -254,7 +253,6 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     }),
                 );
                 for (;;) {

@@ -14,7 +14,6 @@ export function nativeSessionQueryKey(query: NativeSessionQuery): NativeSessionQ
         JSON.stringify([
             query.agent.id,
             query.cwd,
-            query.additionalDirectories,
             Object.entries(query.agent.environment).sort(([left], [right]) => left.localeCompare(right)),
         ]),
     );

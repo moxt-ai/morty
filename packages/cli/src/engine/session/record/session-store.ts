@@ -1,12 +1,10 @@
 import { nativeSessionKey } from "@morty-build/client/native-session";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
-import { z } from "zod";
 import type { AcpSessionRow, AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { MemorySessionEventStore, type SessionEventStore } from "../history/session-event-store.ts";
 import { decodeStoredSessionConfigurations, type StoredSessionConfiguration } from "../live/session-configurations.ts";
 
 export class StoredSession {
-    readonly additionalDirectories: readonly string[];
     readonly target: NativeSessionTarget;
     get agentId(): string {
         return this.target.harness;
@@ -23,13 +21,11 @@ export class StoredSession {
     constructor(
         target: NativeSessionTarget,
         cwd: string,
-        additionalDirectories: readonly string[],
         prompted: boolean,
         title: string,
         updatedAt = new Date().toISOString(),
         configurations: readonly StoredSessionConfiguration[] = [],
     ) {
-        this.additionalDirectories = [...additionalDirectories];
         this.target = target;
         this.cwd = cwd;
         this.configurations = configurations.map((configuration) => ({ ...configuration }));
@@ -98,14 +94,11 @@ export class MemorySessionStore implements SessionStore {
 }
 
 function decodeStoredSession(row: AcpSessionRow): StoredSession {
-    const decodedAdditionalDirectories: unknown = JSON.parse(row.additionalDirectories);
-    const additionalDirectories = z.array(z.string()).parse(decodedAdditionalDirectories);
     const decodedConfigurations: unknown = JSON.parse(row.configurations);
     const configurations = decodeStoredSessionConfigurations(decodedConfigurations);
     return new StoredSession(
         { harness: row.agentId, sessionId: row.sessionId },
         row.cwd,
-        additionalDirectories,
         row.prompted,
         row.title,
         row.updatedAt,
@@ -144,7 +137,6 @@ export class SqliteSessionStore implements SessionStore {
 
     readonly write = (session: StoredSession): void => {
         this.#table.upsert({
-            additionalDirectories: JSON.stringify(session.additionalDirectories),
             agentId: session.agentId,
             configurations: JSON.stringify(session.configurations),
             cwd: session.cwd,

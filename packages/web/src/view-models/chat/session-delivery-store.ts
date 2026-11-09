@@ -49,8 +49,7 @@ export type Journal = {
     readonly commandId: string;
     readonly placement: DeliveryPlacement;
     /** Chat states the Session's whole binding, so a saved request stays complete for any Relay it is resent to. */
-    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition"> &
-        Required<Pick<SubmitRequest, "additionalDirectoryIds">>;
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition">;
 };
 export function journalMessage(journal: Journal): SubmittedMessage {
     return {

@@ -1,0 +1,1 @@
+ALTER TABLE `acp_session` DROP COLUMN `additional_directories`;

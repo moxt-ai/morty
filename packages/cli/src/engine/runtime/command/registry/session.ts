@@ -27,7 +27,7 @@ import { SessionError } from "../../../session/api/session-error.ts";
 import type { ClosedSessionHandling, SessionManager } from "../../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
 import { applyCompleteSessionConfiguration } from "../../../session/prompt/apply-session-configuration.ts";
-import { resolveSessionDirectories } from "../../../session/workspace/resolve-session-directories.ts";
+import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
 import type { RuntimeConfig } from "../../config.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
@@ -49,18 +49,10 @@ async function prepareSession(
     return await metrics.measure("prepare-total", async () => {
         const resolved = await metrics.measure(
             "workspace-resolve",
-            async () =>
-                await resolveSessionDirectories(
-                    directories,
-                    config.bindingId,
-                    command.directoryId,
-                    command.additionalDirectoryIds,
-                    signal,
-                ),
+            async () => await resolveSessionDirectory(directories, config.bindingId, command.directoryId, signal),
         );
         const resolvedAgent = await resolveAgent(command.agentId, signal, command.target);
         const preparation = {
-            additionalDirectories: resolved.additionalDirectories,
             ...resolvedAgent,
             cwd: resolved.cwd,
             target: command.target,
@@ -92,7 +84,6 @@ async function prepareSession(
                                 resolvedAgent.agent,
                                 resolvedAgent.adapter,
                                 resolved.cwd,
-                                resolved.additionalDirectories,
                                 command.requestId,
                                 command.target,
                                 creationSignal,
@@ -104,7 +95,6 @@ async function prepareSession(
         };
         const prepared = await prepare();
         return {
-            additionalDirectories: resolved.additionalDirectoryEntries,
             agentId: command.agentId,
             agentName: prepared.agentName,
             agentVersion: prepared.agentVersion,
@@ -217,7 +207,6 @@ async function executeSessionRestore(
         });
         const ready = await prepareSession(
             {
-                additionalDirectoryIds: entry.additionalDirectories.map((directory) => directory.directoryId),
                 agentId: entry.agentId,
                 bindingId: config.bindingId,
                 directoryId: entry.directoryId,
@@ -272,16 +261,9 @@ async function executeSessionRename(
         if (entry === undefined) {
             throw new SessionError("session_not_found", "The Session was not found");
         }
-        const resolved = await resolveSessionDirectories(
-            directories,
-            config.bindingId,
-            entry.directoryId,
-            entry.additionalDirectories.map((directory) => directory.directoryId),
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(directories, config.bindingId, entry.directoryId, signal);
         const renamed = await sessions.renameSession(
             {
-                additionalDirectories: resolved.additionalDirectories,
                 ...(await resolveAgent(entry.agentId, signal, command.target)),
                 cwd: resolved.cwd,
                 target: command.target,
@@ -314,15 +296,8 @@ async function executeSessionConfigure(
     signal: AbortSignal,
 ): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectories(
-            directories,
-            config.bindingId,
-            command.directoryId,
-            command.additionalDirectoryIds,
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(directories, config.bindingId, command.directoryId, signal);
         const snapshot = await sessions.configureSession({
-            additionalDirectories: resolved.additionalDirectories,
             ...(await resolveAgent(command.agentId, signal, command.target)),
             booleanValue: command.booleanValue,
             configId: command.configId,
@@ -385,11 +360,10 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
     );
     const signal = AbortSignal.any([context.signal, timeout.signal]);
     try {
-        const resolved = await resolveSessionDirectories(
+        const resolved = await resolveSessionDirectory(
             context.directories,
             context.config.bindingId,
             command.directoryId,
-            command.additionalDirectoryIds,
             signal,
         );
         const agent = await context.resolveAgent(command.agentId, signal);
@@ -398,7 +372,6 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
             {
                 agentId: command.agentId,
                 cwd: resolved.cwd,
-                additionalDirectories: resolved.additionalDirectories,
                 configurations: command.configurations,
             },
             signal,
@@ -406,7 +379,6 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                 const target = await context.sessions.createNativeSession({
                     ...agent,
                     cwd: resolved.cwd,
-                    additionalDirectories: resolved.additionalDirectories,
                     signal,
                 });
                 try {
@@ -574,7 +546,6 @@ async function executeSessionConfigRead(
         });
         const ready = await prepareSession(
             {
-                additionalDirectoryIds: entry.additionalDirectories.map((directory) => directory.directoryId),
                 agentId: entry.agentId,
                 bindingId: config.bindingId,
                 directoryId: entry.directoryId,

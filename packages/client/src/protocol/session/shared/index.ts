@@ -43,7 +43,6 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
 export const sessionCapabilitiesSchema = z
     .strictObject({
-        additionalDirectories: z.boolean(),
         audioPrompt: z.boolean(),
         closeSession: z.boolean(),
         deleteSession: z.boolean(),
@@ -91,7 +90,6 @@ export const configValueSchema = z
 export type SessionConfigValue = z.infer<typeof configValueSchema>;
 
 export const sessionIdentityFields = {
-    additionalDirectoryIds: z.array(DIRECTORY_IDENTIFIER).max(16).readonly(),
     agentId: IDENTIFIER,
     bindingId: IDENTIFIER,
     directoryId: DIRECTORY_IDENTIFIER,

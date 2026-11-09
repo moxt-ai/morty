@@ -168,7 +168,6 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       agentId: "codex",
                                       bindingId: "workspace",
                                       directoryId: "default",
-                                      additionalDirectoryIds: [],
                                       configurations: [],
                                   })
                                 : encodeSessionPrepareCommand({
@@ -178,7 +177,6 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       agentId: "codex",
                                       bindingId: "workspace",
                                       directoryId: "default",
-                                      additionalDirectoryIds: [],
                                   }),
                         );
                         expected.push({

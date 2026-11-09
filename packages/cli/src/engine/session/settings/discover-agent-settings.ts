@@ -72,7 +72,6 @@ export async function discoverAgentSettings(
     const cwd = await directories.resolve(bindingId, directoryId, signal);
     const inspectedBaseSnapshot = await sessions.inspectAgentSettings({
         adapter: harnessAdapter,
-        additionalDirectories: [],
         agent,
         cwd,
         signal,
@@ -103,7 +102,6 @@ export async function discoverAgentSettings(
             try {
                 selectedSnapshot = await sessions.inspectAgentSettings({
                     adapter: harnessAdapter,
-                    additionalDirectories: [],
                     agent,
                     cwd,
                     model: command.model,
@@ -270,7 +268,6 @@ async function discoverModelEffort(
         (
             await sessions.inspectAgentSettings({
                 adapter: harnessAdapter,
-                additionalDirectories: [],
                 agent,
                 cwd,
                 model: modelValue,

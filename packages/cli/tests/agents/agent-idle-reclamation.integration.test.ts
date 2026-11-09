@@ -69,7 +69,6 @@ test.each(["codex", "claude"] as const)(
                             agentId,
                             bindingId: peer.bindingId,
                             directoryId: "default",
-                            additionalDirectoryIds: [],
                             cursor: null,
                         }),
                     );
@@ -142,7 +141,6 @@ async function prompt(
             agentId,
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             attachments: [],
             prompt: text,
             disposition: SessionPromptDisposition.Append,

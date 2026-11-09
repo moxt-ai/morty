@@ -148,7 +148,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
     await Promise.all([mkdir(executableDirectory), mkdir(nativeStateDirectory)]);
     await writeFile(
         executable,
-        `#!${process.execPath}\nif (process.argv.includes("--version")) {\n  process.stdout.write("1.0.0\\n");\n} else {\n  process.argv.push(\n    "--agent-name", "Controlled ACP",\n    "--agent-version", "1.0.0",\n    "--exclusive-writer",\n    "--no-load-session",\n    "--http-mcp",\n    "--no-additional-directories",\n    "--no-delete-session",\n    "--no-fork-session",\n    "--no-embedded-context",\n  );\n  await import(${JSON.stringify(new URL(`file://${fakeAgentPath}`).toString())});\n}\n`,
+        `#!${process.execPath}\nif (process.argv.includes("--version")) {\n  process.stdout.write("1.0.0\\n");\n} else {\n  process.argv.push(\n    "--agent-name", "Controlled ACP",\n    "--agent-version", "1.0.0",\n    "--exclusive-writer",\n    "--no-load-session",\n    "--http-mcp",\n    "--no-delete-session",\n    "--no-fork-session",\n    "--no-embedded-context",\n  );\n  await import(${JSON.stringify(new URL(`file://${fakeAgentPath}`).toString())});\n}\n`,
         { mode: 0o700 },
     );
     await chmod(executable, 0o700);
@@ -161,7 +161,6 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                 const promptCommandId = crypto.randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId: promptCommandId,

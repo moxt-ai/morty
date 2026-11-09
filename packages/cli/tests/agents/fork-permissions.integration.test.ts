@@ -65,7 +65,6 @@ test.each(["codex", "claude"] as const)(
             agent.environment,
             async (peer) => {
                 const identity = {
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: peer.bindingId,
                     directoryId: "default",
@@ -184,7 +183,6 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: peer.bindingId,
                     directoryId: "default",

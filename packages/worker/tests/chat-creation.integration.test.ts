@@ -471,7 +471,7 @@ for (const configured of [false, true]) {
             ).toBe(202);
         }
         const computerId = fixture.runtime.computerId;
-        const identity = { agentId: "codex", directoryId: "default", additionalDirectoryIds: [] };
+        const identity = { agentId: "codex", directoryId: "default" };
         // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
         // attributed to a nonexistent Runtime, entry, or discovery.
         const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
@@ -557,7 +557,7 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     await using fixture = await createChatFixture(cloud, undefined, new Set([nativeId]));
     const computerId = fixture.runtime.computerId;
     expect((await fixture.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
-    const identity = { computerId, agentId: "codex", directoryId: "default", additionalDirectoryIds: [] };
+    const identity = { computerId, agentId: "codex", directoryId: "default" };
     const listed = await fixture.request(`chat/native-sessions`, {
         ...identity,
         action: "list",
@@ -608,7 +608,6 @@ test("Given a managed Chat session is still running, When its owner archives it,
     await fixture.runtime.client.turns.submitToRuntime(
         { harness: "codex", sessionId: sessionId },
         {
-            additionalDirectoryIds: [],
             agentId: "codex",
             content: "wait for steering",
             directoryId: "default",
@@ -869,7 +868,6 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     await fixture.runtime.client.turns.submitToRuntime(
         target,
         {
-            additionalDirectoryIds: [],
             agentId: "codex",
             content: "Reply after revoke",
             directoryId: "default",

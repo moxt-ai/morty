@@ -334,7 +334,6 @@ async function startRuntime() {
                     agentId: "controlled",
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     configurations: [],
                 }),
             );
@@ -348,7 +347,6 @@ async function startRuntime() {
             const sessionTarget = decodeSessionReadyEvent(created).target;
             peer.socket.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "controlled",
                     bindingId: config.bindingId,
                     commandId: `command-${label}`,
@@ -538,7 +536,6 @@ test.each([
         }
         runtime.initial.socket.send(
             encodeSessionPreviewHistoryPageLoad({
-                additionalDirectoryIds: [],
                 agentId: "controlled",
                 bindingId: runtime.bindingId,
                 directoryId: "default",

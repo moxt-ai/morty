@@ -103,12 +103,10 @@ describe("ACP conversation sessions", () => {
         const target = await manager.createNativeSession({
             agent,
             cwd: temporaryDirectory,
-            additionalDirectories: [],
             signal: AbortSignal.timeout(10_000),
         });
         const prompt = (commandId: string) =>
             manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId,
                 cwd: temporaryDirectory,
@@ -175,11 +173,9 @@ describe("ACP conversation sessions", () => {
             const target = await firstManager.createNativeSession({
                 agent,
                 cwd: process.cwd(),
-                additionalDirectories: [],
                 signal,
             });
             await firstManager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "initial-command",
                 cwd: process.cwd(),
@@ -216,7 +212,6 @@ describe("ACP conversation sessions", () => {
             });
             try {
                 await reopenedManager.prepareSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     target,
@@ -229,7 +224,6 @@ describe("ACP conversation sessions", () => {
                 expect(reopened.session.updatedAt).toBe(initial.session.updatedAt);
 
                 await reopenedManager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "new-command",
                     cwd: process.cwd(),
@@ -746,13 +740,11 @@ describe("ACP conversation sessions", () => {
         const sessionTarget = await firstRuntime.createNativeSession({
             agent,
             cwd: process.cwd(),
-            additionalDirectories: [],
             signal,
         });
 
         try {
             await firstRuntime.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "claude-first-turn",
                 cwd: process.cwd(),
@@ -873,11 +865,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 const target = await manager.createNativeSession({
                     agent,
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 });
                 const hangingTurn = manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "pi-hanging-command",
                     cwd: process.cwd(),
@@ -913,7 +903,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 expect(processExists(piPid)).toBe(true);
                 observer.events.length = 0;
                 await manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "pi-after-cancellation",
                     cwd: process.cwd(),
@@ -985,14 +974,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             const target = await manager.createNativeSession({
-                additionalDirectories: [],
                 agent: codex,
                 cwd: process.cwd(),
                 signal: new AbortController().signal,
             });
             await expect(
                 manager.prepareSession({
-                    additionalDirectories: [],
                     agent: claude,
                     cwd: process.cwd(),
                     target,
@@ -1002,14 +989,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
             const selected = await manager.createNativeSession({
                 agent: claude,
                 cwd: process.cwd(),
-                additionalDirectories: [],
                 signal: AbortSignal.timeout(10_000),
             });
 
             const observer = new RecordingObserver();
             manager.setObserver(observer);
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: claude,
                 commandId: "command-after-rebind",
                 cwd: process.cwd(),
@@ -1046,7 +1031,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
             maxProcesses: null,
         });
         const preparation = await manager.createSession({
-            additionalDirectories: [],
             agent: new AcpAgentDefinition(
                 "codex",
                 "Codex",
@@ -1123,7 +1107,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "controlled-acp-interleaved-command",
                 cwd: process.cwd(),
@@ -1133,7 +1116,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 target: await manager.createNativeSession({
                     agent,
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -1218,11 +1200,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
         const activeTarget = await manager.createNativeSession({
             agent,
             cwd: temporaryDirectory,
-            additionalDirectories: [],
             signal,
         });
         const activeTurn = manager.runPrompt({
-            additionalDirectories: [],
             agent,
             commandId: "conversation-1-active",
             cwd: temporaryDirectory,
@@ -1241,11 +1221,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             const sessionTarget = await manager.createNativeSession({
                 agent,
                 cwd: temporaryDirectory,
-                additionalDirectories: [],
                 signal,
             });
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: crypto.randomUUID(),
                 cwd: temporaryDirectory,
@@ -1338,7 +1316,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.createNativeSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     signal: new AbortController().signal,
@@ -1387,7 +1364,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.createNativeSession({
-                    additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
                     signal: new AbortController().signal,
@@ -1436,7 +1412,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "command-model-unavailable",
                     cwd: process.cwd(),
@@ -1446,7 +1421,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     target: await manager.createNativeSession({
                         agent,
                         cwd: process.cwd(),
-                        additionalDirectories: [],
                         signal: AbortSignal.timeout(10_000),
                     }),
                     signal: new AbortController().signal,
@@ -1498,7 +1472,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
         try {
             await expect(
                 manager.runPrompt({
-                    additionalDirectories: [],
                     agent,
                     commandId: "command-invalid-prompt",
                     cwd: process.cwd(),
@@ -1508,7 +1481,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     target: await manager.createNativeSession({
                         agent,
                         cwd: process.cwd(),
-                        additionalDirectories: [],
                         signal: AbortSignal.timeout(10_000),
                     }),
                     signal: new AbortController().signal,
@@ -1595,11 +1567,9 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             const target = await manager.createNativeSession({
                 agent,
                 cwd: temporaryDirectory,
-                additionalDirectories: [],
                 signal: AbortSignal.timeout(10_000),
             });
             const cancelledTurn = manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "command-cancelled-tree",
                 cwd: temporaryDirectory,
@@ -1621,7 +1591,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             expect(processExists(childPid)).toBe(true);
             observer.events.length = 0;
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: "command-after-tree-cancel",
                 cwd: temporaryDirectory,
@@ -1702,11 +1671,9 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             const target = await manager.createNativeSession({
                 agent: codex,
                 cwd: process.cwd(),
-                additionalDirectories: [],
                 signal: AbortSignal.timeout(10_000),
             });
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: codex,
                 commandId: "command-locked-first",
                 cwd: process.cwd(),
@@ -1718,7 +1685,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             });
             await expect(
                 manager.runPrompt({
-                    additionalDirectories: [],
                     agent: claude,
                     commandId: "command-locked-second",
                     cwd: process.cwd(),
@@ -1771,14 +1737,12 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         const signal = new AbortController().signal;
 
         const target = await manager.createNativeSession({
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             signal,
         });
         await expect(
             manager.applySessionConfiguration({
-                additionalDirectories: [],
                 agent,
                 booleanValue: false,
                 configId: "model",

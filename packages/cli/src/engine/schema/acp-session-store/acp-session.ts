@@ -6,7 +6,6 @@ export const acpSession = sqliteTable(
         agentId: text("agent_id").notNull(),
         sessionId: text("session_id").notNull(),
         cwd: text("cwd").notNull(),
-        additionalDirectories: text("additional_directories").notNull(),
         configurations: text("configurations").notNull().default("[]"),
         prompted: integer("prompted", { mode: "boolean" }).notNull(),
         title: text("title").notNull(),

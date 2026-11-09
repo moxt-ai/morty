@@ -191,7 +191,6 @@ export const createNativeSessionStore = (
                         action: "list",
                         agentId: agent.agentRef,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         cursor: null,
                         discoveryId: null,
                     },
@@ -279,7 +278,6 @@ export const createNativeSessionStore = (
                     {
                         agentId: directory.agentRef,
                         directoryId: entry.directoryId,
-                        additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
                         entryId: entry.entryId,
                         sessionId: entry.sessionId,
                     },
@@ -319,7 +317,6 @@ export const createNativeSessionStore = (
                 const input = {
                     agentId: directory.agentRef,
                     directoryId: preview.entry.directoryId,
-                    additionalDirectoryIds: preview.entry.additionalDirectories.map((item) => item.directoryId),
                     sessionId: preview.entry.sessionId,
                 };
                 const retained = get().forkIntent;
@@ -341,9 +338,6 @@ export const createNativeSessionStore = (
                                   discoveryId: directory.discoveryId,
                                   agentId: directory.agentRef,
                                   directoryId: preview.entry.directoryId,
-                                  additionalDirectoryIds: preview.entry.additionalDirectories.map(
-                                      (item) => item.directoryId,
-                                  ),
                                   entryId: preview.entry.entryId,
                               },
                               signal,
@@ -384,7 +378,6 @@ export const createNativeSessionStore = (
                         action: "list",
                         agentId: directory.agentRef,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         cursor: directory.nextCursor,
                         discoveryId: directory.discoveryId,
                     },
