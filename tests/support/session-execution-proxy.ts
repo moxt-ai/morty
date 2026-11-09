@@ -5,6 +5,15 @@ import { WebSocket, WebSocketServer } from "ws";
 
 /** Forwards real traffic unchanged, with controllable ordering at the Platform transport boundary. */
 export async function createSessionExecutionProxy(upstream: string) {
+    const responseHolds = new Map<string, (release: () => void) => void>();
+    const takeResponseHold = (path: string) => {
+        const suffix = [...responseHolds.keys()].find((candidate) => path.endsWith(candidate));
+        const held = suffix === undefined ? undefined : responseHolds.get(suffix);
+        if (suffix !== undefined) {
+            responseHolds.delete(suffix);
+        }
+        return held;
+    };
     let hold: ((release: () => void) => void) | null = null;
     // Requests held by the end of their path until released, each release returning the Runtime's response.
     const heldReplies = new Map<string, (release: () => Promise<unknown>) => void>();
@@ -24,6 +33,7 @@ export async function createSessionExecutionProxy(upstream: string) {
     const runtimeHostWaiters: (() => void)[] = [];
     const heldUpgrades = new Set<Duplex>();
     const server = createServer((incoming, outgoing) => {
+        const heldResponse = takeResponseHold(new URL(incoming.url ?? "/", upstream).pathname);
         const forwarded = request(
             new URL(incoming.url ?? "/", upstream),
             {
@@ -31,6 +41,17 @@ export async function createSessionExecutionProxy(upstream: string) {
                 headers: { ...incoming.headers, host: new URL(upstream).host },
             },
             (response) => {
+                if (heldResponse !== undefined) {
+                    const chunks: Buffer[] = [];
+                    response.on("data", (chunk: Buffer) => chunks.push(chunk));
+                    response.on("end", () =>
+                        heldResponse(() => {
+                            outgoing.writeHead(response.statusCode ?? 502, response.headers);
+                            outgoing.end(Buffer.concat(chunks));
+                        }),
+                    );
+                    return;
+                }
                 outgoing.writeHead(response.statusCode ?? 502, response.headers);
                 response.pipe(outgoing);
             },
@@ -86,6 +107,7 @@ export async function createSessionExecutionProxy(upstream: string) {
         const pending: (() => void)[] = [];
         let delayedCloseTraffic: (() => void)[] | null = null;
         const responses = new Map<string, (frame: unknown) => void>();
+        const heldResponses = new Map<string, (release: () => void) => void>();
         const executionRequests = new Set<string>();
         client.on("message", (data, binary) => {
             const send = () => {
@@ -109,6 +131,12 @@ export async function createSessionExecutionProxy(upstream: string) {
                     : null;
             if (heldReply?.path.endsWith("/active-turn")) {
                 executionRequests.add(heldReply.requestId);
+            }
+            if (heldReply !== null) {
+                const heldResponse = takeResponseHold(heldReply.path);
+                if (heldResponse !== undefined) {
+                    heldResponses.set(heldReply.requestId, heldResponse);
+                }
             }
             const heldSuffix =
                 heldReply === null ? undefined : [...heldReplies.keys()].find((end) => heldReply.path.endsWith(end));
@@ -192,6 +220,21 @@ export async function createSessionExecutionProxy(upstream: string) {
                     client.send(data, { binary });
                 }
             };
+            if (
+                typeof frame === "object" &&
+                frame !== null &&
+                "kind" in frame &&
+                frame.kind === "http.response" &&
+                "requestId" in frame &&
+                typeof frame.requestId === "string"
+            ) {
+                const heldResponse = heldResponses.get(frame.requestId);
+                if (heldResponse !== undefined) {
+                    heldResponses.delete(frame.requestId);
+                    heldResponse(send);
+                    return;
+                }
+            }
             if (delayedCloseTraffic !== null) {
                 delayedCloseTraffic.push(send);
                 return;
@@ -289,6 +332,19 @@ export async function createSessionExecutionProxy(upstream: string) {
     }
     return {
         origin: `http://127.0.0.1:${address.port}`,
+        /** Holds one real HTTP or WebSocket response after the upstream has completed it, without changing it. */
+        holdNextResponse: (suffix: string) =>
+            new Promise<() => void>((resolve) => {
+                responseHolds.set(suffix, (send) => {
+                    let pending = true;
+                    resolve(() => {
+                        if (pending) {
+                            pending = false;
+                            send();
+                        }
+                    });
+                });
+            }),
         observedExecutionReads: () => [...executionReads],
         /** Delays real terminal events and every later event on the same connection without reordering them. */
         holdTerminalSessionEvents: () => {
