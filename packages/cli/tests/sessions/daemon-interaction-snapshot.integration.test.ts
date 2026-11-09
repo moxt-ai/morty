@@ -141,7 +141,6 @@ test("Given a newly created native Session, When its first Turn resolves interac
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -155,7 +154,6 @@ test("Given a newly created native Session, When its first Turn resolves interac
         const submittedAt = Date.now();
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "interaction_turn",
@@ -176,7 +174,6 @@ test("Given a newly created native Session, When its first Turn resolves interac
             socket.send(
                 encodeNativeSessionRequest({
                     action: "active-turn",
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -322,7 +319,6 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -335,7 +331,6 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "announced_turn",
@@ -434,7 +429,6 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -447,7 +441,6 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "null_input_turn",
@@ -546,7 +539,6 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -559,7 +551,6 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "orphan_update_turn",
@@ -658,7 +649,6 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 directoryId: "default",
@@ -754,7 +744,6 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             initial.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
             initial.socket.send(
                 encodeSessionCreateCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: config.bindingId,
                     directoryId: "default",
@@ -767,7 +756,6 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
             initial.socket.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: config.bindingId,
                     commandId: "initial_turn",
@@ -932,14 +920,12 @@ test("Given queued prompts from the running Agent identity and another one, When
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 configurations: [],
             }),
         );
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "running_turn",
@@ -957,7 +943,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         // A different Agent identity queues behind the running turn in the same Session.
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 commandId: "foreign_queued_turn",
@@ -980,7 +965,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         };
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 commandId: "own_queued_turn",
@@ -996,7 +980,6 @@ test("Given queued prompts from the running Agent identity and another one, When
         socket.send(
             encodeNativeSessionRequest({
                 action: "active-turn",
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",

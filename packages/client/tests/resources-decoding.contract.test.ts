@@ -12,7 +12,6 @@ const runtime = {
             agentPath: "/usr/local/bin/codex",
             agentVersion: "codex-cli 1.0.0",
             capabilities: {
-                additionalDirectories: false,
                 audioPrompt: false,
                 closeSession: false,
                 deleteSession: false,

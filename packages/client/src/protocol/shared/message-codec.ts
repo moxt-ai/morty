@@ -48,27 +48,6 @@ export function readText(value: Readonly<Record<string, unknown>>, key: string, 
     return field;
 }
 
-export function readDirectoryIdentifiers(
-    value: Readonly<Record<string, unknown>>,
-    key: string,
-    maximumCount: number,
-): readonly string[] {
-    const field = value[key];
-    if (!Array.isArray(field) || field.length > maximumCount) {
-        throw new ProtocolMessageError(`Invalid directory list field: ${key}`);
-    }
-    const identifiers: string[] = [];
-    const unique = new Set<string>();
-    for (const candidate of field) {
-        if (!isDirectoryIdentifier(candidate) || unique.has(candidate)) {
-            throw new ProtocolMessageError(`Invalid directory in field: ${key}`);
-        }
-        unique.add(candidate);
-        identifiers.push(candidate);
-    }
-    return identifiers;
-}
-
 export function readIdentifier(value: Readonly<Record<string, unknown>>, key: string): Identifier {
     try {
         return decodeIdentifier(value[key]);

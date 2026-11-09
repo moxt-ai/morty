@@ -23,7 +23,6 @@ describe("native session preparation", () => {
             const options = {
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
                 target: { harness: f.agent.id, sessionId },
                 signal: owner.signal,
             } as const;
@@ -69,7 +68,6 @@ describe("native session preparation", () => {
                     {
                         agent: f.agent,
                         cwd: f.workspace,
-                        additionalDirectories: [],
                         signal: owner.signal,
                     },
                     { kind: "import", sessionId, title: "" },
@@ -113,13 +111,11 @@ describe("native session preparation", () => {
         try {
             await external.runPrompt({
                 agent: f.agent,
-                additionalDirectories: [],
                 cwd: f.workspace,
                 signal: new AbortController().signal,
                 target: await external.createNativeSession({
                     agent: f.agent,
                     cwd: f.workspace,
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 commandId: "external-turn",

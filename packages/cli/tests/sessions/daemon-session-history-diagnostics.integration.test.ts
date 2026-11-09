@@ -39,7 +39,6 @@ if (process.argv.includes("--version")) {
     "--agent-name", "Controlled ACP",
     "--agent-version", "1.0.0",
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -61,7 +60,6 @@ if (process.argv.includes("--version")) {
             async (peer) => {
                 peer.send(
                     encodeSessionPrepareCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -77,7 +75,6 @@ if (process.argv.includes("--version")) {
                 }
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId: "external-image-seed-turn",

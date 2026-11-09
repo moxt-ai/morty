@@ -30,7 +30,6 @@ it("Given two harnesses create the same native ID, When I create and restore eac
             const ready = await runtime.client.sessions.create(
                 {
                     agentId: harness,
-                    additionalDirectoryIds: [],
                     configurations: [],
                     directoryId: "default",
                     computerId: runtime.computerId,
@@ -77,7 +76,6 @@ it("Given a harness announces its title during creation, When the caller creates
         const ready = await runtime.client.sessions.create(
             {
                 agentId: "claude",
-                additionalDirectoryIds: [],
                 configurations: [],
                 directoryId: "default",
                 computerId: runtime.computerId,
@@ -124,7 +122,7 @@ it("Given two harnesses own the same native session ID, When a caller restores e
         );
         const imported = new Map<string, string>();
         for (const harness of ["claude", "codex"]) {
-            const workspace = { agentId: harness, directoryId: "default", additionalDirectoryIds: [] };
+            const workspace = { agentId: harness, directoryId: "default" };
             const listing = await runtime.client.runtimes.nativeSessions(
                 {
                     ...workspace,

@@ -31,7 +31,7 @@ export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string
     const { adapter, processes } = historyAdapter(agent);
     try {
         return await adapter.readSessionHistory({
-            query: { agent, cwd, additionalDirectories: [], signal: AbortSignal.timeout(30_000) },
+            query: { agent, cwd, signal: AbortSignal.timeout(30_000) },
             request: {
                 sessionId,
                 eventLimit: 500,
@@ -56,7 +56,7 @@ export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, s
             throw new Error("History replay must not request interaction");
         };
         const params: AdapterSessionCreateParams = {
-            scope: { agent, cwd, additionalDirectories: [] },
+            scope: { agent, cwd },
             signal,
             onSessionEvent: async (_sessionId, event) => {
                 events.append(sessionTarget, { type: "acp", payload: event.payload });
@@ -75,7 +75,6 @@ export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, s
         } finally {
             await adapter.releaseSession({
                 cwd,
-                additionalDirectories: [],
                 sessionId,
                 signal: AbortSignal.timeout(30_000),
             });

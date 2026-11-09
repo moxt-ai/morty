@@ -34,7 +34,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "image-command",
                 cwd: process.cwd(),
@@ -44,7 +43,6 @@ describe("acp content limits", () => {
                 target: await manager.createNativeSession({
                     agent: fakeAgent(),
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -97,12 +95,10 @@ describe("acp content limits", () => {
             const target = await manager.createNativeSession({
                 agent: fakeAgent(),
                 cwd: process.cwd(),
-                additionalDirectories: [],
                 signal: AbortSignal.timeout(10_000),
             });
             for (const commandId of ["first-image-turn", "second-image-turn"]) {
                 await manager.runPrompt({
-                    additionalDirectories: [],
                     agent: fakeAgent(),
                     commandId,
                     cwd: process.cwd(),
@@ -152,7 +148,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "oversized-tool-output-command",
                 cwd: process.cwd(),
@@ -162,7 +157,6 @@ describe("acp content limits", () => {
                 target: await manager.createNativeSession({
                     agent: fakeAgent(),
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -199,7 +193,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "oversized-reasoning-command",
                 cwd: process.cwd(),
@@ -209,7 +202,6 @@ describe("acp content limits", () => {
                 target: await manager.createNativeSession({
                     agent: fakeAgent(),
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -266,7 +258,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "markdown-image-command",
                 cwd: directory,
@@ -276,7 +267,6 @@ describe("acp content limits", () => {
                 target: await manager.createNativeSession({
                     agent: fakeAgent(),
                     cwd: directory,
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -315,7 +305,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent([], { FAKE_ACP_IMAGE_DIRECTORY: generatedImages }),
                 commandId: "codex-generated-image-command",
                 cwd: workspace,
@@ -325,7 +314,6 @@ describe("acp content limits", () => {
                 target: await manager.createNativeSession({
                     agent: fakeAgent([], { FAKE_ACP_IMAGE_DIRECTORY: generatedImages }),
                     cwd: workspace,
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -366,7 +354,6 @@ describe("acp content limits", () => {
         });
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "media-command",
                 cwd: directory,
@@ -376,7 +363,6 @@ describe("acp content limits", () => {
                 target: await manager.createNativeSession({
                     agent: fakeAgent(),
                     cwd: directory,
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,

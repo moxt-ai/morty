@@ -16,8 +16,7 @@ describe("native session authorization", () => {
                 await f.seed("Saved one");
                 await f.seed("Saved two");
                 await f.seed("Saved three");
-                await f.seed("Additional project", [outside]);
-                await f.seed("Other project", [], outside);
+                await f.seed("Other project", outside);
                 const entries: NativeSessionEntry[] = [];
                 let cursor: string | null = null;
                 do {
@@ -26,7 +25,6 @@ describe("native session authorization", () => {
                     cursor = page.nextCursor;
                 } while (cursor !== null);
                 expect(entries.map((entry) => entry.title).sort()).toEqual([
-                    "Additional project",
                     "Other project",
                     "Saved one",
                     "Saved three",
@@ -117,7 +115,7 @@ describe("native session authorization", () => {
             await mkdir(inside);
             await mkdir(outside);
             await symlink(inside, alias);
-            await f.seed("Moving roots", [alias]);
+            await f.seed("Moving workspace", alias);
             const entry = (await f.list()).entries[0];
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
@@ -126,12 +124,12 @@ describe("native session authorization", () => {
             await symlink(outside, alias);
             await expect(
                 f.service.execute(
-                    { ...f.identity, action: "import", entryId: entry.entryId },
+                    { ...f.identity, directoryId: entry.directoryId, action: "import", entryId: entry.entryId },
                     new AbortController().signal,
                 ),
             ).rejects.toMatchObject({ code: "native_session_target_changed" });
             expect((await readdir(f.native)).filter((name) => name.endsWith(".json"))).toHaveLength(1);
-            expect((await f.list()).entries).toEqual([expect.objectContaining({ title: "Moving roots" })]);
+            expect((await f.list()).entries).toEqual([expect.objectContaining({ title: "Moving workspace" })]);
         } finally {
             await f.close();
         }
@@ -143,11 +141,9 @@ describe("native session authorization", () => {
             const ready = await f.sessions.prepareSession({
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
                 target: await f.sessions.createNativeSession({
                     agent: f.agent,
                     cwd: f.workspace,
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,

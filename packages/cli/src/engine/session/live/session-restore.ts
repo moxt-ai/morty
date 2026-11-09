@@ -1,6 +1,5 @@
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import { type NativeSessionOrigin, sessionIdSchema } from "../../acp/protocol/native-session.ts";
-import { arraysEqual } from "../../util/value-utils.ts";
 import type { SessionRecovery } from "../api/session-api.ts";
 import { FoundStoredSession, StoredSession } from "../record/session-store.ts";
 import type { AgentSessionRestore } from "./agent-session-restore.ts";
@@ -28,7 +27,6 @@ export async function restoreSession(
                           sessionId: sessionIdSchema.parse(origin.sessionId),
                       },
                       session.cwd,
-                      session.additionalDirectories,
                       true,
                       origin.title,
                   ),
@@ -39,11 +37,7 @@ export async function restoreSession(
         throw new AcpExecutionError("The native Session was not found", {}, "session_not_found");
     }
     const conversation = stored.session;
-    if (
-        conversation.agentId !== session.agentId ||
-        conversation.cwd !== session.cwd ||
-        !arraysEqual(conversation.additionalDirectories, session.additionalDirectories)
-    ) {
+    if (conversation.agentId !== session.agentId || conversation.cwd !== session.cwd) {
         throw new AcpExecutionError("The native Session workspace cannot change", {}, "session_identity_mismatch");
     }
     session.selectNativeSession(conversation.sessionId);

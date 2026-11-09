@@ -7,7 +7,6 @@ export function nativeSessionQuery(options: SessionCreationOptions): NativeSessi
     return {
         agent: options.agent,
         cwd: options.cwd,
-        additionalDirectories: options.additionalDirectories,
         signal: options.signal,
         ...(externalize === undefined
             ? {}

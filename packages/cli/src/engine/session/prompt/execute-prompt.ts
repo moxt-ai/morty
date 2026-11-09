@@ -4,7 +4,7 @@ import { operationErrorCode, operationErrorMessage } from "../../infra/operation
 import type { ReportFailure, ResolveAgent } from "../api/session-api.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import type { PromptDispatch } from "../turn/active-turn.ts";
-import { resolveSessionDirectories } from "../workspace/resolve-session-directories.ts";
+import { resolveSessionDirectory } from "../workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import { agentForSessionConfiguration, applyCompleteSessionConfiguration } from "./apply-session-configuration.ts";
 import { PromptArtifactError, type ReadPromptArtifact, resolvePromptArtifacts } from "./prompt-artifacts.ts";
@@ -46,13 +46,7 @@ export async function executePrompt({
     cancellationRequested,
 }: ExecutePromptOptions): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectories(
-            directories,
-            command.bindingId,
-            command.directoryId,
-            command.additionalDirectoryIds,
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(directories, command.bindingId, command.directoryId, signal);
         const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(
             command.agentId,
             signal,
@@ -74,7 +68,6 @@ export async function executePrompt({
         const preparation = {
             adapter,
             ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-            additionalDirectories: resolved.additionalDirectories,
             agent: executionAgent,
             cwd: resolved.cwd,
             target: command.target,
@@ -95,7 +88,6 @@ export async function executePrompt({
                 executionAgent,
                 adapter,
                 resolved.cwd,
-                resolved.additionalDirectories,
                 command.commandId,
                 command.target,
                 signal,
@@ -121,7 +113,6 @@ export async function executePrompt({
             await sessions.steerPrompt({
                 adapter,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-                additionalDirectories: resolved.additionalDirectories,
                 agent: executionAgent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,
@@ -139,7 +130,6 @@ export async function executePrompt({
                 adapter,
                 cancellationRequested,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-                additionalDirectories: resolved.additionalDirectories,
                 agent: executionAgent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,

@@ -67,7 +67,6 @@ async function run(
     });
     try {
         return await manager.runPrompt({
-            additionalDirectories: [],
             agent: usageAgent(response, context),
             commandId: "usage-command",
             cwd: process.cwd(),
@@ -76,7 +75,6 @@ async function run(
             target: await manager.createNativeSession({
                 agent: usageAgent(response, context),
                 cwd: process.cwd(),
-                additionalDirectories: [],
                 signal: AbortSignal.timeout(10_000),
             }),
             prompt: "Complete this turn",

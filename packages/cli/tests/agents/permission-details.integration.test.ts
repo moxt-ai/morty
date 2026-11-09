@@ -38,7 +38,6 @@ test.each(["allow_once", "reject_once"] as const)(
         await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
@@ -78,7 +77,6 @@ test.each(["allow_once", "reject_once"] as const)(
                     peer.send(
                         encodeNativeSessionCommand({
                             action: "active-turn",
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             bindingId: peer.bindingId,
                             directoryId: "default",
@@ -161,7 +159,6 @@ test.each(["allow_once", "reject_once"] as const)(
             await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, async (peer) => {
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         commandId: randomUUID(),
@@ -195,7 +192,6 @@ test.each(["allow_once", "reject_once"] as const)(
                         peer.send(
                             encodeNativeSessionCommand({
                                 action: "active-turn",
-                                additionalDirectoryIds: [],
                                 agentId: "claude",
                                 bindingId: peer.bindingId,
                                 directoryId: "default",

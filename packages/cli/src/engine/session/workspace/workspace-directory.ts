@@ -229,16 +229,4 @@ export class WorkspaceDirectoryService {
             throw new LocalAuthorizationError("This directory cannot be browsed by your user account", { cause });
         }
     };
-
-    readonly resolveMany = async (
-        bindingId: string,
-        ids: readonly string[],
-        signal: AbortSignal,
-    ): Promise<readonly string[]> => {
-        const paths = new Set<string>();
-        for (const id of ids) {
-            paths.add(await this.resolve(bindingId, id, signal));
-        }
-        return [...paths];
-    };
 }

@@ -18,7 +18,6 @@ it("Given two clients holding one configuration revision, When they edit concurr
         const runtime = await platform.connectAgent(project.computerId);
         const ready = await runtime.client.sessions.create(
             {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
@@ -29,7 +28,6 @@ it("Given two clients holding one configuration revision, When they edit concurr
         );
         expect(ready.configurationRevision).toEqual(expect.any(String));
         const edit = {
-            additionalDirectoryIds: [],
             agentId: "claude",
             booleanValue: false,
             configId: "model",

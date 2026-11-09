@@ -68,7 +68,6 @@ describe("native session history", () => {
                 {
                     agent: f.agent,
                     cwd: f.workspace,
-                    additionalDirectories: [],
                     signal: new AbortController().signal,
                 },
                 sessionId,
@@ -95,7 +94,6 @@ describe("native session history", () => {
             const sessionId = await f.seed("Writer-owned Codex session");
             await f.sessions.openNativeSession(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     signal,
@@ -105,7 +103,6 @@ describe("native session history", () => {
 
             const preview = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     signal,
@@ -150,7 +147,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     target: opened.target,
@@ -191,7 +187,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     target: opened.target,
@@ -231,7 +226,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     target: opened.target,
@@ -261,7 +255,6 @@ describe("native session history", () => {
             const sessionId = await f.seed("Preserve this update");
             const replay = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     signal: new AbortController().signal,
@@ -300,7 +293,6 @@ describe("native session history", () => {
 
             const newestMessage = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     signal: new AbortController().signal,
@@ -315,7 +307,6 @@ describe("native session history", () => {
             ).toEqual(["agent_thought_chunk", "tool_call", "tool_call", "agent_message_chunk"]);
             const olderMessage = await f.sessions.previewNativeSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     signal: new AbortController().signal,
@@ -349,7 +340,6 @@ describe("native session history", () => {
 
             const replay = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     target: opened.target,
@@ -379,7 +369,7 @@ describe("native session history", () => {
         try {
             const sessionId = await f.seed("Shared Pi history");
             const opened = await f.sessions.openNativeSession(
-                { agent: f.agent, cwd: f.workspace, additionalDirectories: [], signal },
+                { agent: f.agent, cwd: f.workspace, signal },
                 { kind: "import", sessionId: sessionId, title: "Shared Pi history" },
             );
             await writeFile(join(f.native, "pause-load"), "");
@@ -391,7 +381,6 @@ describe("native session history", () => {
                 }
             });
             const options = {
-                additionalDirectories: [],
                 agent: f.agent,
                 cwd: f.workspace,
                 target: opened.target,

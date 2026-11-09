@@ -139,10 +139,7 @@ export type UpdateMortySessionConfigurationRequest = MortySessionBinding &
         "booleanValue" | "configId" | "expectedConfigurationRevision" | "value" | "valueType"
     >;
 
-/**
- * Writes the supplied binding fields to a query. A query cannot carry an empty list, so an empty
- * `additionalDirectoryIds` reads as empty only beside `agentId` or `directoryId`; alone it reads as omitted.
- */
+/** Writes the supplied binding fields to a query. */
 function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBinding): void {
     if (binding.agentId !== undefined) {
         query.set("agentId", binding.agentId);
@@ -150,16 +147,12 @@ function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBin
     if (binding.directoryId !== undefined) {
         query.set("directoryId", binding.directoryId);
     }
-    for (const directoryId of binding.additionalDirectoryIds ?? []) {
-        query.append("additionalDirectoryId", directoryId);
-    }
 }
 
 export interface ForkMortyNativeSessionRequest {
     readonly agentId: string;
     readonly sessionId: string;
     readonly directoryId: string;
-    readonly additionalDirectoryIds: readonly string[];
 }
 
 export type MortyExternalContentBlock =
@@ -1137,7 +1130,6 @@ export class MortySessionResources {
     readonly load = async (
         sessionTarget: NativeSessionTarget,
         request: {
-            readonly additionalDirectoryIds: readonly string[];
             readonly agentId: string;
             readonly directoryId: string;
         },

@@ -48,7 +48,6 @@ async function createSession(peer: RealDaemonPeer, directoryId: string): Promise
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionCreateCommand({
-            additionalDirectoryIds: [],
             agentId: NATIVE_AGENT_ID,
             bindingId: peer.bindingId,
             directoryId,

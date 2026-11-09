@@ -68,7 +68,6 @@ export type AdapterResolver = (agent: AcpAgentDefinition, dependencies: AdapterD
 export interface NativeSessionQuery {
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
-    readonly additionalDirectories: readonly string[];
     readonly signal: AbortSignal;
     readonly externalizeUpdate?: ExternalizeSessionUpdate;
 }
@@ -82,7 +81,6 @@ export interface NativeSessionLookupBudget {
 export interface AdapterSessionTarget {
     readonly sessionId: string;
     readonly cwd: string;
-    readonly additionalDirectories: readonly string[];
 }
 
 export interface AdapterPromptResult {
@@ -104,7 +102,6 @@ export interface AdapterSessionOpened {
 export interface AdapterSessionScope {
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
-    readonly additionalDirectories: readonly string[];
     readonly externalizeUpdate?: ExternalizeSessionUpdate;
 }
 

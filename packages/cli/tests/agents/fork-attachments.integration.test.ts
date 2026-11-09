@@ -50,7 +50,6 @@ test.each(["pi", "claude", "codex"] as const)(
                   : new CodexAgentSpecification();
         await withRealDaemon(specification, agent.environment, async (peer) => {
             const identity = {
-                additionalDirectoryIds: [],
                 agentId,
                 bindingId: peer.bindingId,
                 directoryId: "default",
@@ -204,7 +203,6 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: peer.bindingId,
                     directoryId: "default",

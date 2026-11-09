@@ -66,9 +66,7 @@ export type NewChatSessionInput = {
     }[];
 };
 
-export type ExistingChatSessionInput = ChatSessionTarget & {
-    readonly additionalDirectoryIds: readonly string[];
-};
+export type ExistingChatSessionInput = ChatSessionTarget;
 
 const discoveredRuntimeSchema = v.object({
     agents: v.array(
@@ -368,7 +366,6 @@ export class PlatformProjectGateway {
             async (client) => {
                 const ready = await client.sessions.create(
                     {
-                        additionalDirectoryIds: [],
                         agentId: input.agentRef,
                         configurations: input.configurations,
                         directoryId: input.workspaceRef,
@@ -433,7 +430,6 @@ export class PlatformProjectGateway {
                     await client.sessions.load(
                         input.target,
                         {
-                            additionalDirectoryIds: input.additionalDirectoryIds,
                             agentId: input.agentRef,
                             directoryId: input.workspaceRef,
                         },
@@ -508,7 +504,6 @@ export class PlatformProjectGateway {
                         title: session.title,
                         directoryId: ready.directoryId,
                         directoryLabel: ready.directoryLabel,
-                        additionalDirectories: ready.additionalDirectories,
                         updatedAt: session.updatedAt,
                     },
                 };

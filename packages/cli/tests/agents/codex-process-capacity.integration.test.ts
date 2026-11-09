@@ -34,7 +34,6 @@ async function promptRealSession(
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             prompt: text,
             disposition: SessionPromptDisposition.Append,
             attachments: [],

@@ -30,7 +30,6 @@ async function promptFromMorty(
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             attachments: [],
             prompt,
             disposition: SessionPromptDisposition.Append,

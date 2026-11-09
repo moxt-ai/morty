@@ -78,7 +78,6 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
             { MORTY_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent"), PATH: executableDirectory },
             async (peer) => {
                 const original: SessionPromptCommand = {
-                    additionalDirectoryIds: [],
                     agentId: "controlled-acp",
                     attachments: [],
                     bindingId: peer.bindingId,

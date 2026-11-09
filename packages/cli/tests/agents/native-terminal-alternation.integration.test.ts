@@ -92,7 +92,6 @@ async function promptFromMorty(
             agentId: sessionTarget.harness,
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             attachments: [],
             prompt,
             disposition: SessionPromptDisposition.Append,

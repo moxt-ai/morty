@@ -69,7 +69,6 @@ const managedSessionSchema = v.pipe(
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
         directoryId: v.string(),
-        additionalDirectoryIds: v.array(v.string()),
         computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
@@ -159,7 +158,6 @@ const localSessionEntrySchema = v.object({
     title: v.string(),
     directoryId: v.string(),
     directoryLabel: v.string(),
-    additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
     updatedAt: v.nullable(v.string()),
 });
 const managedSdkSessionSchema = v.object({
@@ -376,7 +374,6 @@ export class BotChatApi {
             title,
             directoryId: access.workspaceRef,
             directoryLabel,
-            additionalDirectories: [],
             updatedAt: null,
         },
     });
@@ -587,7 +584,6 @@ export class BotChatApi {
             readonly entryId: string;
             readonly agentId: string;
             readonly directoryId: string;
-            readonly additionalDirectoryIds: readonly string[];
             readonly sessionId: string;
         },
         signal: AbortSignal,

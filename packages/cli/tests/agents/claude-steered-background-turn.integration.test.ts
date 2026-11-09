@@ -72,7 +72,6 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         ...(steering
                             ? { disposition: "steer" as const, targetCommandId: main }
@@ -140,7 +139,6 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     }),
                 );
                 for (;;) {

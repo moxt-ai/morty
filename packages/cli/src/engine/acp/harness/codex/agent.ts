@@ -245,7 +245,6 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 return {
                     nextCursor: decoded.nextCursor ?? null,
                     sessions: decoded.data.map((thread) => ({
-                        additionalDirectories: [],
                         cwd: thread.cwd,
                         sessionId: thread.id,
                         title: thread.name ?? thread.preview ?? null,

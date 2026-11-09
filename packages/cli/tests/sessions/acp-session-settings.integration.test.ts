@@ -51,7 +51,6 @@ describe("Agent setting capabilities", () => {
                 ),
         );
         const session = await manager.createSession({
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             signal: new AbortController().signal,
@@ -129,7 +128,6 @@ describe("Agent setting capabilities", () => {
                 ),
         );
         const session = await manager.createSession({
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             signal: new AbortController().signal,
@@ -192,13 +190,11 @@ describe("Agent setting capabilities", () => {
 
         try {
             const prepared = await manager.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
                 target: await manager.createNativeSession({
                     agent,
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -250,7 +246,6 @@ describe("Agent setting capabilities", () => {
                 ),
         );
         const session = await manager.createSession({
-            additionalDirectories: [],
             agent,
             cwd: process.cwd(),
             signal: new AbortController().signal,
@@ -280,7 +275,6 @@ it("Given ACP exposes select and boolean settings, When a user configures the co
     expect(prepared).toMatchObject({
         agentName: "Morty test agent",
         capabilities: {
-            additionalDirectories: true,
             embeddedContextPrompt: true,
             imagePrompt: true,
             loadSession: true,

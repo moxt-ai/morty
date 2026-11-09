@@ -11,7 +11,6 @@ const directoryIdentifier = v.custom<string>(isDirectoryIdentifier);
 
 /** The binding of an existing Session: each omitted field is the Session's own. */
 export const sessionBindingEntries = {
-    additionalDirectoryIds: v.optional(v.pipe(v.array(directoryIdentifier), v.maxLength(16))),
     agentId: v.optional(identifier),
     directoryId: v.optional(directoryIdentifier),
 };

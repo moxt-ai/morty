@@ -409,7 +409,6 @@ export async function importRealSession(
         agentId,
         bindingId: peer.bindingId,
         directoryId: "default",
-        additionalDirectoryIds: [],
         discoveryId: randomUUID(),
     } as const;
     const receive = async (requestId: string) => {
@@ -439,7 +438,6 @@ export async function importRealSession(
             ...identity,
             discoveryId: found.discoveryId,
             directoryId: found.entry.directoryId,
-            additionalDirectoryIds: found.entry.additionalDirectories.map((directory) => directory.directoryId),
             action: "import",
             entryId: found.entry.entryId,
             requestId: importId,
@@ -464,7 +462,6 @@ export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId:
             agentId,
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
         }),
     );
     for (;;) {
