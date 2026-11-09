@@ -1,7 +1,7 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectBrowserCredential = sqliteTable(
-    "project_browser_credentials",
+    "machine_browser_credentials",
     {
         credentialId: text("credential_id").primaryKey(),
         projectId: text("project_id").notNull(),
@@ -13,7 +13,7 @@ export const projectBrowserCredential = sqliteTable(
         revokedAt: integer("revoked_at"),
     },
     (table) => [
-        index("project_browser_credentials_project").on(
+        index("machine_browser_credentials_project").on(
             table.projectId,
             table.revokedAt,
             table.expiresAt,

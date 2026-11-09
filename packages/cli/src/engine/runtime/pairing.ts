@@ -23,7 +23,8 @@ import type { RuntimeInstallationStore } from "./connection/runtime-installation
 const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-const REDEEM_RESPONSE_KEYS: readonly string[] = ["appId", "channelId", "runtimeCredential", "runtimeId"];
+
+const REDEEM_RESPONSE_KEYS = ["channelId", "runtimeCredential", "runtimeId"] as const;
 
 interface PairCommandOptions {
     readonly code: string;
@@ -33,7 +34,6 @@ interface PairCommandOptions {
 }
 
 interface ClaimPairingResponse {
-    readonly appId: string;
     readonly channelId: string;
     readonly runtimeCredential: string;
     readonly runtimeId: string;
@@ -150,13 +150,10 @@ function decodePairingResponse(value: unknown): ClaimPairingResponse {
     if (!isRecord(value) || !hasExactKeys(value, REDEEM_RESPONSE_KEYS)) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    const appId = value["appId"];
     const channelId = value["channelId"];
     const runtimeCredential = value["runtimeCredential"];
     const runtimeId = value["runtimeId"];
     if (
-        typeof appId !== "string" ||
-        !isIdentifier(appId) ||
         typeof channelId !== "string" ||
         !isIdentifier(channelId) ||
         typeof runtimeCredential !== "string" ||
@@ -166,7 +163,7 @@ function decodePairingResponse(value: unknown): ClaimPairingResponse {
     ) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    return { appId, channelId, runtimeCredential, runtimeId };
+    return { channelId, runtimeCredential, runtimeId };
 }
 
 async function claimPairing(
@@ -276,7 +273,6 @@ async function pairRuntime(
     const claim = await claimPairing(options, defaultWorkspace, inventory.readyAgents(), signal);
     const connection = await installation.saveConnection(
         {
-            appId: claim.appId,
             channelId: claim.channelId,
             defaultWorkspace,
             pairingId: options.pairingId,

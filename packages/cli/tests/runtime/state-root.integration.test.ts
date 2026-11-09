@@ -50,7 +50,7 @@ async function openedStateRoot(): Promise<{
     const root = join(home, "state");
     const listed = await runCli(["pair", "list"], environment(home, root));
     expect(listed.code, listed.stderr).toBe(0);
-    const application = join(root, "versions", packageMetadata.version, "installations", "build.morty.cli");
+    const application = join(root, "machine");
     const pointer: unknown = JSON.parse(await readFile(join(application, "current.json"), "utf8"));
     const installationId =
         typeof pointer === "object" && pointer !== null && "installationId" in pointer ? pointer.installationId : null;
@@ -66,27 +66,16 @@ function environment(home: string, stateDirectory: string): NodeJS.ProcessEnv {
 
 describe("Morty state root", () => {
     it.each(["pair list", "start"])(
-        "Given the version-data directory is a symlink, When the user runs %s, Then the CLI or Worker refuses without creating connection state in the link target",
+        "Given the installation directory is a symlink, When the user runs %s, Then the CLI or Worker refuses without creating connection state in the link target",
         async (command) => {
             const home = await mkdtemp(join(tmpdir(), "morty-version-container-"));
             temporaryDirectories.push(home);
             const root = join(home, "state");
             const target = join(home, "redirected");
-            await mkdir(join(root, "versions"), { recursive: true, mode: 0o700 });
+            await mkdir(root, { recursive: true, mode: 0o700 });
             await mkdir(target, { mode: 0o700 });
-            await symlink(
-                target,
-                join(root, "versions", packageMetadata.version),
-                process.platform === "win32" ? "junction" : "dir",
-            );
-
+            await symlink(target, join(root, "machine"), process.platform === "win32" ? "junction" : "dir");
             const env = environment(home, root);
-            if (command === "start") {
-                // Startup must validate the container even when no inheritance is needed.
-                await writeFile(join(root, "current-data.txt"), `versions/${packageMetadata.version}\n`, {
-                    mode: 0o600,
-                });
-            }
             try {
                 const result = await runCli(command === "start" ? ["start"] : ["pair", "list"], env);
 
@@ -101,14 +90,13 @@ describe("Morty state root", () => {
     );
 
     it.skipIf(process.platform === "win32")(
-        "Given a user-owned version-data directory allows other users to write, When the user lists pairings, Then the CLI makes the container private before initializing state",
+        "Given a user-owned installation directory allows other users to write, When the user lists pairings, Then the CLI makes the container private before initializing state",
         async () => {
             const home = await mkdtemp(join(tmpdir(), "morty-version-container-"));
             temporaryDirectories.push(home);
             const root = join(home, "state");
             await runCli(["pair", "list"], environment(home, root));
-            const versionDirectory = join(root, "versions", packageMetadata.version);
-            await mkdir(versionDirectory, { recursive: true });
+            const versionDirectory = join(root, "machine");
             await chmod(versionDirectory, 0o777);
 
             const listed = await runCli(["pair", "list"], environment(home, root));
@@ -131,7 +119,7 @@ describe("Morty state root", () => {
 
     it("Given an installation's data where an earlier nested Morty only left control files, When Morty runs there, Then it still refuses instead of treating it as a root", async () => {
         const { root, installation, home } = await openedStateRoot();
-        await mkdir(join(installation, "installations", "build.morty.cli"), { recursive: true, mode: 0o700 });
+        await mkdir(join(installation, "machine"), { recursive: true, mode: 0o700 });
 
         const listed = await runCli(["pair", "list"], environment(home, installation));
 

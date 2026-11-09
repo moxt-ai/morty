@@ -127,6 +127,20 @@
             "when": 1794186842484,
             "tag": "0017_drop_recording_policies",
             "breakpoints": true
+        },
+        {
+            "idx": 18,
+            "version": "6",
+            "when": 1794197408907,
+            "tag": "0018_retain_service_revocations",
+            "breakpoints": true
+        },
+        {
+            "idx": 19,
+            "version": "6",
+            "when": 1794197417454,
+            "tag": "0019_machine_accounts",
+            "breakpoints": true
         }
     ]
 }

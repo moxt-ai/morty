@@ -57,15 +57,14 @@ export function createPlatformControlApplication() {
             ),
         )
         .post(
-            "/v1/apps/:appId/projects",
+            "/v1/machine-accounts",
             bodyParser(createProjectBody),
             authenticateWith(appCredentialAuthentication),
             async (context) => {
                 const value = context.req.valid("json");
                 return context.json(
-                    await context.env.control.provisionAppProject(
+                    await context.env.control.provisionMachineAccount(
                         context.var.principal,
-                        path(context.req.param("appId")),
                         value.displayName,
                         value.idempotencyKey,
                         value.clientReference,

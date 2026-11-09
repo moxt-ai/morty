@@ -23,7 +23,7 @@ export class AppCredentialAuthenticationService {
             const permissions = credentialPermissions(row).granted;
             return {
                 kind: "application",
-                tenantId: row.tenant_id,
+                publicCredentialId: row.public_credential_id,
                 appId: row.app_id,
                 credentialId: row.credential_id,
                 permissions,

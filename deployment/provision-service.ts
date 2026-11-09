@@ -4,7 +4,7 @@ import { and, eq, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
 import { PLATFORM_APP_PROJECT_PERMISSIONS } from "../packages/client/src/protocol/index.ts";
-import { platformApp, platformAppCredential } from "../packages/relay/src/schema/d1/index.ts";
+import { serviceCredential } from "../packages/relay/src/schema/d1/index.ts";
 
 const account = "b903018a1c3d9d9a4bd68a11eb03e764";
 const targetSchema = v.object({ d1_id: v.string(), app_id: v.string() });
@@ -52,27 +52,17 @@ async function query(statement: { readonly sql: string; readonly params: readonl
     const value = v.parse(envelope, await response.json());
     return value.result.flatMap((result) => result.results);
 }
-const applications = await query(
-    database
-        .select({ id: platformApp.appId })
-        .from(platformApp)
-        .where(and(eq(platformApp.appId, target.app_id), eq(platformApp.lifecycle, "active")))
-        .toSQL(),
-);
-if (applications.length !== 1) {
-    throw new Error("The deployment-owned Morty service identity is unavailable");
-}
 const credentials = await query(
     database
         .select()
-        .from(platformAppCredential)
-        .where(eq(platformAppCredential.publicCredentialId, publicCredentialId))
+        .from(serviceCredential)
+        .where(eq(serviceCredential.publicCredentialId, publicCredentialId))
         .toSQL(),
 );
 const existing = credentials[0];
 if (
     existing !== undefined &&
-    (existing["app_id"] !== target.app_id ||
+    (existing["service_id"] !== target.app_id ||
         existing["secret_digest"] !== secretDigest ||
         existing["revoked_at"] !== null)
 ) {
@@ -82,7 +72,7 @@ if (operation === "prepare") {
     if (existing === undefined) {
         await query(
             database
-                .insert(platformAppCredential)
+                .insert(serviceCredential)
                 .values({
                     credentialId,
                     publicCredentialId,
@@ -102,13 +92,13 @@ if (operation === "prepare") {
     // Called only after the compiled deployment and its real HTTP/asset health checks pass.
     await query(
         database
-            .update(platformAppCredential)
+            .update(serviceCredential)
             .set({ revokedAt: Date.now() })
             .where(
                 and(
-                    eq(platformAppCredential.appId, target.app_id),
-                    ne(platformAppCredential.publicCredentialId, publicCredentialId),
-                    isNull(platformAppCredential.revokedAt),
+                    eq(serviceCredential.appId, target.app_id),
+                    ne(serviceCredential.publicCredentialId, publicCredentialId),
+                    isNull(serviceCredential.revokedAt),
                 ),
             )
             .toSQL(),

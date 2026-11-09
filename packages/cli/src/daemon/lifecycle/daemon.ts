@@ -1,7 +1,5 @@
-import { realpath } from "node:fs/promises";
 import { refreshAgentCatalog } from "../../engine/runtime/catalog/refresh-agent-catalog.ts";
 import type { RuntimeConfig } from "../../engine/runtime/config.ts";
-import { RuntimeInstallationStore } from "../../engine/runtime/connection/runtime-installation-store.ts";
 import { prepareRuntimeConnection } from "../../engine/runtime/pairing.ts";
 import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
 import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
@@ -10,12 +8,11 @@ import type { InstallationDirectory } from "../../engine/storage/installation/in
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
 import { logDirectory, WORKER_LIFECYCLE_LOG_FILENAME } from "../../engine/storage/logs/log-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
-import { releaseEntry, requireInstalledRelease } from "../../installation/releases.ts";
 import { acquireDaemonLock } from "../../storage/daemon/daemon-lock.ts";
-import { prepareMortyEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
+import { resolveMaxAcpProcesses } from "../config.ts";
 import { sendLocalRequest } from "../control/local-client.ts";
 import { serveLocalControl } from "../control/local-server.ts";
-import { openMortyControlInstallation } from "../pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../pairing/pair-local-machine.ts";
 import { surviveUnhandledRejections, type UnhandledRejectionGuard } from "./unhandled-rejection.ts";
 
 class DaemonRuntimeError extends Error {
@@ -53,7 +50,9 @@ export async function releaseIdleAgentProcesses(
         if (typeof response === "object" && response !== null && "kind" in response && response.kind === "released") {
             return;
         }
-        throw new Error("The running daemon cannot release Agent sessions. Run `morty update` to update it first.");
+        throw new Error(
+            "The running daemon cannot release Agent sessions. Restart the daemon with the current Morty CLI first.",
+        );
     } catch (cause) {
         if (!isNodeError(cause, "ENOENT") && !isNodeError(cause, "ECONNREFUSED")) {
             throw cause;
@@ -62,15 +61,6 @@ export async function releaseIdleAgentProcesses(
 }
 
 export async function runDaemon(version: string, signal: AbortSignal): Promise<void> {
-    const installed = await requireInstalledRelease(signal);
-    const invoked = process.argv[1];
-    if (
-        installed.version !== version ||
-        invoked === undefined ||
-        (await realpath(invoked)) !== (await realpath(releaseEntry(installed)))
-    ) {
-        throw new Error("Morty release changed during startup; retry start using the selected installation");
-    }
     // Install before any await: an unhandled rejection during startup itself
     // must not kill the daemon before the guard exists.
     const rejectionGuard = surviveUnhandledRejections();
@@ -79,7 +69,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     try {
         await runDaemonRuntime(version, combined, shutdown, rejectionGuard);
     } catch (cause) {
-        const control = await openMortyControlInstallation(AbortSignal.timeout(5_000), process.env);
+        const control = await openMortyInstallation(AbortSignal.timeout(5_000), process.env);
         new BoundedLineLog(logDirectory(control.stateDirectory), WORKER_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
             JSON.stringify({
                 kind: "daemon_failed",
@@ -99,8 +89,8 @@ async function runDaemonRuntime(
     shutdown: AbortController,
     rejectionGuard: UnhandledRejectionGuard,
 ): Promise<void> {
-    const control = await openMortyControlInstallation(combined, process.env);
-    const releaseDaemon = await acquireDaemonLock(control.stateDirectory, "manager.lock");
+    const control = await openMortyInstallation(combined, process.env);
+    const releaseDaemon = await acquireDaemonLock(control.stateDirectory);
     if (releaseDaemon === null) {
         return;
     }
@@ -113,42 +103,33 @@ async function runDaemonRuntime(
         JSON.stringify({ kind: "daemon_started", pid: process.pid, version, timestamp: new Date().toISOString() }),
     );
     try {
-        const engineDataDir = await prepareMortyEngineDataDir(version, combined, process.env);
-        const installation = await RuntimeInstallationStore.open(engineDataDir, combined);
+        const installation = control;
         rejectionGuard.bindStateDirectory(control.stateDirectory);
         const turnActivity = new RuntimeTurnActivity();
         const agentProcesses = new RuntimeAgentProcesses();
-        const active = new Map<
-            string,
-            {
-                readonly config: RuntimeConfig;
-                readonly controller: AbortController;
-                readonly completion: Promise<void>;
-            }
-        >();
+        let active:
+            | {
+                  readonly connectionId: string;
+                  readonly config: RuntimeConfig;
+                  readonly controller: AbortController;
+                  readonly completion: Promise<void>;
+              }
+            | undefined;
         const fail = (connectionId: string, cause: unknown): void => {
             console.error(`Runtime ${connectionId} failed; stopping the daemon`, cause);
             shutdown.abort(new DaemonRuntimeError(connectionId, cause));
         };
         const reconcile = async (): Promise<void> => {
-            const connections = await installation.listConnections(combined);
-            const enabled = new Set(
-                connections
-                    .filter((connection) => connection.activation === "active")
-                    .map((connection) => connection.connectionId),
-            );
-            for (const [id, running] of active) {
-                if (enabled.has(id)) {
-                    continue;
+            const connection = await installation.currentConnection(combined);
+            if (active !== undefined) {
+                if (connection?.activation === "active" && connection.connectionId === active.connectionId) {
+                    return;
                 }
-                running.controller.abort();
-                await running.completion;
-                active.delete(id);
+                active.controller.abort();
+                await active.completion;
+                active = undefined;
             }
-            for (const connection of connections) {
-                if (!enabled.has(connection.connectionId) || active.has(connection.connectionId)) {
-                    continue;
-                }
+            if (connection?.activation === "active") {
                 try {
                     const config = await prepareRuntimeConnection(
                         installation,
@@ -165,49 +146,25 @@ async function runDaemonRuntime(
                         turnActivity,
                         agentProcesses,
                     });
-                    const completion = loop
-                        .run(AbortSignal.any([combined, controller.signal]))
-                        .then(
-                            () => {
-                                if (!combined.aborted && !controller.signal.aborted) {
-                                    fail(connection.connectionId, new Error("The Runtime stopped unexpectedly"));
-                                }
-                            },
-                            (cause: unknown) => {
-                                if (!combined.aborted && !controller.signal.aborted) {
-                                    fail(connection.connectionId, cause);
-                                }
-                            },
-                        )
-                        .finally(() => active.delete(connection.connectionId));
-                    active.set(connection.connectionId, { config, controller, completion });
+                    const completion = loop.run(AbortSignal.any([combined, controller.signal])).then(
+                        () => {
+                            if (!combined.aborted && !controller.signal.aborted) {
+                                fail(connection.connectionId, new Error("The Runtime stopped unexpectedly"));
+                            }
+                        },
+                        (cause: unknown) => {
+                            if (!combined.aborted && !controller.signal.aborted) {
+                                fail(connection.connectionId, cause);
+                            }
+                        },
+                    );
+                    active = { connectionId: connection.connectionId, config, controller, completion };
                 } catch (cause) {
                     combined.throwIfAborted();
                     fail(connection.connectionId, cause);
                     throw cause;
                 }
             }
-        };
-        const refreshRunningCatalogs = async (connectionIds: ReadonlySet<string>): Promise<void> => {
-            await Promise.all(
-                [...connectionIds].map(async (connectionId) => {
-                    const config = active.get(connectionId)?.config;
-                    if (config?.rediscoverAgents === undefined) {
-                        return;
-                    }
-                    try {
-                        await refreshAgentCatalog(
-                            config,
-                            config.rediscoverAgents,
-                            AbortSignal.any([combined, AbortSignal.timeout(90_000)]),
-                        );
-                    } catch (cause) {
-                        combined.throwIfAborted();
-                        // The Runtime keeps serving its previous catalog; the reload itself still applies.
-                        console.error(`Runtime ${connectionId} could not refresh its Agent catalog`, cause);
-                    }
-                }),
-            );
         };
         let reload: Promise<void> = Promise.resolve();
         const handle = async (request: unknown) => {
@@ -229,8 +186,22 @@ async function runDaemonRuntime(
             }
             // A reload, such as `morty start` after the user installs or signs in to an Agent, also re-reads the
             // Agent inventory of Runtimes that were already running; Runtimes it starts read it themselves.
-            const running = new Set(active.keys());
-            const pending = reload.then(reconcile).then(async () => await refreshRunningCatalogs(running));
+            const pending = reload.then(async () => {
+                const previous = active;
+                await reconcile();
+                if (active !== undefined && previous === active && active.config.rediscoverAgents !== undefined) {
+                    try {
+                        await refreshAgentCatalog(
+                            active.config,
+                            active.config.rediscoverAgents,
+                            AbortSignal.any([combined, AbortSignal.timeout(90_000)]),
+                        );
+                    } catch (cause) {
+                        combined.throwIfAborted();
+                        console.error("Could not refresh the Agent catalog", cause);
+                    }
+                }
+            });
             reload = pending.catch(() => undefined);
             await pending;
             return { kind: "reloaded" };
@@ -267,7 +238,7 @@ async function runDaemonRuntime(
         } finally {
             shutdown.abort();
             await reload;
-            await Promise.all([...active.values()].map((running) => running.completion));
+            await active?.completion;
         }
     } finally {
         await releaseDaemon();

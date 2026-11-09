@@ -82,7 +82,6 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         try {
             const saved = await engine.getConnectionManager().save(
                 {
-                    appId: "environment-app",
                     channelId: "environment-channel",
                     defaultWorkspace: workspace,
                     pairingId: "environment-pairing",

@@ -1,6 +1,5 @@
 import { Command, CommanderError } from "commander";
 import packageMetadata from "../../package.json" with { type: "json" };
-import { dispatchInstalledCommand } from "../installation/dispatch.ts";
 import { StateRootError, validateStateRoot } from "../storage/state-root.ts";
 
 import type { CliContext } from "./context.ts";
@@ -34,20 +33,19 @@ function createProgram(cliContext: CliContext): Command {
     return program;
 }
 
-export async function runCLI(): Promise<void> {
+export async function runCLI(entry: string): Promise<void> {
     const shutdown = new AbortController();
     const abort = (): void => shutdown.abort();
     process.once("SIGINT", abort);
     process.once("SIGTERM", abort);
     const context: CliContext = {
+        entry,
         shutdownSignal: shutdown.signal,
         version: packageMetadata.version,
     };
     try {
         await validateStateRoot(process.env);
-        if (!(await dispatchInstalledCommand(shutdown.signal))) {
-            await createProgram(context).parseAsync(process.argv);
-        }
+        await createProgram(context).parseAsync(process.argv);
     } catch (error) {
         if (error instanceof CommanderError) {
             process.exitCode = error.exitCode;

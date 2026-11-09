@@ -1,14 +1,11 @@
 import type { Command } from "commander";
 import { readDaemonVersion } from "../../../daemon/lifecycle/daemon-client.ts";
-import { openMortyControlInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
-import { readInstalledRelease } from "../../../installation/releases.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
 import type { CliContext } from "../../context.ts";
 
 async function reportInstallationVersion(context: CliContext): Promise<void> {
-    const control = await openMortyControlInstallation(context.shutdownSignal, process.env);
+    const control = await openMortyInstallation(context.shutdownSignal, process.env);
     const daemonVersion = await readDaemonVersion(control.stateDirectory, context.shutdownSignal);
-    const installed = await readInstalledRelease(context.shutdownSignal);
-    process.stdout.write(`Installed: ${installed?.version ?? "not installed"}\n`);
     process.stdout.write(`CLI: ${context.version}\n`);
     process.stdout.write(`Daemon: ${daemonVersion ?? "not running"}\n`);
 }

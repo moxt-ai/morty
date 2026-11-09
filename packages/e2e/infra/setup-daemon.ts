@@ -10,7 +10,6 @@ import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{
-    app_id: string;
     connection_id: string;
     runtime_id: string;
     channel_id: string;
@@ -87,8 +86,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify(
-                    Array.from(this.#saved.values(), ({ app_id, connection_id, runtime_id }) => ({
-                        app_id,
+                    Array.from(this.#saved.values(), ({ connection_id, runtime_id }) => ({
                         connection_id,
                         runtime_id,
                     })),
@@ -150,7 +148,6 @@ export class ControlledSetupRuntime implements SetupRuntime {
             signal,
         });
         const connection: Connection = {
-            app_id: text(claim["appId"], "App ID"),
             channel_id: text(claim["channelId"], "Channel ID"),
             connection_id: crypto.randomUUID(),
             runtime_id: text(claim["runtimeId"], "Runtime ID"),

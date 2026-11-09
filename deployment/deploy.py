@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,7 +68,7 @@ def main():
     assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
     assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
     assert not platform.get('services')
-    assert morty['vars']['MORTY_RELAY_URL'] == expected['platform_origin'] and morty['vars']['MORTY_SERVICE_ID'] == expected['app_id']
+    assert morty['vars']['MORTY_RELAY_URL'] == expected['platform_origin']
     assert morty['r2_buckets'] == [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': expected['buckets']['attachments']}]
     assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
     assert json.loads(platform['vars']['MORTY_ALLOWED_ORIGINS']) == expected['allowed_origins']
@@ -121,7 +122,14 @@ def main():
     app_secret = secrets_by_component['morty'].get('MORTY_SERVICE_SECRET')
     if not isinstance(app_secret, str) or not app_secret:
         raise ValueError('Missing production application credential')
-    credentials = cloud('/d1/database/' + expected['d1_id'] + '/query', {'sql': "SELECT c.secret_digest FROM platform_app_credentials c JOIN platform_apps a ON a.app_id = c.app_id WHERE a.app_id = ? AND a.lifecycle = 'active' AND c.revoked_at IS NULL", 'params': [expected['app_id']]})
+    directory = '/d1/database/' + expected['d1_id'] + '/query'
+    # Preflight runs before migrations and npm publication. Inspect the current schema without writing.
+    migrated = cloud(directory, {'sql': "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'service_credentials'"})
+    if any(result['results'] for result in migrated):
+        query = "SELECT secret_digest FROM service_credentials WHERE service_id = ? AND all_accounts = 1 AND revoked_at IS NULL AND (replaced_by_credential_id IS NULL OR overlap_ends_at > ?)"
+    else:
+        query = "SELECT c.secret_digest FROM platform_app_credentials c JOIN platform_apps a ON a.app_id = c.app_id WHERE a.app_id = ? AND a.lifecycle = 'active' AND c.all_projects = 1 AND c.revoked_at IS NULL AND (c.replaced_by_credential_id IS NULL OR c.overlap_ends_at > ?)"
+    credentials = cloud(directory, {'sql': query, 'params': [expected['app_id'], int(time.time() * 1000)]})
     if not all(item.get('success') and item.get('meta', {}).get('rows_written', 0) == 0 for item in credentials):
         raise ValueError('Production credential verification failed')
     digest = hashlib.sha256(app_secret.encode()).hexdigest()

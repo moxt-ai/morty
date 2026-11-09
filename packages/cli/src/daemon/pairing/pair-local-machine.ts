@@ -1,14 +1,13 @@
 import { join } from "node:path";
 import { claimMortyState } from "@morty-build/local-state";
-import packageMetadata from "../../../package.json" with { type: "json" };
 import type { VerifiedRuntimeConnection } from "../../engine/runtime/connection/runtime-connection.ts";
 import {
     RuntimeInstallationStore,
     RuntimeInstallationStoreError,
 } from "../../engine/runtime/connection/runtime-installation-store.ts";
-import { MortyRuntimeEngine } from "../../engine/runtime/engine.ts";
 import {
     PairingClientError,
+    pairRuntimeConnection,
     parsePairingCode,
     parseRelayOrigin,
     prepareRuntimeConnection,
@@ -17,7 +16,7 @@ import {
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
-import { prepareMortyEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
+import { resolveMaxAcpProcesses } from "../config.ts";
 
 function readSingleOption(arguments_: readonly string[], option: string): string {
     const values: string[] = [];
@@ -53,7 +52,7 @@ function parsePairCommand(arguments_: readonly string[], defaultWorkspace: strin
     };
 }
 
-export async function openMortyControlInstallation(
+export async function openMortyInstallation(
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<RuntimeInstallationStore> {
@@ -70,18 +69,7 @@ export async function openMortyControlInstallation(
             { cause },
         );
     }
-    return await RuntimeInstallationStore.open(join(root, "installations", "build.morty.cli"), signal);
-}
-
-// Commands and daemons resolve the same directory before writing any data.
-export async function openMortyCliInstallation(
-    signal: AbortSignal,
-    environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<RuntimeInstallationStore> {
-    return await RuntimeInstallationStore.open(
-        await prepareMortyEngineDataDir(packageMetadata.version, signal, environment),
-        signal,
-    );
+    return await RuntimeInstallationStore.open(join(root, "machine"), signal);
 }
 
 export async function pairLocalMachine(
@@ -89,12 +77,10 @@ export async function pairLocalMachine(
     signal: AbortSignal = new AbortController().signal,
 ): Promise<VerifiedRuntimeConnection> {
     const requested = parsePairCommand(arguments_, "");
-    const engineDataDir = await prepareMortyEngineDataDir(packageMetadata.version, signal, process.env);
-    const engine = new MortyRuntimeEngine({ engineDataDir, agentLaunchEnvironment: process.env });
-    const installation = await RuntimeInstallationStore.open(engineDataDir, signal);
+    const installation = await openMortyInstallation(signal, process.env);
     if (requested.pairingId.length > 0) {
         const existing = await installation.readConnectionForPairing(requested.pairingId, signal);
-        if (existing !== null) {
+        if (existing !== null && existing.relayOrigin.origin === requested.relayOrigin.origin) {
             await prepareRuntimeConnection(
                 installation,
                 existing,
@@ -105,7 +91,8 @@ export async function pairLocalMachine(
             return existing;
         }
     }
-    return await engine.pair(
+    return await pairRuntimeConnection(
+        installation,
         {
             pairingCode: requested.code,
             pairingId: requested.pairingId,
@@ -115,5 +102,6 @@ export async function pairLocalMachine(
                 : join(readStateDirectory(), "workspace"),
         },
         signal,
+        process.env,
     );
 }

@@ -9,7 +9,6 @@ import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
 import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
-import runtimeRelease from "../../cli/package.json" with { type: "json" };
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import { claimMortyState } from "../../local-state/src/ownership.ts";
 import worker from "../src/application.ts";
@@ -17,7 +16,7 @@ import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
 // Exercise the package-runner boundary, including the production argument prefix.
 async function writeNpxFixture(bin: string, body: string): Promise<void> {
-    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@morty-build/cli@${runtimeRelease.version}'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
+    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@morty-build/cli@latest'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
     if (process.platform === "win32") {
         const directory = join(bin, "node_modules", "npm", "bin");
         await mkdir(directory, { recursive: true });
@@ -236,7 +235,7 @@ test.each([
     },
 );
 
-test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as const)(
+test.each(["missing", "unlaunchable"] as const)(
     "Given a %s local dependency, When setup checks the Morty executable, Then it fails before creating an identity and reports recovery instructions",
     async (failure) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-preflight-"));
@@ -247,19 +246,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
         try {
             if (failure !== "missing") {
                 const entry = join(bin, "broken.mjs");
-                await writeFile(
-                    entry,
-                    failure === "unlaunchable"
-                        ? "await using = ;"
-                        : `import ${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)};`,
-                );
-                if (failure === "npm-unlaunchable") {
-                    await writeFile(
-                        join(bin, process.platform === "win32" ? "npm.cmd" : "npm"),
-                        process.platform === "win32" ? "@exit /b 42\r\n" : `#!${process.execPath}\nprocess.exit(42);\n`,
-                        { mode: 0o700 },
-                    );
-                }
+                await writeFile(entry, "await using = ;");
                 await writeNpxFixture(bin, `await import(${JSON.stringify(pathToFileURL(entry).href)});`);
             }
             let output = "";
@@ -321,7 +308,7 @@ test("Given a local workspace and a private state directory, When setup creates 
     await mkdir(bin);
     await writeNpxFixture(
         bin,
-        `if (process.argv[2] === "install") process.argv.splice(3, 2, "--archive", ${JSON.stringify(fileURLToPath(new URL(`../../../.release/morty-build-cli-${runtimeRelease.version}.tgz`, import.meta.url)))}); await import(${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+        `await import(${JSON.stringify(new URL("../../../packages/cli/dist/cli.js", import.meta.url).href)});`,
     );
     const runner = join(directory, "setup.mjs");
     await writeFile(
@@ -458,15 +445,15 @@ test.runIf(process.platform !== "win32")(
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
         const state =
             process.platform === "darwin"
-                ? join(directory, "Library", "Application Support", "Morty", "v2")
-                : join(directory, ".local", "state", "morty", "v2");
+                ? join(directory, "Library", "Application Support", "Morty", "v3")
+                : join(directory, ".local", "state", "morty", "v3");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
         const bin = join(directory, "bin");
         await mkdir(bin);
         await writeNpxFixture(
             bin,
-            `if (process.argv[2] === "install") process.argv.splice(3, 2, "--archive", ${JSON.stringify(fileURLToPath(new URL(`../../../.release/morty-build-cli-${runtimeRelease.version}.tgz`, import.meta.url)))}); await import(${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+            `await import(${JSON.stringify(new URL("../../../packages/cli/dist/cli.js", import.meta.url).href)});`,
         );
         const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
@@ -571,7 +558,6 @@ for (const [failure, scenario] of starterFailures) {
                 });
                 await runtime.disconnect();
                 const connection = {
-                    app_id: fixture.baseConfiguration.MORTY_SERVICE_ID,
                     runtime_id: runtime.runtimeId,
                     connection_id: "managed-test-connection",
                 };

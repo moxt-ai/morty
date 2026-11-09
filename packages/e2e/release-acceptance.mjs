@@ -86,7 +86,6 @@ try {
     );
     receipt.version = metadata.version;
     if (!origin.startsWith("https:")) {
-        await cli("install", "--archive", archive);
         environment.MORTY_LOCAL_CLI = entry;
     }
     stage("create-real-native-session");
@@ -215,9 +214,9 @@ try {
     let localClean = !packageInstalled;
     if (packageInstalled) {
         try {
-            await cleanupCli("uninstall");
+            await cleanupCli("stop");
             const status = (await cleanupCli("status")).stdout;
-            localClean = status.includes("Installed: not installed") && status.includes("Daemon: not running");
+            localClean = status.includes("Daemon: not running");
         } catch {
             localClean = false;
         }

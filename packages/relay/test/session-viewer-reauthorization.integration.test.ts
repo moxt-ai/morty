@@ -51,7 +51,7 @@ class Inbox {
 
 async function openSessionView(slug: string) {
     const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
-    const { appId, defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const { defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
         "content-type": "application/json",
@@ -67,7 +67,7 @@ async function openSessionView(slug: string) {
     const { projectId } = v.parse(
         v.object({ projectId: v.string() }),
         await (
-            await dashboard(`apps/${appId}/projects`, {
+            await dashboard("machine-accounts", {
                 displayName: `Viewer check Project ${slug}`,
                 idempotencyKey: `viewer-check-project-${slug}`,
                 locationHint: "apac",
@@ -147,7 +147,7 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
 
     // The revocation commits, but its push never reaches this Runtime's Relay (or reached it before the view opened).
     await env.PLATFORM_DIRECTORY_DATABASE.prepare(
-        "INSERT INTO platform_project_session_access_revocations (project_id, revoked_at) VALUES (?, ?)",
+        "INSERT INTO machine_access_revocations (account_id, revoked_at) VALUES (?, ?)",
     )
         .bind(projectId, Date.now())
         .run();

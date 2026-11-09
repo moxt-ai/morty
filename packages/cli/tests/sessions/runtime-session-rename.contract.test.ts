@@ -6,7 +6,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
     await using platform = await startTestPlatform();
     try {
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Runtime Session rename",

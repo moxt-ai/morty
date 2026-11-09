@@ -51,7 +51,7 @@ class Inbox {
 
 it("Given a quiet /host connection opened with an AppCredential, When the AppCredential is revoked, Then the Relay's next connection check closes it", async () => {
     const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
-    const { appId, defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const { defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
         "content-type": "application/json",
@@ -67,7 +67,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
     const { projectId } = v.parse(
         v.object({ projectId: v.string() }),
         await (
-            await dashboard(`apps/${appId}/projects`, {
+            await dashboard("machine-accounts", {
                 displayName: "Repro8 Project",
                 idempotencyKey: "repro8-project",
                 locationHint: "apac",

@@ -23,10 +23,7 @@ import { collectLocalDaemonLogs } from "../../../src/cli/handler/logs/logic/coll
 import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";
 import { sendLocalRequest } from "../../../src/daemon/control/local-client.ts";
 import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
-import {
-    openMortyCliInstallation,
-    openMortyControlInstallation,
-} from "../../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-machine.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
 import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery/discover-local-agents.ts";
@@ -36,7 +33,6 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/ru
 import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
-import { installWorkspaceDaemonRelease } from "../installed-daemon-release.ts";
 
 export interface RealDaemonPeer {
     /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
@@ -198,11 +194,9 @@ export async function withRealDaemon(
                   })()
                 : null;
         if (launch === "managed") {
-            await installWorkspaceDaemonRelease(cliEnvironment.MORTY_STATE_DIRECTORY);
-            const installation = await openMortyCliInstallation(signal, cliEnvironment);
+            const installation = await openMortyInstallation(signal, cliEnvironment);
             await installation.saveConnection(
                 {
-                    appId: "app_real",
                     channelId: "real-agent",
                     defaultWorkspace: workspace,
                     pairingId: "",
@@ -256,7 +250,7 @@ export async function withRealDaemon(
                 connected = Promise.withResolvers<void>();
                 if (launch === "managed") {
                     if (mode === "crash") {
-                        const control = await openMortyControlInstallation(signal, cliEnvironment);
+                        const control = await openMortyInstallation(signal, cliEnvironment);
                         const status = lifecycleResponse.parse(
                             await sendLocalRequest(control.stateDirectory, { kind: "status" }, signal),
                         );

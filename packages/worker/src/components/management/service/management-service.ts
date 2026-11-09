@@ -7,13 +7,12 @@ import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
-import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
 
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
-    readonly #platformProjects: PlatformProjectStorage;
+    readonly #accountId: string | undefined;
     readonly #platform: PlatformProjectGateway;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
 
@@ -22,13 +21,12 @@ export class ManagementService {
         readonly services: { readonly authentication: AuthenticationService };
         readonly storages: {
             readonly managedBots: ManagedBotStorage;
-            readonly platformProjects: PlatformProjectStorage;
         };
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
-        this.#platformProjects = cx.storages.platformProjects;
+        this.#accountId = cx.config.bindings.CHAT_PROJECT_ID;
         this.#platform = cx.gateways.platformProjects;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
     }
@@ -45,7 +43,6 @@ export class ManagementService {
     ) => {
         const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin, signal);
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
-        await this.#platformProjects.save(userId, project, signal);
         const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, bot: { botId, displayName } };
     };
@@ -92,12 +89,16 @@ export class ManagementService {
         return { botId: bot.botId, runtimeId: bot.configuration?.runtimeId ?? null };
     };
 
-    readonly readProject = async (userId: string, signal: AbortSignal) =>
-        await this.#platformProjects.read(userId, signal);
+    readonly readProject = async (userId: string, signal: AbortSignal) => {
+        const machine = await this.#managedBots.readMachine(userId, signal);
+        return machine === null || this.#accountId === undefined
+            ? null
+            : { projectId: this.#accountId, displayName: machine.displayName };
+    };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {
-        const previous = await this.#platformProjects.read(userId, signal);
+        const previous = await this.readProject(userId, signal);
         if (previous === null) {
             throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }

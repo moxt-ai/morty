@@ -7,7 +7,6 @@ import { join, resolve } from "node:path";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
-import { installWorkspaceDaemonRelease } from "../support/installed-daemon-release.ts";
 
 interface PairingRelay {
     readonly claims: Array<Readonly<Record<string, unknown>>>;
@@ -38,7 +37,6 @@ async function createPairingRelay(): Promise<PairingRelay> {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
-                    appId: "app_unattended",
                     channelId: "unattended-channel",
                     runtimeCredential: "u".repeat(32),
                     runtimeId: "unattended-runtime",
@@ -124,7 +122,6 @@ describe("pairing a machine without a local Agent", () => {
         ];
 
         try {
-            await installWorkspaceDaemonRelease(join(home, "state"));
             const paired = await runCli(pairing, environment, "ABCD-EFGH-JKLM-NPQR-STUV\n");
 
             expect(
@@ -166,7 +163,6 @@ describe("pairing a machine without a local Agent", () => {
             expect(
                 await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(5_000)),
             ).toMatchObject({
-                appId: "app_unattended",
                 channelId: "unattended-channel",
                 runtimeId: "unattended-runtime",
             });

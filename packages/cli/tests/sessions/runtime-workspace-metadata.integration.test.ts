@@ -15,7 +15,6 @@ it("describes a selected directory without browsing its children and still rejec
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Directory metadata",

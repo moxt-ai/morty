@@ -6,8 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
-import { openMortyCliInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
-import { installWorkspaceDaemonRelease } from "../support/installed-daemon-release.ts";
+import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -99,13 +98,11 @@ it("Given a running daemon with a long temporary directory whose Agent catalog w
         PATH: dirname(process.execPath),
         TMPDIR: temporaryFiles,
     };
-    await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
     const relay = await catalogRelay();
 
-    const installation = await openMortyCliInstallation(AbortSignal.timeout(10_000), environment);
+    const installation = await openMortyInstallation(AbortSignal.timeout(10_000), environment);
     await installation.saveConnection(
         {
-            appId: "app_start_catalog",
             channelId: "start-catalog-channel",
             runtimeId: "runtime_start_catalog",
             pairingId: "",

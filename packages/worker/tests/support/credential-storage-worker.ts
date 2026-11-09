@@ -1,7 +1,7 @@
 import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
 import { ProjectDurableObject as Project } from "../../src/components/project/project-durable-object.ts";
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
-import { managedBot, platformProjectMapping } from "../../src/schema/project-do/index.ts";
+import { managedBot } from "../../src/schema/project-do/index.ts";
 
 export { ChatWebSocketDurableObject, default } from "../../src/index.ts";
 
@@ -11,7 +11,7 @@ export class ProjectDurableObject extends Project {
         if (request.url === "https://project.internal/incomplete-bootstrap" && request.method === "DELETE") {
             // Reconstruct an interrupted bootstrap: the credential committed, but the mapping and Machine did not.
             const database = requireIdentityDatabase(new DurableObjectDatabase(this.ctx.storage));
-            await database.batch([database.delete(managedBot), database.delete(platformProjectMapping)]);
+            await database.delete(managedBot).run();
             return new Response(null, { status: 204 });
         }
         if (request.url === "https://project.internal/aged-links" && request.method === "POST") {

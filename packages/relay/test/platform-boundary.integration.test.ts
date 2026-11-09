@@ -292,7 +292,7 @@ describe.sequential("Platform Session-only boundary", () => {
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const create = (displayName: string, locationHint: string) =>
             worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${text(app, "appId")}/projects`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                     body: JSON.stringify({ displayName, idempotencyKey: "retried-project", locationHint }),
                     headers: credentialHeaders(app.defaultCredential.credential),
                     method: "POST",
@@ -315,11 +315,10 @@ describe.sequential("Platform Session-only boundary", () => {
         const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
-        const appId = text(app, "appId");
         const appCredential = text(record(app["defaultCredential"]), "credential");
         const project = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${appId}/projects`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                     body: JSON.stringify({
                         displayName: "Private reconnect Project",
                         idempotencyKey: "private-reconnect-project",
@@ -361,7 +360,7 @@ describe.sequential("Platform Session-only boundary", () => {
             ),
             200,
         );
-        expect(claimed["appId"]).toBe(appId);
+        expect(claimed).not.toHaveProperty("appId");
         const runtimeId = text(claimed, "runtimeId");
         expect(
             await responseJson(
@@ -1214,7 +1213,7 @@ describe.sequential("Platform Session-only boundary", () => {
         const projectId = text(
             await responseJson(
                 await worker.fetch(
-                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${text(app, "appId")}/projects`, {
+                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                         body: JSON.stringify({
                             displayName: "Unattended Project",
                             idempotencyKey: "unattended-project",
@@ -1314,7 +1313,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     const appCredential = text(record(app["defaultCredential"]), "credential");
     const project = await responseJson(
         await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${text(app, "appId")}/projects`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                 body: JSON.stringify({
                     displayName: `${slug} Project`,
                     idempotencyKey: `${slug}-project`,
@@ -2748,7 +2747,7 @@ describe.sequential("Platform Turn submission", () => {
         const appCredential = text(record(app["defaultCredential"]), "credential");
         const project = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${text(app, "appId")}/projects`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                     body: JSON.stringify({
                         displayName: "Long prompt Project",
                         idempotencyKey: "long-prompt-project",
@@ -3016,11 +3015,10 @@ describe.sequential("Platform Turn submission", () => {
         const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
-        const appId = text(app, "appId");
         const appCredential = text(record(app["defaultCredential"]), "credential");
         const project = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${appId}/projects`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                     body: JSON.stringify({
                         displayName: "Capability-gated commands Project",
                         idempotencyKey: "capability-gated-commands-project",
@@ -3189,11 +3187,10 @@ describe.sequential("Platform Turn submission", () => {
         const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
-        const appId = text(app, "appId");
         const appCredential = text(record(app["defaultCredential"]), "credential");
         const project = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${appId}/projects`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
                     body: JSON.stringify({
                         displayName: "Malformed capabilities Project",
                         idempotencyKey: "malformed-capabilities-project",

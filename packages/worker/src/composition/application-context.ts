@@ -6,7 +6,6 @@ import { AuthenticationService } from "../components/management/service/authenti
 import { ManagementService } from "../components/management/service/management-service.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../components/management/storage/managed-bot-storage.ts";
-import { PlatformProjectStorage } from "../components/management/storage/platform-project-storage.ts";
 import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
@@ -21,7 +20,6 @@ export interface ApplicationContext {
         readonly identities: IdentityStorage;
         readonly managedBots: ManagedBotStorage;
         readonly chatSessions: ManagedSessionStorage;
-        readonly platformProjects: PlatformProjectStorage;
     };
     readonly services: {
         readonly authentication: AuthenticationService;
@@ -41,7 +39,6 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
         identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_PROJECT_ID ?? null),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
         chatSessions: new ManagedSessionStorage(bindings.DATABASE),
-        platformProjects: new PlatformProjectStorage(bindings.DATABASE),
     });
     const cx = { ...infrastructure, storages };
     const authentication = new AuthenticationService(cx);

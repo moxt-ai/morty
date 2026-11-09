@@ -115,7 +115,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     const shutdown = new AbortController();
     const loopSignal = AbortSignal.any([signal, shutdown.signal]);
     const engine = new MortyRuntimeEngine({
-        engineDataDir: join(directory, "installations", "probe-app"),
+        engineDataDir: join(directory, "machine"),
         agentLaunchEnvironment: {
             PATH: "",
             MORTY_CODEX_PATH: agent,
@@ -130,7 +130,6 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     });
     const saved = await engine.getConnectionManager().save(
         {
-            appId: "probe-app",
             channelId: "output-drain",
             defaultWorkspace: workspace,
             pairingId: "probe-pairing",

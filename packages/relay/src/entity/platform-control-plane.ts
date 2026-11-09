@@ -55,7 +55,7 @@ export class PlatformAppCredentialAccess {
 
 export interface PlatformApplicationIdentity {
     readonly kind: "application";
-    readonly tenantId: string;
+    readonly publicCredentialId: string;
     readonly appId: string;
     readonly credentialId: string;
     readonly permissions: ReadonlySet<ProjectPermission>;

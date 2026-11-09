@@ -1,7 +1,7 @@
 import { parseMortyApiPrefix } from "@morty-build/client/protocol";
 import type { ChannelGateway } from "../gateway/channel-gateway.ts";
 import type { ProjectAccessAuthorizer } from "../gateway/project-access-authorizer.ts";
-import type { ProjectApplicationResolver } from "../infra/project-application-resolver.ts";
+import type { MachineAccountDirectory } from "../infra/machine-account-directory.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.ts";
 import { ChannelService } from "../service/channel/channel-service.ts";
@@ -12,7 +12,7 @@ import { PairingService } from "../service/pairing/pairing-service.ts";
 
 interface PairingInfrastructure {
     readonly authentication: { readonly projects: ProjectAccessAuthorizer };
-    readonly projectApplications: ProjectApplicationResolver;
+    readonly machineAccounts: MachineAccountDirectory;
     readonly stores: ProjectStoreResolver;
     readonly projects: ProjectStorageDirectory;
     /** The Project stores this execution searches to find the Project a credential belongs to. */
@@ -37,7 +37,7 @@ export interface RelayInfrastructure extends PairingInfrastructure {
 function createPairings(cx: PairingInfrastructure) {
     const identities = new PairingIdentityService(cx.identityStores, cx.stores, cx.projects);
     return new PairingDirectoryService({
-        gateways: { projectApplications: cx.projectApplications },
+        gateways: { machineAccounts: cx.machineAccounts },
         storages: {
             forProject: (project) => cx.stores.resolve(project.storagePlacement),
             projectDirectory: cx.projects,

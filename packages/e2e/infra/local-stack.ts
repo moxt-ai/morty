@@ -117,7 +117,6 @@ export class LocalStack {
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {
         const variables = {
             APP_ORIGIN: this.chatOrigin,
-            MORTY_SERVICE_ID: application.appId,
             MORTY_SERVICE_SECRET: application.appSecret,
             MORTY_RELAY_URL: this.platformOrigin,
         };

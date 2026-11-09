@@ -50,7 +50,7 @@ afterAll(async () => await abortAllDurableObjects());
 
 async function project(_name = "Runtime pairing") {
     const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
-    const { appId, defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const { defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
         "content-type": "application/json",
@@ -66,7 +66,7 @@ async function project(_name = "Runtime pairing") {
     const { projectId } = v.parse(
         v.object({ projectId: v.string() }),
         await responseJson(
-            await dashboard(`apps/${appId}/projects`, {
+            await dashboard("machine-accounts", {
                 displayName: "Runtime pairing Project",
                 idempotencyKey: "runtime-pairing-project",
                 locationHint: "apac",
@@ -104,7 +104,6 @@ async function project(_name = "Runtime pairing") {
     const create = async (idempotencyKey: string) =>
         request(`/v1/projects/${projectId}/runtime-pairings`, "POST", { idempotencyKey });
     return {
-        appId,
         projectId,
         credentialId: defaultCredential.credentialId,
         create,
@@ -243,14 +242,13 @@ it.each(["redeem"] as const)(
         vi.setSystemTime(new Date(Date.now() + 20_000));
         const response = await responseJson(await app.claim(pairing, endpoint, "Retry machine"), 200);
         // A retry returns the exact current redemption contract.
-        const identity = { appId: v.string(), channelId: v.string(), runtimeId: v.string() };
+        const identity = { channelId: v.string(), runtimeId: v.string() };
         const credential = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/));
         const runtimeCredential = v.parse(
             v.strictObject({ ...identity, runtimeCredential: credential }),
             response,
         ).runtimeCredential;
         expect(response).toMatchObject({
-            appId: app.appId,
             channelId: pairing.channelId,
             runtimeId: pairing.runtimeId,
         });

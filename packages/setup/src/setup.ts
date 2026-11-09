@@ -15,11 +15,9 @@ import { validateLocalPath } from "../../../packages/cli/src/engine/util/filesys
 import {
     executableLaunch,
     findExecutableOnPath,
-    runBoundedProcess,
     spawnProcess,
     stopProcessTree,
 } from "../../../packages/cli/src/engine/util/process/executable.ts";
-import runtimeRelease from "../../cli/package.json" with { type: "json" };
 import { resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
@@ -384,7 +382,7 @@ class RuntimeStartError extends Error {
 class RuntimePreflightError extends Error {
     readonly code = "RUNTIME_PREFLIGHT_FAILED";
     readonly nextStep =
-        "Install Node.js 22.19+ or 24.20+ and npm, reinstall the latest @morty-build/cli using that Node.js, then verify morty --version in the same terminal and rerun setup.";
+        "Install Node.js 22.19+ or 24.20+ with npx, run npx --yes @morty-build/cli@latest --version in the same terminal, then rerun setup.";
 
     constructor(message: string, cause?: unknown) {
         super(message, { cause });
@@ -1122,7 +1120,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 launch = executableLaunch(executable.path, [
                     "--yes",
                     "--prefer-online",
-                    `@morty-build/cli@${runtimeRelease.version}`,
+                    "@morty-build/cli@latest",
                     ...args,
                 ]);
             }
@@ -1766,7 +1764,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function preflightRuntime(directory: string, cwd: string) {
-        progress("preflight", "Installing and verifying the selected Morty release before creating an identity.");
+        progress("preflight", "Verifying the Morty CLI before creating an identity.");
         const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
         if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
             throw new RuntimePreflightError(
@@ -1776,31 +1774,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         try {
             // This uses the same executable resolution as start/pair, including the Node
             // selected by its launcher. A package's engines field is not proof it starts.
-            if (host.runtime === undefined && process.env["MORTY_LOCAL_CLI"] === undefined) {
-                await runMorty(
-                    directory,
-                    // runMorty already selects the exact package; install defaults to that CLI's version.
-                    ["install"],
-                    cwd,
-                    AbortSignal.any([signal, deadline(180_000)]),
-                );
-            }
             await runMorty(directory, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
-            if (host.runtime === undefined) {
-                const npm = await findExecutableOnPath("npm", process.env);
-                if (npm === null) {
-                    throw new Error("npm is required for Runtime upgrades");
-                }
-                await runBoundedProcess({
-                    command: npm.path,
-                    arguments: ["--version"],
-                    cwd,
-                    environment: process.env,
-                    signal,
-                    timeoutMilliseconds: 10_000,
-                    outputLimitBytes: 4096,
-                });
-            }
         } catch (cause) {
             signal.throwIfAborted();
             // The installation is fine; the shell names the wrong state root.
