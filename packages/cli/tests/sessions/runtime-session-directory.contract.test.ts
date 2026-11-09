@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { startTestPlatform } from "../support/platform.ts";
 
 for (const client of ["SDK", "HTTP"] as const) {
-    it(`Given a new Session, When ${client} creates and prompts it, Then its conversation uses the Runtime title and workspace without enabling Recording`, async () => {
+    it(`Given a new Session, When ${client} creates and prompts it, Then its conversation uses the Runtime title and workspace`, async () => {
         const cancellation = new AbortController();
         await using platform = await startTestPlatform();
         try {
