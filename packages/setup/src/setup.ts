@@ -1769,11 +1769,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     ) {
         await waitForReadiness(context, runtime, options.harness);
         const botId = context.botId;
-        const transfer = await request(
-            context,
-            "/identity/transfers",
-            options.deviceAccess === null ? {} : { accessDuration: options.deviceAccess },
-        );
+        const transfer = await request(context, "/identity/transfers", {
+            operationId: crypto.randomUUID(),
+            ...(options.deviceAccess === null ? {} : { accessDuration: options.deviceAccess }),
+        });
         const url = new URL(text(transfer["url"]));
         if (
             url.origin !== context.base ||

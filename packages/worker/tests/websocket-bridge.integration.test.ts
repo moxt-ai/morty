@@ -246,8 +246,8 @@ test("Given browser API requests and watches, When the Chat web application uses
             requestId: "request-1",
             method: "POST",
             path: "/morty/api/identity/transfers",
-            headers: [],
-            body: null,
+            headers: [["content-type", "application/json"]],
+            body: JSON.stringify({ operationId: crypto.randomUUID() }),
         }),
     );
     await expect(reply).resolves.toMatchObject({

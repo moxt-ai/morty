@@ -3,6 +3,14 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import worker, { fetchPublicApplication } from "../src/application.ts";
 import { APP_ORIGIN, accountRequest, anonymousCreationKey, createIdentityFixture } from "./support/identity-fixture.ts";
 
+function sharingRequest(): RequestInit {
+    return {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operationId: crypto.randomUUID() }),
+    };
+}
+
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
 
 beforeAll(async () => {
@@ -68,7 +76,7 @@ test("Given a device that opened a link and opens the next one, When the reply i
             environment,
         );
     const share = async () => {
-        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        const shared = await request("/identity/transfers", owner.token, sharingRequest());
         return new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     };
     const redeem = async (code: string, redemptionKey: string, replaces?: string) =>
@@ -103,16 +111,17 @@ test("Given a device that opened a link and opens the next one, When the reply i
 test("Given a device that shared links before and after renewing its credential, When the owner removes it, Then its unused links cannot restore access while other devices and fresh invitations still work", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
-    const request = (path: string, token: string, method = "GET") =>
+    const request = (path: string, token: string, method = "GET", body?: object) =>
         worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 method,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             }),
             environment,
         );
     const share = async (token: string) => {
-        const response = await request("/identity/transfers", token, "POST");
+        const response = await request("/identity/transfers", token, "POST", { operationId: crypto.randomUUID() });
         expect(response.status).toBe(201);
         return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
     };
@@ -278,7 +287,8 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
         const transfer = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/transfers`, {
                 method: "POST",
-                headers: { authorization: `Bearer ${identity.token}` },
+                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ operationId: crypto.randomUUID() }),
             }),
             environment,
         );
@@ -381,7 +391,8 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
     const created = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
             method: "POST",
-            headers: { authorization: `Bearer ${owner.token}` },
+            headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ operationId: crypto.randomUUID() }),
         }),
         environment,
     );
@@ -457,7 +468,8 @@ test("Given an anonymous user with a Machine, When a transfer link is redeemed, 
     const transfer = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/transfers`, {
             method: "POST",
-            headers: { authorization: `Bearer ${identity.token}` },
+            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ operationId: crypto.randomUUID() }),
         }),
         environment,
     );
@@ -530,7 +542,8 @@ test("Given browser access the owner revoked, When the browser presents its cred
     const transfer = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
             method: "POST",
-            headers: { authorization: `Bearer ${owner.token}` },
+            headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ operationId: crypto.randomUUID() }),
         }),
         environment,
     );
@@ -595,7 +608,7 @@ test("Given a browser that opened one link, When it opens another link for the s
             environment,
         );
     const share = async () => {
-        const response = await request("/identity/transfers", owner.token, { method: "POST" });
+        const response = await request("/identity/transfers", owner.token, sharingRequest());
         expect(response.status).toBe(201);
         return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice("#code=".length);
     };
@@ -651,7 +664,7 @@ test("Given a device with a month of access, When it opens a link that grants le
         const response = await request("/identity/transfers", token, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ accessDuration }),
+            body: JSON.stringify({ operationId: crypto.randomUUID(), accessDuration }),
         });
         expect(response.status).toBe(201);
         const link = v.parse(v.object({ url: v.string(), accessExpiresAt: v.string() }), await response.json());
@@ -713,7 +726,7 @@ test("Given two tabs of one browser open new links at once, When the browser lat
             environment,
         );
     const share = async () => {
-        const response = await request("/identity/transfers", owner.token, { method: "POST" });
+        const response = await request("/identity/transfers", owner.token, sharingRequest());
         expect(response.status).toBe(201);
         return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice("#code=".length);
     };
@@ -756,12 +769,12 @@ test("Given browsers that joined through links shared by the computer and by ano
         worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
             environment,
         );
     const join = async (sharer: string, device: string, replaces?: string) => {
-        const shared = await request("/identity/transfers", sharer, { method: "POST" });
+        const shared = await request("/identity/transfers", sharer, sharingRequest());
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const redeemed = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
@@ -830,7 +843,7 @@ test("Given the owner chooses how long a shared device keeps access, When the li
         request("/identity/transfers", owner.token, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify({ operationId: crypto.randomUUID(), ...body }),
         });
     const link = v.object({
         url: v.string(),
@@ -873,6 +886,71 @@ test("Given the owner chooses how long a shared device keeps access, When the li
     expect(session.accessExpiresAt).toBe(week.accessExpiresAt);
 });
 
+test("Given a committed sharing replacement whose reply was lost, When it is retried and two edits compete, Then the original result is recovered and only one successor grants access", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const share = (body: object) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ operationId: crypto.randomUUID(), ...body }),
+            }),
+            environment,
+        );
+    const link = v.object({ url: v.string(), accessExpiresAt: v.string(), expiresAt: v.string() });
+    const codeOf = (url: string) => new URL(url).hash.slice("#code=".length);
+    const redeem = (code: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code }),
+            }),
+            environment,
+        );
+    const original = v.parse(link, await (await share({ operationId: crypto.randomUUID() })).json());
+    const replacement = {
+        operationId: crypto.randomUUID(),
+        accessDuration: "7d",
+        replaces: codeOf(original.url),
+    };
+    const committed = v.parse(link, await (await share(replacement)).json());
+    // Repeat the exact intent after an ambiguous result, without inventing a new operation.
+    const recovered = v.parse(link, await (await share(replacement)).json());
+    expect.soft(recovered.url === committed.url).toBe(true);
+    expect.soft(recovered.accessExpiresAt).toBe(committed.accessExpiresAt);
+    expect.soft(recovered.expiresAt).toBe(committed.expiresAt);
+    expect.soft((await share({ ...replacement, accessDuration: "1h" })).status).toBe(409);
+    expect.soft((await share({ ...replacement, operationId: crypto.randomUUID() })).status).toBe(409);
+
+    const competing = await Promise.all(
+        ["1h", "1d"].map((accessDuration) =>
+            share({ operationId: crypto.randomUUID(), accessDuration, replaces: codeOf(recovered.url) }),
+        ),
+    );
+    expect.soft(competing.map((response) => response.status).sort()).toEqual([201, 409]);
+    const accepted = competing.find((response) => response.status === 201);
+    if (accepted === undefined) {
+        throw new Error("No sharing replacement succeeded");
+    }
+    const current = v.parse(link, await accepted.json());
+    expect((await redeem(codeOf(original.url))).status).toBe(410);
+    expect((await redeem(codeOf(recovered.url))).status).toBe(410);
+    const opened = await redeem(codeOf(current.url));
+    expect(opened.status).toBe(200);
+    const device = v.parse(v.object({ token: v.string() }), await opened.json());
+    const session = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/session`, {
+            headers: { authorization: `Bearer ${device.token}` },
+        }),
+        environment,
+    );
+    expect(v.parse(v.object({ accessExpiresAt: v.string() }), await session.json()).accessExpiresAt).toBe(
+        current.accessExpiresAt,
+    );
+});
+
 test("Given two devices that joined through links, When one disconnects the other, Then only that device loses access, retrying is harmless, no device can disconnect itself and the other rejoins only as a new device", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
@@ -885,7 +963,7 @@ test("Given two devices that joined through links, When one disconnects the othe
             environment,
         );
     const join = async (device: string, replaces?: string) => {
-        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        const shared = await request("/identity/transfers", owner.token, sharingRequest());
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const opened = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
@@ -941,7 +1019,7 @@ test("Given a browser whose credential a later link replaced, When a stale tab o
             environment,
         );
     const join = async (device: string, replaces?: string) => {
-        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        const shared = await request("/identity/transfers", owner.token, sharingRequest());
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const opened = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {

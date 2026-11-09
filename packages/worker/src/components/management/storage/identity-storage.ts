@@ -20,6 +20,7 @@ function unusedLink(database: IdentityDatabase) {
 }
 const openedCredential = alias(anonymousCredential, "opened_credential");
 const openedLink = alias(continueLink, "opened_link");
+const issuedLink = alias(continueLink, "issued_link");
 const successorCredential = alias(anonymousCredential, "successor_credential");
 
 /**
@@ -360,70 +361,125 @@ export class IdentityStorage {
         signal.throwIfAborted();
     };
 
-    /**
-     * Issues a link, and stops `replaces` from working when it is a link the same access shared that no one opened, so
-     * choosing other terms leaves one link to hand out. Both happen in one write with the issuing credential checked.
-     */
+    /** Claims an unopened predecessor and issues its successor atomically; retries read the committed issuance. */
     readonly createTransfer = async (
         userId: string,
         parentToken: string,
         now: number,
         terms: SharedLinkTerms,
         replaces: string | null,
+        operation: { readonly code: string; readonly requestHash: string },
         signal: AbortSignal,
-    ): Promise<IdentityTransfer | null> => {
+    ): Promise<
+        | {
+              readonly kind: "issued";
+              readonly createdAt: number;
+              readonly expiresAt: number;
+              readonly accessExpiresAt: number;
+          }
+        | { readonly kind: "conflict" }
+    > => {
         signal.throwIfAborted();
-        const code = createProjectCredential("morty_transfer_v1", v.parse(v.string(), this.#computerId));
         // Check the issuing credential in the write itself so ending its access cannot race issuance. Its term needs no
         // check here: the terms are capped by it, so a link shared after it ended adds no device.
         const database = requireIdentityDatabase(this.#database);
         const parentTokenHash = await digest(parentToken);
+        const codeHash = await digest(operation.code);
+        const replacesHash = replaces === null ? null : await digest(replaces);
         const issuer = and(
             eq(anonymousCredential.userId, userId),
             eq(anonymousCredential.tokenHash, parentTokenHash),
             credentialInForce(database),
         );
-        const issue = database.insert(continueLink).select(
-            database
-                .select({
-                    id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
-                    codeHash: sql<string>`${await digest(code)}`.as("code_hash"),
-                    userId: anonymousCredential.userId,
-                    expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
-                    accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
-                    createdAt: sql<number>`${now}`.as("created_at"),
-                    revokedAt: sql<null>`null`.as("revoked_at"),
-                    createdByCredentialId: anonymousCredential.id,
-                })
-                .from(anonymousCredential)
-                .where(issuer),
+        const predecessor = and(
+            eq(continueLink.codeHash, replacesHash ?? ""),
+            eq(continueLink.userId, userId),
+            isNull(continueLink.revokedAt),
+            gt(continueLink.expiresAt, now),
+            unusedLink(database),
+            inArray(
+                continueLink.createdByCredentialId,
+                database.select({ id: anonymousCredential.id }).from(anonymousCredential).where(issuer),
+            ),
         );
-        const [issued] =
-            replaces === null
-                ? [await issue.run()]
-                : await database.batch([
-                      issue,
-                      database
-                          .update(continueLink)
-                          .set({ revokedAt: now })
-                          .where(
-                              and(
-                                  eq(continueLink.codeHash, await digest(replaces)),
-                                  eq(continueLink.userId, userId),
-                                  isNull(continueLink.revokedAt),
-                                  unusedLink(database),
-                                  inArray(
-                                      continueLink.createdByCredentialId,
-                                      database
-                                          .select({ id: anonymousCredential.id })
-                                          .from(anonymousCredential)
-                                          .where(issuer),
+        const issue = database
+            .insert(continueLink)
+            .select(
+                database
+                    .select({
+                        id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
+                        codeHash: sql<string>`${codeHash}`.as("code_hash"),
+                        requestHash: sql<string>`${operation.requestHash}`.as("request_hash"),
+                        userId: anonymousCredential.userId,
+                        expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
+                        accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
+                        createdAt: sql<number>`${now}`.as("created_at"),
+                        revokedAt: sql<null>`null`.as("revoked_at"),
+                        createdByCredentialId: anonymousCredential.id,
+                    })
+                    .from(anonymousCredential)
+                    .where(
+                        replacesHash === null
+                            ? issuer
+                            : and(
+                                  issuer,
+                                  exists(
+                                      database.select({ id: continueLink.id }).from(continueLink).where(predecessor),
                                   ),
                               ),
-                          ),
-                  ]);
+                    ),
+            )
+            .onConflictDoNothing({ target: continueLink.codeHash });
         signal.throwIfAborted();
-        return issued.meta.changes === 1 ? { code, ...terms } : null;
+        if (replacesHash === null) {
+            await issue.run();
+        } else {
+            await database.batch([
+                issue,
+                database
+                    .update(continueLink)
+                    .set({ revokedAt: now })
+                    .where(
+                        and(
+                            predecessor,
+                            exists(
+                                database
+                                    .select({ id: issuedLink.id })
+                                    .from(issuedLink)
+                                    .where(
+                                        and(
+                                            eq(issuedLink.codeHash, codeHash),
+                                            eq(issuedLink.requestHash, operation.requestHash),
+                                        ),
+                                    ),
+                            ),
+                        ),
+                    ),
+            ]);
+        }
+        const issued = await database
+            .select({
+                createdAt: continueLink.createdAt,
+                expiresAt: continueLink.expiresAt,
+                accessExpiresAt: continueLink.accessExpiresAt,
+            })
+            .from(continueLink)
+            .where(
+                and(
+                    eq(continueLink.codeHash, codeHash),
+                    eq(continueLink.requestHash, operation.requestHash),
+                    eq(continueLink.userId, userId),
+                    isNull(continueLink.revokedAt),
+                    gt(continueLink.expiresAt, now),
+                    inArray(
+                        continueLink.createdByCredentialId,
+                        database.select({ id: anonymousCredential.id }).from(anonymousCredential).where(issuer),
+                    ),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return issued === undefined ? { kind: "conflict" } : { kind: "issued", ...issued };
     };
 
     readonly createRecoveryToken = async (

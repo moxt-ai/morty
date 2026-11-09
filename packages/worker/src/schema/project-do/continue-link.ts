@@ -5,6 +5,8 @@ export const continueLink = sqliteTable(
     {
         id: text("id").primaryKey().notNull(),
         codeHash: text("code_hash").notNull().unique(),
+        /** The original issuance intent, so a retry cannot change an operation's terms or predecessor. */
+        requestHash: text("request_hash"),
         userId: text("user_id").notNull(),
         /** Until when the link can add a device. */
         expiresAt: integer("expires_at").notNull(),
