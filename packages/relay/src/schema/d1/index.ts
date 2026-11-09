@@ -1,9 +1,5 @@
-export { platformApp } from "./platform-app.ts";
-export { platformAppCredential } from "./platform-app-credential.ts";
-export { platformAppCredentialScope } from "./platform-app-credential-scope.ts";
-export { platformAppSessionStatusWebhook } from "./platform-app-session-status-webhook.ts";
+export { machineAccessRevocation } from "./machine-access-revocation.ts";
+export { machineAccount } from "./machine-account.ts";
+export { machineAccountGrant } from "./machine-account-grant.ts";
 export { platformDashboardAuditEvent } from "./platform-dashboard-audit-event.ts";
-export { platformOrganizationInviteLink } from "./platform-organization-invite-link.ts";
-export { platformProject } from "./platform-project.ts";
-export { platformProjectSessionAccessRevocation } from "./platform-project-session-access-revocation.ts";
-export { platformTenant } from "./platform-tenant.ts";
+export { serviceCredential } from "./service-credential.ts";

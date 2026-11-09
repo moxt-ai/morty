@@ -64,6 +64,13 @@
             "when": 1793412835285,
             "tag": "0008_remove_control_host_leases",
             "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "6",
+            "when": 1794195345487,
+            "tag": "0009_machine_identity",
+            "breakpoints": true
         }
     ]
 }

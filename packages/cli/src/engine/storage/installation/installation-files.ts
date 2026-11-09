@@ -1,12 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { type FileHandle, link, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { type FileHandle, link, mkdir, open, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { isNodeError } from "../../util/node-error.ts";
 
 // Engine data lives beneath its explicitly selected data directory. `current.json`
-// points at the current installation, whose directory keeps one file per saved connection in
-// `connections/` and one index file per relay channel in `channels/`.
+// selects the installation containing the daemon state and its single pairing.
 
 const MAXIMUM_FILE_BYTES = 16 * 1024;
 
@@ -21,19 +20,6 @@ export type InstallationDirectory = z.infer<typeof installationDirectorySchema>;
 
 export function installationDirectory(engineDataDir: string, installationId: string): InstallationDirectory {
     return installationDirectorySchema.parse(join(engineDataDir, installationId));
-}
-
-export function connectionDirectory(installationDirectory: string): string {
-    return join(installationDirectory, "connections");
-}
-
-export function connectionFilePath(connectionDirectory: string, connectionId: string): string {
-    return join(connectionDirectory, `${connectionId}.json`);
-}
-
-/** Channel index files are named by a hash, so a channel ID never becomes part of a path. */
-export function channelIndexFilePath(installationDirectory: string, channelId: string): string {
-    return join(installationDirectory, "channels", `mci_${createHash("sha256").update(channelId).digest("hex")}.json`);
 }
 
 export type InstallationFileRead =
@@ -90,10 +76,6 @@ export async function createInstallationFile(path: string, text: string): Promis
     } finally {
         await rm(temporaryPath, { force: true });
     }
-}
-
-export async function listInstallationFiles(directory: string): Promise<readonly string[]> {
-    return await readdir(directory);
 }
 
 export async function removeInstallationFile(path: string): Promise<void> {

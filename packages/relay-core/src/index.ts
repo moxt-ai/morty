@@ -66,7 +66,7 @@ export { D1DatabaseAdapter } from "./infra/d1-database.ts";
 export type { DoSqlDatabase } from "./infra/do-sql-database.ts";
 export { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "./infra/durable-object-sql-database.ts";
 export { logger } from "./infra/logger.ts";
-export type { ProjectApplicationResolver } from "./infra/project-application-resolver.ts";
+export type { MachineAccountDirectory } from "./infra/machine-account-directory.ts";
 export type {
     ProjectStorageContext,
     ProjectStorageDirectory,

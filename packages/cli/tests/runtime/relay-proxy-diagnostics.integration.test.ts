@@ -95,7 +95,6 @@ async function fixture(
                 response.setHeader("content-type", "application/json");
                 response.end(
                     JSON.stringify({
-                        appId: "app_probe",
                         channelId: `chn_${role}`,
                         runtimeId: `rnt_${role}`,
                         runtimeCredential: role[0]?.repeat(43),

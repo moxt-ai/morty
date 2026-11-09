@@ -32,7 +32,6 @@ export type ProjectStorageBindings = v.InferOutput<typeof projectStorageBindings
 
 export const platformEndpointBindingsSchema = v.pipe(
     v.object({
-        MORTY_SERVICE_ID: v.string(),
         MORTY_RELAY_URL: v.string(),
     }),
     v.readonly(),
@@ -55,6 +54,5 @@ export interface CloudBindings {
     /** The Project object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
     readonly MORTY_RELAY_URL?: unknown;
-    readonly MORTY_SERVICE_ID?: unknown;
     readonly MORTY_SERVICE_SECRET?: unknown;
 }

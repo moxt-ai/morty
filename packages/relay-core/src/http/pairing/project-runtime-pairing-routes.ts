@@ -37,7 +37,6 @@ export function createProjectRuntimePairingRoutes() {
                     context.var.signal,
                 );
                 return context.json({
-                    appId: redeemed.appId,
                     channelId: redeemed.channelId,
                     runtimeCredential: redeemed.daemonToken,
                     runtimeId: redeemed.runtimeId,

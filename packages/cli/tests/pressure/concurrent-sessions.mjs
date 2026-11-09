@@ -232,7 +232,7 @@ async function exercise(count) {
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const credential = app.defaultCredential.credential;
         const project = await api(
-            `/dashboard/v1/apps/${app.appId}/projects`,
+            `/dashboard/v1/machine-accounts`,
             "POST",
             { displayName: "Pressure", idempotencyKey: "pressure", locationHint: "apac" },
             undefined,

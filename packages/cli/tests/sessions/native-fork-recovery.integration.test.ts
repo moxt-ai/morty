@@ -14,7 +14,6 @@ test.each(["request", "result"] as const)(
         await using platform = await startTestPlatform();
         const signal = new AbortController().signal;
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Runtime Fork loss",
@@ -100,7 +99,6 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     await using platform = await startTestPlatform();
     const signal = new AbortController().signal;
     const project = await platform.service.createProject(
-        platform.appId,
         {
             clientReference: crypto.randomUUID(),
             displayName: "Fork recovery",

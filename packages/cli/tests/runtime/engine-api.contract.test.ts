@@ -24,7 +24,6 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
         expect(engine.getConnectionManager()).toBe(store);
         const connection = await store.save(
             {
-                appId: "embedded_app",
                 channelId: "embedded_channel",
                 defaultWorkspace: join(directory, "workspace"),
                 pairingId: "embedded_pairing",
@@ -91,7 +90,7 @@ it("Given first-use initialization is pending, When its owner and one waiter can
     }
 });
 
-it("Given a fresh Engine data directory, When a host concurrently saves connections on first use, Then every connection belongs to the same readable installation", async () => {
+it("Given a fresh Engine data directory, When a host concurrently saves connections on first use, Then only one complete pairing becomes active", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-concurrent-"));
     const signal = AbortSignal.timeout(5_000);
     try {
@@ -103,7 +102,6 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
             Array.from({ length: 32 }, (_, index) =>
                 manager.save(
                     {
-                        appId: "concurrent_app",
                         channelId: `concurrent_channel_${index}`,
                         defaultWorkspace: join(directory, "workspace"),
                         pairingId: `concurrent_pairing_${index}`,
@@ -115,15 +113,18 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
                 ),
             ),
         );
+        const saved = await manager.list(signal);
+        expect(saved).toHaveLength(1);
+        expect(
+            results.some(
+                (result) => result.status === "fulfilled" && result.value.connectionId === saved[0]?.connectionId,
+            ),
+        ).toBe(true);
         for (const result of results) {
             if (result.status === "rejected") {
-                throw result.reason;
+                expect(result.reason).toMatchObject({ code: "pairing_busy" });
             }
-            expect(await manager.read(result.value.connectionId, signal)).toEqual(result.value);
         }
-        const saved = await manager.list(signal);
-        expect(saved).toHaveLength(32);
-        expect(new Set(saved.map((connection) => connection.installationId)).size).toBe(1);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -198,7 +199,6 @@ it("Given saved and provided connections with opaque credentials, When a host se
         const manager = engine.getConnectionManager();
         const saved = await manager.save(
             {
-                appId: "loop_app",
                 channelId: "loop_channel",
                 defaultWorkspace: join(directory, "workspace"),
                 pairingId: "loop_pairing",

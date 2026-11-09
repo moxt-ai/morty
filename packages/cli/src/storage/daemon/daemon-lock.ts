@@ -1,38 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { access, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import {
     type InstallationDirectory,
     writeInstallationFile,
 } from "../../engine/storage/installation/installation-files.ts";
+import { tryLock } from "../../engine/storage/installation/local-lock.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 
-const SQLITE_BUSY = 5;
-type LockName = "manager.lock" | "installation.lock";
-
-/** The operating system releases the SQLite write transaction when its owning process exits. */
-function holdDaemonOwnership(path: string): (() => void) | null {
-    const database = new DatabaseSync(path);
-    try {
-        database.exec("BEGIN IMMEDIATE");
-        return () => database.close();
-    } catch (cause) {
-        database.close();
-        if (cause instanceof Error && "errcode" in cause && cause.errcode === SQLITE_BUSY) {
-            return null;
-        }
-        throw cause;
-    }
-}
-
 /** SQLite owns exclusion. The PID file is diagnostic output and cannot authorize or prevent acquisition. */
-export async function acquireDaemonLock(
-    stateDirectory: InstallationDirectory,
-    filename: LockName = "manager.lock",
-): Promise<(() => Promise<void>) | null> {
-    const path = join(stateDirectory, filename);
-    const release = holdDaemonOwnership(`${path}.sqlite`);
+export async function acquireDaemonLock(stateDirectory: InstallationDirectory): Promise<(() => Promise<void>) | null> {
+    const path = join(stateDirectory, "manager.lock");
+    const release = tryLock(`${path}.sqlite`);
     if (release === null) {
         return null;
     }
@@ -55,11 +34,8 @@ export async function acquireDaemonLock(
 }
 
 /** Probe the same lock that acquisition holds; a PID can be stale or reused by an unrelated process. */
-export async function daemonLockExists(
-    stateDirectory: InstallationDirectory,
-    filename: LockName = "manager.lock",
-): Promise<boolean> {
-    const path = join(stateDirectory, `${filename}.sqlite`);
+export async function daemonLockExists(stateDirectory: InstallationDirectory): Promise<boolean> {
+    const path = join(stateDirectory, "manager.lock.sqlite");
     try {
         await access(path);
     } catch (cause) {
@@ -68,7 +44,7 @@ export async function daemonLockExists(
         }
         throw cause;
     }
-    const release = holdDaemonOwnership(path);
+    const release = tryLock(path);
     if (release === null) {
         return true;
     }

@@ -49,7 +49,6 @@ describe("daemon environment proxy", () => {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
-                    appId: "app_proxy",
                     channelId: "proxy-channel",
                     runtimeCredential: "a".repeat(32),
                     runtimeId: "proxy-runtime",
@@ -184,8 +183,8 @@ describe("daemon environment proxy", () => {
                 AbortSignal.timeout(2_000),
             );
             expect(
-                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).appId,
-            ).toBe("app_proxy");
+                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).runtimeId,
+            ).toBe("proxy-runtime");
 
             const relayPort = port(relayServer);
             expect(describeEnvironmentProxyRoute(new URL(`ws://127.0.0.1:${relayPort}/daemon`))).toEqual({

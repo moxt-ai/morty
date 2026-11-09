@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { access, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -49,19 +49,16 @@ test("Given an existing Mobius state root, Morty help identifies its own product
     }
 });
 
-test("Given a packed Morty release, version-selected installation and daemon lifecycle preserve adjacent Moxt data and a failed update preserves the installed release", async () => {
-    const archive = process.env.MORTY_RELEASE_ARCHIVE;
-    assert.ok(archive, "MORTY_RELEASE_ARCHIVE is required");
+test("Given a packed Morty release, starting and restarting its daemon preserve adjacent Moxt data", async () => {
     const existing = await mkdtemp(join(tmpdir(), "moxt-lifecycle-"));
     const morty = await mkdtemp(join(tmpdir(), "morty-lifecycle-"));
     const env = { ...process.env, MORTY_STATE_DIRECTORY: morty, MOBIUS_STATE_DIRECTORY: existing };
     const run = (...args) => execute(process.execPath, [entry, ...args], { env, timeout: 180_000 });
     try {
         await writeFile(join(existing, "owned-by-moxt"), "preserve this installation\n");
-        await run("install", "--version", releaseVersion, "--archive", archive);
         await Promise.all([run("start"), run("start"), run("start")]);
         assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
-        const control = join(morty, "installations", "build.morty.cli");
+        const control = join(morty, "machine");
         const pointer = JSON.parse(await readFile(join(control, "current.json"), "utf8"));
         const installation = join(control, pointer.installationId);
         const hash = createHash("sha256").update(installation).digest("hex").slice(0, 32);
@@ -87,63 +84,16 @@ test("Given a packed Morty release, version-selected installation and daemon lif
         }
         assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         await run("restart");
-        await assert.rejects(run("update", "--version", releaseVersion, "--archive", join(morty, "missing.tgz")));
         assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         await run("stop");
         assert.match((await run("status")).stdout, /Daemon: not running/);
         await writeFile(join(morty, "user-data"), "keep this file");
-        await run("uninstall");
-        assert.match((await run("status")).stdout, /Installed: not installed/);
+        await assert.rejects(access(join(morty, "executables")), { code: "ENOENT" });
         await access(join(morty, "user-data"));
         assert.deepEqual(await readdir(existing), ["owned-by-moxt"]);
     } finally {
         await run("stop").catch(() => undefined);
         await rm(morty, { recursive: true, force: true });
         await rm(existing, { recursive: true, force: true });
-    }
-});
-
-test("Given a running Morty installation, When an update process is interrupted during preparation, Then the selected daemon survives and a subsequent update recovers", async () => {
-    const archive = process.env.MORTY_RELEASE_ARCHIVE;
-    assert.ok(archive, "MORTY_RELEASE_ARCHIVE is required");
-    const root = await mkdtemp(join(tmpdir(), "morty-interrupted-update-"));
-    const env = { ...process.env, MORTY_STATE_DIRECTORY: root };
-    const run = (...args) => execute(process.execPath, [entry, ...args], { env, timeout: 180_000 });
-    let updater;
-    try {
-        await run("install", "--archive", archive);
-        await run("start");
-        updater = spawn(process.execPath, [entry, "update", "--archive", archive], {
-            env,
-            stdio: ["ignore", "pipe", "inherit"],
-            timeout: 60_000,
-        });
-        const exited = new Promise((resolve, reject) => {
-            updater.once("exit", (code, signal) => resolve({ code, signal }));
-            updater.once("error", reject);
-        });
-        const interrupted = (async () => {
-            let output = "";
-            for await (const chunk of updater.stdout) {
-                output += chunk.toString();
-                if (output.includes("Preparing Morty release;")) {
-                    updater.kill("SIGKILL");
-                    return;
-                }
-            }
-            throw new Error("The update never exposed its preparation state");
-        })();
-        await interrupted;
-        const outcome = await exited;
-        assert.ok(outcome.signal !== null || outcome.code !== 0);
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
-        assert.match((await run("doctor")).stdout, /preparing/);
-        await run("update", "--archive", archive);
-        assert.match((await run("doctor")).stdout, /complete/);
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
-    } finally {
-        updater?.kill();
-        await run("stop").catch(() => undefined);
-        await rm(root, { recursive: true, force: true });
     }
 });

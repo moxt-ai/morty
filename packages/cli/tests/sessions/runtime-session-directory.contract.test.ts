@@ -11,7 +11,6 @@ for (const client of ["SDK", "HTTP"] as const) {
         await using platform = await startTestPlatform();
         try {
             const project = await platform.service.createProject(
-                platform.appId,
                 {
                     clientReference: `client-${crypto.randomUUID()}`,
                     displayName: "Runtime Session directory",
@@ -91,7 +90,6 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
     await using platform = await startTestPlatform();
     const signal = AbortSignal.timeout(30_000);
     const project = await platform.service.createProject(
-        platform.appId,
         {
             clientReference: `client-${crypto.randomUUID()}`,
             displayName: "Long directory references",
@@ -126,7 +124,6 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Long project",
@@ -197,7 +194,6 @@ it("Given a Session with an additional directory, When the App prompts it and re
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Session binding",

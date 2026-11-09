@@ -33,7 +33,7 @@ import type { PairingIdentityCredential } from "../../entity/pairing/pairing-ide
 import type { AuthorizedChannelRow, RuntimePairingRow } from "../../entity/pairing/pairing-records.ts";
 import { projectRuntimePairingStatus, runtimeRevokedAt } from "../../entity/pairing/runtime-pairing-state.ts";
 import type { ProjectAccessAuthorizer } from "../../gateway/project-access-authorizer.ts";
-import type { ProjectApplicationResolver } from "../../infra/project-application-resolver.ts";
+import type { MachineAccountDirectory } from "../../infra/machine-account-directory.ts";
 import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
 import type { ProjectStore } from "../../infra/project-store.ts";
 import type { PairingIdentityService } from "./pairing-identity-service.ts";
@@ -41,7 +41,7 @@ import type { PairingOperations } from "./pairing-operations.ts";
 import { deriveRuntimeDaemonToken, deriveRuntimePairingSecrets } from "./runtime-pairing-secrets.ts";
 
 export interface PairingDirectoryInfrastructure {
-    readonly gateways: { readonly projectApplications: ProjectApplicationResolver };
+    readonly gateways: { readonly machineAccounts: MachineAccountDirectory };
     readonly storages: {
         readonly forProject: (project: ProjectStorageContext) => ProjectStore;
         readonly projectDirectory: ProjectStorageDirectory;
@@ -365,7 +365,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (pairing === null || pairing.pairing_id !== expectedPairingId) {
             throw new PairingDirectoryError("invalid_pairing_code", "The pairing code is invalid or expired");
         }
-        const appId = await this.#cx.gateways.projectApplications.resolveApplicationId(pairing.project_id, signal);
+        await this.#cx.gateways.machineAccounts.requireActiveAccount(pairing.project_id, signal);
         const daemonToken = await deriveRuntimeDaemonToken(
             pairingCode,
             pairing.project_id,
@@ -389,7 +389,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (!claimed) {
             throw new PairingDirectoryError("invalid_pairing_code", "The pairing code is invalid or expired");
         }
-        return { appId, channelId: pairing.channel_id, daemonToken, runtimeId: pairing.runtime_id };
+        return { channelId: pairing.channel_id, daemonToken, runtimeId: pairing.runtime_id };
     };
 
     readonly redeemRuntimePairing: PairingOperations["redeemRuntimePairing"] = async (

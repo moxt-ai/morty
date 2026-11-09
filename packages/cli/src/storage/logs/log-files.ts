@@ -3,46 +3,27 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const LOG_FILE_NAME_PATTERN = /^[\w.-]{1,128}\.log$/u;
-const INSTALLATIONS_DIRECTORY = "installations";
-const VERSIONS_DIRECTORY = "versions";
-
 /** True when a path is legitimately absent, rather than present and unreadable. */
 function isAbsent(cause: unknown): boolean {
     return typeof cause === "object" && cause !== null && Reflect.get(cause, "code") === "ENOENT";
 }
 
-/**
- * Resolve the installation log directories. The installation store produces two
- * shapes: `<root>/installations/<appId>/<installationId>` for the control
- * installation, and the same path under `versions/<version>/` for a version-
- * scoped CLI installation. These are enumerated instead of walked, because the
- * state root also holds Agent adapters with their own node_modules trees.
- *
- * Directories that exist but cannot be read are added to `unreadable`, relative to `root`.
- */
+/** Collect logs only inside Morty's private machine directory. */
 export async function findLogDirectories(
     root: string,
     unreadable: string[],
     signal: AbortSignal,
 ): Promise<readonly string[]> {
-    const versions = join(root, VERSIONS_DIRECTORY);
-    const installationsRoots: string[] = [join(root, INSTALLATIONS_DIRECTORY)];
-    for (const version of await listDirectories(versions, root, unreadable, signal)) {
-        installationsRoots.push(join(versions, version, INSTALLATIONS_DIRECTORY));
-    }
+    const machine = join(root, "machine");
     const found: string[] = [];
-    for (const installations of installationsRoots) {
-        for (const dataDirectory of await listDirectories(installations, root, unreadable, signal)) {
-            const application = join(installations, dataDirectory);
-            for (const installationId of await listDirectories(application, root, unreadable, signal)) {
-                const logs = join(application, installationId, "logs");
-                const status = await directoryStatus(logs);
-                if (status === "listed") {
-                    found.push(logs);
-                } else if (status === "unreadable") {
-                    unreadable.push(relative(root, logs));
-                }
-            }
+    for (const id of await listDirectories(machine, root, unreadable, signal)) {
+        const logs = join(machine, id, "logs");
+        const status = await directoryStatus(logs);
+        if (status === "listed") {
+            found.push(logs);
+        }
+        if (status === "unreadable") {
+            unreadable.push(relative(root, logs));
         }
     }
     return found;

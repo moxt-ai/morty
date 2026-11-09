@@ -1,12 +1,7 @@
 import { and, eq, exists, gt, inArray, isNotNull, isNull, max, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
-import {
-    anonymousCredential,
-    browserDevice,
-    continueLink,
-    platformProjectMapping,
-} from "../../../schema/project-do/index.ts";
+import { anonymousCredential, browserDevice, continueLink, managedBot } from "../../../schema/project-do/index.ts";
 import { type Credential, deviceAccess, type SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
@@ -148,7 +143,7 @@ export class IdentityStorage {
                 ),
             })
             .from(anonymousCredential)
-            .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
+            .innerJoin(managedBot, eq(managedBot.userId, anonymousCredential.userId))
             .leftJoin(
                 browserDevice,
                 and(
@@ -156,12 +151,7 @@ export class IdentityStorage {
                     eq(browserDevice.userId, anonymousCredential.userId),
                 ),
             )
-            .where(
-                and(
-                    eq(anonymousCredential.tokenHash, await digest(token)),
-                    eq(platformProjectMapping.projectId, this.#projectId),
-                ),
-            )
+            .where(eq(anonymousCredential.tokenHash, await digest(token)))
             .get();
         signal.throwIfAborted();
         return result ?? null;
@@ -587,10 +577,13 @@ export class IdentityStorage {
 
     readonly ownsProject = async (userId: string, projectId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
+        if (this.#projectId !== projectId) {
+            return false;
+        }
         const row = await requireIdentityDatabase(this.#database)
-            .select({ projectId: platformProjectMapping.projectId })
-            .from(platformProjectMapping)
-            .where(and(eq(platformProjectMapping.userId, userId), eq(platformProjectMapping.projectId, projectId)))
+            .select({ botId: managedBot.botId })
+            .from(managedBot)
+            .where(eq(managedBot.userId, userId))
             .get();
         signal.throwIfAborted();
         return row !== undefined;

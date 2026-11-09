@@ -4,19 +4,6 @@ import * as v from "valibot";
 const nonNegativeInteger = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
 const lifecycle = v.picklist(["active", "deleted"]);
 
-export const AppRowSchema = v.object({
-    app_id: v.string(),
-    created_at: nonNegativeInteger,
-    // Legacy column name for the credential issued at App creation, unchanged by rotation or revocation.
-    default_credential_id: v.nullable(v.string()),
-    deleted_at: v.nullable(nonNegativeInteger),
-    display_name: v.string(),
-    lifecycle,
-    tenant_id: v.string(),
-    updated_at: nonNegativeInteger,
-});
-export type AppRow = Readonly<v.InferOutput<typeof AppRowSchema>>;
-
 const AuditRowSchema = v.object({
     action: v.string(),
     actor_id: v.string(),
@@ -29,12 +16,11 @@ const AuditRowSchema = v.object({
     project_id: v.string(),
     recorded_at: nonNegativeInteger,
     subject_id: v.string(),
-    tenant_id: v.string(),
 });
 type AuditRow = Readonly<v.InferOutput<typeof AuditRowSchema>>;
 
 /** A Platform audit event kept in its Project's own storage; its Tenant is the Project's. */
-export type ProjectAuditRow = Omit<AuditRow, "tenant_id">;
+export type ProjectAuditRow = AuditRow;
 
 export const CredentialRowSchema = v.object({
     all_projects: v.picklist([0, 1]),
@@ -47,7 +33,6 @@ export const CredentialRowSchema = v.object({
     replaced_by_credential_id: v.nullable(v.string()),
     revoked_at: v.nullable(nonNegativeInteger),
     secret_digest: v.string(),
-    tenant_id: v.string(),
 });
 export type CredentialRow = Readonly<v.InferOutput<typeof CredentialRowSchema>>;
 
@@ -63,14 +48,12 @@ export interface PlatformAuditRecord {
     readonly projectId: string;
     readonly recordedAt: number;
     readonly subjectId: string;
-    readonly tenantId: string;
 }
 
 export const PlatformProjectScopeRowSchema = v.object({
     app_id: v.string(),
     lifecycle,
     project_id: v.string(),
-    tenant_id: v.string(),
 });
 export type PlatformProjectScopeRow = Readonly<v.InferOutput<typeof PlatformProjectScopeRowSchema>>;
 
@@ -84,17 +67,6 @@ export const ProjectRowSchema = v.object({
     lifecycle,
     location_hint: v.picklist(PROJECT_LOCATION_HINTS),
     project_id: v.string(),
-    request_digest: v.string(),
-    tenant_id: v.string(),
     updated_at: nonNegativeInteger,
 });
 export type ProjectRow = Readonly<v.InferOutput<typeof ProjectRowSchema>>;
-
-export const TenantRowSchema = v.object({
-    created_at: nonNegativeInteger,
-    display_name: v.string(),
-    quotas_json: v.string(),
-    tenant_id: v.string(),
-    updated_at: nonNegativeInteger,
-});
-export type TenantRow = Readonly<v.InferOutput<typeof TenantRowSchema>>;

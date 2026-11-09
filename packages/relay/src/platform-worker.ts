@@ -239,7 +239,7 @@ export function createPlatformApplication(
         .route(
             "/v1",
             new Hono<DispatchEnvironment>()
-                .all("/apps/*", controlHandler)
+                .post("/machine-accounts", controlHandler)
                 .all("/platform/*", controlHandler)
                 .route(
                     "/projects/:projectId",

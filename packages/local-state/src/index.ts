@@ -5,7 +5,7 @@ export class MortyPathError extends Error {
     readonly code = "morty_state_directory_invalid";
 }
 
-/** Generation two is the latest-only installation and never adopts retired state. */
+/** Each installation has one machine account and one local daemon. */
 export function mortyStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = process.env): string {
     const configured = environment["MORTY_STATE_DIRECTORY"]?.trim();
     if (configured) {
@@ -20,13 +20,13 @@ export function mortyStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = p
             if (!local || !isAbsolute(local)) {
                 throw new MortyPathError("LOCALAPPDATA must be absolute");
             }
-            return join(local, "Morty", "v2");
+            return join(local, "Morty", "v3");
         }
         case "darwin":
-            return join(homedir(), "Library", "Application Support", "Morty", "v2");
+            return join(homedir(), "Library", "Application Support", "Morty", "v3");
         default: {
             const state = environment["XDG_STATE_HOME"];
-            return join(state && isAbsolute(state) ? state : join(homedir(), ".local", "state"), "morty", "v2");
+            return join(state && isAbsolute(state) ? state : join(homedir(), ".local", "state"), "morty", "v3");
         }
     }
 }

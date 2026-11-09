@@ -52,7 +52,7 @@ def main():
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
-    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['platform_origin'], 'MORTY_SERVICE_ID': spec['app_id']}
+    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['platform_origin']}
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_SETUP_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
     env.update(MORTY_WORKER_CONFIG=str(generated / 'morty.json'), MORTY_APP_ORIGIN=spec['morty_origin'], MORTY_ASSET_ORIGIN=spec['asset_origin'])

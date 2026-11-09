@@ -99,7 +99,7 @@ export class PlatformProjectGateway {
             ) {
                 throw new Error("Invalid Morty relay endpoint");
             }
-            return { origin: endpoint.origin, appId: v.parse(platformIdentifier, bindings.MORTY_SERVICE_ID) };
+            return { origin: endpoint.origin };
         } catch (cause) {
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Morty relay is not configured.", 503, { cause });
         }
@@ -661,7 +661,6 @@ export class PlatformProjectGateway {
         });
         try {
             const project = await client.createProject(
-                configuration.appId,
                 {
                     clientReference: reference,
                     idempotencyKey: `cloud-${reference}`,
@@ -670,11 +669,7 @@ export class PlatformProjectGateway {
                 },
                 signal,
             );
-            if (
-                project.appId !== configuration.appId ||
-                project.clientReference !== reference ||
-                project.lifecycle !== "active"
-            ) {
+            if (project.clientReference !== reference || project.lifecycle !== "active") {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
                     "Morty returned an unexpected Project.",

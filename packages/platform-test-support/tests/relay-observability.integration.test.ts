@@ -118,7 +118,7 @@ async function provisionApp() {
 async function provisionProject() {
     const app = await provisionApp();
     const project = await api(
-        `/dashboard/v1/apps/${app.appId}/projects`,
+        `/dashboard/v1/machine-accounts`,
         {
             method: "POST",
             headers: { authorization: `Bearer ${app.appCredential}` },
@@ -295,7 +295,7 @@ it("identifies a Project database overload through the public project creation A
     const app = await provisionApp();
     const start = logs.length;
     await api(
-        `/dashboard/v1/apps/${app.appId}/projects`,
+        `/dashboard/v1/machine-accounts`,
         {
             method: "POST",
             headers: { authorization: `Bearer ${app.appCredential}`, "x-test-project-failure": "1" },

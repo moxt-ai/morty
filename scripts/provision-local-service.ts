@@ -6,13 +6,12 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { PLATFORM_APP_PROJECT_PERMISSIONS } from "../packages/client/src/protocol/index.ts";
-import { platformApp, platformAppCredential, platformTenant } from "../packages/relay/src/schema/d1/index.ts";
+import { serviceCredential } from "../packages/relay/src/schema/d1/index.ts";
 
 /** Local development provisioning uses storage, without installing a privileged HTTP bootstrap route. */
 export async function provisionLocalService(config: string, persistTo: string, signal: AbortSignal) {
     signal.throwIfAborted();
     const appId = `app_${randomBytes(18).toString("base64url")}`;
-    const tenantId = `morty_${randomBytes(12).toString("base64url")}`;
     const credentialId = `credential_${randomBytes(18).toString("base64url")}`;
     const publicCredentialId = randomBytes(16).toString("base64url");
     const appSecret = `mapp_${publicCredentialId}_${randomBytes(32).toString("base64url")}`;
@@ -22,29 +21,7 @@ export async function provisionLocalService(config: string, persistTo: string, s
     });
     const statements = [
         db
-            .insert(platformTenant)
-            .values({
-                tenantId,
-                displayName: "Morty local",
-                quotasJson: JSON.stringify({ activeApps: 1, activeProjects: 1000 }),
-                createdAt: now,
-                updatedAt: now,
-            })
-            .toSQL(),
-        db
-            .insert(platformApp)
-            .values({
-                appId,
-                tenantId,
-                displayName: "Morty local",
-                lifecycle: "active",
-                initialCredentialId: credentialId,
-                createdAt: now,
-                updatedAt: now,
-            })
-            .toSQL(),
-        db
-            .insert(platformAppCredential)
+            .insert(serviceCredential)
             .values({
                 credentialId,
                 publicCredentialId,

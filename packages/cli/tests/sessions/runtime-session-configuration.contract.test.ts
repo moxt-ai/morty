@@ -7,7 +7,6 @@ it("Given two clients holding one configuration revision, When they edit concurr
     await using platform = await startTestPlatform();
     try {
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Session configuration authority",

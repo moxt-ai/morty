@@ -1,5 +1,4 @@
 export interface RuntimeConnectionInput {
-    readonly appId: string;
     readonly channelId: string;
     readonly defaultWorkspace: string;
     readonly pairingId: string;
@@ -14,7 +13,6 @@ export type RuntimeConnectionActivation = "active" | "stopped";
 export class VerifiedRuntimeConnection {
     readonly kind = "verified";
     readonly activation: RuntimeConnectionActivation;
-    readonly appId: string;
     readonly channelId: string;
     readonly connectionId: string;
     readonly defaultWorkspace: string;
@@ -27,7 +25,6 @@ export class VerifiedRuntimeConnection {
 
     constructor(
         activation: RuntimeConnectionActivation,
-        appId: string,
         installationId: string,
         connectionId: string,
         channelId: string,
@@ -38,7 +35,6 @@ export class VerifiedRuntimeConnection {
         runtimeId: string,
     ) {
         this.activation = activation;
-        this.appId = appId;
         this.channelId = channelId;
         this.connectionId = connectionId;
         this.defaultWorkspace = defaultWorkspace;

@@ -536,7 +536,6 @@ async function prepare(options) {
 
         const variables = {
             APP_ORIGIN: chatOrigin,
-            MORTY_SERVICE_ID: appId,
             MORTY_SERVICE_SECRET: appSecret,
             MORTY_RELAY_URL: platformOrigin,
         };
@@ -655,10 +654,6 @@ async function installLocalCli(stack) {
         );
         controller.signal.throwIfAborted();
         const entry = path.join(prefix, "node_modules", "@morty-build", "cli", "dist", "cli.js");
-        await run(process.execPath, [entry, "install", "--archive", tarball], {
-            ...options,
-            env: { ...process.env, MORTY_STATE_DIRECTORY: path.join(stack.stateDir, "morty") },
-        });
         return entry;
     } finally {
         process.removeListener("SIGINT", cancel);
@@ -825,11 +820,7 @@ async function setup(options) {
                 fail("Morty returned an invalid connection list");
             }
             const connection = listed.find(
-                (item) =>
-                    item !== null &&
-                    typeof item === "object" &&
-                    item.app_id === stack.appId &&
-                    item.runtime_id === runtimeId,
+                (item) => item !== null && typeof item === "object" && item.runtime_id === runtimeId,
             );
             if (
                 connection === undefined ||

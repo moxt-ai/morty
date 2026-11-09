@@ -39,14 +39,13 @@ test("Given a Project mapping saved under an old origin and service setting, Whe
     });
 });
 
-test("Given an existing Project, When the deployment's service setting changes, Then the user keeps their Project and can pair a Runtime for it", async () => {
+test("Given a machine owner and a deployment service credential, When the owner opens management, Then they can pair a Runtime for their account", async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
         const projectUrl = `${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management`;
         const headers = { authorization: `Bearer ${identity.token}` };
 
-        await fixture.changeServiceId("app_reconfigured_service");
         const environment = fixture.environment();
 
         const project = await worker.fetch(new Request(`${projectUrl}/project`, { headers }), environment);

@@ -113,7 +113,6 @@ async function startIdentityFixture(
                 const listener = new URL(appOrigin);
                 const baseConfiguration = {
                     APP_ORIGIN: appOrigin,
-                    MORTY_SERVICE_ID: platform.appId,
                     MORTY_SERVICE_SECRET: platform.appCredential,
                     MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,
                 };
@@ -233,10 +232,6 @@ async function startIdentityFixture(
                 },
                 changePlatformOrigin: async (origin: string) => {
                     baseConfiguration.MORTY_RELAY_URL = origin;
-                    await reconfigure();
-                },
-                changeServiceId: async (serviceId: string) => {
-                    baseConfiguration.MORTY_SERVICE_ID = serviceId;
                     await reconfigure();
                 },
                 close: async () => {
