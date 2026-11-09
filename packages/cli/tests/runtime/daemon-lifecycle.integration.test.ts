@@ -40,10 +40,9 @@ describe("Morty daemon lifecycle", () => {
                 {
                     channelId,
                     defaultWorkspace: workspace,
-                    pairingId: "",
+                    pairingId: "pairing_failure",
                     relayOrigin: new URL("http://127.0.0.1:1"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_failure",
                 },
                 signal,
             );
@@ -111,7 +110,8 @@ describe("Morty daemon lifecycle", () => {
         const deadline = AbortSignal.timeout(60_000);
         let heldConnection: Socket | undefined;
         try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
+            const started = await runCli(["start"], environment, deadline);
+            expect(started.code, started.stderr).toBe(0);
             const control = await openMortyInstallation(deadline, environment);
             heldConnection = await holdControlConnection(control.stateDirectory, deadline);
             expect(await runCli(["quit"], environment, deadline)).toEqual({
@@ -151,16 +151,16 @@ describe("Morty pairing lifecycle", () => {
             {
                 channelId: "channel_test",
                 defaultWorkspace: workspace,
-                pairingId: "",
+                pairingId: "pairing_test",
                 relayOrigin: relay.origin,
                 runtimeCredential: "a".repeat(43),
-                runtimeId: "runtime_test",
             },
             deadline,
         );
 
         try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
+            const started = await runCli(["start"], environment, deadline);
+            expect(started.code, started.stderr).toBe(0);
             const initiallyListed = await runCli(["pair", "list"], environment, deadline);
             expect(initiallyListed.code).toBe(0);
             expect(initiallyListed.stdout).toContain("| connection_id");
@@ -175,7 +175,7 @@ describe("Morty pairing lifecycle", () => {
             expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual([
                 {
                     connection_id: connection.connectionId,
-                    runtime_id: "runtime_test",
+                    pairing_id: "pairing_test",
                     status: "active",
                     workspace,
                 },

@@ -3,10 +3,10 @@ import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-cor
 
 // Identity is allocated before a daemon claims it, so callers can cancel an
 // outstanding pairing without manufacturing an empty Runtime registration.
-export const runtimeIdentity = sqliteTable(
+export const pairedDaemon = sqliteTable(
     "runtimes",
     {
-        runtimeId: text("runtime_id").primaryKey(),
+        pairingId: text("pairing_id").primaryKey(),
         channelId: text("channel_id").notNull().unique(),
         computerId: text("project_id").notNull(),
         createdAt: integer("created_at").notNull(),

@@ -129,7 +129,7 @@ export class PairingDirectoryService implements PairingOperations {
         const storage = await this.projectStorage(rotation.access.scope, signal);
         await storage.revokeRuntime(
             {
-                runtimeId: rotation.access.runtimeId,
+                pairingId: rotation.access.pairingId,
                 ownerId: null,
                 now: Date.now(),
                 actorKind: "relay",
@@ -143,15 +143,15 @@ export class PairingDirectoryService implements PairingOperations {
 
     readonly authorizeHost: PairingOperations["authorizeHost"] = async (channelId, token, signal) => {
         const row = await this.readAuthorizedHost(channelId, token, signal);
-        return new ChannelHostCredential(row.channel_id, row.runtime_id, row.project_id, row.credential_id);
+        return new ChannelHostCredential(row.channel_id, row.pairing_id, row.project_id, row.credential_id);
     };
 
     readonly authorizeProject: PairingOperations["authorizeProject"] = async (computerId, token, permission, signal) =>
         await this.#cx.services.projectAuthentication.authorizeProject(computerId, token, permission, "", signal);
 
-    readonly authorizeProjectRuntimeHost: PairingOperations["authorizeProjectRuntimeHost"] = async (
+    readonly authorizePairedHost: PairingOperations["authorizePairedHost"] = async (
         computerId,
-        runtimeId,
+        pairingId,
         token,
         signal,
     ) => {
@@ -163,38 +163,29 @@ export class PairingDirectoryService implements PairingOperations {
             );
         }
         const storage = await this.projectStorage(access.scope, signal);
-        const runtime = await this.readProjectRuntime(storage, runtimeId, signal);
+        const runtime = await this.readActivePairing(storage, pairingId, signal);
         return new ProjectCredentialHostAccess(
             runtime.channelId,
-            runtime.runtimeId,
+            runtime.pairingId,
             runtime.computerId,
             access.credentialId,
         );
     };
 
-    readonly authorizeProjectRuntime: PairingOperations["authorizeProjectRuntime"] = async (
+    readonly authorizePairing: PairingOperations["authorizePairing"] = async (
         computerId,
-        runtimeId,
+        pairingId,
         token,
         permission,
         signal,
     ) => {
         const access = await this.authorizeProject(computerId, token, permission, signal);
         const storage = await this.projectStorage(access.scope, signal);
-        return await this.readProjectRuntime(storage, runtimeId, signal);
+        return await this.readActivePairing(storage, pairingId, signal);
     };
 
-    readonly authorizeComputerScopeRuntime: PairingOperations["authorizeComputerScopeRuntime"] = async (
-        scope,
-        runtimeId,
-        signal,
-    ) => {
-        const storage = await this.projectStorage(scope, signal);
-        return await this.readProjectRuntime(storage, runtimeId, signal);
-    };
-
-    private readonly readProjectRuntime = async (storage: ProjectStore, runtimeId: string, signal: AbortSignal) => {
-        const row = await storage.readRuntime(validateIdentifier(runtimeId, "runtime_id"), signal);
+    private readonly readActivePairing = async (storage: ProjectStore, pairingId: string, signal: AbortSignal) => {
+        const row = await storage.readRuntime(validateIdentifier(pairingId, "pairing_id"), signal);
         if (row === null) {
             throw new PairingDirectoryError(
                 "runtime_access_denied",
@@ -206,7 +197,7 @@ export class PairingDirectoryService implements PairingOperations {
         }
         return new VerifiedChannelAccess(
             row.channel_id,
-            row.runtime_id,
+            row.pairing_id,
             row.project_id,
             parseAgents(row.registration.agents_json),
         );
@@ -242,7 +233,6 @@ export class PairingDirectoryService implements PairingOperations {
             row.pairing_id,
             secrets.pollToken,
             row.project_id,
-            row.runtime_id,
         );
     };
 
@@ -260,7 +250,6 @@ export class PairingDirectoryService implements PairingOperations {
         const secrets = await deriveRuntimePairingSecrets(token, owner.computerId, normalizedKey);
         const pairingId = `${owner.computerId}.${crypto.randomUUID()}`;
         const channelId = `chn_${createRandomToken(18)}`;
-        const runtimeId = `rnt_${createRandomToken(18)}`;
         const now = Date.now();
         const expiresAt = now + PAIRING_LIFETIME_MILLISECONDS;
         let stored: Awaited<ReturnType<ProjectStore["requestRuntimePairing"]>>;
@@ -271,7 +260,6 @@ export class PairingDirectoryService implements PairingOperations {
                     codeHash: await hashPairingCredential(secrets.pairingCode),
                     pollHash: await hashPairingCredential(secrets.pollToken),
                     channelId,
-                    runtimeId,
                     now,
                     expiresAt,
                     idempotencyKey: normalizedKey,
@@ -305,7 +293,6 @@ export class PairingDirectoryService implements PairingOperations {
                     pairingId,
                     secrets.pollToken,
                     owner.computerId,
-                    runtimeId,
                 );
         }
     };
@@ -327,7 +314,7 @@ export class PairingDirectoryService implements PairingOperations {
 
     readonly revokeProjectRuntime: PairingOperations["revokeProjectRuntime"] = async (
         computerId,
-        runtimeId,
+        pairingId,
         token,
         signal,
     ) => {
@@ -335,7 +322,7 @@ export class PairingDirectoryService implements PairingOperations {
         const storage = await this.projectStorage(owner.scope, signal);
         const row = await storage.revokeRuntime(
             {
-                runtimeId: validateIdentifier(runtimeId, "runtime_id"),
+                pairingId: validateIdentifier(pairingId, "pairing_id"),
                 ownerId: owner.credentialId,
                 now: Date.now(),
                 actorKind: owner.actor.kind.value,
@@ -352,7 +339,7 @@ export class PairingDirectoryService implements PairingOperations {
             throw new PairingDirectoryError("invalid_directory_record", "The Runtime revocation is invalid");
         }
         return new RevokedProjectRuntime(
-            new VerifiedChannelAccess(row.channel_id, row.runtime_id, row.project_id, []),
+            new VerifiedChannelAccess(row.channel_id, row.pairing_id, row.project_id, []),
             new Date(revokedAt).toISOString(),
         );
     };
@@ -396,7 +383,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (!claimed) {
             throw new PairingDirectoryError("invalid_pairing_code", "The pairing code is invalid or expired");
         }
-        return { channelId: pairing.channel_id, daemonToken, runtimeId: pairing.runtime_id };
+        return { channelId: pairing.channel_id, daemonToken, pairingId: pairing.pairing_id };
     };
 
     readonly redeemRuntimePairing: PairingOperations["redeemRuntimePairing"] = async (
@@ -514,20 +501,20 @@ export class PairingDirectoryService implements PairingOperations {
                     row.machine_name,
                     row.workspace_name,
                     row.project_id,
-                    row.runtime_id,
+                    row.pairing_id,
                 ),
         );
     };
 
     readonly isProjectRuntimeRevoked: PairingOperations["isProjectRuntimeRevoked"] = async (
         computerId,
-        runtimeId,
+        pairingId,
         token,
         signal,
     ) => {
         const access = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
         const storage = await this.projectStorage(access.scope, signal);
-        const row = await storage.readRuntime(validateIdentifier(runtimeId, "runtime_id"), signal);
+        const row = await storage.readRuntime(validateIdentifier(pairingId, "pairing_id"), signal);
         return row !== null && runtimeRevokedAt(row.revoked_at) !== null;
     };
 
@@ -547,7 +534,7 @@ export class PairingDirectoryService implements PairingOperations {
             row.machine_name,
             row.workspace_name,
             row.project_id,
-            row.runtime_id,
+            row.pairing_id,
         );
     };
 
@@ -609,7 +596,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (!(await storage.revokeLinkedDevice(owner.channel_id, normalizedCredentialId, Date.now(), signal))) {
             throw new PairingDirectoryError("linked_device_not_found", "The linked device was not found");
         }
-        return new ChannelHostCredential(owner.channel_id, owner.runtime_id, owner.project_id, normalizedCredentialId);
+        return new ChannelHostCredential(owner.channel_id, owner.pairing_id, owner.project_id, normalizedCredentialId);
     };
 
     readonly revokeBrowserCredential: PairingOperations["revokeBrowserCredential"] = async (

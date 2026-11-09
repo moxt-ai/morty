@@ -35,7 +35,6 @@ const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "pairingId",
     "relayOrigin",
     "runtimeCredential",
-    "runtimeId",
     "version",
 ];
 
@@ -133,7 +132,7 @@ function decodeInstallationPointer(value: unknown): InstallationPointer {
 }
 
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedRuntimeConnection {
-    if (!hasExactKeys(value, VERIFIED_CONNECTION_KEYS) || value["version"] !== 6 || value["kind"] !== "verified") {
+    if (!hasExactKeys(value, VERIFIED_CONNECTION_KEYS) || value["version"] !== 7 || value["kind"] !== "verified") {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
@@ -144,7 +143,6 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
     const pairingId = value["pairingId"];
     const relayOrigin = value["relayOrigin"];
     const runtimeCredential = value["runtimeCredential"];
-    const runtimeId = value["runtimeId"];
     if (
         (activation !== "active" && activation !== "stopped") ||
         typeof channelId !== "string" ||
@@ -153,8 +151,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         typeof storedInstallationId !== "string" ||
         typeof pairingId !== "string" ||
         typeof relayOrigin !== "string" ||
-        typeof runtimeCredential !== "string" ||
-        typeof runtimeId !== "string"
+        typeof runtimeCredential !== "string"
     ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
@@ -164,10 +161,9 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         validateConnectionId(connectionId),
         validateIdentifier(channelId, "invalid_connection"),
         defaultWorkspace,
-        pairingId.length === 0 ? "" : validateIdentifier(pairingId, "invalid_connection"),
+        validateIdentifier(pairingId, "invalid_connection"),
         parseRelayOrigin(relayOrigin),
         validateRuntimeCredential(runtimeCredential),
-        validateIdentifier(runtimeId, "invalid_connection"),
     );
 }
 
@@ -318,10 +314,9 @@ export class RuntimeInstallationStore {
             connectionId(),
             validateIdentifier(input.channelId, "invalid_connection"),
             input.defaultWorkspace,
-            input.pairingId.length === 0 ? "" : validateIdentifier(input.pairingId, "invalid_pairing_id"),
+            validateIdentifier(input.pairingId, "invalid_pairing_id"),
             parseRelayOrigin(input.relayOrigin.toString()),
             validateRuntimeCredential(input.runtimeCredential),
-            validateIdentifier(input.runtimeId, "invalid_connection"),
         );
         await this.changePairing(async () => {
             await this.#discardCredential();
@@ -371,7 +366,6 @@ export class RuntimeInstallationStore {
                 connection.pairingId,
                 connection.relayOrigin,
                 connection.runtimeCredential,
-                connection.runtimeId,
             );
             await this.overwriteConnection(updated, signal);
             return updated;
@@ -503,8 +497,7 @@ export class RuntimeInstallationStore {
                 pairingId: connection.pairingId,
                 relayOrigin: connection.relayOrigin.toString(),
                 runtimeCredential: connection.runtimeCredential,
-                runtimeId: connection.runtimeId,
-                version: 6,
+                version: 7,
             },
             signal,
         );

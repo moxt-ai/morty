@@ -97,11 +97,11 @@ export class SqliteProjectStore implements ProjectStore {
     readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (channelId, tokenHash, agents, signal) =>
         (await this.#runtimes.updateAgents(channelId, tokenHash, agents, signal)).meta.changes === 1;
 
-    readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (runtimeId, signal) =>
-        await this.#credentials.readActiveRuntime({ computerId: this.#computerId, runtimeId }, signal);
+    readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (pairingId, signal) =>
+        await this.#credentials.readActiveRuntime({ computerId: this.#computerId, pairingId }, signal);
 
-    readonly readRuntime: ProjectStore["readRuntime"] = async (runtimeId, signal) =>
-        await this.#runtimes.readRuntime(runtimeId, signal);
+    readonly readRuntime: ProjectStore["readRuntime"] = async (pairingId, signal) =>
+        await this.#runtimes.readRuntime(pairingId, signal);
 
     readonly listRuntimes: ProjectStore["listRuntimes"] = async (signal) => await this.#runtimes.listRuntimes(signal);
 
@@ -121,7 +121,6 @@ export class SqliteProjectStore implements ProjectStore {
                 auditId: value.rejectionAuditId,
                 computerId: this.#computerId,
                 pairingId: value.pairingId,
-                runtimeId: value.runtimeId,
                 actorKind: value.actorKind,
                 actorId: value.actorId,
                 action: "runtime_pairing.rejected",
@@ -158,7 +157,6 @@ export class SqliteProjectStore implements ProjectStore {
                 auditId: value.rejectionAuditId,
                 computerId: this.#computerId,
                 pairingId: value.pairingId,
-                runtimeId: pairing?.runtime_id ?? "",
                 actorKind: "pairing_code",
                 actorId: value.pairingId,
                 action: "runtime_pairing.rejected",

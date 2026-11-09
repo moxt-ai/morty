@@ -312,8 +312,8 @@ export class RuntimeAccessContext extends VerifiedChannelAccess {
     readonly credentialId: string;
     readonly scope: ComputerScope;
 
-    constructor(scope: ComputerScope, runtimeId: string, channelId: string, credentialId: string) {
-        super(channelId, runtimeId, scope.computerId, []);
+    constructor(scope: ComputerScope, pairingId: string, channelId: string, credentialId: string) {
+        super(channelId, pairingId, scope.computerId, []);
         this.scope = scope;
         this.credentialId = credentialId;
     }

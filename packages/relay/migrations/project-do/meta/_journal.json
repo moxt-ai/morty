@@ -78,6 +78,13 @@
             "when": 1794200661590,
             "tag": "0010_rotate_runtime_daemon_credentials",
             "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "6",
+            "when": 1794206535786,
+            "tag": "0011_use_pairing_identity",
+            "breakpoints": true
         }
     ]
 }

@@ -3,7 +3,6 @@ import type {
     ProjectPermission,
     RuntimeAccessContext,
 } from "../../entity/authentication/project-authentication.ts";
-import type { ComputerScope } from "../../entity/do/session.ts";
 import type {
     AgentDescriptor,
     ChannelDescriptor,
@@ -32,9 +31,9 @@ export interface PairingOperations {
         { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
     >;
     readonly authorizeHost: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
-    readonly authorizeProjectRuntimeHost: (
+    readonly authorizePairedHost: (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<ProjectCredentialHostAccess>;
@@ -44,16 +43,11 @@ export interface PairingOperations {
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<ProjectAccessContext>;
-    readonly authorizeProjectRuntime: (
+    readonly authorizePairing: (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         permission: ProjectPermission,
-        signal: AbortSignal,
-    ) => Promise<VerifiedChannelAccess>;
-    readonly authorizeComputerScopeRuntime: (
-        scope: ComputerScope,
-        runtimeId: string,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
     readonly createChannelAccessGrant: (
@@ -89,7 +83,7 @@ export interface PairingOperations {
     /** Whether the Project's Runtime was revoked; false for one the Project never had. */
     readonly isProjectRuntimeRevoked: (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<boolean>;
@@ -136,7 +130,7 @@ export interface PairingOperations {
     // is safe; an unclaimed identity can also be cancelled through this command.
     readonly revokeProjectRuntime: (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<RevokedProjectRuntime>;

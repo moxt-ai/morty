@@ -178,7 +178,7 @@ export class ChannelActor {
                 event: "relay_message_skipped",
                 reason,
                 skippedCount: this.#skippedCount,
-                runtimeId: this.#runtimeId,
+                pairingId: this.#pairingId,
                 computerId: this.#computerId,
             },
             "Relay skipped unsupported input",
@@ -188,22 +188,22 @@ export class ChannelActor {
     };
     readonly #peers: ChannelPeers;
     readonly #computerId: string;
-    readonly #runtimeId: string;
+    readonly #pairingId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
-        readonly config: { readonly computerId: string; readonly runtimeId: string };
+        readonly config: { readonly computerId: string; readonly pairingId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
-        const { computerId, runtimeId } = cx.config;
+        const { computerId, pairingId } = cx.config;
         const { peers, notifications } = cx.gateways;
         this.#peers = peers;
         this.#computerId = computerId;
-        this.#runtimeId = runtimeId;
-        this.#liveEvents = new SessionLiveEventRelay(computerId, runtimeId, peers, notifications);
+        this.#pairingId = pairingId;
+        this.#liveEvents = new SessionLiveEventRelay(computerId, pairingId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {
@@ -218,7 +218,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online: this.hasOnlineDaemon(),
-                runtimeId: this.#runtimeId,
+                pairingId: this.#pairingId,
             }),
         );
         return Promise.resolve();
@@ -817,7 +817,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online,
-                runtimeId: this.#runtimeId,
+                pairingId: this.#pairingId,
             }),
         );
     };

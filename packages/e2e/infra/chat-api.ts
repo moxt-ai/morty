@@ -94,13 +94,13 @@ export class ChatApi {
     }
 
     async createPairing() {
-        return await this.#request("/morty/api/management/runtime-pairings", {
+        return await this.#request("/morty/api/management/pairings", {
             body: { idempotencyKey: crypto.randomUUID() },
         });
     }
 
     async readPairedAgent(pairingId: string, agentId: string) {
-        const paired = await this.#request(`/morty/api/management/runtime-pairings/${encodeURIComponent(pairingId)}`);
+        const paired = await this.#request(`/morty/api/management/pairings/${encodeURIComponent(pairingId)}`);
         if (
             paired["status"] !== "paired" ||
             !Array.isArray(paired["agents"]) ||
@@ -108,15 +108,15 @@ export class ChatApi {
         ) {
             throw new Error(`The paired Runtime does not expose ${agentId}`);
         }
-        return { runtimeId: text(paired["runtimeId"], "runtimeId") };
+        return { pairingId: text(paired["pairingId"], "pairingId") };
     }
 
-    async bindAgent(runtimeId: string, agentId: string) {
+    async bindAgent(pairingId: string, agentId: string) {
         const identity = this.#requireIdentity();
         await this.#request(
             `/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
             {
-                body: { runtimeId, agentRef: agentId },
+                body: { pairingId, agentRef: agentId },
             },
         );
     }

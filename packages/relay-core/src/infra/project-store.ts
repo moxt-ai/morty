@@ -54,7 +54,6 @@ export interface RequestRuntimePairing {
     readonly codeHash: string;
     readonly pollHash: string;
     readonly channelId: string;
-    readonly runtimeId: string;
     readonly now: number;
     readonly expiresAt: number;
     readonly idempotencyKey: string;
@@ -84,7 +83,7 @@ export interface ClaimPairing {
 }
 
 export interface RevokeRuntime {
-    readonly runtimeId: string;
+    readonly pairingId: string;
     /** The owner credential that revoked the Runtime; null when the Relay revoked it for a reused credential. */
     readonly ownerId: string | null;
     readonly now: number;
@@ -126,8 +125,8 @@ export interface ProjectStore {
         agents: string,
         signal: AbortSignal,
     ) => Promise<boolean>;
-    readonly isRuntimeActive: (runtimeId: string, signal: AbortSignal) => Promise<boolean>;
-    readonly readRuntime: (runtimeId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
+    readonly isRuntimeActive: (pairingId: string, signal: AbortSignal) => Promise<boolean>;
+    readonly readRuntime: (pairingId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     readonly listRuntimes: (signal: AbortSignal) => Promise<readonly RuntimeChannelRow[]>;
     readonly readChannel: (channelId: string, signal: AbortSignal) => Promise<RuntimeChannelRow | null>;
     /**

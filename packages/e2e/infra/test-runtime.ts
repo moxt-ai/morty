@@ -125,7 +125,7 @@ export async function createTestRuntime(
                     text(pairing["pairingCode"], "pairing code"),
                 );
                 const paired = await chat.readPairedAgent(text(pairing["pairingId"], "pairing ID"), agentId);
-                await chat.bindAgent(paired.runtimeId, agentId);
+                await chat.bindAgent(paired.pairingId, agentId);
                 await chat.readBinding(agentId);
                 await page.reload();
             },

@@ -31,7 +31,6 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
                 pairingId: "embedded_pairing",
                 relayOrigin: new URL("https://relay.example.com/"),
                 runtimeCredential: "a".repeat(43),
-                runtimeId: "embedded_runtime",
             },
             signal,
         );
@@ -109,7 +108,6 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
                         pairingId: `concurrent_pairing_${index}`,
                         relayOrigin: new URL("https://relay.example.com/"),
                         runtimeCredential: "a".repeat(43),
-                        runtimeId: `concurrent_runtime_${index}`,
                     },
                     signal,
                 ),
@@ -209,7 +207,6 @@ it("Given saved and provided connections with opaque credentials, When a host se
                 pairingId: "loop_pairing",
                 relayOrigin: new URL(origin),
                 runtimeCredential: "a".repeat(73),
-                runtimeId: "loop_runtime",
             },
             deadline,
         );

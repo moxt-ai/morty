@@ -96,7 +96,7 @@ export type ManagedSessionEvent =
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
-    runtimeId: identifier,
+    pairingId: identifier,
     machineName: v.string(),
     online: v.boolean(),
     agents: v.array(
@@ -115,7 +115,7 @@ const networkDiagnosticSchema = v.strictObject({
 });
 export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
 export type ChatAgentSelection = {
-    readonly runtimeId: Identifier;
+    readonly pairingId: Identifier;
     readonly machineName: string;
     readonly agentRef: Identifier;
     readonly label: string;
@@ -123,7 +123,7 @@ export type ChatAgentSelection = {
 export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
     return runtime.online
         ? runtime.agents.map((agent) => ({
-              runtimeId: runtime.runtimeId,
+              pairingId: runtime.pairingId,
               machineName: runtime.machineName,
               ...agent,
           }))
@@ -542,7 +542,7 @@ export class BotChatApi {
         );
     readonly forkNativeSession = async (
         botId: string,
-        runtimeId: string,
+        pairingId: string,
         operationId: string,
         input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[2],
         signal: AbortSignal,
@@ -552,7 +552,7 @@ export class BotChatApi {
                 await this.#request(
                     botId,
                     `native-session-forks/${encodeURIComponent(operationId)}`,
-                    { ...input, runtimeId },
+                    { ...input, pairingId },
                     signal,
                 ),
             ),
@@ -560,13 +560,13 @@ export class BotChatApi {
 
     readonly nativeSessions = async (
         botId: string,
-        runtimeId: string,
+        pairingId: string,
         input: Parameters<MortyClient["runtimes"]["nativeSessions"]>[1],
         signal: AbortSignal,
     ) => {
         if (input.action === "list") {
             return decodeNativeSessionResult(
-                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
+                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, pairingId }, signal)),
             );
         }
         if (input.action !== "import") {
@@ -581,7 +581,7 @@ export class BotChatApi {
                 await this.#request(
                     botId,
                     `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/${action}`,
-                    { ...identity, runtimeId },
+                    { ...identity, pairingId },
                     signal,
                 ),
             ),
@@ -589,7 +589,7 @@ export class BotChatApi {
     };
     readonly nativeSession = async (
         botId: string,
-        runtimeId: string,
+        pairingId: string,
         input: {
             readonly entryId: string;
             readonly agentId: string;
@@ -604,7 +604,7 @@ export class BotChatApi {
             await this.#request(
                 botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
-                { ...identity, runtimeId },
+                { ...identity, pairingId },
                 signal,
             ),
         );

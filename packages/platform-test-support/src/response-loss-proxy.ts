@@ -236,7 +236,7 @@ export async function createResponseLossProxy(upstream: string) {
             }
         },
         /** Loses a pairing response after the real service commits it. */
-        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/runtime-pairings(?:\?|$)/u),
+        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/pairings(?:\?|$)/u),
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
         /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
         dropNextSessionCreation: () => {

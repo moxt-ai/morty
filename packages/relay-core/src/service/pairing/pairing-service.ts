@@ -64,7 +64,7 @@ export class PairingService {
                     new RuntimeDescriptor(
                         channel,
                         await this.#channels.readRuntimeStatus(
-                            new VerifiedChannelAccess(channel.channelId, channel.runtimeId, channel.computerId, []),
+                            new VerifiedChannelAccess(channel.channelId, channel.pairingId, channel.computerId, []),
                             signal,
                         ),
                     ),
@@ -72,12 +72,12 @@ export class PairingService {
         );
     };
 
-    readonly getRuntimeAgents = async (computerId: string, runtimeId: string, token: string, signal: AbortSignal) => {
+    readonly getRuntimeAgents = async (computerId: string, pairingId: string, token: string, signal: AbortSignal) => {
         const channels = await this.#pairings.listProjectRuntimes(computerId, token, signal);
-        const channel = channels.find((candidate) => candidate.runtimeId === runtimeId);
+        const channel = channels.find((candidate) => candidate.pairingId === pairingId);
         if (channel === undefined) {
             // A revoked Runtime is not listed; saying so lets its Machine be paired again instead of waiting for it.
-            if (await this.#pairings.isProjectRuntimeRevoked(computerId, runtimeId, token, signal)) {
+            if (await this.#pairings.isProjectRuntimeRevoked(computerId, pairingId, token, signal)) {
                 throw new PairingDirectoryError("runtime_revoked", "The Runtime has been revoked");
             }
             throw new PairingDirectoryError(
@@ -88,7 +88,7 @@ export class PairingService {
         return new RuntimeDescriptor(
             channel,
             await this.#channels.readRuntimeStatus(
-                new VerifiedChannelAccess(channel.channelId, channel.runtimeId, channel.computerId, []),
+                new VerifiedChannelAccess(channel.channelId, channel.pairingId, channel.computerId, []),
                 signal,
             ),
         );
@@ -96,26 +96,26 @@ export class PairingService {
 
     readonly forkNativeSession = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => {
         const access = await this.#pairings.authorizeProject(computerId, token, ProjectPermission.SessionWrite, signal);
-        return await this.#operations().forkNativeSession(access.scope, runtimeId, operationId, input, signal);
+        return await this.#operations().forkNativeSession(access.scope, pairingId, operationId, input, signal);
     };
 
     readonly requestControl = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         command: RuntimeControlCommand,
         signal: AbortSignal,
     ) =>
         await this.requestOperationControl(
             computerId,
-            runtimeId,
+            pairingId,
             token,
             command,
             runtimeControlPermission(command),
@@ -125,19 +125,19 @@ export class PairingService {
     /** Runs one command of an operation that needs `permission`, which may be the operation's rather than the command's. */
     readonly requestOperationControl = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         command: RuntimeControlCommand,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => {
         const access = await this.#pairings.authorizeProject(computerId, token, permission, signal);
-        return await this.#operations().requestComputerScopeControl(access.scope, runtimeId, command, signal);
+        return await this.#operations().requestComputerScopeControl(access.scope, pairingId, command, signal);
     };
 
     readonly readRuntimeDiagnostics = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => {
@@ -150,12 +150,12 @@ export class PairingService {
             runtimeControlPermission(command),
             signal,
         );
-        return await this.#operations().requestComputerScopeControl(access.scope, runtimeId, command, signal);
+        return await this.#operations().requestComputerScopeControl(access.scope, pairingId, command, signal);
     };
 
     readonly measureRuntimeLatency = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         signal: AbortSignal,
     ): Promise<number> => {
@@ -167,37 +167,37 @@ export class PairingService {
             signal,
         );
         const started = performance.now();
-        await this.#operations().requestComputerScopeControl(access.scope, runtimeId, command, signal);
+        await this.#operations().requestComputerScopeControl(access.scope, pairingId, command, signal);
         return Math.max(0, Math.round(performance.now() - started));
     };
 
     readonly listWorkspace = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         command: WorkspaceListCommand,
         signal: AbortSignal,
     ) => {
         const access = await this.#pairings.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
-        return await this.#operations().requestWorkspace(access.scope, runtimeId, command, signal);
+        return await this.#operations().requestWorkspace(access.scope, pairingId, command, signal);
     };
 
     readonly discoverAgentSettings = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         command: AgentSettingsDiscoverCommand,
         signal: AbortSignal,
     ) => {
         const runtimes = await this.#pairings.listProjectRuntimes(computerId, token, signal);
-        if (!runtimes.some((candidate) => candidate.runtimeId === runtimeId)) {
+        if (!runtimes.some((candidate) => candidate.pairingId === pairingId)) {
             throw new PairingDirectoryError(
                 "runtime_access_denied",
                 "The project credential cannot access this Runtime",
             );
         }
         const access = await this.#pairings.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
-        return await this.#operations().requestAgentSettings(access.scope, runtimeId, command, signal);
+        return await this.#operations().requestAgentSettings(access.scope, pairingId, command, signal);
     };
 
     readonly readProjectRuntimePairing = (computerId: string, pairingId: string, token: string, signal: AbortSignal) =>
@@ -212,20 +212,16 @@ export class PairingService {
         signal,
     ) => await this.#pairings.redeemRuntimePairing(pairingId, pairingCode, machineName, workspaceName, agents, signal);
 
-    readonly authorizeProjectRuntimeHost = async (
-        computerId: string,
-        runtimeId: string,
-        token: string,
-        signal: AbortSignal,
-    ) => await this.#pairings.authorizeProjectRuntimeHost(computerId, runtimeId, token, signal);
+    readonly authorizePairedHost = async (computerId: string, pairingId: string, token: string, signal: AbortSignal) =>
+        await this.#pairings.authorizePairedHost(computerId, pairingId, token, signal);
 
     readonly revokeProjectRuntime = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         token: string,
         signal: AbortSignal,
     ): Promise<void> => {
-        const revoked = await this.#pairings.revokeProjectRuntime(computerId, runtimeId, token, signal);
+        const revoked = await this.#pairings.revokeProjectRuntime(computerId, pairingId, token, signal);
         try {
             await this.#channels.disconnectRuntime(revoked.access, signal);
         } catch (cause) {

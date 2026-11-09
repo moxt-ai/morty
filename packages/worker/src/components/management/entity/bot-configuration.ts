@@ -3,7 +3,7 @@ import { platformIdentifier } from "./platform-project.ts";
 
 export const botConfigurationSchema = v.pipe(
     v.object({
-        runtimeId: platformIdentifier,
+        pairingId: platformIdentifier,
     }),
     v.readonly(),
 );

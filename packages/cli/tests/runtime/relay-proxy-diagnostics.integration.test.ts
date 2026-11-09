@@ -79,7 +79,7 @@ async function fixture(
     relay.on(
         "request",
         (request: IncomingMessage | Http2ServerRequest, response: ServerResponse | Http2ServerResponse) => {
-            const pairing = request.url?.match(/\/runtime-pairings\/(direct-pairing|proxy-pairing)\/redeem$/u)?.[1];
+            const pairing = request.url?.match(/\/pairings\/(direct-pairing|proxy-pairing)\/redeem$/u)?.[1];
             if (pairing !== undefined) {
                 claimed.push(pairing);
                 const role = pairing === "direct-pairing" ? "direct" : "proxy";
@@ -96,7 +96,7 @@ async function fixture(
                 response.end(
                     JSON.stringify({
                         channelId: `chn_${role}`,
-                        runtimeId: `rnt_${role}`,
+                        pairingId: `${role}-pairing`,
                         runtimeCredential: role[0]?.repeat(43),
                     }),
                 );

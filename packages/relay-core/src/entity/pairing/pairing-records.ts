@@ -1,6 +1,6 @@
 export interface PairingScopeRow {
     readonly channel_id: string;
-    readonly runtime_id: string;
+    readonly pairing_id: string;
     readonly project_id: string;
 }
 
@@ -24,7 +24,7 @@ export interface ChannelCredentialIdentity {
     readonly channelId: string;
     readonly credentialId: string;
     readonly computerId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
 }
 
 /** A stored credential matching an identity lookup; only browser credentials carry their own lifetime. */
@@ -55,7 +55,6 @@ export interface RuntimeDirectoryRow extends PairingScopeRow {
 }
 
 export interface PairingChannelRow extends RuntimeDirectoryRow {
-    readonly pairing_id: string;
     readonly expires_at: number;
 }
 
@@ -64,7 +63,6 @@ export interface PairingClaimRow extends PairingChannelRow {
 }
 
 export interface RuntimePairingRow extends PairingScopeRow {
-    readonly pairing_id: string;
     readonly pairing_code_hash: string;
     readonly poll_token_hash: string;
     readonly expires_at: number;
@@ -75,7 +73,6 @@ export interface RuntimePairingAudit {
     readonly auditId: string;
     readonly computerId: string;
     readonly pairingId: string;
-    readonly runtimeId: string;
     readonly actorKind: string;
     readonly actorId: string;
     readonly action:

@@ -16,7 +16,7 @@ export interface SessionAccess {
     readonly issuedAtEpochMilliseconds: number;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
 }
 
@@ -27,8 +27,8 @@ export interface SessionAccess {
  */
 /** The live Session views a Project's Runtimes hold, which a revocation of Session access must also end. */
 export interface SessionViewers {
-    readonly runtimeIds: (signal: AbortSignal) => Promise<readonly string[]>;
-    readonly disconnect: (runtimeId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
+    readonly pairingIds: (signal: AbortSignal) => Promise<readonly string[]>;
+    readonly disconnect: (pairingId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
 }
 
 async function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {
@@ -67,7 +67,7 @@ export class SessionAccessService {
 
     readonly issue = async (
         target: SessionAccessTarget,
-        runtimeId: string,
+        pairingId: string,
         appCredential: string,
         expiresInSeconds: number,
         signal: AbortSignal,
@@ -81,7 +81,7 @@ export class SessionAccessService {
         if (target.kind !== "session") {
             throw new ProjectAuthenticationError("project_permission_denied", "A selected Session is required");
         }
-        if (!isIdentifier(runtimeId)) {
+        if (!isIdentifier(pairingId)) {
             throw new ProjectAuthenticationError("invalid_request", "The Runtime identifier is invalid");
         }
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
@@ -108,7 +108,7 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
             purpose: "session-access",
-            runtimeId,
+            pairingId,
             sessionId: target.sessionId,
         });
         return {
@@ -132,8 +132,8 @@ export class SessionAccessService {
         signal: AbortSignal,
     ): Promise<{ readonly revokedThrough: string }> => {
         const revokedThrough = await this.#control.revokeSessionAccess(computerId, appCredential, signal);
-        for (const runtimeId of await viewers.runtimeIds(signal)) {
-            await viewers.disconnect(runtimeId, revokedThrough, signal);
+        for (const pairingId of await viewers.pairingIds(signal)) {
+            await viewers.disconnect(pairingId, revokedThrough, signal);
         }
         return { revokedThrough: new Date(revokedThrough).toISOString() };
     };
@@ -213,7 +213,7 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
-            runtimeId: claims.runtimeId,
+            pairingId: claims.pairingId,
             authorize: async (permission, authorizationSignal) => {
                 await this.#control.authorizeSessionCredentialRecord(
                     computerId,

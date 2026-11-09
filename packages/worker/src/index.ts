@@ -13,4 +13,4 @@ export default {
 } satisfies ExportedHandler<CloudBindings, unknown>;
 
 // Preserve the retired namespace and its records without binding it to incoming requests.
-export { DurableObject as ComputerDurableObject } from "cloudflare:workers";
+export { DurableObject as ProjectDurableObject } from "cloudflare:workers";

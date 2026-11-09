@@ -75,7 +75,7 @@ test("Given a rejected Platform credential, When a user tries to pair their Mach
     try {
         await fixture.changePlatformCredential(`${original.slice(0, -1)}${original.endsWith("A") ? "B" : "A"}`);
         const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/runtime-pairings`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/pairings`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
                 body: JSON.stringify({ idempotencyKey: "security-error-sanitization" }),

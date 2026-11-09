@@ -13,7 +13,7 @@ import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{
     connection_id: string;
-    runtime_id: string;
+    pairing_id: string;
     channel_id: string;
     credential: string;
     origin: string;
@@ -90,9 +90,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify(
-                    Array.from(this.#saved.values(), ({ connection_id, runtime_id }) => ({
+                    Array.from(this.#saved.values(), ({ connection_id, pairing_id }) => ({
                         connection_id,
-                        runtime_id,
+                        pairing_id,
                     })),
                 ),
             );
@@ -142,7 +142,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
         const origin = option("--url");
         const daemon = createMortyFakeDaemon(this.#options);
-        const claim = await jsonRequest(origin, `/morty/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
+        const claim = await jsonRequest(origin, `/morty/api/v1/pairings/${option("--pairing")}/redeem`, {
             body: {
                 agents: daemon.catalog,
                 machineName: this.#machineName,
@@ -154,7 +154,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const connection: Connection = {
             channel_id: text(claim["channelId"], "Channel ID"),
             connection_id: crypto.randomUUID(),
-            runtime_id: text(claim["runtimeId"], "Runtime ID"),
+            pairing_id: text(claim["pairingId"], "Runtime ID"),
             credential: text(claim["runtimeCredential"], "Runtime credential"),
             origin,
         };

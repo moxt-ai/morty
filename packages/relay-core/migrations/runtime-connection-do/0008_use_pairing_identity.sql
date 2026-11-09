@@ -1,0 +1,1 @@
+ALTER TABLE `runtime_connection_state` RENAME COLUMN "runtime_id" TO "pairing_id";

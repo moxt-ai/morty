@@ -1,9 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import {
-    MORTY_API_PREFIX,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-} from "@morty-build/client/protocol";
+import { RUNTIME_HEARTBEAT_ACK_MESSAGE, RUNTIME_HEARTBEAT_MESSAGE } from "@morty-build/client/protocol";
 import {
     type AccessGrantRedemption,
     acceptWebSocketHttpTransport,
@@ -29,7 +25,7 @@ import { decodeComputerDurableObjectPath } from "../entity/computer-durable-obje
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
-import { runtimeRequestTarget } from "../gateway/runtime-session-routing.ts";
+import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
 import { computerDurableObjectMigrations } from "../generated/project-do-migrations.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
@@ -229,12 +225,12 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         return await this.#operate(computerId).updateAgentCatalog(channelId, tokenHash, agents, uncancelled);
     }
 
-    async isRuntimeActive(computerId: string, runtimeId: string): Promise<boolean> {
-        return await this.#operate(computerId).isRuntimeActive(runtimeId, uncancelled);
+    async isRuntimeActive(computerId: string, pairingId: string): Promise<boolean> {
+        return await this.#operate(computerId).isRuntimeActive(pairingId, uncancelled);
     }
 
-    async readRuntime(computerId: string, runtimeId: string): Promise<Result<"readRuntime">> {
-        return await this.#operate(computerId).readRuntime(runtimeId, uncancelled);
+    async readRuntime(computerId: string, pairingId: string): Promise<Result<"readRuntime">> {
+        return await this.#operate(computerId).readRuntime(pairingId, uncancelled);
     }
 
     async listRuntimes(computerId: string): Promise<Result<"listRuntimes">> {
@@ -295,10 +291,29 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         if (decodeComputerDurableObjectPath(url.pathname) !== null) {
             return this.#fetchComputer(request);
         }
-        const current = runtimeRequestTarget(request);
+        const current = computerRequestTarget(request);
         if (current !== null) {
             if (!this.#owns(current.computerId)) {
                 return Response.json({ error: { code: "runtime_access_denied" } }, { status: 403 });
+            }
+            if (current.kind === "transport") {
+                return acceptWebSocketHttpTransport(
+                    request,
+                    (operation) => this.fetch(operation),
+                    standardWebSocketHost,
+                    {
+                        uploads: this.#uploads,
+                        authorizeUpload: async (operation) => {
+                            const { sessionAccess } = createPlatformAccessServices(this.env);
+                            const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
+                            return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
+                        },
+                        validateTarget: (operation) => {
+                            const target = computerRequestTarget(operation);
+                            return target?.kind === "operation" && target.computerId === current.computerId;
+                        },
+                    },
+                );
             }
             const environment = {
                 ...this.env,
@@ -307,47 +322,14 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
                 MORTY_COMPUTER_STORE: this.#operate(current.computerId),
                 MORTY_RUNTIME_EXECUTION: {
                     computerId: current.computerId,
-                    runtimeId: current.runtimeId,
+                    pairingId: current.pairingId,
                     operations: createLocalSessionOperations(
                         this.#connectionsForComputer.context,
                         current.computerId,
-                        current.runtimeId,
+                        current.pairingId,
                     ),
                 },
             };
-            if (
-                new URL(request.url).pathname ===
-                `${MORTY_API_PREFIX}/v1/computers/${current.computerId}/runtimes/${current.runtimeId}/transport`
-            ) {
-                return acceptWebSocketHttpTransport(
-                    request,
-                    async (operation) => {
-                        const response = await this.#application.fetch(operation, environment);
-                        if (response.status === 101) {
-                            await this.scheduleConnectionChecks();
-                        }
-                        return response;
-                    },
-                    standardWebSocketHost,
-                    {
-                        uploads: this.#uploads,
-                        authorizeUpload: async (operation) => {
-                            const { sessionAccess } = createPlatformAccessServices(environment);
-                            const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
-                            return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
-                        },
-                        validateTarget: (operation) => {
-                            const target = runtimeRequestTarget(operation);
-                            return (
-                                target !== null &&
-                                target.computerId === current.computerId &&
-                                target.runtimeId === current.runtimeId &&
-                                !new URL(operation.url).pathname.endsWith("/transport")
-                            );
-                        },
-                    },
-                );
-            }
             const response = await this.#application.fetch(request, environment);
             if (response.status === 101) {
                 await this.scheduleConnectionChecks();

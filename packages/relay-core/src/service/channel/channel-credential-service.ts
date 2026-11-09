@@ -9,10 +9,10 @@ export class ChannelCredentialService {
     }
 
     readonly isRuntimeActive = async (
-        identity: { readonly computerId: string; readonly runtimeId: string },
+        identity: { readonly computerId: string; readonly pairingId: string },
         signal: AbortSignal,
     ): Promise<boolean> => {
-        const active = await this.#store.isRuntimeActive(identity.runtimeId, signal);
+        const active = await this.#store.isRuntimeActive(identity.pairingId, signal);
         signal.throwIfAborted();
         return active;
     };

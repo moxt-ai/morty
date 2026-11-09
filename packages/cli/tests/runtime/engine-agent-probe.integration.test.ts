@@ -136,7 +136,6 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
             pairingId: "probe-pairing",
             relayOrigin: new URL(`http://127.0.0.1:${port(http)}`),
             runtimeCredential: "r".repeat(43),
-            runtimeId: "probe-runtime",
         },
         signal,
     );

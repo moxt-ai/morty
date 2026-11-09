@@ -70,7 +70,7 @@ export async function runRelayProbeWorker(
             },
             stopped,
         );
-        notify({ kind: "prepared", channelId: connection.channelId, runtimeId: connection.runtimeId, routesBefore });
+        notify({ kind: "prepared", channelId: connection.channelId, pairingId: connection.pairingId, routesBefore });
         await start.promise;
         if (!stopped.aborted) {
             await engine.runLoop({

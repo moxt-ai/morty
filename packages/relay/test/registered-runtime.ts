@@ -5,7 +5,7 @@ import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-ob
 import { eq } from "drizzle-orm";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
-import { runtimeIdentity, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
+import { pairedDaemon, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
 import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
@@ -13,7 +13,7 @@ import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
 export async function registerRuntimeFixture(
     computerId: string,
-    runtimeId: string,
+    pairingId: string,
 ): Promise<{ readonly hostCredentialId: string }> {
     const registeredAt = Date.UTC(2026, 9, 27);
     const appId = `app_${computerId}`;
@@ -38,13 +38,13 @@ export async function registerRuntimeFixture(
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         await database.batch([
             database
-                .insert(runtimeIdentity)
-                .values({ runtimeId, computerId, channelId: runtimeId, createdAt: registeredAt })
+                .insert(pairedDaemon)
+                .values({ pairingId, computerId, channelId: pairingId, createdAt: registeredAt })
                 .onConflictDoNothing(),
             database
                 .insert(runtimeRegistration)
                 .values({
-                    runtimeId,
+                    pairingId,
                     claimedAt: registeredAt,
                     machineName: "Registered test Runtime",
                     workspaceName: "Registered test workspace",

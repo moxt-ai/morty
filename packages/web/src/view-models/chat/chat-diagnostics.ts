@@ -22,7 +22,7 @@ export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
         return {
             kind: "available",
             view: "draft",
-            runtimeId: runtime?.runtimeId ?? null,
+            pairingId: runtime?.pairingId ?? null,
             runtimeOnline: runtime?.online ?? false,
             agent: { id: diagnosticAgent(catalog.agentId), version: diagnosticVersion(catalog.agentVersion) },
             catalog: {
@@ -50,7 +50,7 @@ export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
     return {
         kind: "available",
         view: "session",
-        runtimeId: runtime?.runtimeId ?? null,
+        pairingId: runtime?.pairingId ?? null,
         runtimeOnline: runtime?.online ?? false,
         agent: { id: diagnosticAgent(ready.agentId), version: diagnosticVersion(ready.agentVersion) },
         catalog: {

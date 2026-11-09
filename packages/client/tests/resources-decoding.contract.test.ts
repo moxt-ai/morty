@@ -34,7 +34,7 @@ const runtime = {
     machineName: "MacBook",
     online: true,
     computerId: "project-1",
-    runtimeId: "runtime-1",
+    pairingId: "runtime-1",
     workspaceName: "contract",
 };
 
@@ -43,7 +43,7 @@ const pairedStatus = {
     channelId: "channel-1",
     machineName: "MacBook",
     computerId: "project-1",
-    runtimeId: "runtime-1",
+    pairingId: "runtime-1",
     status: "paired",
     workspaceName: "contract",
 };

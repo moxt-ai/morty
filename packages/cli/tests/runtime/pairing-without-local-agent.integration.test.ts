@@ -39,7 +39,7 @@ async function createPairingRelay(): Promise<PairingRelay> {
                 JSON.stringify({
                     channelId: "unattended-channel",
                     runtimeCredential: "u".repeat(32),
-                    runtimeId: "unattended-runtime",
+                    pairingId: "unattended-runtime",
                 }),
             );
         });
@@ -164,7 +164,7 @@ describe("pairing a machine without a local Agent", () => {
                 await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(5_000)),
             ).toMatchObject({
                 channelId: "unattended-channel",
-                runtimeId: "unattended-runtime",
+                pairingId: "unattended-runtime",
             });
             expect(relay.claims).toHaveLength(1);
             expect(relay.claims[0]).toMatchObject({

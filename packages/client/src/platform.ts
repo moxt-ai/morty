@@ -146,4 +146,4 @@ export class MortyPlatformAppClient {
         );
 }
 
-export { runtimeRequestTarget } from "./transport/runtime-request-target.ts";
+export { computerRequestTarget } from "./transport/computer-request-target.ts";

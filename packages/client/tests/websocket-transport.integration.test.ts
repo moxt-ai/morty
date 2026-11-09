@@ -11,7 +11,7 @@ const sessionClaims = btoa(
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
         computerId: "project-1",
-        runtimeId: "runtime-1",
+        pairingId: "runtime-1",
         sessionId: "session-1",
     }),
 )
@@ -23,7 +23,7 @@ const sessionCredential = `msession_${"a".repeat(22)}_${sessionClaims}_${"A".rep
 function runtimeRequest(address: string, init?: RequestInit): Request {
     const url = new URL(address);
     if (!url.pathname.startsWith("/morty/api/v1/computers/")) {
-        url.pathname = `/morty/api/v1/computers/project-1/runtimes/runtime-1${url.pathname}`;
+        url.pathname = `/morty/api/v1/computers/project-1/pairings/runtime-1${url.pathname}`;
     } else {
         url.pathname = url.pathname.replace("/computers/project/", "/computers/project-1/");
     }
@@ -157,7 +157,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-it("Given a browser bound to one Runtime, When it opens another Session or addresses another Runtime, Then Sessions share the connection and the other Runtime is rejected", async () => {
+it("Given a browser bound to one computer, When it opens another Session or addresses another computer, Then Sessions share the connection and the other computer is rejected", async () => {
     const connector = new BrowserWebSocketConnector();
     const transport = new WsTransport({ connector });
     try {
@@ -166,14 +166,12 @@ it("Given a browser bound to one Runtime, When it opens another Session or addre
             runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-1/sessions/session-2/events-v2"),
         );
         expect(connector.sockets).toHaveLength(1);
-        expect(connector.sockets[0]?.url).toBe(
-            "wss://relay.example.test/morty/api/v1/computers/project-1/runtimes/runtime-1/transport",
-        );
+        expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/project-1/transport");
         await expect(
             transport.fetch(
-                runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-1/runtimes/runtime-2/agents"),
+                runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-2/pairings/runtime-2/agents"),
             ),
-        ).rejects.toThrow("cannot connect to multiple Runtimes");
+        ).rejects.toThrow("cannot connect to multiple computers");
         expect((await transport.fetch(runtimeRequest("https://relay.example.test/after-rejection"))).status).toBe(204);
         await events.cancel();
     } finally {

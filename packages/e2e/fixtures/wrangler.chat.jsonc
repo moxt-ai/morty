@@ -21,10 +21,6 @@
     },
     "migrations": [
         { "tag": "v1", "new_sqlite_classes": ["ProjectDurableObject"] },
-        { "tag": "v2", "new_sqlite_classes": ["ChatWebSocketDurableObject"] },
-        {
-            "tag": "rename-computer-object",
-            "renamed_classes": [{ "from": "ProjectDurableObject", "to": "ComputerDurableObject" }]
-        }
+        { "tag": "v2", "new_sqlite_classes": ["ChatWebSocketDurableObject"] }
     ]
 }

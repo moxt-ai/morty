@@ -15,7 +15,6 @@ export const runtimePairingAuditEvent = sqliteTable(
         auditId: text("audit_id").primaryKey(),
         computerId: text("project_id").notNull(),
         pairingId: text("pairing_id").notNull(),
-        runtimeId: text("runtime_id").notNull(),
         actorKind: text("actor_kind").notNull(),
         actorId: text("actor_id").notNull(),
         action: text("action", { enum: runtimePairingActions }).notNull(),

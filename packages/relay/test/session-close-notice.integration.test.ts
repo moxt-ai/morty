@@ -47,9 +47,9 @@ interface RuntimeConnection {
 }
 
 async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<RuntimeConnection>) => Promise<void>) {
-    const runtimeId = `close-notice-${crypto.randomUUID()}`;
+    const pairingId = `close-notice-${crypto.randomUUID()}`;
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    const { hostCredentialId } = await registerRuntimeFixture(computerId, runtimeId);
+    const { hostCredentialId } = await registerRuntimeFixture(computerId, pairingId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
     const connect = async (path: string): Promise<RuntimeConnection> => {
@@ -58,7 +58,7 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
             headers: {
                 Upgrade: "websocket",
                 "x-morty-channel-id": "close-notice-channel",
-                "x-morty-runtime-id": runtimeId,
+                "x-morty-pairing-id": pairingId,
                 "x-morty-host-credential-id": hostCredentialId,
                 "x-morty-host-credential-kind": "project",
             },

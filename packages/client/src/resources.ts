@@ -109,7 +109,7 @@ export interface CreateMortySessionRequest {
     readonly agentId: string;
     readonly configurations: readonly SessionConfigurationSelection[];
     readonly directoryId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly sessionId: string;
 }
 
@@ -330,7 +330,7 @@ export class MortyRuntimeDescriptor {
     readonly machineName: string;
     readonly online: boolean;
     readonly computerId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly workspaceName: string;
 
     constructor(
@@ -339,7 +339,7 @@ export class MortyRuntimeDescriptor {
         machineName: string,
         online: boolean,
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         workspaceName: string,
     ) {
         this.agents = agents;
@@ -347,7 +347,7 @@ export class MortyRuntimeDescriptor {
         this.machineName = machineName;
         this.online = online;
         this.computerId = computerId;
-        this.runtimeId = runtimeId;
+        this.pairingId = pairingId;
         this.workspaceName = workspaceName;
     }
 }
@@ -357,7 +357,7 @@ export class MortyChannelDescriptor {
     readonly channelId: string;
     readonly machineName: string;
     readonly computerId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly workspaceName: string;
 
     constructor(
@@ -365,14 +365,14 @@ export class MortyChannelDescriptor {
         channelId: string,
         machineName: string,
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         workspaceName: string,
     ) {
         this.agents = agents;
         this.channelId = channelId;
         this.machineName = machineName;
         this.computerId = computerId;
-        this.runtimeId = runtimeId;
+        this.pairingId = pairingId;
         this.workspaceName = workspaceName;
     }
 }
@@ -384,7 +384,7 @@ export function decodeMortyChannelDescriptor(value: unknown): MortyChannelDescri
         identifierField(channel, "channelId"),
         stringField(channel, "machineName", 255),
         identifierField(channel, "computerId"),
-        identifierField(channel, "runtimeId"),
+        identifierField(channel, "pairingId"),
         stringField(channel, "workspaceName", 255),
     );
 }
@@ -397,7 +397,7 @@ export function decodeRuntimeDescriptor(value: unknown): MortyRuntimeDescriptor 
         stringField(runtime, "machineName", 255),
         booleanField(runtime, "online"),
         identifierField(runtime, "computerId"),
-        identifierField(runtime, "runtimeId"),
+        identifierField(runtime, "pairingId"),
         stringField(runtime, "workspaceName", 255),
     );
 }
@@ -414,7 +414,6 @@ export class MortyRuntimePairing {
     readonly pairingId: string;
     readonly pollToken: string;
     readonly computerId: string;
-    readonly runtimeId: string;
 
     constructor(
         channelId: string,
@@ -423,7 +422,6 @@ export class MortyRuntimePairing {
         pairingId: string,
         pollToken: string,
         computerId: string,
-        runtimeId: string,
     ) {
         this.channelId = channelId;
         this.expiresAt = expiresAt;
@@ -431,7 +429,6 @@ export class MortyRuntimePairing {
         this.pairingId = pairingId;
         this.pollToken = pollToken;
         this.computerId = computerId;
-        this.runtimeId = runtimeId;
     }
 }
 
@@ -472,7 +469,6 @@ export function decodeMortyRuntimePairing(value: unknown): MortyRuntimePairing {
         identifierField(pairing, "pairingId"),
         pollToken,
         identifierField(pairing, "computerId"),
-        identifierField(pairing, "runtimeId"),
     );
 }
 
@@ -506,7 +502,7 @@ export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
     readonly channelId: string;
     readonly machineName: string;
     readonly computerId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly status = MortyRuntimePairingLifecycle.Paired;
     readonly workspaceName: string;
 
@@ -515,7 +511,7 @@ export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
         channelId: string,
         machineName: string,
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         workspaceName: string,
     ) {
         super();
@@ -523,7 +519,7 @@ export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
         this.channelId = channelId;
         this.machineName = machineName;
         this.computerId = computerId;
-        this.runtimeId = runtimeId;
+        this.pairingId = pairingId;
         this.workspaceName = workspaceName;
     }
 }
@@ -560,7 +556,7 @@ export function decodeMortyRuntimePairingStatus(value: unknown): MortyRuntimePai
             identifierField(status, "channelId"),
             stringField(status, "machineName", 255),
             identifierField(status, "computerId"),
-            identifierField(status, "runtimeId"),
+            identifierField(status, "pairingId"),
             stringField(status, "workspaceName", 255),
         );
     }

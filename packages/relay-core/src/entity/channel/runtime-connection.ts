@@ -1,5 +1,5 @@
 export interface RuntimeConnectionIdentity {
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly connectionEpoch: number;
     readonly connectionId: string;
 }

@@ -50,7 +50,7 @@ async function computerIdFromUnscopedRequest(request: Request): Promise<string |
             return computerId;
         }
     }
-    const pairingPrefix = `${MORTY_API_PREFIX}/v1/runtime-pairings/`;
+    const pairingPrefix = `${MORTY_API_PREFIX}/v1/pairings/`;
     if (pathname.startsWith(pairingPrefix) && pathname.endsWith("/redeem")) {
         try {
             const pairingId = decodeURIComponent(pathname.slice(pairingPrefix.length, -"/redeem".length));

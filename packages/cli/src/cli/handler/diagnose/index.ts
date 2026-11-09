@@ -25,7 +25,7 @@ const workerMessage = z.discriminatedUnion("kind", [
         kind: z.literal("prepared"),
         role: z.enum(["direct", "proxy"]),
         channelId: z.string(),
-        runtimeId: z.string(),
+        pairingId: z.string(),
         routesBefore: z.array(routeEvidenceSchema),
     }),
     z.object({
@@ -51,7 +51,7 @@ const workerMessage = z.discriminatedUnion("kind", [
 interface LegReport {
     readonly role: RelayProbeRole;
     readonly channelId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly onlineCount: number;
     readonly routesBefore: readonly RouteEvidence[];
     readonly routesAfter: readonly RouteEvidence[];
@@ -66,10 +66,10 @@ class ProbeLeg {
     readonly role: RelayProbeRole;
     readonly #child: ChildProcess;
     readonly #directory: string;
-    readonly #prepared = Promise.withResolvers<{ readonly channelId: string; readonly runtimeId: string }>();
+    readonly #prepared = Promise.withResolvers<{ readonly channelId: string; readonly pairingId: string }>();
     readonly closed: Promise<number | null>;
     #channelId = "";
-    #runtimeId = "";
+    #pairingId = "";
     #routesBefore: readonly RouteEvidence[] = [];
     #routesAfter: readonly RouteEvidence[] = [];
     #onlineCount = 0;
@@ -151,7 +151,7 @@ class ProbeLeg {
             switch (event.kind) {
                 case "prepared":
                     this.#channelId = event.channelId;
-                    this.#runtimeId = event.runtimeId;
+                    this.#pairingId = event.pairingId;
                     this.#routesBefore = event.routesBefore;
                     this.#prepared.resolve(event);
                     break;
@@ -206,7 +206,7 @@ class ProbeLeg {
         return {
             role: this.role,
             channelId: this.#channelId,
-            runtimeId: this.#runtimeId,
+            pairingId: this.#pairingId,
             onlineCount: this.#onlineCount,
             routesBefore: this.#routesBefore,
             routesAfter: this.#routesAfter,
@@ -247,7 +247,7 @@ async function compare(configPath: string, output: string, duration: number, con
         deadline.addEventListener("abort", abortPreparation, { once: true });
         const prepared = await Promise.race([Promise.all(legs.map((leg) => leg.prepare())), cancelled.promise]);
         context.shutdownSignal.throwIfAborted();
-        if (prepared[0]?.channelId === prepared[1]?.channelId || prepared[0]?.runtimeId === prepared[1]?.runtimeId) {
+        if (prepared[0]?.channelId === prepared[1]?.channelId || prepared[0]?.pairingId === prepared[1]?.pairingId) {
             throw new RelayProbeError(
                 "probe_runtime_reused",
                 "The Relay returned the same Runtime for distinct pairings",

@@ -25,7 +25,7 @@ const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 
-const REDEEM_RESPONSE_KEYS = ["channelId", "runtimeCredential", "runtimeId"] as const;
+const REDEEM_RESPONSE_KEYS = ["channelId", "runtimeCredential", "pairingId"] as const;
 
 interface PairCommandOptions {
     readonly code: string;
@@ -37,7 +37,7 @@ interface PairCommandOptions {
 interface ClaimPairingResponse {
     readonly channelId: string;
     readonly runtimeCredential: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
 }
 
 export interface MortyRuntimePairingOptions {
@@ -153,18 +153,18 @@ function decodePairingResponse(value: unknown): ClaimPairingResponse {
     }
     const channelId = value["channelId"];
     const runtimeCredential = value["runtimeCredential"];
-    const runtimeId = value["runtimeId"];
+    const pairingId = value["pairingId"];
     if (
         typeof channelId !== "string" ||
         !isIdentifier(channelId) ||
         typeof runtimeCredential !== "string" ||
         !TOKEN_PATTERN.test(runtimeCredential) ||
-        typeof runtimeId !== "string" ||
-        !isIdentifier(runtimeId)
+        typeof pairingId !== "string" ||
+        !isIdentifier(pairingId)
     ) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    return { channelId, runtimeCredential, runtimeId };
+    return { channelId, runtimeCredential, pairingId };
 }
 
 async function claimPairing(
@@ -180,10 +180,7 @@ async function claimPairing(
         id: agent.id,
         label: agent.label,
     }));
-    const endpoint = mortyApiUrl(
-        options.relayOrigin,
-        `/v1/runtime-pairings/${encodeURIComponent(options.pairingId)}/redeem`,
-    );
+    const endpoint = mortyApiUrl(options.relayOrigin, `/v1/pairings/${encodeURIComponent(options.pairingId)}/redeem`);
     let response: Response;
     try {
         response = await fetch(endpoint, {
@@ -277,10 +274,9 @@ async function pairRuntime(
         {
             channelId: claim.channelId,
             defaultWorkspace,
-            pairingId: options.pairingId,
+            pairingId: claim.pairingId,
             relayOrigin: options.relayOrigin,
             runtimeCredential: claim.runtimeCredential,
-            runtimeId: claim.runtimeId,
         },
         signal,
     );

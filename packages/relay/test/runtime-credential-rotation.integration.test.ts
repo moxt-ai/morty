@@ -63,21 +63,18 @@ async function pairedRuntime(name: string) {
     );
     const pairing = await responseJson(
         await worker.fetch(
-            new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${text(project, "computerId")}/runtime-pairings`,
-                {
-                    body: JSON.stringify({ idempotencyKey: name }),
-                    headers,
-                    method: "POST",
-                },
-            ),
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${text(project, "computerId")}/pairings`, {
+                body: JSON.stringify({ idempotencyKey: name }),
+                headers,
+                method: "POST",
+            }),
             environment,
         ),
         201,
     );
     const claimed = await responseJson(
         await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtime-pairings/${text(pairing, "pairingId")}/redeem`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`, {
                 body: JSON.stringify({
                     agents: [],
                     machineName: "Owner laptop",

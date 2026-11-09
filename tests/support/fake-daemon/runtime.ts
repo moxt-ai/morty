@@ -26,13 +26,12 @@ const runtimePairingSchema = v.object({
     pairingCode: v.string(),
     pairingId: v.string(),
     computerId: v.string(),
-    runtimeId: v.string(),
 });
 
 const runtimeClaimSchema = v.object({
     channelId: v.string(),
     runtimeCredential: v.string(),
-    runtimeId: v.string(),
+    pairingId: v.string(),
 });
 
 export interface ControlledRuntimeConnection {
@@ -304,7 +303,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/runtime-pairings`, {
+                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairings`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,
@@ -321,7 +320,7 @@ export async function createControlledAgentRuntime(options: {
         runtimeClaimSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                new Request(`${options.origin}/morty/api/v1/pairings/${pairing.pairingId}/redeem`, {
                     body: JSON.stringify({
                         agents: harness.catalog,
                         machineName: "Controlled Agent Runtime",
@@ -353,6 +352,6 @@ export async function createControlledAgentRuntime(options: {
     return {
         ...connected,
         client,
-        runtimeId: claim.runtimeId,
+        pairingId: claim.pairingId,
     };
 }

@@ -24,13 +24,13 @@ function validated<TSchema extends v.GenericSchema>(schema: TSchema, value: unkn
 /** Session operations on the Runtime this request names, authorized by its project credential for each operation. */
 export function sessionControl(context: Context<RelayHttpEnvironment>): SessionControl {
     const computerId = validated(identifier, context.req.param("computerId"));
-    const runtimeId = validated(identifier, context.req.param("runtimeId"));
+    const pairingId = validated(identifier, context.req.param("pairingId"));
     const token = bearerToken(context.req.raw);
     return new SessionControl(
         async (command, permission) =>
             await context.env.services.runtimePairings.requestOperationControl(
                 computerId,
-                runtimeId,
+                pairingId,
                 token,
                 command,
                 permission,
@@ -45,7 +45,7 @@ export function createProjectRuntimeSessionControlRoutes() {
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .post(
-            "/computers/:computerId/runtimes/:runtimeId/sessions/:sessionId/turns/:turnId/cancel",
+            "/computers/:computerId/pairings/:pairingId/sessions/:sessionId/turns/:turnId/cancel",
             async (context) => {
                 const turnId = validateIdentifier(context.req.param("turnId"), "turn_id");
                 const { stopReason } = await sessionControl(context).cancelTurn(turnId);
@@ -54,7 +54,7 @@ export function createProjectRuntimeSessionControlRoutes() {
             },
         )
         .post(
-            "/computers/:computerId/runtimes/:runtimeId/sessions/:sessionId/turns/:turnId/cancel-before-start",
+            "/computers/:computerId/pairings/:pairingId/sessions/:sessionId/turns/:turnId/cancel-before-start",
             async (context) => {
                 const turnId = validateIdentifier(context.req.param("turnId"), "turn_id");
                 await sessionControl(context).withdrawTurn(turnId);
@@ -63,7 +63,7 @@ export function createProjectRuntimeSessionControlRoutes() {
             },
         )
         .put(
-            "/computers/:computerId/runtimes/:runtimeId/sessions/:sessionId/turns/:turnId/disposition",
+            "/computers/:computerId/pairings/:pairingId/sessions/:sessionId/turns/:turnId/disposition",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 decodeSessionRequest(turnSteerRequest, context.req.valid("json"));
@@ -74,7 +74,7 @@ export function createProjectRuntimeSessionControlRoutes() {
             },
         )
         .post(
-            "/computers/:computerId/runtimes/:runtimeId/sessions/:sessionId/interactions/:interactionId/responses",
+            "/computers/:computerId/pairings/:pairingId/sessions/:sessionId/interactions/:interactionId/responses",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = decodeSessionRequest(interactionResponseRequest, context.req.valid("json"));
@@ -84,7 +84,7 @@ export function createProjectRuntimeSessionControlRoutes() {
                 return context.json({ accepted: true });
             },
         )
-        .get("/computers/:computerId/runtimes/:runtimeId/sessions/:sessionId/events-v2", async (context) => {
+        .get("/computers/:computerId/pairings/:pairingId/sessions/:sessionId/events-v2", async (context) => {
             const cursor = context.req.query("cursor");
             const events = await sessionControl(context).liveEvents({
                 cursor:

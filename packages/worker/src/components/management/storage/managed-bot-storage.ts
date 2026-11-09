@@ -16,7 +16,7 @@ const listedBotSchema = v.pipe(
     v.object({
         botId: identifier,
         displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
-        runtimeId: v.nullable(identifier),
+        pairingId: v.nullable(identifier),
     }),
     v.readonly(),
 );
@@ -43,7 +43,7 @@ export class ManagedBotStorage {
     readonly readMachine = async (userId: string, signal: AbortSignal): Promise<ListedManagedBot | null> => {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
-            .select({ botId: managedBot.botId, displayName: managedBot.displayName, runtimeId: managedBot.runtimeId })
+            .select({ botId: managedBot.botId, displayName: managedBot.displayName, pairingId: managedBot.pairingId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
             .get();
@@ -77,7 +77,7 @@ export class ManagedBotStorage {
             .select({
                 botId: managedBot.botId,
                 displayName: managedBot.displayName,
-                runtimeId: managedBot.runtimeId,
+                pairingId: managedBot.pairingId,
             })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
@@ -108,14 +108,14 @@ export class ManagedBotStorage {
         const database = this.#requireDatabase();
         const result = await database
             .update(managedBot)
-            .set({ runtimeId: value.runtimeId, updatedAt: now })
+            .set({ pairingId: value.pairingId, updatedAt: now })
             .where(
                 and(
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
                     or(
-                        replaced === null ? isNull(managedBot.runtimeId) : eq(managedBot.runtimeId, replaced),
-                        eq(managedBot.runtimeId, value.runtimeId),
+                        replaced === null ? isNull(managedBot.pairingId) : eq(managedBot.pairingId, replaced),
+                        eq(managedBot.pairingId, value.pairingId),
                     ),
                 ),
             )
@@ -125,7 +125,7 @@ export class ManagedBotStorage {
             return "configured";
         }
         const current = await database
-            .select({ runtimeId: managedBot.runtimeId })
+            .select({ pairingId: managedBot.pairingId })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
             .get();
@@ -133,7 +133,7 @@ export class ManagedBotStorage {
         if (current === undefined) {
             return "not-found";
         }
-        return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "not-found";
+        return current.pairingId !== null && current.pairingId !== value.pairingId ? "runtime-mismatch" : "not-found";
     };
 
     /**

@@ -85,7 +85,7 @@ export class ManagementService {
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { botId: bot.botId, runtimeId: bot.configuration?.runtimeId ?? null };
+        return { botId: bot.botId, pairingId: bot.configuration?.pairingId ?? null };
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {

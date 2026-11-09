@@ -16,15 +16,14 @@ export function createProjectRuntimePairingRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
-        .use("/runtime-pairings/:pairingId/redeem", pairingTimeoutMiddleware("Runtime pairing redemption timed out"))
-        .use("/computers/:computerId/runtime-pairings", pairingTimeoutMiddleware("Runtime pairing creation timed out"))
+        .use("/pairings/:pairingId/redeem", pairingTimeoutMiddleware("Runtime pairing redemption timed out"))
+        .use("/computers/:computerId/pairings", pairingTimeoutMiddleware("Runtime pairing creation timed out"))
         .use(
-            "/computers/:computerId/runtime-pairings/:pairingId",
-            pairingTimeoutMiddleware("Runtime pairing lookup timed out"),
+            "/computers/:computerId/pairings/:pairingId",
+            pairingTimeoutMiddleware("Pairing lookup or revocation timed out"),
         )
-        .use("/computers/:computerId/runtimes/:runtimeId", pairingTimeoutMiddleware("Runtime revocation timed out"))
         .post(
-            "/runtime-pairings/:pairingId/redeem",
+            "/pairings/:pairingId/redeem",
             bodyParser<RelayHttpEnvironment>(["agents", "machineName", "pairingCode", "workspaceName"]),
             async (context) => {
                 const body = context.req.valid("json");
@@ -40,7 +39,7 @@ export function createProjectRuntimePairingRoutes() {
                 return context.json({
                     channelId: redeemed.channelId,
                     runtimeCredential: redeemed.daemonToken,
-                    runtimeId: redeemed.runtimeId,
+                    pairingId: redeemed.pairingId,
                 });
             },
         )
@@ -63,7 +62,7 @@ export function createProjectRuntimePairingRoutes() {
             }
         })
         .post(
-            "/computers/:computerId/runtime-pairings",
+            "/computers/:computerId/pairings",
             bodyParser<RelayHttpEnvironment>(["idempotencyKey"]),
             async (context) => {
                 const request = context.req.raw;
@@ -79,7 +78,7 @@ export function createProjectRuntimePairingRoutes() {
                 );
             },
         )
-        .get("/computers/:computerId/runtime-pairings/:pairingId", async (context) => {
+        .get("/computers/:computerId/pairings/:pairingId", async (context) => {
             const request = context.req.raw;
             return context.json(
                 await context.env.services.runtimePairings.readProjectRuntimePairing(
@@ -90,21 +89,21 @@ export function createProjectRuntimePairingRoutes() {
                 ),
             );
         })
-        .get("/computers/:computerId/runtimes/:runtimeId/host", async (context) => {
+        .get("/computers/:computerId/pairings/:pairingId/host", async (context) => {
             const request = context.req.raw;
-            const access = await context.env.services.runtimePairings.authorizeProjectRuntimeHost(
+            const access = await context.env.services.runtimePairings.authorizePairedHost(
                 validateIdentifier(context.req.param("computerId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("pairingId"), "pairing_id"),
                 bearerToken(request),
                 request.signal,
             );
             return await context.env.gateways.channelGateway.acceptHost(access, request, request.signal);
         })
-        .delete("/computers/:computerId/runtimes/:runtimeId", async (context) => {
+        .delete("/computers/:computerId/pairings/:pairingId", async (context) => {
             const request = context.req.raw;
             await context.env.services.runtimePairings.revokeProjectRuntime(
                 validateIdentifier(context.req.param("computerId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("pairingId"), "pairing_id"),
                 bearerToken(request),
                 context.var.signal,
             );

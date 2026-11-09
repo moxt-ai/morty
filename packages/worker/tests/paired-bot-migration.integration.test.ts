@@ -31,7 +31,7 @@ test("Given a user with a configured bot and a bot created by a consumed pairing
     expect(
         database
             .prepare(
-                "SELECT user_id, bot_id, display_name, runtime_id, created_at, updated_at FROM managed_bot ORDER BY bot_id",
+                "SELECT user_id, bot_id, display_name, pairing_id, created_at, updated_at FROM managed_bot ORDER BY bot_id",
             )
             .all(),
     ).toEqual([
@@ -39,7 +39,7 @@ test("Given a user with a configured bot and a bot created by a consumed pairing
             user_id: "usr_owner",
             bot_id: "bot_configured",
             display_name: "Laptop",
-            runtime_id: "rt_laptop",
+            pairing_id: "rt_laptop",
             created_at: 1,
             updated_at: 2,
         },

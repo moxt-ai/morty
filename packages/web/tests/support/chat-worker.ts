@@ -57,7 +57,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.computerId, agents, nativeSessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
-                runtimeId: runtime.runtimeId,
+                pairingId: runtime.pairingId,
                 agentRef: agents[0]?.id ?? "codex",
             });
             if (setup.status !== 202) {
@@ -68,18 +68,18 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 continueReply: runtime.continueReply,
                 /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
-                    await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
+                    await runtime.client.sessions.close(runtime.pairingId, sessionId, new AbortController().signal);
                 },
                 /** Applies another client's explicit model edit through the public Platform contract. */
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
                     const snapshot = await runtime.client.sessions.readConfiguration(
-                        runtime.runtimeId,
+                        runtime.pairingId,
                         sessionId,
                         signal,
                     );
                     await runtime.client.sessions.updateConfiguration(
-                        runtime.runtimeId,
+                        runtime.pairingId,
                         sessionId,
                         {
                             additionalDirectoryIds: [],
@@ -97,7 +97,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
-                        runtime.runtimeId,
+                        runtime.pairingId,
                         sessionId,
                         {
                             additionalDirectoryIds: [],
@@ -125,7 +125,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Renames a Session through the Platform, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
-                        runtime.runtimeId,
+                        runtime.pairingId,
                         sessionId,
                         title,
                         new AbortController().signal,
@@ -137,7 +137,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 revoke: async (): Promise<void> => {
                     const response = await cloud.platformRequest(
                         new Request(
-                            `https://platform.test/morty/api/v1/computers/${identity.computerId}/runtimes/${runtime.runtimeId}`,
+                            `https://platform.test/morty/api/v1/computers/${identity.computerId}/pairings/${runtime.pairingId}`,
                             {
                                 method: "DELETE",
                                 headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
@@ -163,7 +163,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 await connect(agents, nativeSessionIds),
             connectRuntime: async () => {
                 const runtime = await cloud.connectAgent(identity.computerId);
-                return { failure: runtime.failure, runtimeId: runtime.runtimeId };
+                return { failure: runtime.failure, pairingId: runtime.pairingId };
             },
             createTransferUrl: async () => {
                 const response = await request(`computers/${identity.computerId}/identity/transfers`, {});

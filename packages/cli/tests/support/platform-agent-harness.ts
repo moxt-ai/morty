@@ -20,7 +20,6 @@ type TestServerApp = { readonly request: (request: Request) => Response | Promis
 const runtimePairingSchema = v.object({
     pairingId: v.string(),
     computerId: v.string(),
-    runtimeId: v.string(),
     channelId: v.string(),
     pairingCode: v.string(),
 });
@@ -78,7 +77,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             runtimePairingSchema,
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/runtime-pairings`, {
+                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairings`, {
                         body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                         headers: {
                             authorization: `Bearer ${options.credential}`,
@@ -94,7 +93,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             v.object({ runtimeCredential: v.string() }),
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                    new Request(`${options.origin}/morty/api/v1/pairings/${pairing.pairingId}/redeem`, {
                         body: JSON.stringify({
                             agents: fakeAgentHarnessCatalog(harnesses),
                             machineName: "Controlled Agent harness",
@@ -160,7 +159,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         return {
             client,
             failure,
-            runtimeId: pairing.runtimeId,
+            pairingId: pairing.pairingId,
             [Symbol.asyncDispose]: async () => {
                 if (disposed) {
                     return;

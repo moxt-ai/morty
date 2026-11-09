@@ -24,26 +24,26 @@ import type { NativeSessionForks } from "./native-session-forks.ts";
 export interface LocalSessionOperations extends SessionRuntimeOperations {
     readonly forkNativeSession: (
         scope: Scope,
-        runtimeId: string,
+        pairingId: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => ReturnType<NativeSessionForks["fork"]>;
     readonly requestWorkspace: (
         scope: Scope,
-        runtimeId: string,
+        pairingId: string,
         command: WorkspaceListCommand,
         signal: AbortSignal,
     ) => Promise<WorkspaceEntriesEvent>;
     readonly requestAgentSettings: (
         scope: Scope,
-        runtimeId: string,
+        pairingId: string,
         command: AgentSettingsDiscoverCommand,
         signal: AbortSignal,
     ) => Promise<AgentSettingsDiscoveredEvent>;
     readonly openPublicSessionEvents: (
         scope: Scope,
-        runtimeId: string,
+        pairingId: string,
         sessionId: string,
         credential: {
             readonly credentialId: string;
@@ -58,11 +58,11 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
 export function createLocalSessionOperations(
     cx: DurableObjectContext,
     computerId: string,
-    runtimeId: string,
+    pairingId: string,
 ): LocalSessionOperations {
     const checkTarget = (requestedProject: string, requestedRuntime: string) => {
         const current = cx.services.connections.current();
-        if (requestedProject !== computerId || requestedRuntime !== runtimeId || current?.runtimeId !== runtimeId) {
+        if (requestedProject !== computerId || requestedRuntime !== pairingId || current?.pairingId !== pairingId) {
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
         const daemon = cx.gateways.peers.sockets().find(({ identity }) => identity.role === "daemon");
@@ -77,7 +77,7 @@ export function createLocalSessionOperations(
             if (!signal.aborted) {
                 await cx.services.runtime.receiveOperation(
                     new ComputerScope(computerId),
-                    runtimeId,
+                    pairingId,
                     socket,
                     message,
                     signal,
@@ -100,7 +100,7 @@ export function createLocalSessionOperations(
             try {
                 await cx.services.runtime.receiveOperation(
                     new ComputerScope(computerId),
-                    runtimeId,
+                    pairingId,
                     socket,
                     message,
                     cleanup.signal,
@@ -146,13 +146,13 @@ export function createLocalSessionOperations(
             signal.throwIfAborted();
             await cx.services.runtime.expireSilentDaemons();
             checkTarget(scope.computerId, requestedRuntime);
-            if (!cx.services.runtime.isOnline(runtimeId)) {
+            if (!cx.services.runtime.isOnline(pairingId)) {
                 throw new PairingDirectoryError("runtime_offline", "The Runtime is offline");
             }
             return cx.gateways.peers.accept({
                 role: "viewer",
                 computerId,
-                runtimeId,
+                pairingId,
                 sessionFilter: sessionId,
                 expiresAt: credential.expiresAt,
                 credential: {

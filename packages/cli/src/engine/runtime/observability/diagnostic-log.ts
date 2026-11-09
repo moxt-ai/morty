@@ -14,7 +14,7 @@ const MAXIMUM_REPORT_BYTES = 60_000;
 const REMOTE_DIAGNOSTIC_FIELDS = [
     "agentId",
     "operation",
-    "runtimeId",
+    "pairingId",
     "closeCode",
     "timeoutMilliseconds",
     "attempt",

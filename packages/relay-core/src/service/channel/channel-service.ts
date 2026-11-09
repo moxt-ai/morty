@@ -71,7 +71,7 @@ export class ChannelService {
             {
                 event: "runtime_credential_reused",
                 computerId: rotation.access.computerId,
-                runtimeId: rotation.access.runtimeId,
+                pairingId: rotation.access.pairingId,
             },
             "A retired Runtime credential was presented; the Runtime was revoked",
         );

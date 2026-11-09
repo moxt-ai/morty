@@ -22,7 +22,6 @@ describe("Runtime installation storage", () => {
                     pairingId: "pairing_directory",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_directory",
                 },
                 signal,
             );
@@ -51,7 +50,6 @@ describe("Runtime installation storage", () => {
                     pairingId: "pairing_context",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_context",
                 },
                 signal,
             );
@@ -68,7 +66,6 @@ describe("Runtime installation storage", () => {
                     pairingId: "pairing_new",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "b".repeat(43),
-                    runtimeId: "runtime_new",
                 },
                 signal,
             );
@@ -106,7 +103,6 @@ describe("Runtime installation storage", () => {
                     pairingId: "old_pairing",
                     relayOrigin: "https://relay.example.com/",
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "old_runtime",
                     version: 4,
                 }),
                 { mode: 0o600 },
@@ -133,7 +129,6 @@ describe("Runtime installation storage", () => {
                     pairingId: "pairing_morty",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_morty",
                 },
                 signal,
             );
@@ -144,7 +139,6 @@ describe("Runtime installation storage", () => {
                     pairingId: "pairing_moxt",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "b".repeat(43),
-                    runtimeId: "runtime_moxt",
                 },
                 signal,
             );
@@ -156,7 +150,7 @@ describe("Runtime installation storage", () => {
             if (!(resumed instanceof VerifiedRuntimeConnection)) {
                 throw new Error("Expected a verified Runtime connection");
             }
-            expect(resumed.runtimeId).toBe("runtime_moxt");
+            expect(resumed.pairingId).toBe("runtime_moxt");
             await expect(moxt.listConnections(signal)).resolves.toEqual([resumed]);
             await expect(moxt.readConnectionForPairing("pairing_moxt", signal)).resolves.toEqual(resumed);
             expect(morty.pairingPath).not.toContain("moxt-data");

@@ -95,7 +95,7 @@ export class PairingIdentityService {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
             }
             const computerId = validateIdentifier(match.row.project_id, "project_id");
-            const runtimeId = validateIdentifier(match.row.runtime_id, "runtime_id");
+            const pairingId = validateIdentifier(match.row.pairing_id, "pairing_id");
             const channelId = validateIdentifier(match.row.channel_id, "channel_id");
             const project = await this.#projects.resolve(computerId, signal);
             signal.throwIfAborted();
@@ -109,7 +109,7 @@ export class PairingIdentityService {
                 kind: match.kind,
                 access: new RuntimeAccessContext(
                     new ComputerScope(computerId),
-                    runtimeId,
+                    pairingId,
                     channelId,
                     `daemon:${channelId}`,
                 ),

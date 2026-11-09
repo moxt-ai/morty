@@ -5,7 +5,7 @@ export const runtimeConnectionState = sqliteTable(
     "runtime_connection_state",
     {
         singleton: integer("singleton").primaryKey(),
-        runtimeId: text("runtime_id").notNull(),
+        pairingId: text("pairing_id").notNull(),
         connectionEpoch: integer("connection_epoch").notNull(),
         connectionId: text("connection_id").notNull(),
         state: text("state", { enum: ["online", "offline"] }).notNull(),

@@ -52,7 +52,7 @@ test("Given a machine owner and a deployment service credential, When the owner 
         expect(project.status).toBe(200);
         expect(await project.json()).toMatchObject({ computer: { computerId: identity.computerId } });
         const pairing = await worker.fetch(
-            new Request(`${projectUrl}/runtime-pairings`, {
+            new Request(`${projectUrl}/pairings`, {
                 method: "POST",
                 headers: { ...headers, "content-type": "application/json" },
                 body: JSON.stringify({ idempotencyKey: "reconfigured-service-pairing" }),
@@ -101,7 +101,7 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
             expect(await currentProject.json()).toEqual(project);
 
             const pairing = await worker.fetch(
-                new Request(`${projectUrl}/runtime-pairings`, {
+                new Request(`${projectUrl}/pairings`, {
                     method: "POST",
                     headers: { ...headers, "content-type": "application/json" },
                     body: JSON.stringify({ idempotencyKey: "relocated-platform-pairing" }),

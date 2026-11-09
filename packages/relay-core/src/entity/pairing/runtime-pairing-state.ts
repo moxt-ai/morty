@@ -32,7 +32,7 @@ export function projectRuntimePairingStatus(row: PairingChannelRow, now: number)
             row.registration.machine_name,
             row.registration.workspace_name,
             row.project_id,
-            row.runtime_id,
+            row.pairing_id,
         );
     }
     if (!Number.isSafeInteger(row.expires_at) || row.expires_at < 0) {

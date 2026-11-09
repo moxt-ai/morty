@@ -4,18 +4,18 @@ import type { ChannelPeers } from "./channel-actor.ts";
 
 export class SessionLiveEventRelay {
     readonly #computerId: string;
-    readonly #runtimeId: string;
+    readonly #pairingId: string;
     readonly #peers: ChannelPeers;
     readonly #notifications: SessionStatusNotifications | undefined;
 
     constructor(
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         peers: ChannelPeers,
         notifications?: SessionStatusNotifications,
     ) {
         this.#computerId = computerId;
-        this.#runtimeId = runtimeId;
+        this.#pairingId = pairingId;
         this.#peers = peers;
         this.#notifications = notifications;
     }
@@ -71,7 +71,7 @@ export class SessionLiveEventRelay {
         const events = envelope.events.filter((event) => event.mortyMetadata?.restated !== true);
         if (events.length > 0) {
             this.#notifications?.publish(
-                { computerId: this.#computerId, runtimeId: this.#runtimeId },
+                { computerId: this.#computerId, pairingId: this.#pairingId },
                 events.length === envelope.events.length ? envelope : { ...envelope, events },
             );
         }

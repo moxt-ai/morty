@@ -23,7 +23,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
-                runtimeId: runtime.runtimeId,
+                pairingId: runtime.pairingId,
                 sessionId,
             },
             cancellation.signal,
@@ -40,9 +40,9 @@ it("Given two clients holding one configuration revision, When they edit concurr
             valueType: "select" as const,
         };
         const results = await Promise.allSettled([
-            runtime.client.sessions.updateConfiguration(runtime.runtimeId, ready.sessionId, edit, cancellation.signal),
+            runtime.client.sessions.updateConfiguration(runtime.pairingId, ready.sessionId, edit, cancellation.signal),
             runtime.client.sessions.updateConfiguration(
-                runtime.runtimeId,
+                runtime.pairingId,
                 ready.sessionId,
                 { ...edit, value: "test-small" },
                 cancellation.signal,
@@ -60,10 +60,10 @@ it("Given two clients holding one configuration revision, When they edit concurr
         }
         expect(committed.value.configurationRevision).not.toBe(ready.configurationRevision);
         await expect(
-            runtime.client.sessions.updateConfiguration(runtime.runtimeId, ready.sessionId, edit, cancellation.signal),
+            runtime.client.sessions.updateConfiguration(runtime.pairingId, ready.sessionId, edit, cancellation.signal),
         ).rejects.toMatchObject({ code: "session_configuration_conflict", status: 409 });
         const current = await runtime.client.sessions.readConfiguration(
-            runtime.runtimeId,
+            runtime.pairingId,
             ready.sessionId,
             cancellation.signal,
         );

@@ -1,0 +1,1 @@
+ALTER TABLE `managed_bot` RENAME COLUMN "runtime_id" TO "pairing_id";

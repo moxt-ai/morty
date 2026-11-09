@@ -12,7 +12,7 @@ import type { ChannelGateway } from "./channel-gateway.ts";
 const INTERNAL_CHANNEL_ID_HEADER = "x-morty-channel-id";
 const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-morty-host-credential-id";
 const INTERNAL_HOST_CREDENTIAL_KIND_HEADER = "x-morty-host-credential-kind";
-const INTERNAL_RUNTIME_ID_HEADER = "x-morty-runtime-id";
+const INTERNAL_PAIRING_ID_HEADER = "x-morty-pairing-id";
 const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-morty-session-access-revoked-through";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
@@ -67,7 +67,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         const headers = new Headers();
         headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
         headers.set(INTERNAL_HOST_CREDENTIAL_ID_HEADER, access.credentialId);
-        headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
+        headers.set(INTERNAL_PAIRING_ID_HEADER, access.pairingId);
         const response = await this.fetchRuntime(
             access,
             new Request(
@@ -90,7 +90,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         signal.throwIfAborted();
         const headers = new Headers();
         headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
-        headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
+        headers.set(INTERNAL_PAIRING_ID_HEADER, access.pairingId);
         const response = await this.fetchRuntime(
             access,
             new Request(`https://runtime.internal/computers/${encodeURIComponent(access.computerId)}/runtime/revoke`, {
@@ -108,7 +108,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
 
     readonly disconnectSessionViewers = async (
         computerId: string,
-        runtimeId: string,
+        pairingId: string,
         revokedThrough: number,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -116,7 +116,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         const headers = new Headers();
         headers.set(INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER, String(revokedThrough));
         const response = await this.fetchRuntime(
-            { computerId, runtimeId },
+            { computerId, pairingId },
             new Request(`https://runtime.internal/computers/${encodeURIComponent(computerId)}/session-viewers/revoke`, {
                 headers,
                 method: "DELETE",
@@ -162,7 +162,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         signal.throwIfAborted();
         const headers = new Headers(request.headers);
         headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
-        headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
+        headers.set(INTERNAL_PAIRING_ID_HEADER, access.pairingId);
         const endpoint = new URL(request.url);
         endpoint.pathname = `/computers/${encodeURIComponent(access.computerId)}${endpoint.pathname}`;
         const forwarded = new Request(endpoint, { method: request.method, headers, signal });
@@ -170,7 +170,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     private readonly fetchRuntime = async (
-        access: Pick<VerifiedChannelAccess, "computerId" | "runtimeId"> & { readonly channelId?: string },
+        access: Pick<VerifiedChannelAccess, "computerId" | "pairingId"> & { readonly channelId?: string },
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -190,7 +190,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
                     durableObjectId: objectId.toString(),
                     computerId: access.computerId,
                     channelId: access.channelId,
-                    runtimeId: access.runtimeId,
+                    pairingId: access.pairingId,
                     err: error,
                 },
                 "Runtime Relay request failed",

@@ -31,7 +31,7 @@ const attachmentSchema = v.union([
         // Every view receives events; the attachment keeps the format earlier Relay versions read.
         eventFormat: v.literal("events"),
         computerId: v.string(),
-        runtimeId: v.string(),
+        pairingId: v.string(),
         sessionFilter: v.string(),
     }),
     v.object({
@@ -47,7 +47,7 @@ const attachmentSchema = v.union([
                 v.check((value: string) => isIdentifier(value)),
             ),
         ),
-        runtimeId: v.string(),
+        pairingId: v.string(),
         computerId: v.string(),
         historyRequest: v.optional(historyRequestSchema),
         pendingAgentSettingsDiscoveries: v.optional(v.array(pendingAgentSettingsDiscoverySchema), []),
@@ -56,14 +56,14 @@ const attachmentSchema = v.union([
         role: v.literal("relay"),
         historyRequest: v.optional(historyRequestSchema),
         channelId: v.string(),
-        runtimeId: v.string(),
+        pairingId: v.string(),
         computerId: v.string(),
     }),
     v.object({
         role: v.picklist(["daemon", "replaced-daemon"]),
         connectionEpoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
         connectionId: v.pipe(v.string(), v.minLength(1)),
-        runtimeId: v.string(),
+        pairingId: v.string(),
         computerId: v.string(),
     }),
 ]);
@@ -90,7 +90,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 ...(attachment.sessionFilter === undefined ? {} : { sessionFilter: attachment.sessionFilter }),
                 computerId: attachment.computerId,
                 role: attachment.role,
-                runtimeId: attachment.runtimeId,
+                pairingId: attachment.pairingId,
             };
         }
         if (attachment.role === "viewer") {
@@ -108,7 +108,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 expiresAt: attachment.expiresAt,
                 computerId: attachment.computerId,
                 role: attachment.role,
-                runtimeId: attachment.runtimeId,
+                pairingId: attachment.pairingId,
                 sessionFilter: attachment.sessionFilter,
             };
         }
@@ -118,7 +118,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 connectionId: attachment.connectionId,
                 computerId: attachment.computerId,
                 role: attachment.role,
-                runtimeId: attachment.runtimeId,
+                pairingId: attachment.pairingId,
             };
         }
         return attachment;

@@ -7,9 +7,9 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     channelAccessGrant,
     channelHostCredential,
+    pairedDaemon,
     projectBrowserCredential,
     runtimeDaemonCredential,
-    runtimeIdentity,
     runtimePairingRequest,
     runtimeRegistration,
 } from "../schema/project-do/index.ts";
@@ -29,12 +29,12 @@ export async function credentialMatches(
     const computerId = validateIdentifier(credential.computerId, "project_id");
     const [hosts, browsers] = await Promise.all([
         orm
-            .select({ project_id: runtimeIdentity.computerId })
+            .select({ project_id: pairedDaemon.computerId })
             .from(channelHostCredential)
-            .innerJoin(runtimeIdentity, eq(runtimeIdentity.channelId, channelHostCredential.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelHostCredential.channelId))
             .where(
                 and(
-                    eq(runtimeIdentity.computerId, computerId),
+                    eq(pairedDaemon.computerId, computerId),
                     eq(channelHostCredential.tokenHash, credential.tokenHash),
                     hostCredentialValid(orm),
                 ),
@@ -65,9 +65,9 @@ async function credentialRows(
     switch (credential.kind) {
         case "host":
             return orm
-                .select({ project_id: runtimeIdentity.computerId })
+                .select({ project_id: pairedDaemon.computerId })
                 .from(channelHostCredential)
-                .innerJoin(runtimeIdentity, eq(runtimeIdentity.channelId, channelHostCredential.channelId))
+                .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelHostCredential.channelId))
                 .where(
                     and(
                         eq(channelHostCredential.channelId, validateIdentifier(credential.channelId, "channel_id")),
@@ -77,22 +77,22 @@ async function credentialRows(
                 );
         case "daemon":
             return orm
-                .select({ project_id: runtimeIdentity.computerId })
-                .from(runtimeIdentity)
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.runtimeId, runtimeIdentity.runtimeId))
-                .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.runtimeId, runtimeIdentity.runtimeId))
+                .select({ project_id: pairedDaemon.computerId })
+                .from(pairedDaemon)
+                .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
+                .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.pairingId, pairedDaemon.pairingId))
                 .where(
                     and(
-                        eq(runtimeIdentity.channelId, validateIdentifier(credential.channelId, "channel_id")),
+                        eq(pairedDaemon.channelId, validateIdentifier(credential.channelId, "channel_id")),
                         eq(runtimeDaemonCredential.tokenHash, credential.tokenHash),
-                        isNull(runtimeIdentity.revokedAt),
+                        isNull(pairedDaemon.revokedAt),
                     ),
                 );
         case "pairing":
             return orm
-                .select({ project_id: runtimeIdentity.computerId })
+                .select({ project_id: pairedDaemon.computerId })
                 .from(runtimePairingRequest)
-                .innerJoin(runtimeIdentity, eq(runtimeIdentity.runtimeId, runtimePairingRequest.runtimeId))
+                .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimePairingRequest.pairingId))
                 .where(
                     and(
                         eq(runtimePairingRequest.pairingId, validateIdentifier(credential.pairingId, "pairing_id")),
@@ -101,15 +101,15 @@ async function credentialRows(
                 );
         case "pairing-code":
             return orm
-                .select({ project_id: runtimeIdentity.computerId })
+                .select({ project_id: pairedDaemon.computerId })
                 .from(runtimePairingRequest)
-                .innerJoin(runtimeIdentity, eq(runtimeIdentity.runtimeId, runtimePairingRequest.runtimeId))
+                .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimePairingRequest.pairingId))
                 .where(eq(runtimePairingRequest.pairingCodeHash, credential.codeHash));
         case "grant":
             return orm
-                .select({ project_id: runtimeIdentity.computerId })
+                .select({ project_id: pairedDaemon.computerId })
                 .from(channelAccessGrant)
-                .innerJoin(runtimeIdentity, eq(runtimeIdentity.channelId, channelAccessGrant.channelId))
+                .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelAccessGrant.channelId))
                 .where(
                     and(
                         eq(channelAccessGrant.channelId, validateIdentifier(credential.channelId, "channel_id")),

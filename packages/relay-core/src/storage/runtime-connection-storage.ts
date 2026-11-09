@@ -16,7 +16,7 @@ export class RuntimeConnectionStorage {
         | null => {
         const row = this.#database.orm
             .select({
-                runtimeId: runtimeConnectionState.runtimeId,
+                pairingId: runtimeConnectionState.pairingId,
                 connectionEpoch: runtimeConnectionState.connectionEpoch,
                 connectionId: runtimeConnectionState.connectionId,
                 state: runtimeConnectionState.state,
@@ -36,7 +36,7 @@ export class RuntimeConnectionStorage {
 
     readonly connect = (identity: RuntimeConnectionIdentity, now: number): void => {
         const connection = {
-            runtimeId: identity.runtimeId,
+            pairingId: identity.pairingId,
             connectionEpoch: identity.connectionEpoch,
             connectionId: identity.connectionId,
             state: "online",
@@ -57,7 +57,7 @@ export class RuntimeConnectionStorage {
             .where(
                 and(
                     eq(runtimeConnectionState.singleton, 1),
-                    eq(runtimeConnectionState.runtimeId, identity.runtimeId),
+                    eq(runtimeConnectionState.pairingId, identity.pairingId),
                     eq(runtimeConnectionState.connectionEpoch, identity.connectionEpoch),
                     eq(runtimeConnectionState.connectionId, identity.connectionId),
                 ),

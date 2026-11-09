@@ -27,7 +27,6 @@ const pairingSchema = v.object({
     pairingId: v.string(),
     pollToken: v.string(),
     computerId: v.string(),
-    runtimeId: v.string(),
 });
 type Pairing = Readonly<v.InferOutput<typeof pairingSchema>>;
 
@@ -98,28 +97,23 @@ async function project(_name = "Runtime pairing") {
         });
     };
     const create = async (idempotencyKey: string) =>
-        request(`/v1/computers/${computerId}/runtime-pairings`, "POST", { idempotencyKey });
+        request(`/v1/computers/${computerId}/pairings`, "POST", { idempotencyKey });
     return {
         computerId,
         credentialId: defaultCredential.credentialId,
         create,
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
-        status: async (pairing: Pairing) =>
-            request(`/v1/computers/${computerId}/runtime-pairings/${pairing.pairingId}`),
+        status: async (pairing: Pairing) => request(`/v1/computers/${computerId}/pairings/${pairing.pairingId}`),
         claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", machineName = "Runtime machine") =>
-            request(
-                endpoint === "claim" ? "/pairings/claim" : `/v1/runtime-pairings/${pairing.pairingId}/redeem`,
-                "POST",
-                {
-                    pairingCode: pairing.pairingCode,
-                    machineName,
-                    workspaceName: "Runtime workspace",
-                    agents: [],
-                },
-            ),
+            request(endpoint === "claim" ? "/pairings/claim" : `/v1/pairings/${pairing.pairingId}/redeem`, "POST", {
+                pairingCode: pairing.pairingCode,
+                machineName,
+                workspaceName: "Runtime workspace",
+                agents: [],
+            }),
         revoke: async (pairing: Pairing) =>
-            request(`/v1/computers/${computerId}/runtimes/${pairing.runtimeId}`, "DELETE"),
+            request(`/v1/computers/${computerId}/pairings/${pairing.pairingId}`, "DELETE"),
         list: async () => request(`/v1/computers/${computerId}/runtimes`),
         publish: async (pairing: Pairing, token: string) =>
             request(`/channels/${pairing.channelId}/catalog`, "PUT", { agents: [] }, token),
@@ -230,7 +224,7 @@ it.each(["redeem"] as const)(
         vi.setSystemTime(new Date(Date.now() + 20_000));
         const response = await responseJson(await app.claim(pairing, endpoint, "Retry machine"), 200);
         // A retry returns the exact current redemption contract.
-        const identity = { channelId: v.string(), runtimeId: v.string() };
+        const identity = { channelId: v.string(), pairingId: v.string() };
         const credential = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/));
         const runtimeCredential = v.parse(
             v.strictObject({ ...identity, runtimeCredential: credential }),
@@ -238,11 +232,11 @@ it.each(["redeem"] as const)(
         ).runtimeCredential;
         expect(response).toMatchObject({
             channelId: pairing.channelId,
-            runtimeId: pairing.runtimeId,
+            pairingId: pairing.pairingId,
         });
         expect((await app.publish(pairing, runtimeCredential)).status).toBe(204);
         expect(await responseJson(await app.list(), 200)).toMatchObject({
-            runtimes: [{ runtimeId: pairing.runtimeId, machineName: "Runtime machine" }],
+            runtimes: [{ pairingId: pairing.pairingId, machineName: "Runtime machine" }],
         });
         expect(
             await app.storage((storage) =>
@@ -411,7 +405,7 @@ it("Given a pending pairing, When claims arrive concurrently, Then they return t
     });
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "paired", agents: [] });
     expect((await app.publish(pairing, runtimeCredential)).status).toBe(204);
-    expect(await responseJson(await app.list(), 200)).toMatchObject({ runtimes: [{ runtimeId: pairing.runtimeId }] });
+    expect(await responseJson(await app.list(), 200)).toMatchObject({ runtimes: [{ pairingId: pairing.pairingId }] });
     expect((await app.revoke(pairing)).status).toBe(204);
     const revoked = await responseJson(await app.status(pairing), 200);
     expect(revoked).toEqual({ status: "revoked", revokedAt: new Date().toISOString() });
@@ -444,7 +438,7 @@ it("Given separate Projects, When they use the same pairing idempotency key, The
     const second = await project("Another Runtime pairing App");
     const left = await first.pair("same-key");
     const right = await second.pair("same-key");
-    expect(left.runtimeId).not.toBe(right.runtimeId);
+    expect(left.pairingId).not.toBe(right.pairingId);
     expect(await first.pair("same-key")).toEqual(left);
     expect(await second.pair("same-key")).toEqual(right);
 });
@@ -474,6 +468,22 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
 });
 
+it("revoking a pairing invalidates its daemon credential after the same computer pairs again", async () => {
+    const app = await project();
+    const original = await app.pair("original");
+    const credential = v.object({ pairingId: v.string(), runtimeCredential: v.string() });
+    const old = v.parse(credential, await responseJson(await app.claim(original), 200));
+    expect(old.pairingId).toBe(original.pairingId);
+    expect((await app.revoke(original)).status).toBe(204);
+    const replacement = await app.pair("replacement");
+    const current = v.parse(credential, await responseJson(await app.claim(replacement), 200));
+    expect(current.pairingId).toBe(replacement.pairingId);
+    expect(current.pairingId).not.toBe(old.pairingId);
+    expect((await app.publish(original, old.runtimeCredential)).status).toBe(401);
+    expect((await app.publish(replacement, old.runtimeCredential)).status).toBe(401);
+    expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
+});
+
 it.each(["", "morty-pairing-v1\0"])(
     "Given a retained Runtime credential from retired domain %j, When it reaches Morty authorization, Then it is rejected while project records remain and new pairing succeeds",
     async (retiredDomain) => {
@@ -488,7 +498,7 @@ it.each(["", "morty-pairing-v1\0"])(
             database.orm
                 .update(runtimeDaemonCredential)
                 .set({ tokenHash: await hashSecret(`${retiredDomain}${old.runtimeCredential}`) })
-                .where(eq(runtimeDaemonCredential.runtimeId, oldPairing.runtimeId))
+                .where(eq(runtimeDaemonCredential.pairingId, oldPairing.pairingId))
                 .run();
         });
         expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);

@@ -34,9 +34,9 @@ class Inbox {
 
 // @no-uc: Runtime transport regression. HTTP native queries must not multiply live-event egress.
 it("isolates native query replies from live fanout across hibernation and daemon disconnect", async () => {
-    const runtimeId = `fanout-${crypto.randomUUID()}`;
+    const pairingId = `fanout-${crypto.randomUUID()}`;
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(computerId, runtimeId);
+    await registerRuntimeFixture(computerId, pairingId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const clients: WebSocket[] = [];
     const connect = async (path: string) => {
@@ -45,7 +45,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
             headers: {
                 Upgrade: "websocket",
                 "x-morty-channel-id": "fanout-channel",
-                "x-morty-runtime-id": runtimeId,
+                "x-morty-pairing-id": pairingId,
                 "x-morty-host-credential-id": "apc_fanout",
                 "x-morty-host-credential-kind": "project",
             },
@@ -192,16 +192,16 @@ it("isolates native query replies from live fanout across hibernation and daemon
 });
 
 it("Given a host connection without credential kind, When it reaches the service boundary, Then it is rejected instead of inferred as a channel credential", async () => {
-    const runtimeId = `kind-${crypto.randomUUID()}`;
+    const pairingId = `kind-${crypto.randomUUID()}`;
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(computerId, runtimeId);
+    await registerRuntimeFixture(computerId, pairingId);
     const response = await env.COMPUTER_RELAY.getByName(computerId).fetch(
         `https://runtime.internal/computers/${computerId}/host`,
         {
             headers: {
                 Upgrade: "websocket",
                 "x-morty-channel-id": "kind-channel",
-                "x-morty-runtime-id": runtimeId,
+                "x-morty-pairing-id": pairingId,
                 "x-morty-host-credential-id": "retired-host",
             },
         },

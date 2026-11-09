@@ -88,7 +88,6 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                     pairingId: "environment-pairing",
                     relayOrigin: new URL(origin),
                     runtimeCredential: "r".repeat(43),
-                    runtimeId: "environment-runtime",
                 },
                 signal,
             );

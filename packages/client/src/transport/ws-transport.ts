@@ -1,7 +1,7 @@
 import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame, MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { MortyApiError, MortyConnectionError, MortyProtocolError, MortyValidationError } from "../errors.ts";
+import { computerRequestTarget } from "./computer-request-target.ts";
 import { HttpTransport, type MortyHttpTransport, type MortyTransportSessionEvent } from "./http-transport.ts";
-import { runtimeRequestTarget } from "./runtime-request-target.ts";
 
 const DEFAULT_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
@@ -183,7 +183,7 @@ export class WsTransport implements MortyHttpTransport {
         if (this.#state.kind === "closed") {
             throw new MortyConnectionError("The Morty WebSocket transport is closed");
         }
-        if (runtimeRequestTarget(request) === null) {
+        if (computerRequestTarget(request) === null) {
             return await this.#http.fetch(request);
         }
         const requestUrl = new URL(request.url);
@@ -297,17 +297,14 @@ export class WsTransport implements MortyHttpTransport {
     };
 
     readonly #socket = async (request: Request): Promise<WebSocket> => {
-        const target = runtimeRequestTarget(request);
+        const target = computerRequestTarget(request);
         if (target === null) {
             throw new MortyValidationError("A WebSocket subscription requires a Runtime target");
         }
-        const endpoint = new URL(
-            `${MORTY_API_PREFIX}/v1/computers/${target.computerId}/runtimes/${target.runtimeId}/transport`,
-            request.url,
-        );
+        const endpoint = new URL(`${MORTY_API_PREFIX}/v1/computers/${target.computerId}/transport`, request.url);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         if (this.#endpoint !== null && this.#endpoint !== endpoint.href) {
-            throw new MortyValidationError("A WebSocket transport cannot connect to multiple Runtimes");
+            throw new MortyValidationError("A WebSocket transport cannot connect to multiple computers");
         }
         this.#endpoint = endpoint.href;
         switch (this.#state.kind) {

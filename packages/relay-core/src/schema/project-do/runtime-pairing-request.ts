@@ -4,7 +4,6 @@ export const runtimePairingRequest = sqliteTable(
     "runtime_pairing_requests",
     {
         pairingId: text("pairing_id").primaryKey(),
-        runtimeId: text("runtime_id").notNull().unique(),
         pairingCodeHash: text("pairing_code_hash").notNull().unique(),
         pollTokenHash: text("poll_token_hash").notNull(),
         expiresAt: integer("expires_at").notNull(),

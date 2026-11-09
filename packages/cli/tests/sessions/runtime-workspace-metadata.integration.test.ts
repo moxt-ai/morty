@@ -24,11 +24,11 @@ it("describes a selected directory without browsing its children and still rejec
             signal,
         );
         const runtime = await platform.connectAgent(project.computerId);
-        const listing = await runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal);
+        const listing = await runtime.client.runtimes.listWorkspace(runtime.pairingId, directoryId, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 
         const invalid = await fetch(
-            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/runtimes/${runtime.runtimeId}/workspace`,
+            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/pairings/${runtime.pairingId}/workspace`,
             {
                 method: "POST",
                 headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
@@ -43,11 +43,11 @@ it("describes a selected directory without browsing its children and still rejec
         // The returned metadata contract is the same when a privileged test user ignores chmod.
         await chmod(root, 0o111);
         await expect(
-            runtime.client.runtimes.describeWorkspace(runtime.runtimeId, directoryId, signal),
+            runtime.client.runtimes.describeWorkspace(runtime.pairingId, directoryId, signal),
         ).resolves.toStrictEqual({ directoryId, directoryLabel: listing.directoryLabel });
         const missing = `path-${Buffer.from(join(canonical, "missing")).toString("base64url")}`;
         await expect(
-            runtime.client.runtimes.describeWorkspace(runtime.runtimeId, missing, signal),
+            runtime.client.runtimes.describeWorkspace(runtime.pairingId, missing, signal),
         ).rejects.toMatchObject({ code: "local_authorization_failed" });
     } finally {
         await chmod(root, 0o755);

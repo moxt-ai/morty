@@ -175,7 +175,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 signal.throwIfAborted();
                 saveLastCwdPreference(
                     identity.botId,
-                    configuration.runtime.runtimeId,
+                    configuration.runtime.pairingId,
                     handoff.harness,
                     directory.directoryId,
                 );

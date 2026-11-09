@@ -177,8 +177,8 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     expect(await run()).not.toBe(0);
     const pairing = await lost;
     expect(pairing.status).toBe(201);
-    const lostPairing = v.parse(v.object({ runtimeId: v.string(), pairingId: v.string() }), JSON.parse(pairing.body));
-    const pairedRuntime = lostPairing.runtimeId;
+    const lostPairing = v.parse(v.object({ pairingId: v.string() }), JSON.parse(pairing.body));
+    const pairedRuntime = lostPairing.pairingId;
 
     expect(await run()).toBe(0);
     const saved = v.parse(
@@ -190,13 +190,13 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     });
     const actual: unknown = await machine.json();
     const original = await fetch(
-        `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/runtime-pairings/${lostPairing.pairingId}`,
+        `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/pairings/${lostPairing.pairingId}`,
         { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
     );
     expect(original.status).toBe(200);
     const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
     expect(originalStatus).toBe("paired");
-    expect(actual).toMatchObject({ runtimeId: pairedRuntime });
+    expect(actual).toMatchObject({ pairingId: pairedRuntime });
 });
 
 test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
@@ -263,13 +263,13 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
             fixture.environment(fixture.origin),
         );
         expect(response.status).toBe(200);
-        return { identity, runtimeId: v.parse(v.object({ runtimeId: v.string() }), await response.json()).runtimeId };
+        return { identity, pairingId: v.parse(v.object({ pairingId: v.string() }), await response.json()).pairingId };
     };
     const first = await run();
     const before = await machineRuntime();
     const revoked = await fixture.platformRequest(
         new Request(
-            `https://platform.test/morty/api/v1/computers/${before.identity.project_id}/runtimes/${before.runtimeId}`,
+            `https://platform.test/morty/api/v1/computers/${before.identity.project_id}/pairings/${before.pairingId}`,
             {
                 method: "DELETE",
                 headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
@@ -282,9 +282,9 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const after = await machineRuntime();
 
     expect(again.events).toContainEqual(
-        expect.objectContaining({ status: "runtime_revoked", runtimeId: before.runtimeId }),
+        expect.objectContaining({ status: "runtime_revoked", pairingId: before.pairingId }),
     );
     expect(again.ready.botId).toBe(first.ready.botId);
     expect(after.identity).toEqual(before.identity);
-    expect(after.runtimeId).not.toBe(before.runtimeId);
+    expect(after.pairingId).not.toBe(before.pairingId);
 });

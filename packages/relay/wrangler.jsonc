@@ -58,8 +58,7 @@
             "tag": "platform-runtime-browser-transport",
             "deleted_classes": ["WebSocketTransport"]
         },
-        { "tag": "rename-computer-object", "renamed_classes": [{ "from": "ProjectDO", "to": "ComputerDO" }] },
-        { "tag": "unify-computer-relay", "renamed_classes": [{ "from": "ComputerDO", "to": "ComputerRelay" }] }
+        { "tag": "computer-relay", "new_sqlite_classes": ["ComputerRelay"] }
     ],
     "d1_databases": [
         {

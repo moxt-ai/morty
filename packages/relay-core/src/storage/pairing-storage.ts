@@ -5,8 +5,8 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     channelAccessGrant,
     channelHostCredential,
+    pairedDaemon,
     projectBrowserCredential,
-    runtimeIdentity,
 } from "../schema/project-do/index.ts";
 import { hostCredentialValid } from "./host-credential-validity.ts";
 
@@ -25,14 +25,14 @@ export class PairingStorage {
         const database = relayDrizzle(this.#database, signal);
         const rows = await database
             .select({
-                channel_id: runtimeIdentity.channelId,
-                runtime_id: runtimeIdentity.runtimeId,
-                project_id: runtimeIdentity.computerId,
+                channel_id: pairedDaemon.channelId,
+                pairing_id: pairedDaemon.pairingId,
+                project_id: pairedDaemon.computerId,
                 credential_id: channelHostCredential.credentialId,
                 authority: channelHostCredential.authority,
             })
             .from(channelHostCredential)
-            .innerJoin(runtimeIdentity, eq(runtimeIdentity.channelId, channelHostCredential.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelHostCredential.channelId))
             .where(
                 and(
                     eq(channelHostCredential.channelId, channelId),
@@ -138,12 +138,12 @@ export class PairingStorage {
                     gt(channelAccessGrant.expiresAt, now),
                     exists(
                         database
-                            .select({ runtimeId: runtimeIdentity.runtimeId })
-                            .from(runtimeIdentity)
+                            .select({ pairingId: pairedDaemon.pairingId })
+                            .from(pairedDaemon)
                             .where(
                                 and(
-                                    eq(runtimeIdentity.channelId, channelAccessGrant.channelId),
-                                    isNull(runtimeIdentity.revokedAt),
+                                    eq(pairedDaemon.channelId, channelAccessGrant.channelId),
+                                    isNull(pairedDaemon.revokedAt),
                                 ),
                             ),
                     ),
@@ -185,10 +185,10 @@ export class PairingStorage {
             .select({
                 expires_at: channelAccessGrant.expiresAt,
                 redeemed_at: channelAccessGrant.redeemedAt,
-                runtime_revoked_at: runtimeIdentity.revokedAt,
+                runtime_revoked_at: pairedDaemon.revokedAt,
             })
             .from(channelAccessGrant)
-            .innerJoin(runtimeIdentity, eq(runtimeIdentity.channelId, channelAccessGrant.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelAccessGrant.channelId))
             .where(
                 and(
                     eq(channelAccessGrant.grantId, grantId),

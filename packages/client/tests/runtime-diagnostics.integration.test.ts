@@ -57,7 +57,7 @@ describe("Runtime diagnostics SDK", () => {
             client.close();
         }
         expect(received).toEqual([
-            { method: "GET", path: "/morty/api/v1/computers/project-1/runtimes/runtime-1/diagnostics" },
+            { method: "GET", path: "/morty/api/v1/computers/project-1/pairings/runtime-1/diagnostics" },
         ]);
     });
 

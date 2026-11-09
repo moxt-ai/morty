@@ -104,8 +104,7 @@ it("Given a running daemon with a long temporary directory whose Agent catalog w
     await installation.saveConnection(
         {
             channelId: "start-catalog-channel",
-            runtimeId: "runtime_start_catalog",
-            pairingId: "",
+            pairingId: "runtime_start_catalog",
             defaultWorkspace: directory,
             relayOrigin: relay.origin,
             runtimeCredential: "r".repeat(43),

@@ -4,7 +4,6 @@ export interface RuntimeConnectionInput {
     readonly pairingId: string;
     readonly relayOrigin: URL;
     readonly runtimeCredential: string;
-    readonly runtimeId: string;
 }
 
 export type RuntimeConnectionActivation = "active" | "stopped";
@@ -25,8 +24,6 @@ export class VerifiedRuntimeConnection {
      */
     readonly runtimeCredential: string;
 
-    readonly runtimeId: string;
-
     constructor(
         activation: RuntimeConnectionActivation,
         installationId: string,
@@ -36,7 +33,6 @@ export class VerifiedRuntimeConnection {
         pairingId: string,
         relayOrigin: URL,
         runtimeCredential: string,
-        runtimeId: string,
     ) {
         this.activation = activation;
         this.channelId = channelId;
@@ -46,6 +42,5 @@ export class VerifiedRuntimeConnection {
         this.pairingId = pairingId;
         this.relayOrigin = relayOrigin;
         this.runtimeCredential = runtimeCredential;
-        this.runtimeId = runtimeId;
     }
 }

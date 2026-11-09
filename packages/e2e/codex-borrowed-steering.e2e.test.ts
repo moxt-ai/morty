@@ -110,7 +110,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         void running.catch(ready.reject);
         await Promise.race([ready.promise, running]);
         const pairedAgent = await chat.readPairedAgent(text(pairing["pairingId"], "pairing ID"), "codex");
-        await chat.bindAgent(pairedAgent.runtimeId, "codex");
+        await chat.bindAgent(pairedAgent.pairingId, "codex");
         await page.addInitScript(
             ({ key, userId, token }) => {
                 localStorage.setItem(key, JSON.stringify({ [userId]: token }));

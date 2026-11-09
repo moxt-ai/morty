@@ -11,16 +11,16 @@ export class RuntimeConnectionService {
     readonly current = () => this.#storage.read();
 
     readonly prepare = (
-        runtimeId: string,
+        pairingId: string,
     ): { readonly kind: "conflict" } | { readonly kind: "ready"; readonly identity: RuntimeConnectionIdentity } => {
         const previous = this.#storage.read();
-        if (previous?.state === "online" && previous.runtimeId !== runtimeId) {
+        if (previous?.state === "online" && previous.pairingId !== pairingId) {
             return { kind: "conflict" };
         }
         return {
             kind: "ready",
             identity: {
-                runtimeId,
+                pairingId,
                 connectionEpoch: (previous?.connectionEpoch ?? 0) + 1,
                 connectionId: `cnn_${crypto.randomUUID()}`,
             },
@@ -31,7 +31,7 @@ export class RuntimeConnectionService {
         const current = this.#storage.read();
         return (
             current?.state === "online" &&
-            current.runtimeId === identity.runtimeId &&
+            current.pairingId === identity.pairingId &&
             current.connectionEpoch === identity.connectionEpoch &&
             current.connectionId === identity.connectionId
         );

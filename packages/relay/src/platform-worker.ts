@@ -78,7 +78,7 @@ export interface ComputerPlatformRelayBindings extends PlatformRelayBindings, Co
 export interface RuntimeExecutionBindings extends PlatformRelayBindings {
     readonly MORTY_RUNTIME_EXECUTION: {
         readonly computerId: string;
-        readonly runtimeId: string;
+        readonly pairingId: string;
         readonly operations: LocalSessionOperations;
     };
 }
@@ -114,7 +114,7 @@ function authorizedSessionControl(
         await access.authorize(permission, context.req.raw.signal);
         return await sessionOperations(context).requestComputerScopeControl(
             scope,
-            access.runtimeId,
+            access.pairingId,
             command,
             context.req.raw.signal,
         );
@@ -282,13 +282,13 @@ export function createPlatformApplication(
             const input = v.parse(
                 v.strictObject({
                     expiresInSeconds: v.pipe(v.number(), v.safeInteger(), v.minValue(60), v.maxValue(900)),
-                    runtimeId: sessionIdentifier,
+                    pairingId: sessionIdentifier,
                 }),
                 body,
             );
             const access = await context.var.sessionAccess.issue(
                 context.var.sessionAccessTarget,
-                input.runtimeId,
+                input.pairingId,
                 credential,
                 input.expiresInSeconds,
                 context.req.raw.signal,
@@ -322,7 +322,7 @@ export function createPlatformApplication(
                 issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
                 kind: "expiring",
                 computerId: target.computerId,
-                runtimeId: target.runtimeId,
+                pairingId: target.pairingId,
             });
         })
         .get("/:sessionId/native-events-preview", sessionAccessTargetMiddleware, async (context) => {
@@ -469,7 +469,7 @@ export function createPlatformApplication(
             );
             return await sessionOperations(context).readProjectSessionFile(
                 new ComputerScope(access.computerId),
-                access.runtimeId,
+                access.pairingId,
                 decodeFileReadCommand(
                     JSON.stringify({ kind: "file.read", maxBytes, path, requestId: crypto.randomUUID(), sessionId }),
                 ),
@@ -509,7 +509,7 @@ export function createPlatformApplication(
             name = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
             const available = await sessionOperations(context).writeProjectSessionContent(
                 new ComputerScope(access.computerId),
-                access.runtimeId,
+                access.pairingId,
                 decodeContentWriteCommand(
                     JSON.stringify({
                         byteLength,
@@ -666,7 +666,7 @@ export function createPlatformApplication(
             }
             return await sessionOperations(context).openPublicSessionEvents(
                 new ComputerScope(target.computerId),
-                target.runtimeId,
+                target.pairingId,
                 context.req.param("sessionId"),
                 {
                     credentialId: target.credentialId,
@@ -696,9 +696,9 @@ export function createPlatformApplication(
             computerId,
             credential,
             {
-                runtimeIds: async (signal) => (await store.listRuntimes(signal)).map((runtime) => runtime.runtime_id),
-                disconnect: (runtimeId, revokedThrough, signal) =>
-                    channel.disconnectSessionViewers(computerId, runtimeId, revokedThrough, signal),
+                pairingIds: async (signal) => (await store.listRuntimes(signal)).map((runtime) => runtime.pairing_id),
+                disconnect: (pairingId, revokedThrough, signal) =>
+                    channel.disconnectSessionViewers(computerId, pairingId, revokedThrough, signal),
             },
             context.req.raw.signal,
         );
@@ -708,12 +708,11 @@ export function createPlatformApplication(
     const projectRoutes = new Hono<DispatchEnvironment>()
         .route("/sessions", sessionRoutes)
         .route("/session-access", sessionAccessRoutes)
-        .all("/runtime-pairings/*", projectHandler)
-        .all("/runtimes/*", projectHandler)
+        .all("/pairings/*", projectHandler)
         .all("/*", projectHandler);
     const versionedRoutes = new Hono<DispatchEnvironment>()
         .route("/computers/:computerId", projectRoutes)
-        .all("/runtime-pairings/*", projectHandler)
+        .all("/pairings/*", projectHandler)
         .all("/runtimes/connect", projectHandler)
         .all("/*", projectHandler);
 

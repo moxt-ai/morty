@@ -139,11 +139,11 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly isRuntimeActive: PlatformProjectStore["isRuntimeActive"] = (runtimeId, signal) =>
-        this.call("isRuntimeActive", (stub, computerId) => stub.isRuntimeActive(computerId, runtimeId), signal);
+    readonly isRuntimeActive: PlatformProjectStore["isRuntimeActive"] = (pairingId, signal) =>
+        this.call("isRuntimeActive", (stub, computerId) => stub.isRuntimeActive(computerId, pairingId), signal);
 
-    readonly readRuntime: PlatformProjectStore["readRuntime"] = (runtimeId, signal) =>
-        this.call("readRuntime", (stub, computerId) => stub.readRuntime(computerId, runtimeId), signal);
+    readonly readRuntime: PlatformProjectStore["readRuntime"] = (pairingId, signal) =>
+        this.call("readRuntime", (stub, computerId) => stub.readRuntime(computerId, pairingId), signal);
 
     readonly listRuntimes: PlatformProjectStore["listRuntimes"] = (signal) =>
         this.call("listRuntimes", (stub, computerId) => stub.listRuntimes(computerId), signal);

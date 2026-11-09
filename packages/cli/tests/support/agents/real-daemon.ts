@@ -204,10 +204,9 @@ export async function withRealDaemon(
                 {
                     channelId: "real-agent",
                     defaultWorkspace: workspace,
-                    pairingId: "",
+                    pairingId: "pairing_real",
                     relayOrigin: new URL(`http://127.0.0.1:${port(relay)}`),
                     runtimeCredential: "r".repeat(43),
-                    runtimeId: "runtime_real",
                 },
                 signal,
             );

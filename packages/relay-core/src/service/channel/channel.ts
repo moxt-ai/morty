@@ -14,7 +14,7 @@ export class RuntimeDescriptor {
     readonly machineName: string;
     readonly online: boolean;
     readonly computerId: string;
-    readonly runtimeId: string;
+    readonly pairingId: string;
     readonly workspaceName: string;
 
     constructor(channel: ChannelDescriptor, status: RuntimeStatus) {
@@ -23,7 +23,7 @@ export class RuntimeDescriptor {
         this.machineName = channel.machineName;
         this.online = status.online;
         this.computerId = channel.computerId;
-        this.runtimeId = channel.runtimeId;
+        this.pairingId = channel.pairingId;
         this.workspaceName = channel.workspaceName;
     }
 }

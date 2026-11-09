@@ -51,7 +51,7 @@ describe("daemon environment proxy", () => {
                 JSON.stringify({
                     channelId: "proxy-channel",
                     runtimeCredential: "a".repeat(32),
-                    runtimeId: "proxy-runtime",
+                    pairingId: "proxy-runtime",
                 }),
             );
         });
@@ -183,7 +183,7 @@ describe("daemon environment proxy", () => {
                 AbortSignal.timeout(2_000),
             );
             expect(
-                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).runtimeId,
+                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).pairingId,
             ).toBe("proxy-runtime");
 
             const relayPort = port(relayServer);
@@ -201,7 +201,7 @@ describe("daemon environment proxy", () => {
 
             expect(tunnelTargets).toContain(`127.0.0.1:${pairingPort}`);
             expect(tunnelTargets).toContain(`127.0.0.1:${relayPort}`);
-            expect(pairingPaths).toEqual([`${MORTY_API_PREFIX}/v1/runtime-pairings/proxy-pairing/redeem`]);
+            expect(pairingPaths).toEqual([`${MORTY_API_PREFIX}/v1/pairings/proxy-pairing/redeem`]);
             await environmentProxyDispatcher.close();
         } finally {
             if (previousHttpProxy === undefined) {

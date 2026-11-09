@@ -37,7 +37,7 @@ function nextMessage(socket: WebSocket): Promise<string> {
 
 it("Given a browser connection, When it heartbeats through the public Platform transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -58,7 +58,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
                 kind: "http.request",
                 requestId: "after-heartbeat",
                 method: "GET",
-                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/runtime/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/pairings/runtime/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -73,9 +73,9 @@ it("Given a browser connection, When it heartbeats through the public Platform t
     }
 });
 
-it("Given a Runtime-bound browser, When it addresses another Runtime, Then the request is rejected without closing the browser connection", async () => {
+it("Given a Runtime-bound browser, When it addresses another computer, Then the request is rejected without closing the browser connection", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -93,7 +93,7 @@ it("Given a Runtime-bound browser, When it addresses another Runtime, Then the r
                 kind: "http.request",
                 requestId: "request-identity",
                 method: "GET",
-                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/another-runtime/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000002/pairings/another-pairing/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -134,7 +134,7 @@ it("Given two browser connections to one Runtime, When their pending uploads exc
             kind: "http.request",
             requestId,
             method: "POST",
-            path: "/morty/api/v1/computers/upload-project/runtimes/upload-runtime/content",
+            path: "/morty/api/v1/computers/upload-project/pairings/upload-runtime/content",
             headers: [],
             body: "",
             bodyByteLength: 8 * 1024 * 1024,
@@ -747,7 +747,7 @@ it("Given a finite request is in flight, When the browser transport closes, Then
             headers: [],
             kind: "http.request",
             method: "GET",
-            path: "/morty/api/v1/computers/project/runtimes/runtime/agents",
+            path: "/morty/api/v1/computers/project/pairings/runtime/agents",
             requestId: "pending-request",
         }),
     );

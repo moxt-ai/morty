@@ -33,7 +33,7 @@ export class ComputerChat {
             return json({ error: { code: "PROJECT_REQUIRED", message: "Morty context is required." } }, 400);
         }
         const validatedComputerId = v.parse(platformIdentifier, computerId);
-        const bound: unknown = await this.#storage.get("project-id");
+        const bound: unknown = await this.#storage.get("computer-id");
         if (bound === undefined) {
             return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty computer does not exist." } }, 404);
         }
@@ -88,9 +88,9 @@ export class ComputerChat {
         if (!this.#owns(computerId)) {
             throw new Error("Computer ID does not match this relay");
         }
-        const stored: unknown = await this.#storage.get("project-id");
+        const stored: unknown = await this.#storage.get("computer-id");
         if (stored === undefined) {
-            await this.#storage.put("project-id", computerId);
+            await this.#storage.put("computer-id", computerId);
             return;
         }
         if (stored !== computerId) {

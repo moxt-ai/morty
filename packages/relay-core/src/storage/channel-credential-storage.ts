@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { ChannelCredentialIdentity } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { channelHostCredential, runtimeIdentity, runtimeRegistration } from "../schema/project-do/index.ts";
+import { channelHostCredential, pairedDaemon, runtimeRegistration } from "../schema/project-do/index.ts";
 import { hostCredentialValid } from "./host-credential-validity.ts";
 
 /** Whether a Runtime, or a host credential reaching it, is still active in the Project's own storage. */
@@ -14,19 +14,19 @@ export class ChannelCredentialStorage {
     }
 
     readonly readActiveRuntime = async (
-        identity: { readonly computerId: string; readonly runtimeId: string },
+        identity: { readonly computerId: string; readonly pairingId: string },
         signal: AbortSignal,
     ): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
         const runtimes = await database
-            .select({ runtimeId: runtimeIdentity.runtimeId })
-            .from(runtimeIdentity)
-            .innerJoin(runtimeRegistration, eq(runtimeRegistration.runtimeId, runtimeIdentity.runtimeId))
+            .select({ pairingId: pairedDaemon.pairingId })
+            .from(pairedDaemon)
+            .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
             .where(
                 and(
-                    eq(runtimeIdentity.runtimeId, identity.runtimeId),
-                    eq(runtimeIdentity.computerId, identity.computerId),
-                    isNull(runtimeIdentity.revokedAt),
+                    eq(pairedDaemon.pairingId, identity.pairingId),
+                    eq(pairedDaemon.computerId, identity.computerId),
+                    isNull(pairedDaemon.revokedAt),
                 ),
             )
             .limit(1);
@@ -38,13 +38,13 @@ export class ChannelCredentialStorage {
         const credentials = await database
             .select({ credentialId: channelHostCredential.credentialId })
             .from(channelHostCredential)
-            .innerJoin(runtimeIdentity, eq(runtimeIdentity.channelId, channelHostCredential.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelHostCredential.channelId))
             .where(
                 and(
                     eq(channelHostCredential.credentialId, identity.credentialId),
                     eq(channelHostCredential.channelId, identity.channelId),
-                    eq(runtimeIdentity.runtimeId, identity.runtimeId),
-                    eq(runtimeIdentity.computerId, identity.computerId),
+                    eq(pairedDaemon.pairingId, identity.pairingId),
+                    eq(pairedDaemon.computerId, identity.computerId),
                     hostCredentialValid(database),
                 ),
             )

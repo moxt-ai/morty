@@ -238,8 +238,8 @@ async function exercise(count) {
             201,
         );
         const base = `/v1/computers/${project.computerId}`;
-        const pairing = await api(`${base}/runtime-pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
-        const claimed = await api(`/v1/runtime-pairings/${pairing.pairingId}/redeem`, "POST", {
+        const pairing = await api(`${base}/pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
+        const claimed = await api(`/v1/pairings/${pairing.pairingId}/redeem`, "POST", {
             pairingCode: pairing.pairingCode,
             agents: [],
             machineName: "Isolated pressure test",
@@ -277,7 +277,7 @@ async function exercise(count) {
         });
         stage("connecting Runtime");
         await check(() => connectionStates.includes("online"), "Runtime online");
-        const hostUrl = new URL(`${origin}/morty/api${base}/runtimes/${claimed.runtimeId}/host`);
+        const hostUrl = new URL(`${origin}/morty/api${base}/pairings/${claimed.pairingId}/host`);
         hostUrl.protocol = "ws:";
         host = new WebSocket(hostUrl, { headers: { authorization: `Bearer ${credential}` } });
         const live = new Map();

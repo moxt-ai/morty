@@ -57,6 +57,13 @@
             "when": 1793353639685,
             "tag": "0007_drop_runtime_revocations",
             "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "6",
+            "when": 1794206534529,
+            "tag": "0008_use_pairing_identity",
+            "breakpoints": true
         }
     ]
 }
