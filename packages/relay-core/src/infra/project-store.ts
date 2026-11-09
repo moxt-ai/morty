@@ -82,8 +82,15 @@ export interface ProjectStore {
      * unexpired; any other failed claim is audited and returns false.
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
-    /** Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. */
+    /**
+     * Revokes a Runtime, and with it the Session credentials issued until then, and returns its committed revocation;
+     * null when the Project has no such Runtime.
+     */
     readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
+    /** Revokes the Session credentials issued until `revokedAt`; returns the latest revocation, which never moves back. */
+    readonly revokeSessionAccess: (revokedAt: number, signal: AbortSignal) => Promise<number>;
+    /** The latest time the computer revoked its Session credentials, by either operation; null when it never did. */
+    readonly readSessionAccessRevocation: (signal: AbortSignal) => Promise<number | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
     readonly findCredential: (
         credential: ComputerIdentityCredential,

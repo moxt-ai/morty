@@ -4,7 +4,6 @@ import {
     IdentityApiError,
     type IdentityTransfer,
     type LinkedDevice,
-    type OpenWindowsAfterDisconnect,
     type SharingTerms,
 } from "../../services/identity/anonymous-identity-api.ts";
 import { createRemoteAccessOperations } from "../chat/remote-access-store.ts";
@@ -20,9 +19,9 @@ export interface IdentityAccess {
     /** Resolves once the linked devices differ from the list this page last read. */
     readonly waitForLinkedDevicesChange: (signal: AbortSignal) => Promise<void>;
     /** Disconnects every other browser that joined through a link while this one keeps its access. */
-    readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
+    readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<void>;
     /** Disconnects one other device; this browser and the computer keep their access. */
-    readonly endDeviceAccess: (deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
+    readonly endDeviceAccess: (deviceId: string, signal: AbortSignal) => Promise<void>;
 }
 
 class IdentitySharingUnavailable extends Error {

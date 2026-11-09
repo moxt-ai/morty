@@ -92,16 +92,8 @@ const linkedDeviceSchema = v.pipe(
 );
 export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;
 const linkedDevicesSchema = v.object({ devices: v.array(linkedDeviceSchema) });
-const deviceAccessEndedSchema = v.object({
-    status: v.literal("device_access_ended"),
-    sessionAccess: v.picklist(["revoked", "unconfirmed"]),
-});
-const otherBrowserAccessEndedSchema = v.object({
-    status: v.literal("other_browser_access_ended"),
-    sessionAccess: v.picklist(["revoked", "unconfirmed"]),
-});
-/** Whether the chat windows already open on the disconnected browsers were closed too. */
-export type OpenWindowsAfterDisconnect = "closed" | "unconfirmed";
+const deviceAccessEndedSchema = v.object({ status: v.literal("device_access_ended") });
+const otherBrowserAccessEndedSchema = v.object({ status: v.literal("other_browser_access_ended") });
 const credentialRevocationPathSchema = v.picklist([
     "/identity/v1/local-credential",
     "/identity/v1/browser-access",
@@ -344,8 +336,11 @@ export class AnonymousIdentityApi {
             ),
         ).devices;
 
-    /** Ends the access of every other browser that joined through a link; this browser and the computer keep theirs. */
-    readonly endOtherBrowserAccess = async (token: string, signal: AbortSignal): Promise<OpenWindowsAfterDisconnect> =>
+    /**
+     * Ends the access of every other browser that joined through a link, and closes the chat windows open with it;
+     * this browser and the computer keep theirs. Repeating it after a failure is safe.
+     */
+    readonly endOtherBrowserAccess = async (token: string, signal: AbortSignal): Promise<void> => {
         v.parse(
             otherBrowserAccessEndedSchema,
             await this.#request(
@@ -353,16 +348,11 @@ export class AnonymousIdentityApi {
                 { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
-        ).sessionAccess === "revoked"
-            ? "closed"
-            : "unconfirmed";
+        );
+    };
 
-    /** Ends one other device's access; repeating it after an uncertain result is safe. */
-    readonly endDeviceAccess = async (
-        token: string,
-        deviceId: string,
-        signal: AbortSignal,
-    ): Promise<OpenWindowsAfterDisconnect> =>
+    /** Ends one other device's access and closes the chat windows open with it; repeating it after a failure is safe. */
+    readonly endDeviceAccess = async (token: string, deviceId: string, signal: AbortSignal): Promise<void> => {
         v.parse(
             deviceAccessEndedSchema,
             await this.#request(
@@ -370,9 +360,8 @@ export class AnonymousIdentityApi {
                 { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
-        ).sessionAccess === "revoked"
-            ? "closed"
-            : "unconfirmed";
+        );
+    };
 
     readonly endRemoteAccess = async (token: string, signal: AbortSignal): Promise<void> => {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };

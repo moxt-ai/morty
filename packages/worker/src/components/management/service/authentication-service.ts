@@ -60,14 +60,6 @@ type Authorization<Operation extends CredentialOperation> =
 
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
 
-/**
- * Whether the Platform also stopped the Session credentials issued before access was revoked. Unconfirmed, those
- * still work until they expire.
- */
-export type IssuedSessionAccess =
-    | { readonly kind: "revoked" }
-    | { readonly kind: "unconfirmed"; readonly cause: PlatformProjectError };
-
 const SESSION_ACCESS_REVOCATION_ATTEMPTS = 3;
 
 /** Who shared the link a device joined through, as the owner recognizes it. */
@@ -369,10 +361,7 @@ export class AuthenticationService {
         token: string | undefined,
         successor: string,
         signal: AbortSignal,
-    ): Promise<
-        | { readonly kind: "revoked"; readonly sessionAccess: IssuedSessionAccess }
-        | { readonly kind: "unauthenticated" | "forbidden" }
-    > => {
+    ): Promise<{ readonly kind: "revoked" } | { readonly kind: "unauthenticated" | "forbidden" }> => {
         const access = await this.authorize(token, "revokeAllAccess", signal);
         if (access.kind !== "authorized") {
             return refused(access);
@@ -389,7 +378,8 @@ export class AuthenticationService {
             return { kind: "unauthenticated" };
         }
         // Revoked access can no longer obtain Session credentials; those it already holds end only at the Platform.
-        return { kind: "revoked", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+        await this.#revokeIssuedSessionAccess(signal);
+        return { kind: "revoked" };
     };
 
     /**
@@ -399,16 +389,14 @@ export class AuthenticationService {
     readonly revokeOtherAccess = async (
         token: string | undefined,
         signal: AbortSignal,
-    ): Promise<
-        | { readonly kind: "revoked"; readonly sessionAccess: IssuedSessionAccess }
-        | { readonly kind: "unauthenticated" | "forbidden" }
-    > => {
+    ): Promise<{ readonly kind: "revoked" } | { readonly kind: "unauthenticated" | "forbidden" }> => {
         const access = await this.authorize(token, "revokeAllAccess", signal);
         if (access.kind !== "authorized") {
             return refused(access);
         }
         await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
-        return { kind: "revoked", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+        await this.#revokeIssuedSessionAccess(signal);
+        return { kind: "revoked" };
     };
 
     /**
@@ -419,10 +407,7 @@ export class AuthenticationService {
     readonly endOtherBrowserAccess = async (
         token: string | undefined,
         signal: AbortSignal,
-    ): Promise<
-        | { readonly kind: "ended"; readonly sessionAccess: IssuedSessionAccess }
-        | { readonly kind: "unauthenticated" | "forbidden" }
-    > => {
+    ): Promise<{ readonly kind: "ended" } | { readonly kind: "unauthenticated" | "forbidden" }> => {
         const access = await this.authorize(token, "endOtherBrowserAccess", signal);
         if (access.kind !== "authorized") {
             return refused(access);
@@ -433,7 +418,8 @@ export class AuthenticationService {
             Date.now(),
             signal,
         );
-        return { kind: "ended", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+        await this.#revokeIssuedSessionAccess(signal);
+        return { kind: "ended" };
     };
 
     /**
@@ -445,7 +431,7 @@ export class AuthenticationService {
         deviceId: string,
         signal: AbortSignal,
     ): Promise<
-        | { readonly kind: "ended"; readonly sessionAccess: IssuedSessionAccess }
+        | { readonly kind: "ended" }
         | { readonly kind: "own" | "unknown" }
         | { readonly kind: "unauthenticated" | "forbidden" }
     > => {
@@ -459,11 +445,17 @@ export class AuthenticationService {
         if (!(await this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal))) {
             return { kind: "unknown" };
         }
-        return { kind: "ended", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+        await this.#revokeIssuedSessionAccess(signal);
+        return { kind: "ended" };
     };
 
-    /** Revoking is safe to repeat, so a failure the Platform may recover from is retried a bounded number of times. */
-    readonly #revokeIssuedSessionAccess = async (signal: AbortSignal): Promise<IssuedSessionAccess> => {
+    /**
+     * Revokes the Session credentials issued until now, after the caller committed the change that stops new ones being
+     * issued. Revoking is safe to repeat, so a failure the Platform may recover from is retried a bounded number of
+     * times. When it still fails, the request fails: its change stays committed, and repeating the request repeats
+     * the revocation.
+     */
+    readonly #revokeIssuedSessionAccess = async (signal: AbortSignal): Promise<void> => {
         const computerId = this.#computerId;
         if (computerId === null) {
             throw new Error("Access is revoked only inside its Project");
@@ -471,14 +463,29 @@ export class AuthenticationService {
         for (let attempt = 1; ; attempt += 1) {
             try {
                 await this.#platform.revokeSessionAccess(computerId, signal);
-                return { kind: "revoked" };
+                return;
             } catch (cause) {
                 signal.throwIfAborted();
                 if (!(cause instanceof PlatformProjectError)) {
                     throw cause;
                 }
-                if (cause.status < 500 || attempt === SESSION_ACCESS_REVOCATION_ATTEMPTS) {
-                    return { kind: "unconfirmed", cause };
+                if (cause.status < 500) {
+                    throw new ManagementError(
+                        "SESSION_ACCESS_REVOCATION_REFUSED",
+                        "Access ended, but Morty could not close the chat windows already open with it.",
+                        502,
+                        {},
+                        { cause },
+                    );
+                }
+                if (attempt === SESSION_ACCESS_REVOCATION_ATTEMPTS) {
+                    throw new ManagementError(
+                        "SESSION_ACCESS_REVOCATION_UNAVAILABLE",
+                        "Access ended, but the chat windows already open with it are not closed yet. Try again.",
+                        503,
+                        {},
+                        { cause },
+                    );
                 }
             }
         }

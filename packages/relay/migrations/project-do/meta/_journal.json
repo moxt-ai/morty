@@ -99,6 +99,13 @@
             "when": 1794222875381,
             "tag": "0013_computer_storage",
             "breakpoints": true
+        },
+        {
+            "idx": 14,
+            "version": "6",
+            "when": 1794231753368,
+            "tag": "0014_session_access_revocations",
+            "breakpoints": true
         }
     ]
 }

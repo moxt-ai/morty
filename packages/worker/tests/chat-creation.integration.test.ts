@@ -825,7 +825,7 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         successor: `morty_anon_v1_${"A".repeat(43)}`,
     });
     expect(revoked.status).toBe(200);
-    expect(await revoked.json()).toEqual({ status: "access_revoked", sessionAccess: "revoked" });
+    expect(await revoked.json()).toEqual({ status: "access_revoked" });
 
     await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
 });
@@ -951,7 +951,7 @@ test("Given two browsers joined through links, When one disconnects the other br
     const ended = await asBrowser(owner, `computers/${fixture.computerId}/identity/v1/other-browser-access`, "DELETE");
 
     expect(ended.status).toBe(200);
-    expect(await ended.json()).toEqual({ status: "other_browser_access_ended", sessionAccess: "revoked" });
+    expect(await ended.json()).toEqual({ status: "other_browser_access_ended" });
     expect((await asBrowser(owner, `computers/${fixture.computerId}/session`)).status).toBe(200);
     expect((await fixture.request("session")).status).toBe(200);
     const refused = await asBrowser(other, `computers/${fixture.computerId}/session`);

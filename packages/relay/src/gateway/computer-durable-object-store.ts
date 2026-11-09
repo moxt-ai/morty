@@ -126,8 +126,15 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly lastDaemonRevocation: PlatformProjectStore["lastDaemonRevocation"] = (signal) =>
-        this.call("lastDaemonRevocation", (stub, computerId) => stub.lastDaemonRevocation(computerId), signal);
+    readonly revokeSessionAccess: PlatformProjectStore["revokeSessionAccess"] = (revokedAt, signal) =>
+        this.call("revokeSessionAccess", (stub, computerId) => stub.revokeSessionAccess(computerId, revokedAt), signal);
+
+    readonly readSessionAccessRevocation: PlatformProjectStore["readSessionAccessRevocation"] = (signal) =>
+        this.call(
+            "readSessionAccessRevocation",
+            (stub, computerId) => stub.readSessionAccessRevocation(computerId),
+            signal,
+        );
 
     readonly recordAudit: PlatformProjectStore["recordAudit"] = (audit, signal) =>
         this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);

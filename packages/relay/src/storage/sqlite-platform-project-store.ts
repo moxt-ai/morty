@@ -20,17 +20,6 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
         this.#database = database;
     }
 
-    readonly lastDaemonRevocation = async (signal: AbortSignal): Promise<number | null> => {
-        signal.throwIfAborted();
-        const row = await this.#database
-            .prepare(
-                "SELECT max(recorded_at) AS cutoff FROM audit_events WHERE category = 'pairing' AND computer_id = ? AND action = 'runtime_pairing.revoked'",
-            )
-            .bind(this.#computerId)
-            .first<{ cutoff: number | null }>(signal);
-        return row?.cutoff ?? null;
-    };
-
     readonly recordAudit: PlatformProjectStore["recordAudit"] = async (audit, signal) => {
         await relayDrizzle(this.#database, signal)
             .insert(auditEvent)

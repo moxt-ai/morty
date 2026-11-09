@@ -5,3 +5,4 @@ export { computer } from "./computer.ts";
 export { daemonCredential, retiredDaemonCredential } from "./daemon-credential.ts";
 export { projectBrowserCredential } from "./project-browser-credential.ts";
 export { runtimePairingRequest } from "./runtime-pairing-request.ts";
+export { sessionAccessRevocation } from "./session-access-revocation.ts";

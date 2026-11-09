@@ -986,12 +986,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Revokes every other credential, link and browser access, and replaces the local credential with a successor
-     * saved first. A run that lost the reply repeats the same request with whichever credential is still in force.
+     * Revokes every other credential, link and browser access, closes the chat windows open with them, and replaces
+     * the local credential with a successor saved first. A run that lost the reply or failed repeats the same request
+     * with whichever credential is still in force.
      */
-    async function revokeAllAccessWithRotation<Revoking extends Context>(
-        context: Revoking,
-    ): Promise<{ readonly context: Revoking; readonly sessionAccess: "revoked" | "unconfirmed" }> {
+    async function revokeAllAccessWithRotation<Revoking extends Context>(context: Revoking): Promise<Revoking> {
         const earlier = context.identity.rotation;
         const successor =
             earlier.kind === "requested"
@@ -1015,11 +1014,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
         }
-        const sessionAccess = revoked["sessionAccess"];
-        if (sessionAccess !== "revoked" && sessionAccess !== "unconfirmed") {
-            fail("INVALID_RESPONSE");
-        }
-        return { context: await commit(requested, rotatedIdentity(requested.identity, successor)), sessionAccess };
+        return await commit(requested, rotatedIdentity(requested.identity, successor));
     }
 
     /** Finishes revoking all access when an earlier run stopped before saving the replaced local credential. */
@@ -1028,7 +1023,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return context;
         }
         progress("identity", "Finishing the earlier revocation of all access.");
-        return (await revokeAllAccessWithRotation(context)).context;
+        return await revokeAllAccessWithRotation(context);
     }
 
     function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
@@ -1825,12 +1820,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         emit({
             status: "access_revoked",
-            computerId: revoked.context.identity.computerId,
-            sessionAccess: revoked.sessionAccess,
+            computerId: revoked.identity.computerId,
             message:
-                revoked.sessionAccess === "revoked"
-                    ? "Previous sharing links and all other Morty credentials have been revoked, and chat windows opened with them have been closed. This computer's own credential was replaced, so copies of it no longer work."
-                    : "Previous sharing links and all other Morty credentials have been revoked, and this computer's own credential was replaced. Chat windows already open elsewhere could not be closed and may remain usable for up to 15 minutes; run this command again to retry closing them.",
+                "Previous sharing links and all other Morty credentials have been revoked, and chat windows opened with them have been closed. This computer's own credential was replaced, so copies of it no longer work.",
         });
     }
 

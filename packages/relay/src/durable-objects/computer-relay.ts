@@ -218,8 +218,12 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         return await this.#operate(computerId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
     }
 
-    async lastDaemonRevocation(computerId: string): Promise<number | null> {
-        return this.#operate(computerId).lastDaemonRevocation(uncancelled);
+    async revokeSessionAccess(computerId: string, revokedAt: number): Promise<number> {
+        return await this.#operate(computerId).revokeSessionAccess(revokedAt, uncancelled);
+    }
+
+    async readSessionAccessRevocation(computerId: string): Promise<number | null> {
+        return await this.#operate(computerId).readSessionAccessRevocation(uncancelled);
     }
 
     async recordAudit(computerId: string, audit: PlatformAuditRecord): Promise<void> {
