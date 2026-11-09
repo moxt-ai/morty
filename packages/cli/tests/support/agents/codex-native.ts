@@ -80,6 +80,7 @@ export async function codexFixture(
         async () => ({
             turn: null,
             queued: [],
+            executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },
             interactionState: null,
         }),
     );

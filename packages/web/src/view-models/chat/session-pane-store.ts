@@ -694,7 +694,8 @@ export function createSessionPaneModel(options: {
                     change.interactions satisfies never;
             }
         };
-        let executionPosition: SessionExecutionSnapshot["executionPosition"];
+        /** How far the execution facts this pane applied reach in the Session's log; unknown until the first read. */
+        let executionPosition: SessionExecutionSnapshot["executionPosition"] | undefined;
         /** Reads the Runtime's execution snapshot, observes it and returns it. */
         const readExecution = async (
             connected: MortyClient,
@@ -712,7 +713,6 @@ export function createSessionPaneModel(options: {
             );
             signal.throwIfAborted();
             if (
-                snapshot.executionPosition !== undefined &&
                 executionPosition !== undefined &&
                 snapshot.executionPosition.sessionGenerationId === executionPosition.sessionGenerationId &&
                 BigInt(snapshot.executionPosition.throughPosition) < BigInt(executionPosition.throughPosition)
@@ -1038,7 +1038,7 @@ export function createSessionPaneModel(options: {
                             ) {
                                 return;
                             }
-                            // Unversioned peers keep the existing reconciliation path.
+                            // Before the first read nothing orders live facts; the read that follows covers them.
                             if (executionPosition !== undefined) {
                                 executionPosition = {
                                     sessionGenerationId: event.sessionGenerationId,

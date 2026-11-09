@@ -511,6 +511,7 @@ describe.sequential("Platform Session-only boundary", () => {
                               turn: null,
                               queued: [],
                               queuedCancellation: "before-start",
+                              executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                               interactionState: null,
                           })
                         : encodeSessionOperationFailedEvent({
@@ -1806,6 +1807,7 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
                 queued: [],
                 command: { state: "completed", stopReason: "end_turn" },
                 queuedCancellation: "before-start",
+                executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                 interactionState: null,
             }),
         );
@@ -1844,6 +1846,7 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
+                executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                 interactionState: null,
                 lastTurn: {
                     code: "model_unavailable",
@@ -2187,6 +2190,7 @@ describe.sequential("Platform Turn submission", () => {
                     turn: null,
                     queued: [],
                     queuedCancellation: "before-start",
+                    executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                     interactionState: null,
                 }),
             );
@@ -2486,6 +2490,7 @@ describe.sequential("Platform Turn submission", () => {
                     kind: "native.session.result",
                     queued: [],
                     queuedCancellation: "before-start",
+                    executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                     interactionState: null,
                     requestId: command.requestId,
                     target: runtime.sessionTarget,

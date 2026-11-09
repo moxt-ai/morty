@@ -1383,7 +1383,7 @@ export class MortySessionResources {
             ...(result.lastTurn === undefined ? {} : { lastTurn: result.lastTurn }),
             queuedCancellation: result.queuedCancellation,
             interactionState: result.interactionState,
-            ...(result.executionPosition === undefined ? {} : { executionPosition: result.executionPosition }),
+            executionPosition: result.executionPosition,
         };
     };
 
