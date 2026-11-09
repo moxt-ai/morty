@@ -17,6 +17,6 @@
         "@morty-build/client": "workspace:*"
     },
     "devDependencies": {
-        "@types/node": "^24.13.5"
+        "@types/node": "catalog:"
     }
 }

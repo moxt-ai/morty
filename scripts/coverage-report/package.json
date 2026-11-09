@@ -8,8 +8,8 @@
         "pnpm": ">=11.25.0 <12"
     },
     "dependencies": {
-        "istanbul-lib-coverage": "3.2.2",
-        "istanbul-lib-report": "3.0.1",
-        "istanbul-reports": "3.2.0"
+        "istanbul-lib-coverage": "catalog:",
+        "istanbul-lib-report": "catalog:",
+        "istanbul-reports": "catalog:"
     }
 }
