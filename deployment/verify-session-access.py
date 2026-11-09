@@ -37,10 +37,10 @@ def fail(operation, status, body):
     raise ValueError(f'{operation} failed (HTTP {status}, code {code})')
 
 
-def verify(origin, app_id, app_credential, root_key, revision):
+def verify(origin, app_credential, root_key, revision):
     # Retained historical rows need not satisfy the current routing contract. Provision through the
     # supported boundary, with a stable identity so retries reuse one dedicated verification Project.
-    status, project = request(origin + '/dashboard/v1/apps/' + app_id + '/projects', app_credential, {
+    status, project = request(origin + '/dashboard/v1/machine-accounts', app_credential, {
         'displayName': 'Deployment verification', 'idempotencyKey': 'deployment-verification',
         'clientReference': 'deployment-verification', 'locationHint': 'wnam',
     })
@@ -82,7 +82,7 @@ def verify(origin, app_id, app_credential, root_key, revision):
 def main():
     target = read(ROOT / 'deployment/targets.json')['environments']['production']
     evidence = verify(
-        target['platform_origin'] + '/morty/api', target['app_id'], os.environ['MORTY_SERVICE_SECRET'],
+        target['platform_origin'] + '/morty/api', os.environ['MORTY_SERVICE_SECRET'],
         os.environ['MORTY_SESSION_SIGNING_SECRET'].encode(), os.environ['EXPECTED_REVISION'],
     )
     (ROOT / 'session-access-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
