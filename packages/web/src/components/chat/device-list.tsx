@@ -98,7 +98,7 @@ export function DeviceSummary({
                     </div>
                     {action}
                 </div>
-                {details}
+                <div className="hidden sm:block">{details}</div>
             </div>
         );
     }
