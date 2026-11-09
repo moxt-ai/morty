@@ -3,8 +3,7 @@ import { pathToFileURL } from "node:url";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
-import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
-import type { Clock } from "../../src/services/time/clock.ts";
+import { TestApiTransport } from "./test-api-transport.ts";
 
 /**
  * The budget of a scenario that starts its own Chat and Platform Workers. Starting them costs seconds on a busy
@@ -22,7 +21,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
     const origin = cloud.origin;
-    const createApplication = async (clock?: Clock) => {
+    const createApplication = async () => {
         const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -52,7 +51,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
         const botId = identity.bot.botId;
-        const transport = new WebSocketApiTransport(origin, clock);
+        const transport = new TestApiTransport(origin);
         transport.open();
         const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);

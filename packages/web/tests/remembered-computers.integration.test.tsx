@@ -2,11 +2,11 @@ import { tmpdir } from "node:os";
 import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestApiTransport } from "./support/test-api-transport.ts";
 
 async function startConversation(app: TestApp, prompt: string): Promise<string> {
     const composer = await app.queryElementByTestId(
@@ -438,7 +438,7 @@ test("Given a saved computer and a failed connection, When I retry after reconne
     await app.close();
     window.location.href = `${app.origin}/`;
     // A reload gets its own page transport; the previous one was disposed.
-    const transport = new WebSocketApiTransport(app.origin);
+    const transport = new TestApiTransport(app.origin);
     const unavailable = await createTestApp({
         application: { ...app, transport, close: () => transport.dispose() },
         page: { kind: "reload" },
@@ -789,7 +789,7 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
 
     // The switched-to page loses its connection while it opens the computer.
     window.location.href = firstLink.href;
-    const transport = new WebSocketApiTransport(second.origin);
+    const transport = new TestApiTransport(second.origin);
     const unavailable = await createTestApp({
         application: { ...second, transport, close: () => transport.dispose() },
         page: { kind: "reload" },

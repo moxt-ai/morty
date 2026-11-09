@@ -41,7 +41,7 @@ async function runCli(
 
 /** Write one installation's logs, mirroring the store's `<root>/installations/<appId>/<id>/logs` layout. */
 async function writeInstallationLog(stateDirectory: string, filename: string, lines: readonly string[]): Promise<void> {
-    const logs = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs");
+    const logs = join(stateDirectory, "machine", "logs");
     await mkdir(logs, { mode: 0o700, recursive: true });
     await writeFile(join(logs, filename), `${lines.join("\n")}\n`, { mode: 0o600 });
 }
@@ -125,7 +125,7 @@ describe("Morty logs command", () => {
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
-        const logPath = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs", "daemon.log");
+        const logPath = join(stateDirectory, "machine", "logs", "daemon.log");
         const directoryPath = dirname(logPath);
         // Widen both deliberately: `validateLocalPath(path, ..., privateAccess: true)`
         // repairs modes with chmod, which would silently hide this difference.
@@ -150,7 +150,7 @@ describe("Morty logs command", () => {
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
-        const logPath = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs", "daemon.log");
+        const logPath = join(stateDirectory, "machine", "logs", "daemon.log");
         // Simulates the read-only mount or failing-disk case the export has to
         // survive: the file is present but this user cannot read it.
         await chmod(logPath, 0o000);
@@ -181,7 +181,7 @@ describe("Morty logs command", () => {
                 readonly unreadable: string[];
             };
             expect(parsed.entries).toEqual([]);
-            expect(parsed.unreadable).toEqual(["machine/min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/logs/daemon.log"]);
+            expect(parsed.unreadable).toEqual(["machine/logs/daemon.log"]);
         } finally {
             await chmod(logPath, 0o600);
         }
@@ -196,7 +196,7 @@ describe("Morty logs command", () => {
         // The logs directory exists and holds a readable file, but cannot be
         // enumerated: an owner-writable, not owner-readable mode (0o300). Treating
         // this as "no logs here" is what hid the evidence before.
-        const logsDirectory = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs");
+        const logsDirectory = join(stateDirectory, "machine", "logs");
         await chmod(logsDirectory, 0o300);
         try {
             const result = await runCli(
@@ -208,7 +208,7 @@ describe("Morty logs command", () => {
             expect(result.code).toBe(1);
             expect(result.stdout).toContain("The local daemon logs could not be read.");
             expect(result.stdout).not.toContain("No local daemon logs were found.");
-            expect(result.stderr).toContain("machine/min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/logs");
+            expect(result.stderr).toContain("machine/logs");
         } finally {
             await chmod(logsDirectory, 0o700);
         }

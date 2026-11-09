@@ -3,11 +3,7 @@ import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "@morty-build/relay-core";
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import {
-    channelAccessGrant,
-    channelHostCredential,
-    runtimeDaemonCredential,
-} from "@morty-build/relay-core/schema/project-do";
+import { channelAccessGrant, channelHostCredential, daemonCredential } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -510,9 +506,9 @@ it.each(["", "morty-pairing-v1\0"])(
         await app.storage(async (storage) => {
             const database = new DurableObjectSqlDatabase(storage);
             database.orm
-                .update(runtimeDaemonCredential)
+                .update(daemonCredential)
                 .set({ tokenHash: await hashSecret(`${retiredDomain}${old.runtimeCredential}`) })
-                .where(eq(runtimeDaemonCredential.computerId, oldPairing.computerId))
+                .where(eq(daemonCredential.computerId, oldPairing.computerId))
                 .run();
         });
         expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);

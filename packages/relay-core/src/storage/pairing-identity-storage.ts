@@ -7,9 +7,9 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     channelAccessGrant,
     channelHostCredential,
+    daemonCredential,
     pairedDaemon,
     projectBrowserCredential,
-    runtimeDaemonCredential,
     runtimePairingRequest,
     runtimeRegistration,
 } from "../schema/project-do/index.ts";
@@ -80,11 +80,11 @@ async function credentialRows(
                 .select({ computer_id: pairedDaemon.computerId })
                 .from(pairedDaemon)
                 .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
-                .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
+                .innerJoin(daemonCredential, eq(daemonCredential.computerId, pairedDaemon.computerId))
                 .where(
                     and(
                         eq(pairedDaemon.computerId, validateIdentifier(credential.computerId, "computer_id")),
-                        eq(runtimeDaemonCredential.tokenHash, credential.tokenHash),
+                        eq(daemonCredential.tokenHash, credential.tokenHash),
                         isNull(pairedDaemon.revokedAt),
                     ),
                 );

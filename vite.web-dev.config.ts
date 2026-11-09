@@ -74,7 +74,6 @@ export default defineConfig({
         strictPort: true,
         proxy: {
             "/morty/api": forward,
-            "/morty/ws": { ...forward, ws: true },
         },
     },
 });

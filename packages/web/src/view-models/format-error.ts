@@ -1,5 +1,5 @@
 import { MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
-import { isChatBridgeError } from "../services/api/websocket-api-transport.ts";
+import { isApiConnectionError } from "../services/api/http-api-transport.ts";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
 const runtimeDisconnectedFailure = {
@@ -80,7 +80,7 @@ export function isSessionClosedFailure(cause: unknown): boolean {
  * upgrade), so the Session keeps retrying them instead of settling as failed.
  */
 export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
-    if (isChatBridgeError(cause) || isRuntimeConnectionFailure(cause)) {
+    if (isApiConnectionError(cause) || isRuntimeConnectionFailure(cause)) {
         return true;
     }
     return cause instanceof MortyError && retryableRuntimeFailureCodes.has(cause.code);

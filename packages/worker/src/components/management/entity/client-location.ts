@@ -11,10 +11,7 @@ const citySchema = v.pipe(v.string(), v.trim(), v.regex(/^[^\p{C}]{1,80}$/u));
 const countrySchema = v.pipe(v.string(), v.regex(/^[A-Z]{2}$/u));
 const locationSchema = v.object({ city: v.nullable(citySchema), country: v.nullable(countrySchema) });
 
-/**
- * Carries the browser connection's location from the Worker that accepted it to the requests its bridge dispatches.
- * The Worker sets it from Cloudflare's metadata; the bridge forwards only that value.
- */
+/** The public Worker forwards the Cloudflare location to the selected computer. */
 export const clientLocationHeader = "Morty-Client-Location";
 
 /** The location Cloudflare attached to a request, or null when it named neither a city nor a country. */

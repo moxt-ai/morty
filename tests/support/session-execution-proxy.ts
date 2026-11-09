@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, request } from "node:http";
-import type { Duplex } from "node:stream";
 import { decodeNativeSessionResult } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 
@@ -28,10 +27,6 @@ export async function createSessionExecutionProxy(upstream: string) {
         readonly lastTurnState: string | null;
         readonly interactionPosition: string | null;
     }[] = [];
-    let heldRuntimeHosts: (() => void)[] | null = null;
-    let openRuntimeHosts = 0;
-    const runtimeHostWaiters: (() => void)[] = [];
-    const heldUpgrades = new Set<Duplex>();
     const server = createServer((incoming, outgoing) => {
         const heldResponse = takeResponseHold(new URL(incoming.url ?? "/", upstream).pathname);
         const forwarded = request(
@@ -62,25 +57,8 @@ export async function createSessionExecutionProxy(upstream: string) {
     });
     const sockets = new Set<WebSocket>();
     const connections = new WebSocketServer({ noServer: true });
-    const isRuntimeHost = (url: string | undefined): boolean =>
-        new URL(url ?? "/", upstream).pathname.endsWith("/host");
     server.on("upgrade", (incoming, socket, head) => {
-        const accept = () => {
-            if (!socket.destroyed) {
-                connections.handleUpgrade(incoming, socket, head, (client) =>
-                    connections.emit("connection", client, incoming),
-                );
-            }
-        };
-        if (heldRuntimeHosts !== null && isRuntimeHost(incoming.url)) {
-            heldUpgrades.add(socket);
-            heldRuntimeHosts.push(() => {
-                heldUpgrades.delete(socket);
-                accept();
-            });
-            return;
-        }
-        accept();
+        connections.handleUpgrade(incoming, socket, head, (client) => connections.emit("connection", client, incoming));
     });
     connections.on("connection", (client: WebSocket, incoming: IncomingMessage) => {
         const target = new URL(incoming.url ?? "/", upstream);
@@ -93,17 +71,6 @@ export async function createSessionExecutionProxy(upstream: string) {
         });
         sockets.add(client);
         sockets.add(remote);
-        if (isRuntimeHost(incoming.url)) {
-            remote.on("open", () => {
-                openRuntimeHosts += 1;
-                for (const opened of runtimeHostWaiters.splice(0)) {
-                    opened();
-                }
-                remote.on("close", () => {
-                    openRuntimeHosts -= 1;
-                });
-            });
-        }
         const pending: (() => void)[] = [];
         let delayedCloseTraffic: (() => void)[] | null = null;
         const responses = new Map<string, (frame: unknown) => void>();
@@ -400,31 +367,9 @@ export async function createSessionExecutionProxy(upstream: string) {
                 }
             };
         },
-        /**
-         * Waits until a Runtime host connection is open, then keeps every later one from connecting until the
-         * returned release, as when the Runtime cannot be reached for a new connection.
-         */
-        holdLaterRuntimeHosts: async (): Promise<() => void> => {
-            if (openRuntimeHosts === 0) {
-                await new Promise<void>((resolve) => runtimeHostWaiters.push(resolve));
-            }
-            const held: (() => void)[] = [];
-            heldRuntimeHosts = held;
-            return () => {
-                if (heldRuntimeHosts === held) {
-                    heldRuntimeHosts = null;
-                }
-                for (const accept of held.splice(0)) {
-                    accept();
-                }
-            };
-        },
         close: async () => {
             for (const socket of sockets) {
                 socket.terminate();
-            }
-            for (const socket of heldUpgrades) {
-                socket.destroy();
             }
             connections.close();
             server.closeAllConnections();

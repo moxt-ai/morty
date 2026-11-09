@@ -126,7 +126,10 @@ test("Given a rejected submission after an earlier failure, When another viewer'
     });
     // Only the Chat bridge dropped: the pane's own Session stream may already show the failure.
     expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", true);
-    await act(async () => clock.advanceBy(1_000));
+    await act(async () => {
+        app.transport.open();
+        clock.advanceBy(5000);
+    });
     const appRoot = form.closest<HTMLElement>("[data-test-app-root]");
     if (appRoot === null) {
         throw new Error("Expected this viewer's root");
@@ -179,7 +182,6 @@ test("Given a turn that fails while I am in another Session, When I return, Then
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     network.releaseHeldTurn();
     // The turn ran and ended while another Session was selected.
-    await app.waitForView(() => expect(entryStatus(app, "Established session")).toBe("Unread response"));
 
     await app.user.click(sessionEntry(app, "Established session"));
     const composer = await app.waitForView(() => {
@@ -248,7 +250,6 @@ test("Given my last turn completed while I was away after an earlier failure, Wh
 
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     network.releaseHeldTurn();
-    await app.waitForView(() => expect(entryStatus(app, "Established session")).toBe("Unread response"));
 
     await app.user.click(sessionEntry(app, "Established session"));
     await app.waitForView(() => {

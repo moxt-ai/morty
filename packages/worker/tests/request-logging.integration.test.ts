@@ -35,7 +35,6 @@ beforeAll(async () => {
             bindings: { APP_ORIGIN: "https://chat.test" },
             compatibilityDate: "2026-09-07",
             compatibilityFlags: ["nodejs_compat"],
-            durableObjects: { CHAT_WEBSOCKETS: { className: "ChatWebSocketDurableObject", useSQLite: true } },
             modules: true,
             script: script.text,
             // The Worker's structured log stream, as the runtime records it.

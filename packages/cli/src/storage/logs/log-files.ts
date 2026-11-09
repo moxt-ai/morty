@@ -15,38 +15,18 @@ export async function findLogDirectories(
     signal: AbortSignal,
 ): Promise<readonly string[]> {
     const machine = join(root, "machine");
-    const found: string[] = [];
-    for (const id of await listDirectories(machine, root, unreadable, signal)) {
-        const logs = join(machine, id, "logs");
-        const status = await directoryStatus(logs);
-        if (status === "listed") {
-            found.push(logs);
-        }
-        if (status === "unreadable") {
-            unreadable.push(relative(root, logs));
-        }
-    }
-    return found;
-}
-
-async function listDirectories(
-    path: string,
-    root: string,
-    unreadable: string[],
-    signal: AbortSignal,
-): Promise<readonly string[]> {
     signal.throwIfAborted();
-    try {
-        const entries = await readdir(path, { withFileTypes: true });
-        return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
-    } catch (cause) {
-        // A state root that has never been used has no installations directory;
-        // anything else is a failure to collect from, not an absence of logs.
-        if (!isAbsent(cause)) {
-            unreadable.push(relative(root, path));
+    const logs = join(machine, "logs");
+    for (const path of [machine, logs]) {
+        const status = await directoryStatus(path);
+        if (status !== "listed") {
+            if (status === "unreadable") {
+                unreadable.push(relative(root, path));
+            }
+            return [];
         }
-        return [];
     }
+    return [logs];
 }
 
 /** The log file names in a log directory. An unreadable directory is added to `unreadable`, relative to `root`. */

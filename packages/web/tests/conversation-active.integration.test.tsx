@@ -1,7 +1,7 @@
 import { getByRole, queryAllByRole, within } from "@testing-library/dom";
 import { afterEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { refreshSessions, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 afterEach(() => vi.useRealTimers());
@@ -187,6 +187,7 @@ test("Given a conversation is running in the background, When it completes after
         throw new Error("Expected a connected controlled Agent Runtime");
     }
     await daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
+    await refreshSessions(app);
     await app.queryElementByTestId(
         dataTestId.sessionStatus,
         (element) => element.getAttribute("aria-label") === "Unread response",

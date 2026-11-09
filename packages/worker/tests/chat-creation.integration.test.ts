@@ -843,39 +843,18 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         workspaceRef: "default",
     });
     const { target } = v.parse(v.object({ target: targetSchema }), await opened.json());
-    const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
-        headers: { Origin: APP_ORIGIN, Upgrade: "websocket" },
-    });
-    const bridge = upgraded.webSocket;
-    if (bridge === null) {
-        throw new Error("Expected the Chat WebSocket bridge.");
-    }
-    const frames: unknown[] = [];
-    let arrived = (): void => {};
-    bridge.addEventListener("message", (event) => {
-        frames.push(JSON.parse(String(event.data)));
-        arrived();
-    });
-    const nextFrame = async () => {
-        while (frames.length === 0) {
-            await new Promise<void>((resolve) => {
-                arrived = resolve;
-            });
-        }
-        return frames.shift();
-    };
-    bridge.accept();
-    bridge.send(
-        JSON.stringify({
-            kind: "subscribe",
-            subscriptionId: "statuses",
+    const stream = await cloud.dispatchFetch(
+        `${APP_ORIGIN}/morty/api/chat/computers/${fixture.computerId}/bots/${fixture.botId}/managed-session/status-events`,
+        {
             method: "POST",
-            path: `/morty/api/chat/computers/${fixture.computerId}/bots/${fixture.botId}/managed-session/status-events`,
-            headers: [["authorization", `Bearer ${browser}`]],
-            body: null,
-        }),
+            headers: { authorization: `Bearer ${browser}` },
+        },
     );
-    expect(await nextFrame()).toMatchObject({ kind: "event", subscriptionId: "statuses" });
+    const reader = stream.body?.getReader();
+    if (!reader) {
+        throw new Error("Missing status stream");
+    }
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("managed-session.statuses.following");
 
     expect((await fixture.request("identity/revoke-all-access", {})).status).toBe(200);
     await fixture.runtime.client.turns.submitToRuntime(
@@ -891,8 +870,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         AbortSignal.timeout(10_000),
     );
 
-    expect(await nextFrame()).toEqual({ kind: "subscription.end", subscriptionId: "statuses" });
-    bridge.close(1000, "Test complete");
+    expect((await reader.read()).done).toBe(true);
 });
 
 test("Given two browsers joined through links, When one disconnects the other browsers, Then only it and the machine keep access and the other's open chat window is refused", async ({
@@ -924,9 +902,8 @@ test("Given two browsers joined through links, When one disconnects the other br
     const owner = await join();
     const other = await join();
     const unused = await share();
-    // The Web application reaches chat routes through its WebSocket bridge and identity routes over public HTTP.
     const asBrowser = (token: string, path: string, method = "GET", body?: object) =>
-        (path.startsWith("chat/") ? worker.fetch : fetchPublicApplication)(
+        fetchPublicApplication(
             new Request(`${APP_ORIGIN}/morty/api/${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -966,41 +943,22 @@ test("Given two browsers joined through links, When one disconnects the other br
     expect((await redeem(unused)).status).toBe(410);
 });
 
-test("Given a browser connecting from a city, When it opens a link through the bridge, Then the device list shows roughly where it joined, never what the browser claimed", async ({
+test("Given a browser connecting from a city, When it opens a link, Then the device list shows roughly where it joined, never what the browser claimed", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
     const shared = await fixture.request("identity/transfers", {});
     const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
-    const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
+    const redeemed = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+        method: "POST",
         headers: {
-            Origin: APP_ORIGIN,
-            Upgrade: "websocket",
-            // A browser cannot name its own location: the Worker replaces this with Cloudflare's.
+            "content-type": "application/json",
             "Morty-Client-Location": encodeURIComponent(JSON.stringify({ city: "Elsewhere", country: "AQ" })),
         },
+        body: JSON.stringify({ code, device: "iPhone · Safari" }),
         cf: { city: "Shanghai", country: "CN" },
     });
-    const bridge = upgraded.webSocket;
-    if (bridge === null) {
-        throw new Error("Expected the Chat WebSocket bridge.");
-    }
-    bridge.accept();
-    const reply = new Promise<unknown>((resolve) => {
-        bridge.addEventListener("message", (event) => resolve(JSON.parse(String(event.data))), { once: true });
-    });
-    bridge.send(
-        JSON.stringify({
-            kind: "request",
-            requestId: "redeem",
-            method: "POST",
-            path: "/morty/api/identity/transfers/redeem",
-            headers: [["content-type", "application/json"]],
-            body: JSON.stringify({ code, device: "iPhone · Safari" }),
-        }),
-    );
-    expect(await reply).toMatchObject({ kind: "response", status: 200 });
-    bridge.close();
+    expect(redeemed.status).toBe(200);
 
     const listed = v.parse(
         v.object({ devices: v.array(v.object({ label: v.nullable(v.string()), location: v.unknown() })) }),

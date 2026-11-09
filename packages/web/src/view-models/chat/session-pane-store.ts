@@ -10,7 +10,6 @@ import type { NativeSessionTarget, SessionEvent, SessionLiveEvent } from "@morty
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -453,13 +452,7 @@ export function createSessionPaneModel(options: {
     readonly botId: string;
     readonly requests: Pick<
         BotChatApi,
-        | "connectSession"
-        | "managedSession"
-        | "managedSessions"
-        | "runtimeConfiguration"
-        | "recoverBridge"
-        | "waitForBridge"
-        | "resetSessionConnections"
+        "connectSession" | "managedSession" | "managedSessions" | "runtimeConfiguration" | "resetSessionConnections"
     >;
     /**
      * Hands the owner this pane's last account of the Session's work when the pane stops. While it runs, the owner
@@ -1001,7 +994,7 @@ export function createSessionPaneModel(options: {
                 // again, so access that ended meanwhile, including a revoked Session credential, ends the page's access.
                 let openedAccess = session.result.action === "conversation" ? session.result.access : undefined;
                 const paneSignal = signal;
-                // One grace period per interruption, shared by the bridge wait, backoff and reconciliation.
+                // One grace period per interruption, shared by backoff and reconciliation.
                 // Successful recovery or a terminal outcome cancels it in the connection transition above.
                 const recoveryNotice = (): "quiet" | "visible" => {
                     const current = get().connection;
@@ -1259,7 +1252,7 @@ export function createSessionPaneModel(options: {
                             at: new Date().toISOString(),
                             component: "web",
                             operation: "session-interruption",
-                            outcome: cause instanceof MortyError ? cause.code : "bridge_unavailable",
+                            outcome: cause instanceof MortyError ? cause.code : "api_unavailable",
                             attempt: consecutiveFailures,
                             elapsedMs: 0,
                             requestId: "",
@@ -1277,20 +1270,7 @@ export function createSessionPaneModel(options: {
                         countdownInterrupt = new AbortController();
                         const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);
                         try {
-                            if (isChatBridgeError(cause)) {
-                                // The bridge owns its dial/backoff. Do not spend a
-                                // second retry budget waiting for that dependency.
-                                setAndSettle({
-                                    connection: {
-                                        kind: "disconnected",
-                                        message,
-                                        retry: { kind: "waiting-for-bridge" },
-                                        notice: recoveryNotice(),
-                                    },
-                                });
-                                await requests.waitForBridge(retrySignal);
-                                consecutiveFailures = 0;
-                            } else if (retry.kind === "scheduled") {
+                            if (retry.kind === "scheduled") {
                                 const retryAt = clock.now() + retry.delayMs;
                                 while (clock.now() < retryAt) {
                                     await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
@@ -1338,14 +1318,12 @@ export function createSessionPaneModel(options: {
                     if (state.retry.kind === "exhausted") {
                         recoveryRequested = true;
                     }
-                    void requests.recoverBridge(parent).catch(() => undefined);
                     countdownInterrupt?.abort(new Error("The browser resumed."));
                     return;
                 }
             },
             retryNow: () => {
                 recoveryRequested = true;
-                void requests.recoverBridge(lifetime.signal).catch(() => undefined);
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
             sessionClosed: (reason) => {

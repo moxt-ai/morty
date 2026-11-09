@@ -27,7 +27,6 @@ export type SessionConnection =
 
 type SessionReconnectRetry =
     | { readonly kind: "scheduled"; readonly remainingSeconds: number }
-    | { readonly kind: "waiting-for-bridge" }
     | { readonly kind: "exhausted" };
 
 const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;

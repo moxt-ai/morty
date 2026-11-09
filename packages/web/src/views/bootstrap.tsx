@@ -7,7 +7,7 @@ import { ImageViewerProvider } from "../components/images/image-gallery.tsx";
 import { ToastProvider } from "../components/ui/toast.tsx";
 import { installInputModalityTracking } from "../input-modality.ts";
 import type { PageAnalytics } from "../services/analytics/google-analytics.ts";
-import type { WebSocketApiTransport } from "../services/api/websocket-api-transport.ts";
+import type { ApiTransport } from "../services/api/api-transport.ts";
 import type { SetupHandoff } from "../services/device/setup-handoff.ts";
 import type { Clock } from "../services/time/clock.ts";
 import { createImageDownloadStore } from "../view-models/chat/image-download-store.ts";
@@ -26,7 +26,7 @@ import { createSignedInRouter, SessionApplication } from "./authentication/sessi
  */
 export function assembleMorty(options: {
     readonly analytics?: PageAnalytics | null;
-    readonly transport: WebSocketApiTransport;
+    readonly transport: ApiTransport;
     readonly origin: string;
     readonly clock?: Clock;
     readonly setupHandoff?: SetupHandoff;
@@ -97,7 +97,7 @@ export function assembleMorty(options: {
 export function mountMorty(options: {
     readonly analytics?: PageAnalytics | null;
     readonly element: HTMLElement;
-    readonly transport: WebSocketApiTransport;
+    readonly transport: ApiTransport;
     readonly origin: string;
 }): {
     readonly application: MortyApplication;

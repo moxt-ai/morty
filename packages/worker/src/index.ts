@@ -4,8 +4,6 @@ import { withSetupFunnelEvents } from "./composition/setup-funnel.ts";
 import { withInstructionDocumentCache } from "./gateway/instruction-document-cache.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 
-export { ChatWebSocketDurableObject } from "./components/chat/chat-websocket-durable-object.ts";
-
 const fetch = withSetupFunnelEvents(withInstructionDocumentCache(fetchPublicApplication), logger);
 
 export default {

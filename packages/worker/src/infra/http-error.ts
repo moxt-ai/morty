@@ -1,4 +1,4 @@
-export interface HttpErrorJson {
+interface HttpErrorJson {
     readonly body: {
         readonly error: { readonly code: string; readonly message: string; readonly reason?: string };
     };
@@ -12,13 +12,4 @@ export interface HttpError extends Error {
 
 export function isHttpError(error: unknown): error is HttpError {
     return error instanceof Error && "toHttpJson" in error && typeof error.toHttpJson === "function";
-}
-
-export function toHttpError(error: unknown): HttpErrorJson {
-    return isHttpError(error)
-        ? error.toHttpJson()
-        : {
-              body: { error: { code: "INTERNAL_ERROR", message: "The request could not be completed." } },
-              status: 500,
-          };
 }

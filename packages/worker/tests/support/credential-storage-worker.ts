@@ -3,7 +3,7 @@ import { requireIdentityDatabase } from "../../src/components/management/storage
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
 import { managedBot } from "../../src/schema/project-do/index.ts";
 
-export { ChatWebSocketDurableObject, default } from "../../src/index.ts";
+export { default } from "../../src/index.ts";
 
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
