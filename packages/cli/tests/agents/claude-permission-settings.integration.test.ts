@@ -45,7 +45,7 @@ test.each([
                         kind: "session.prepare",
                         requestId,
                         target: peer.target,
-                        agentId: "claude",
+                        harness: "claude",
                         directory: ".",
                     }),
                 );

@@ -29,7 +29,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
         const runtime = new ControlledSetupRuntime(
-            { agentId: "codex", agentName: "Codex", reply: mortyReply },
+            { harness: "codex", agentName: "Codex", reply: mortyReply },
             "Laptop",
         );
         cleanup.defer(() => runtime.disconnect());
@@ -144,7 +144,7 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     const state = join(directory, "state");
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    const runtime = new ControlledSetupRuntime({ agentId: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    const runtime = new ControlledSetupRuntime({ harness: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
     cleanup.defer(() => runtime.disconnect());
     let time = Date.parse("2026-10-30T00:00:00Z");
     const run = async () =>
@@ -219,7 +219,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const state = join(directory, "state");
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    const runtime = new ControlledSetupRuntime({ agentId: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    const runtime = new ControlledSetupRuntime({ harness: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
     cleanup.defer(() => runtime.disconnect());
     let time = Date.parse("2026-11-09T00:00:00Z");
     const run = async () => {

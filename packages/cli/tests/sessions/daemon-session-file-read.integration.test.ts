@@ -50,7 +50,7 @@ test("Given a persisted native conversation, When a client prompts after restart
                     peer.send(
                         encodeSessionPromptCommand({
                             kind: "session.prompt",
-                            agentId: "controlled-acp",
+                            harness: "controlled-acp",
                             directory: ".",
                             target: peer.target,
                             commandId,
@@ -198,7 +198,7 @@ if (process.argv.includes("--version")) {
             async (peer) => {
                 peer.send(
                     encodeSessionPrepareCommand({
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         directory: ".",
                         kind: "session.prepare",
                         requestId: "prepare-file-read-session",

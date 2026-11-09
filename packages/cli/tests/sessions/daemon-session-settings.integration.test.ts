@@ -109,14 +109,14 @@ class TerminalSessionResult {
 
 const bufferedSessionEvents = new WeakMap<ClientFrames, SessionLiveEvent[]>();
 
-async function createSession(socket: Duplex, frames: ClientFrames, agentId: string): Promise<NativeSessionTarget> {
+async function createSession(socket: Duplex, frames: ClientFrames, harness: string): Promise<NativeSessionTarget> {
     sendText(
         socket,
         encodeSessionCreateCommand({
             kind: "session.create",
             requestId: crypto.randomUUID(),
             operationId: crypto.randomUUID(),
-            agentId,
+            harness,
             directory: ".",
             configurations: [],
         }),
@@ -310,7 +310,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId: agent.id,
+                    harness: agent.id,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId,
                 }),
@@ -414,7 +414,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId: agent.id,
+                    harness: agent.id,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: noEffortRequestId,
                 }),
@@ -525,7 +525,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 socket,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId: agent.id,
+                    harness: agent.id,
                     directory: projectDirectory,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: "controlled-settings-in-project",
@@ -540,7 +540,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 socket,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId: agent.id,
+                    harness: agent.id,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: "controlled-settings-in-default",
                 }),
@@ -646,7 +646,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId: agent.id,
+                    harness: agent.id,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: noEffortRequestId,
                 }),
@@ -750,7 +750,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId: agent.id,
+                    harness: agent.id,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId,
                 }),
@@ -862,7 +862,7 @@ describe("daemon session configuration boundary", () => {
             const sessionTarget = await createSession(socket, frames, agent.id);
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
-                agentId: agent.id,
+                harness: agent.id,
                 commandId: runningCommandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,
@@ -987,7 +987,7 @@ describe("daemon session configuration boundary", () => {
             const sessionTarget = await createSession(socket, frames, agent.id);
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
-                agentId: agent.id,
+                harness: agent.id,
                 commandId: runningCommandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,

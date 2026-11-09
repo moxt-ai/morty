@@ -123,9 +123,9 @@ const agentOptions = [
 ] as const;
 
 const sessionAgents = [
-    { agentRef: "codex", label: "Codex", value: "runtime:codex" },
-    { agentRef: "claude-code", label: "Claude Code", value: "runtime:claude-code" },
-    { agentRef: "pi", label: "Pi", value: "runtime:pi" },
+    { harness: "codex", label: "Codex", value: "runtime:codex" },
+    { harness: "claude-code", label: "Claude Code", value: "runtime:claude-code" },
+    { harness: "pi", label: "Pi", value: "runtime:pi" },
 ] as const;
 
 const toolStates = [
@@ -1180,7 +1180,7 @@ function NavigationCardGallery() {
 
 const playgroundExecutionContext = {
     agent: "Codex",
-    agentRef: "codex",
+    harness: "codex",
     available: true,
     computerStatus: "Online",
     connection: "Connected",
@@ -1659,20 +1659,20 @@ function SessionAgentTabsGallery() {
 
 function HarnessMarkGallery() {
     const marks = [
-        { agentRef: "claude", label: "Claude" },
-        { agentRef: "codex", label: "Codex" },
-        { agentRef: "pi", label: "Pi" },
-        { agentRef: "local", label: "Local agent" },
+        { harness: "claude", label: "Claude" },
+        { harness: "codex", label: "Codex" },
+        { harness: "pi", label: "Pi" },
+        { harness: "local", label: "Local agent" },
     ] as const;
     return (
         <>
             <Specimen title="Products">
                 {marks.map((mark) => (
-                    <span className="inline-flex items-center gap-2 text-13" key={mark.agentRef}>
+                    <span className="inline-flex items-center gap-2 text-13" key={mark.harness}>
                         <HarnessMark
-                            agentRef={mark.agentRef}
+                            harness={mark.harness}
                             label={mark.label}
-                            testId={`playground-harness-${mark.agentRef}`}
+                            testId={`playground-harness-${mark.harness}`}
                         />
                         {mark.label}
                     </span>
@@ -1680,11 +1680,11 @@ function HarnessMarkGallery() {
             </Specimen>
             <Specimen title="Waiting for the agent">
                 <span className="inline-flex items-center gap-2 text-13">
-                    <HarnessMark agentRef="pi" appearance="line" label="Pi" loading />
+                    <HarnessMark harness="pi" appearance="line" label="Pi" loading />
                     Line mark, still unknown
                 </span>
                 <span className="inline-flex items-center gap-2 text-13">
-                    <HarnessMark agentRef="pi" label="Pi" loading />
+                    <HarnessMark harness="pi" label="Pi" loading />
                     Badge mark, still unknown
                 </span>
             </Specimen>

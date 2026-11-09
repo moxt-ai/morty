@@ -131,7 +131,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         const socket = await connected.promise;
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         const identity = {
-            agentId: "claude",
+            harness: "claude",
             directory: ".",
         };
         socket.send(

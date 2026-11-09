@@ -57,7 +57,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     const runtime = new ControlledSetupRuntime(
-        { agentId: "codex", agentName: "Codex", reply: mortyReply },
+        { harness: "codex", agentName: "Codex", reply: mortyReply },
         "Admission Runtime",
     );
     cleanup.defer(() => runtime.disconnect());

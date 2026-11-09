@@ -25,7 +25,7 @@ test("Given real pi exhausts its automatic model retries, When the last attempt 
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "pi",
+                    harness: "pi",
                     commandId,
                     directory: ".",
                     disposition: SessionPromptDisposition.Append,
@@ -123,7 +123,7 @@ test("Given a pi turn's first model call fails retryably, When pi's automatic re
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                agentId: "pi",
+                harness: "pi",
                 commandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,

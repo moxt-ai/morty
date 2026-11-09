@@ -50,7 +50,7 @@ export type AgentModelEffort = z.infer<typeof agentModelEffortSchema>;
 
 const agentSettingsDiscoverCommandSchema = z
     .object({
-        agentId: IDENTIFIER,
+        harness: IDENTIFIER,
         // The directory whose project settings the Agent reads. Omitted means the default directory.
         directory: DIRECTORY_PATH.optional(),
         kind: z.literal(AGENT_SETTINGS_DISCOVER_KIND),
@@ -63,7 +63,7 @@ export type AgentSettingsDiscoverCommand = z.infer<typeof agentSettingsDiscoverC
 
 const agentSettingsDiscoveredEventSchema = z
     .object({
-        agentId: IDENTIFIER,
+        harness: IDENTIFIER,
         agentName: z.string().max(255),
         agentVersion: z.string().max(128),
         // The directory actually inspected.

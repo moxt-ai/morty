@@ -24,7 +24,7 @@ const sessionHistoryPageLoadSchema = z
 const sessionPreviewHistoryPageLoadSchema = z
     .object({
         ...pageRequestFields,
-        agentId: identifier,
+        harness: identifier,
         directory: directoryPath,
         kind: z.literal(SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND),
     })

@@ -399,12 +399,12 @@ async function withDaemonConnection(
 /** Opens an Agent-owned conversation through the same discovery and import boundary as the browser. */
 export async function importRealSession(
     peer: DaemonConnectionPeer,
-    agentId: string,
+    harness: string,
     sessionId: string,
 ): Promise<NativeSessionTarget> {
     const identity = {
         kind: "native.session.request",
-        agentId,
+        harness,
         directory: ".",
     } as const;
     const receive = async (requestId: string) => {
@@ -446,7 +446,7 @@ export async function importRealSession(
 }
 
 /** Opens a conversation through first-send creation; only the harness chooses its native ID. */
-export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId: string): Promise<NativeSessionTarget> {
+export async function prepareNewRealSession(peer: DaemonConnectionPeer, harness: string): Promise<NativeSessionTarget> {
     const requestId = randomUUID();
     peer.send(
         encodeSessionCreateCommand({
@@ -454,7 +454,7 @@ export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId:
             requestId,
             operationId: randomUUID(),
             configurations: [],
-            agentId,
+            harness,
             directory: ".",
         }),
     );

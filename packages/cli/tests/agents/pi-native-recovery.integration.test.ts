@@ -43,7 +43,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                         kind: "session.prompt",
                         commandId,
                         target: nativeId,
-                        agentId: "pi",
+                        harness: "pi",
                         directory: ".",
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
@@ -138,7 +138,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 kind: "session.prompt",
                 commandId,
                 target: sourceSessionId,
-                agentId: "pi",
+                harness: "pi",
                 directory: ".",
                 attachments: [],
                 prompt: "Reply with a short greeting, without using tools",
@@ -165,7 +165,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
 
         const listRequestId = randomUUID();
         const identity = {
-            agentId: "pi",
+            harness: "pi",
             directory: ".",
         } as const;
         peer.send(
@@ -258,7 +258,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 kind: "session.prompt",
                 commandId: sourceCommandId,
                 target: sourceSessionId,
-                agentId: "pi",
+                harness: "pi",
                 directory: ".",
                 attachments: [],
                 prompt: "Save this conversation so it can be forked",
@@ -278,7 +278,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
 
         const listRequestId = randomUUID();
         const identity = {
-            agentId: "pi",
+            harness: "pi",
             directory: ".",
         } as const;
         peer.send(
@@ -384,7 +384,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 kind: "session.prompt",
                 commandId: forkedCommandId,
                 target: forkedSessionTarget,
-                agentId: "pi",
+                harness: "pi",
                 directory: ".",
                 attachments: [],
                 prompt: "Continue in the independent fork",

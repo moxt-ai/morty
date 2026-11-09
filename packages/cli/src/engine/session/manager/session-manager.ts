@@ -56,7 +56,7 @@ import {
 import type { SessionEventPage } from "../history/session-event-store.ts";
 
 /** Identifies a native session while an import, fork, or continuation manages it. */
-const nativeOperationKey = (agentId: string, sessionId: string): string => `${agentId}:${sessionId}`;
+const nativeOperationKey = (harness: string, sessionId: string): string => `${harness}:${sessionId}`;
 
 export class SessionManager {
     readonly #operations = new RuntimeOperations();
@@ -148,7 +148,7 @@ export class SessionManager {
         const stored = this.#store.read(target);
         return (
             stored instanceof FoundStoredSession &&
-            this.#nativeOperations.has(nativeOperationKey(stored.session.agentId, stored.session.sessionId))
+            this.#nativeOperations.has(nativeOperationKey(stored.session.harness, stored.session.sessionId))
         );
     }
 
@@ -939,7 +939,7 @@ export class SessionManager {
         const stored = this.#store.read(options.target);
         if (
             !(stored instanceof FoundStoredSession) ||
-            stored.session.agentId !== options.agent.id ||
+            stored.session.harness !== options.agent.id ||
             stored.session.cwd !== options.cwd
         ) {
             return undefined;
@@ -949,8 +949,8 @@ export class SessionManager {
         return { sessionGenerationId, throughPosition, interactions: [] };
     };
 
-    readonly hasPreparedSession = (target: NativeSessionTarget, agentId: string, cwd: string): boolean =>
-        this.#executionProcesses.get(target)?.belongsTo(agentId, cwd) === true;
+    readonly hasPreparedSession = (target: NativeSessionTarget, harness: string, cwd: string): boolean =>
+        this.#executionProcesses.get(target)?.belongsTo(harness, cwd) === true;
 
     readonly createNativeSession = async (options: SessionCreationOptions): Promise<NativeSessionTarget> =>
         this.#operations.run(options, async (options) => {

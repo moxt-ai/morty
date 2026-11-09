@@ -3,7 +3,7 @@
  * the header, details, and composer render the same connection presentation.
  */
 export interface ExecutionContext {
-    readonly agentRef: string;
+    readonly harness: string;
     readonly machine: string;
     readonly agent: string;
     readonly directory: string | null;

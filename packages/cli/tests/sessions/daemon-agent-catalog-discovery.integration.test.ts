@@ -468,7 +468,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         sendText(
             socket,
             encodeSessionCreateCommand({
-                agentId: "controlled-acp",
+                harness: "controlled-acp",
                 directory: ".",
                 kind: "session.create",
                 requestId: prepareRequestId,
@@ -593,7 +593,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         sendText(
             socket,
             encodeSessionCreateCommand({
-                agentId: "controlled-acp",
+                harness: "controlled-acp",
                 directory: ".",
                 kind: "session.create",
                 requestId: prepareRequestId,

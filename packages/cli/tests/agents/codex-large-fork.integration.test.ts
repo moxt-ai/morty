@@ -29,7 +29,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                     kind: "session.prompt",
                     commandId,
                     target: sourceSessionId,
-                    agentId: "codex",
+                    harness: "codex",
                     directory: ".",
                     attachments: [],
                     prompt: `Question ${turn}: answer without using tools`,
@@ -57,7 +57,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
             }
         }
         const identity = {
-            agentId: "codex",
+            harness: "codex",
             directory: ".",
             kind: "native.session.request",
         } as const;

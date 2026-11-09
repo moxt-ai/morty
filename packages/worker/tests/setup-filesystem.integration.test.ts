@@ -550,7 +550,7 @@ for (const [failure, scenario] of starterFailures) {
                 };
                 await request(`chat/computers/${identity.computerId}/setup`, {
                     computerId: runtime.computerId,
-                    agentRef: "codex",
+                    harness: "codex",
                 });
                 await runtime.disconnect();
                 const connection = {
@@ -778,7 +778,7 @@ for (const segments of [4, 8]) {
             await mkdir(workspace, { recursive: true });
             const fixture = await createIdentityFixture();
             const runtime = new ControlledSetupRuntime(
-                { agentId: "codex", agentName: "Codex", reply: mortyReply },
+                { harness: "codex", agentName: "Codex", reply: mortyReply },
                 "Setup test Runtime",
             );
             const events: Readonly<Record<string, unknown>>[] = [];
@@ -936,7 +936,7 @@ async function withUpgradeMachine(
     await mkdir(workspace, { recursive: true });
     const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
-        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply },
+        { harness: "settings-test", agentName: "Settings Agent", reply: mortyReply },
         "Setup test Runtime",
         upgrade,
         release,

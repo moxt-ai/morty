@@ -6,13 +6,13 @@ import { dataTestId } from "../../data-testid.ts";
 export type HarnessProduct = "claude" | "codex" | "pi" | "generic";
 
 // Brand marks are inlined rather than pulled from a package so that a harness
-// can only render a mark the build actually ships. `agentRef` is an identifier,
+// can only render a mark the build actually ships. `harness` is an identifier,
 // never a display string, so identity is matched exactly before the label is
 // consulted as a fallback.
-const HARNESS_PRODUCTS: readonly { readonly agentRefs: readonly string[]; readonly product: HarnessProduct }[] = [
-    { agentRefs: ["claude", "claude-code"], product: "claude" },
-    { agentRefs: ["codex", "openai"], product: "codex" },
-    { agentRefs: ["pi"], product: "pi" },
+const HARNESS_PRODUCTS: readonly { readonly harnesses: readonly string[]; readonly product: HarnessProduct }[] = [
+    { harnesses: ["claude", "claude-code"], product: "claude" },
+    { harnesses: ["codex", "openai"], product: "codex" },
+    { harnesses: ["pi"], product: "pi" },
 ];
 
 const MARK_BACKGROUNDS: Readonly<Partial<Record<HarnessProduct, string>>> = {
@@ -42,9 +42,9 @@ const MARK_PATHS: Readonly<Partial<Record<HarnessProduct, string>>> = {
     pi: "M0 0v24h6v-6h6v-6H6V6h6v6h6V0Zm18 12v12h6V12Z",
 };
 
-function identifyHarnessProduct(agentRef: string, label: string): HarnessProduct {
-    const identity = agentRef.toLowerCase();
-    const exact = HARNESS_PRODUCTS.find((entry) => entry.agentRefs.includes(identity));
+function identifyHarnessProduct(harness: string, label: string): HarnessProduct {
+    const identity = harness.toLowerCase();
+    const exact = HARNESS_PRODUCTS.find((entry) => entry.harnesses.includes(identity));
     if (exact !== undefined) {
         return exact.product;
     }
@@ -59,14 +59,14 @@ function identifyHarnessProduct(agentRef: string, label: string): HarnessProduct
 }
 
 export function HarnessMark({
-    agentRef,
+    harness,
     appearance = "badge",
     className,
     label,
     loading = false,
     testId,
 }: {
-    readonly agentRef: string;
+    readonly harness: string;
     readonly appearance?: "badge" | "line";
     readonly className?: string;
     readonly label: string;
@@ -95,7 +95,7 @@ export function HarnessMark({
             </span>
         );
     }
-    const product = identifyHarnessProduct(agentRef, label);
+    const product = identifyHarnessProduct(harness, label);
     if (appearance === "line" && product === "codex") {
         return (
             <svg

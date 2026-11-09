@@ -969,7 +969,7 @@ export const createBotChatHomeStore = (
                         return false;
                     }
                     options.navigation.showManaged({
-                        harness: access.agentRef,
+                        harness: access.harness,
                         sessionId: session.entry.sessionId,
                     });
                 }

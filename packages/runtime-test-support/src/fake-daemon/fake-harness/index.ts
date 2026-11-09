@@ -600,7 +600,7 @@ class ControlledAgentEndpoint implements FakeHarnessEndpoint {
 export function createFakeHarness(options: FakeAgentHarnessOptions) {
     const state = new ControlledAgentState(options);
     const agents = [
-        { id: options.agentId ?? "codex", name: options.agentName ?? "Codex" },
+        { id: options.harness ?? "codex", name: options.agentName ?? "Codex" },
         ...(options.additionalAgents ?? []),
     ];
     return {

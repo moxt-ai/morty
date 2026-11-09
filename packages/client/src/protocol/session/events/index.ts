@@ -350,12 +350,12 @@ const lifecycleBase = { commandId: identifier };
 // before it existed, omit it.
 const promptMessageId = z.string().min(1).max(2_048);
 export interface PromptExecutionContext {
-    readonly agentId: string;
+    readonly harness: string;
     readonly directory: string;
 }
 const promptExecutionContextSchema = z
     .object({
-        agentId: identifier,
+        harness: identifier,
         directory: DIRECTORY_PATH,
     })
     .readonly() satisfies z.ZodType<PromptExecutionContext>;

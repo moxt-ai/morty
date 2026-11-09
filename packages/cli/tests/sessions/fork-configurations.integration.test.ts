@@ -47,7 +47,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                 },
                 async (peer) => {
                     const identity = {
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         directory: ".",
                     };
                     const configureSource = async (

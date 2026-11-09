@@ -25,7 +25,7 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
     const agentSettingsDiscoveries = new Map<
         string,
         {
-            readonly agentId: string;
+            readonly harness: string;
             readonly directory: string;
             readonly model: string | undefined;
             readonly requestIds: Set<string>;
@@ -38,7 +38,7 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
         const directory = command.directory ?? ".";
         const existing = [...agentSettingsDiscoveries.values()].find(
             (request) =>
-                request.agentId === command.agentId &&
+                request.harness === command.harness &&
                 request.directory === directory &&
                 !request.controller.signal.aborted,
         );
@@ -99,7 +99,7 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
                     operationSignal,
                 );
                 for (const diagnostic of result.unsupportedModels) {
-                    const details = agentSettingsFailureDetails(command.agentId, diagnostic);
+                    const details = agentSettingsFailureDetails(command.harness, diagnostic);
                     diagnostics.daemonDiagnostic("agent_settings_model_unsupported", command.requestId, details);
                     process.stderr.write(
                         `Morty daemon diagnostic ${JSON.stringify({ event: "agent_settings_model_unsupported", requestId: command.requestId, ...details })}\n`,
@@ -115,7 +115,7 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
                     ? (controller.signal.reason ??
                       new SessionError("agent_settings_discovery_cancelled", "Agent settings discovery cancelled"))
                     : error;
-                const details = agentSettingsFailureDetails(command.agentId, failure);
+                const details = agentSettingsFailureDetails(command.harness, failure);
                 diagnostics.daemonDiagnostic("agent_settings_discovery_failed", command.requestId, details, failure);
                 if (failure instanceof OperationError && failure.code === "invalid_session_configuration") {
                     process.stderr.write(
@@ -138,7 +138,7 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
             }
         })();
         agentSettingsDiscoveries.set(command.requestId, {
-            agentId: command.agentId,
+            harness: command.harness,
             directory,
             model: command.model,
             requestIds,

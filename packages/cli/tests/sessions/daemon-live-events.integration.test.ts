@@ -292,7 +292,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
             kind: "session.create",
             requestId: "fixture-create",
             operationId: "fixture-creation",
-            agentId: agent.id,
+            harness: agent.id,
             directory: ".",
             configurations: [],
         }),
@@ -377,7 +377,7 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
 
 function prompt(fixture: Fixture, text: string): SessionPromptCommand {
     return {
-        agentId: fixture.agent.id,
+        harness: fixture.agent.id,
         commandId: "test-turn",
         directory: ".",
         disposition: SessionPromptDisposition.Append,
@@ -494,7 +494,7 @@ async function activeTurn(fixture: Fixture, command: SessionPromptCommand) {
         fixture.socket,
         encodeNativeSessionRequest({
             action: "active-turn",
-            agentId: fixture.agent.id,
+            harness: fixture.agent.id,
             directory: ".",
             kind: "native.session.request",
             requestId: "active",
@@ -1020,7 +1020,7 @@ describe("daemon V2 live delivery", () => {
                     kind: "session.create",
                     requestId: "other-create",
                     operationId: "other-creation",
-                    agentId: restarted.agent.id,
+                    harness: restarted.agent.id,
                     directory: ".",
                     configurations: [],
                 }),

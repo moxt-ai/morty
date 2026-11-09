@@ -46,7 +46,7 @@ export async function startTestPlatform(
                     behavior: {
                         reply: agents[0]?.reply ?? mortyReply,
                         files: mortyFiles,
-                        agentId: agents[0]?.id ?? "codex",
+                        harness: agents[0]?.id ?? "codex",
                         agentName: agents[0]?.label ?? "Codex",
                         echoUserMessage: true,
                         additionalAgents: agents.slice(1).map((agent) => ({ id: agent.id, name: agent.label })),

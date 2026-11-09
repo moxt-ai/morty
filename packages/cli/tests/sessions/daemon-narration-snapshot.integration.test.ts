@@ -182,7 +182,7 @@ describe("daemon narration delivery", () => {
                     kind: "session.create",
                     requestId: crypto.randomUUID(),
                     operationId: crypto.randomUUID(),
-                    agentId: agent.id,
+                    harness: agent.id,
                     directory: ".",
                     configurations: [],
                 }),
@@ -195,7 +195,7 @@ describe("daemon narration delivery", () => {
                 created = await frames.next();
             }
             const prompt: SessionPromptCommand = {
-                agentId: agent.id,
+                harness: agent.id,
                 commandId: "narration_turn",
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,

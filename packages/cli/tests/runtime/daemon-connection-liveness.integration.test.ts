@@ -1015,7 +1015,7 @@ describe("daemon relay connection liveness", () => {
                         kind: "session.create",
                         requestId: commandId,
                         operationId: commandId,
-                        agentId: "codex",
+                        harness: "codex",
                         directory: ".",
                         configurations: [],
                     }),
@@ -1040,7 +1040,7 @@ describe("daemon relay connection liveness", () => {
                             kind: SESSION_PROMPT_KIND,
                             commandId,
                             target: sessionTarget,
-                            agentId: "codex",
+                            harness: "codex",
                             directory: ".",
                             disposition: "append",
                             attachments: [],
@@ -1089,7 +1089,7 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        agentId: "codex",
+                        harness: "codex",
                         commandId: `live-command-${turn}`,
                         directory: ".",
                         disposition: "append",

@@ -38,7 +38,7 @@ export type RuntimeControl = (
 
 /** The Agent and directories a Session runs in. */
 export interface SessionExecutionIdentity {
-    readonly agentId: string;
+    readonly harness: string;
     readonly directory: string;
 }
 
@@ -47,7 +47,7 @@ export interface SessionExecutionIdentity {
  * so each omitted field is the Session's own; each supplied field reaches the Runtime unchanged, which validates it.
  */
 export interface SessionBindingRequest {
-    readonly agentId?: string | undefined;
+    readonly harness?: string | undefined;
     readonly directory?: string | undefined;
 }
 
@@ -104,7 +104,7 @@ export class SessionControl {
         try {
             command = decodeSessionPromptCommand(
                 JSON.stringify({
-                    agentId: binding.agentId,
+                    harness: binding.harness,
                     attachments: turn.attachments,
                     commandId: turn.commandId,
                     directory: binding.directory,
@@ -263,7 +263,7 @@ export class SessionControl {
             decodeNativeSessionRequest(
                 JSON.stringify({
                     action: "active-turn",
-                    agentId: identity.agentId,
+                    harness: identity.harness,
                     ...(deliveryCommandId === undefined ? {} : { deliveryCommandId }),
                     directory: identity.directory,
                     kind: "native.session.request",
@@ -289,7 +289,7 @@ export class SessionControl {
         const result = await this.#control(
             decodeSessionPreviewHistoryPageLoad(
                 JSON.stringify({
-                    agentId: identity.agentId,
+                    harness: identity.harness,
                     cursor: page.cursor,
                     directory: identity.directory,
                     eventLimit: page.eventLimit,
@@ -337,12 +337,12 @@ export class SessionControl {
         supplied: SessionBindingRequest,
         permission: ProjectPermission,
     ): Promise<SessionExecutionIdentity> => {
-        const { agentId, directory } = supplied;
-        if (agentId !== undefined && agentId !== this.#target.harness) {
+        const { harness, directory } = supplied;
+        if (harness !== undefined && harness !== this.#target.harness) {
             throw new PairingDirectoryError("invalid_request", "The Session belongs to a different harness");
         }
-        if (agentId !== undefined && directory !== undefined) {
-            return { agentId, directory };
+        if (harness !== undefined && directory !== undefined) {
+            return { harness, directory };
         }
         const queried = await this.#control(
             decodeSessionQueryCommand(
@@ -362,7 +362,7 @@ export class SessionControl {
             throw new PairingDirectoryError("session_not_found", "The selected Session is unavailable");
         }
         return {
-            agentId: agentId ?? session.agentId,
+            harness: harness ?? session.harness,
             directory: directory ?? session.directory,
         };
     };

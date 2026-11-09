@@ -11,8 +11,8 @@ export {
 const genericAdapter = new AgentSettingsAdapter();
 const codexAdapter = new CodexSettingsAdapter();
 
-export function agentSettingsAdapterForAgent(agentId: string): AgentSettingsAdapter {
-    if (agentId === "codex") {
+export function agentSettingsAdapterForAgent(harness: string): AgentSettingsAdapter {
+    if (harness === "codex") {
         return codexAdapter;
     }
     return genericAdapter;

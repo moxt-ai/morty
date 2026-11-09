@@ -35,7 +35,7 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
             },
             async (peer) => {
                 const identity = {
-                    agentId: "controlled-acp",
+                    harness: "controlled-acp",
                     directory: ".",
                     target: peer.target,
                 };
@@ -176,7 +176,7 @@ test.each(["opening", "configuration"] as const)(
                 peer.send(
                     encodeSessionPrepareCommand({
                         kind: "session.prepare",
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         directory: ".",
                         target: peer.target,
                         requestId,
@@ -199,7 +199,7 @@ test.each(["opening", "configuration"] as const)(
                         peer.send(
                             encodeSessionConfigureCommand({
                                 kind: "session.configure",
-                                agentId: "controlled-acp",
+                                harness: "controlled-acp",
                                 directory: ".",
                                 target: peer.target,
                                 requestId: configureId,

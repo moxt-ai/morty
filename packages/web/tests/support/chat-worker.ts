@@ -65,7 +65,7 @@ export async function createChatWorkerEnvironment(
             const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/setup`, {
                 computerId: runtime.computerId,
-                agentRef: agents[0]?.id ?? "codex",
+                harness: agents[0]?.id ?? "codex",
             });
             if (setup.status !== 202) {
                 throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
@@ -92,7 +92,7 @@ export async function createChatWorkerEnvironment(
                         runtime.computerId,
                         { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         {
-                            agentId: agents[0]?.id ?? "codex",
+                            harness: agents[0]?.id ?? "codex",
                             booleanValue: false,
                             configId: "model",
                             directory: ".",
@@ -108,7 +108,7 @@ export async function createChatWorkerEnvironment(
                     await runtime.client.turns.submitToRuntime(
                         { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         {
-                            agentId: agents[0]?.id ?? "codex",
+                            harness: agents[0]?.id ?? "codex",
                             attachments: [],
                             content,
                             directory: ".",
@@ -125,7 +125,7 @@ export async function createChatWorkerEnvironment(
                     }
                     await runtime.restartWithAgents({
                         additionalAgents: others.map((agent) => ({ id: agent.id, name: agent.label })),
-                        agentId: first.id,
+                        harness: first.id,
                         agentName: first.label,
                     });
                 },

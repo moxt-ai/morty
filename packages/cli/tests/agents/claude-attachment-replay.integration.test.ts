@@ -216,7 +216,7 @@ test("Given an old Claude transcript contains large attachments and ambiguous co
         await writeFile(join(project, `${nativeId}.jsonl`), `${records.join("\n")}\n`);
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
                 cursor: null,
                 eventLimit: 50,

@@ -51,7 +51,7 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </svg>
             <span aria-hidden="true" className={cn(setupHarnessTileClassName, "left-[30%]")}>
                 <HarnessMark
-                    agentRef="codex"
+                    harness="codex"
                     appearance="line"
                     className={cn(setupHarnessMarkClassName, "size-[20px]")}
                     label="Codex"
@@ -59,7 +59,7 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </span>
             <span aria-hidden="true" className={cn(setupHarnessTileClassName, "left-1/2")}>
                 <HarnessMark
-                    agentRef="claude"
+                    harness="claude"
                     appearance="line"
                     className={cn(setupHarnessMarkClassName, "size-[18px]")}
                     label="Claude Code"
@@ -67,7 +67,7 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </span>
             <span aria-hidden="true" className={cn(setupHarnessTileClassName, "left-[70%]")}>
                 <HarnessMark
-                    agentRef="pi"
+                    harness="pi"
                     appearance="line"
                     className={cn(setupHarnessMarkClassName, "size-[14px] rounded-none [&>svg]:size-[14px]")}
                     label="Pi"

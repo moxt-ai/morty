@@ -73,7 +73,7 @@ export async function codexFixture(
     const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));
     const creations = new SessionCreations(new SessionCreationTable(database));
     const service = new NativeSessionService(
-        (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
+        (harness) => sessions.resolveAgent(config.catalog.find(harness)),
         directories,
         sessions.sessions,
         creations,
@@ -84,7 +84,7 @@ export async function codexFixture(
         }),
     );
     const identity = {
-        agentId: agent.id,
+        harness: agent.id,
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",

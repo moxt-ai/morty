@@ -780,7 +780,7 @@ describe("ACP conversation sessions", () => {
         });
         try {
             expect(restartedRuntime.findSessions([sessionTarget])).toEqual([
-                expect.objectContaining({ agentId: "claude", prompted: true, target: sessionTarget }),
+                expect.objectContaining({ harness: "claude", prompted: true, target: sessionTarget }),
             ]);
         } finally {
             await restartedRuntime.close();

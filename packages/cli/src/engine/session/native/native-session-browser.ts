@@ -126,13 +126,13 @@ export class NativeSessionService {
         const cwd = await this.#directories.resolve(command.directory, signal);
         signal.throwIfAborted();
         const options: SessionCreationOptions = {
-            ...(await this.#resolveAgent(command.agentId, signal)),
+            ...(await this.#resolveAgent(command.harness, signal)),
             cwd,
             signal,
         };
         if (command.action === "active-turn") {
             sessionIdSchema.parse(command.target.sessionId);
-            if (command.target.harness !== command.agentId) {
+            if (command.target.harness !== command.harness) {
                 throw new AcpExecutionError(
                     "The native Session belongs to a different harness",
                     {},
@@ -156,7 +156,7 @@ export class NativeSessionService {
                 "native_session_unsupported",
             );
         }
-        const cursorScope = JSON.stringify([command.agentId, cwd]);
+        const cursorScope = JSON.stringify([command.harness, cwd]);
         const register = async (info: NativeSessionInfo): Promise<NativeSessionEntry | null> => {
             const authorized = await this.authorizeEntry(options, info);
             if (authorized === null) {
@@ -266,7 +266,7 @@ export class NativeSessionService {
             );
             signal.throwIfAborted();
             return {
-                agentId: command.agentId,
+                harness: command.harness,
                 agentName: opened.prepared.agentName,
                 agentVersion: opened.prepared.agentVersion,
                 capabilities: opened.prepared.capabilities,
@@ -287,7 +287,7 @@ export class NativeSessionService {
                       command.requestId,
                       {
                           action,
-                          harness: command.agentId,
+                          harness: command.harness,
                           sessionId: target.info.sessionId,
                           cwd: target.cwd,
                       },
@@ -323,7 +323,7 @@ export class NativeSessionService {
             // Report the recorded workspace even if it was deleted or unmounted.
             const directory = this.#directories.identifyRecorded(session.cwd);
             entries.push({
-                agentId: session.agentId,
+                harness: session.harness,
                 directory: directory.directory,
                 directoryLabel: directory.label,
                 prompted: session.prompted,

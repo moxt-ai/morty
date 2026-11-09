@@ -68,6 +68,34 @@ async function createChatFixture(
     };
 }
 
+test("Given a paired computer, When its owner selects and creates with harness, Then setup and session access expose the same harness", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    const setup = await fixture.request("chat/setup", {
+        computerId: fixture.computerId,
+        harness: "codex",
+    });
+    expect(setup.status).toBe(202);
+    const workspace = await fixture.request("chat/workspace", {});
+    expect(await workspace.json()).toMatchObject({ runtime: { agents: [{ harness: "codex" }] } });
+    const created = await fixture.request("chat/access", {
+        harness: "codex",
+        configurations: [],
+        conversationKey: "unified-harness",
+        workspaceRef: ".",
+    });
+    expect(created.status).toBe(200);
+    const access = await created.json();
+    expect(access).toMatchObject({ harness: "codex", target: { harness: "codex" } });
+    expect(access).not.toHaveProperty("agentRef");
+    expect(access).not.toHaveProperty("agentId");
+    const { target } = v.parse(v.object({ target: targetSchema }), access);
+    const restored = await fixture.request("chat/access", target);
+    expect(restored.status).toBe(200);
+    expect(await restored.json()).toMatchObject({ harness: "codex", target });
+});
+
 test("Given a computer addressed by its identity, When its owner requests access to an unmanaged session, Then Chat refuses to mint a credential while managed sessions remain usable", async ({
     cloud,
 }) => {
@@ -76,7 +104,7 @@ test("Given a computer addressed by its identity, When its owner requests access
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
@@ -88,7 +116,7 @@ test("Given a computer addressed by its identity, When its owner requests access
     expect(await unowned.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
 
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "security-audit-owned",
         workspaceRef: ".",
@@ -137,7 +165,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
-    const setup = { computerId: fixture.runtime.computerId, agentRef: "codex" };
+    const setup = { computerId: fixture.runtime.computerId, harness: "codex" };
     const setupRuntimesResponse = await fixture.request(`chat/setup/runtimes`, {});
     expect(setupRuntimesResponse.status).toBe(200);
     const setupRuntimes = v.parse(
@@ -147,14 +175,14 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
                     computerId: v.string(),
                     machineName: v.string(),
                     online: v.boolean(),
-                    agents: v.array(v.strictObject({ agentRef: v.string(), label: v.string() })),
+                    agents: v.array(v.strictObject({ harness: v.string(), label: v.string() })),
                 }),
             ),
         }),
         await setupRuntimesResponse.json(),
     );
     expect(setupRuntimes).toMatchObject({
-        runtimes: [{ computerId: fixture.runtime.computerId, online: true, agents: [{ agentRef: "codex" }] }],
+        runtimes: [{ computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] }],
     });
     const draftRuntimeConfiguration = await fixture.request(`chat/workspace`, {});
     expect(draftRuntimeConfiguration.status).toBe(409);
@@ -164,7 +192,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     const runtimeConfigurationResponse = await fixture.request(`chat/workspace`, {});
     expect(runtimeConfigurationResponse.status).toBe(200);
     expect(await runtimeConfigurationResponse.json()).toMatchObject({
-        runtime: { computerId: fixture.runtime.computerId, online: true, agents: [{ agentRef: "codex" }] },
+        runtime: { computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] },
     });
     const configuredSetupRuntimes = await fixture.request(`chat/setup/runtimes`, {});
     expect(configuredSetupRuntimes.status).toBe(200);
@@ -180,7 +208,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     expect(
         (
             await fixture.request(`chat/agent-settings`, {
-                agentRef: setup.agentRef,
+                harness: setup.harness,
             })
         ).status,
     ).toBe(200);
@@ -193,7 +221,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     ).toBe(200);
 
     const opened = await fixture.request(`chat/access`, {
-        agentRef: setup.agentRef,
+        harness: setup.harness,
         configurations: [],
         conversationKey: "first-draft",
         workspaceRef: ".",
@@ -242,9 +270,9 @@ for (const { reason, ...configuration } of [
     }) => {
         await using fixture = await createChatFixture(cloud, [{ id: "configuration-test", label: "Settings Agent" }]);
         const computerId = fixture.runtime.computerId;
-        expect((await fixture.request(`chat/setup`, { computerId, agentRef: "configuration-test" })).status).toBe(202);
+        expect((await fixture.request(`chat/setup`, { computerId, harness: "configuration-test" })).status).toBe(202);
         const input = {
-            agentRef: "configuration-test",
+            harness: "configuration-test",
             conversationKey: "configuration-retry",
             workspaceRef: ".",
         };
@@ -295,14 +323,14 @@ test("Given the answer to a new conversation's Session creation is lost, When th
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
     if (cloud.network === null) {
         throw new Error("The scenario requires a real response-loss proxy");
     }
-    const input = { agentRef: "codex", conversationKey: "lost-creation", workspaceRef: ".", configurations: [] };
+    const input = { harness: "codex", conversationKey: "lost-creation", workspaceRef: ".", configurations: [] };
     const lost = cloud.network.interruptNextSessionCreation();
     const failed = await fixture.request(`chat/access`, input);
     expect(await lost).toBeLessThan(300);
@@ -332,12 +360,12 @@ test("Given a completed creation operation, When its first-send settings are cha
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
     const input = {
-        agentRef: "codex",
+        harness: "codex",
         conversationKey: "conflicting-creation",
         workspaceRef: ".",
         configurations: [],
@@ -363,7 +391,7 @@ test("Given a new conversation whose Session creation never reached the Runtime,
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
@@ -371,7 +399,7 @@ test("Given a new conversation whose Session creation never reached the Runtime,
         throw new Error("The scenario requires a real request-loss proxy");
     }
     const input = {
-        agentRef: "codex",
+        harness: "codex",
         conversationKey: "dropped-creation",
         workspaceRef: ".",
         configurations: [],
@@ -400,12 +428,12 @@ test("Given an Agent whose model decides its effort levels, When Chat starts a c
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "dependent-settings-test",
+                harness: "dependent-settings-test",
             })
         ).status,
     ).toBe(202);
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "dependent-settings-test",
+        harness: "dependent-settings-test",
         conversationKey: "effort-before-model",
         workspaceRef: ".",
         configurations: [
@@ -432,12 +460,12 @@ test("Given dependent Agent settings, When applying a later selection changes an
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "dependent-settings-test",
+                harness: "dependent-settings-test",
             })
         ).status,
     ).toBe(202);
     const response = await fixture.request(`chat/access`, {
-        agentRef: "dependent-settings-test",
+        harness: "dependent-settings-test",
         conversationKey: "dependent-settings",
         workspaceRef: ".",
         configurations: [
@@ -465,13 +493,13 @@ for (const configured of [false, true]) {
                 (
                     await owner.request(`chat/setup`, {
                         computerId: bound.runtime.computerId,
-                        agentRef: "codex",
+                        harness: "codex",
                     })
                 ).status,
             ).toBe(202);
         }
         const computerId = fixture.runtime.computerId;
-        const identity = { agentId: "codex", directory: "." };
+        const identity = { harness: "codex", directory: "." };
         // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
         // attributed to a nonexistent Runtime, entry, or discovery.
         const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
@@ -505,7 +533,7 @@ for (const configured of [false, true]) {
             .soft(await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000)))
             .toEqual(before);
         if (!configured) {
-            expect((await owner.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
+            expect((await owner.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
         }
         const managed = await owner.request(`chat/managed-sessions`, {});
         expect(managed.status).toBe(200);
@@ -520,11 +548,11 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         { id: "codex", label: "Codex" },
         { id: "pi", label: "Pi" },
     ]);
-    const setup = { computerId: fixture.runtime.computerId, agentRef: "codex" };
+    const setup = { computerId: fixture.runtime.computerId, harness: "codex" };
     expect((await fixture.request(`chat/setup`, setup)).status).toBe(202);
 
     const unavailable = await fixture.request(`chat/access`, {
-        agentRef: "claude-code",
+        harness: "claude-code",
         configurations: [],
         conversationKey: "unavailable-agent",
         workspaceRef: ".",
@@ -533,21 +561,21 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
     expect(await unavailable.json()).toMatchObject({ error: { code: "AGENT_UNAVAILABLE" } });
 
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "pi",
+        harness: "pi",
         configurations: [],
         conversationKey: "agent-mismatch",
         workspaceRef: ".",
     });
     expect(opened.status).toBe(200);
-    const access = v.parse(v.object({ agentRef: v.string(), target: targetSchema }), await opened.json());
-    expect(access.agentRef).toBe("pi");
+    const access = v.parse(v.object({ harness: v.string(), target: targetSchema }), await opened.json());
+    expect(access.harness).toBe("pi");
 
     const restored = await fixture.request(`chat/managed-session`, {
         harness: "pi",
         sessionId: access.target.sessionId,
     });
     expect(restored.status).toBe(200);
-    expect(await restored.json()).toMatchObject({ agentRef: "pi" });
+    expect(await restored.json()).toMatchObject({ harness: "pi" });
 });
 
 test("Given an imported native session, When its owner imports it again, Then Chat reopens the canonical session without creating a duplicate", async ({
@@ -556,8 +584,8 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     const nativeId = crypto.randomUUID();
     await using fixture = await createChatFixture(cloud, undefined, new Set([nativeId]));
     const computerId = fixture.runtime.computerId;
-    expect((await fixture.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
-    const identity = { computerId, agentId: "codex", directory: "." };
+    expect((await fixture.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
+    const identity = { computerId, harness: "codex", directory: "." };
     const listed = await fixture.request(`chat/native-sessions`, {
         ...identity,
         action: "list",
@@ -595,9 +623,9 @@ test("Given a managed Chat session is still running, When its owner archives it,
 }) => {
     await using fixture = await createChatFixture(cloud);
     const computerId = fixture.runtime.computerId;
-    expect((await fixture.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
+    expect((await fixture.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "busy-archive",
         workspaceRef: ".",
@@ -606,7 +634,7 @@ test("Given a managed Chat session is still running, When its owner archives it,
     await fixture.runtime.client.turns.submitToRuntime(
         { harness: "codex", sessionId: sessionId },
         {
-            agentId: "codex",
+            harness: "codex",
             content: "wait for steering",
             directory: ".",
             idempotencyKey: crypto.randomUUID(),
@@ -631,9 +659,9 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
 }) => {
     await using fixture = await createChatFixture(cloud);
     const computerId = fixture.runtime.computerId;
-    expect((await fixture.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
+    expect((await fixture.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "idle-archive",
         workspaceRef: ".",
@@ -682,9 +710,9 @@ for (const operation of ["access", "managed-session"]) {
     }) => {
         await using fixture = await createChatFixture(cloud);
         const computerId = fixture.runtime.computerId;
-        expect((await fixture.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
+        expect((await fixture.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
         const opened = await fixture.request(`chat/access`, {
-            agentRef: "codex",
+            harness: "codex",
             configurations: [],
             conversationKey: "concurrent-archive",
             workspaceRef: ".",
@@ -728,9 +756,9 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
 }) => {
     await using fixture = await createChatFixture(cloud);
     const computerId = fixture.runtime.computerId;
-    expect((await fixture.request(`chat/setup`, { computerId, agentRef: "codex" })).status).toBe(202);
+    expect((await fixture.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "unavailable-close-archive",
         workspaceRef: ".",
@@ -763,12 +791,12 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "revoked-while-open",
         workspaceRef: ".",
@@ -804,7 +832,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
@@ -820,7 +848,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     );
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     const opened = await fixture.request(`chat/access`, {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "followed-while-revoked",
         workspaceRef: ".",
@@ -845,7 +873,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     await fixture.runtime.client.turns.submitToRuntime(
         target,
         {
-            agentId: "codex",
+            harness: "codex",
             content: "Reply after revoke",
             directory: ".",
             idempotencyKey: crypto.randomUUID(),
@@ -865,7 +893,7 @@ test("Given two browsers joined through links, When one disconnects the other br
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "codex",
+                harness: "codex",
             })
         ).status,
     ).toBe(202);
@@ -896,7 +924,7 @@ test("Given two browsers joined through links, When one disconnects the other br
             cloud.environment(),
         );
     const opened = await asBrowser(other, `chat/computers/${fixture.computerId}/access`, "POST", {
-        agentRef: "codex",
+        harness: "codex",
         configurations: [],
         conversationKey: "other-browser-window",
         workspaceRef: ".",
@@ -959,11 +987,11 @@ test("Given an existing owned conversation, When a repeated start is refused, Th
         (
             await fixture.request(`chat/setup`, {
                 computerId: fixture.runtime.computerId,
-                agentRef: "configuration-test",
+                harness: "configuration-test",
             })
         ).status,
     ).toBe(202);
-    const input = { agentRef: "configuration-test", conversationKey: "audit-retry", workspaceRef: "." };
+    const input = { harness: "configuration-test", conversationKey: "audit-retry", workspaceRef: "." };
     const started = await fixture.request(`chat/access`, { ...input, configurations: [] });
     expect(started.status).toBe(200);
     const { target } = v.parse(v.object({ target: targetSchema }), await started.json());

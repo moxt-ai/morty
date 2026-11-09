@@ -42,7 +42,7 @@ import {
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const sessionIdentitySchema = v.strictObject({
-    agentId: identifier,
+    harness: identifier,
     directory: v.custom<string>(isDirectoryPath),
 });
 const sessionBindingSchema = v.strictObject(sessionBindingEntries);
@@ -380,7 +380,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/computers/:computerId/daemon/agents/:agentId/settings",
+            "/computers/:computerId/daemon/agents/:harness/settings",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = context.req.valid("json");
@@ -394,7 +394,7 @@ export function createProjectRuntimeRoutes() {
                         : readString(body, "directory", MAX_WORKSPACE_PATH_LENGTH);
                 const command = decodeAgentSettingsDiscoverCommand(
                     JSON.stringify({
-                        agentId: validateIdentifier(context.req.param("agentId"), "agent_id"),
+                        harness: validateIdentifier(context.req.param("harness"), "agent_id"),
                         ...(directory === undefined ? {} : { directory }),
                         kind: "agent.settings.discover",
                         ...(model === undefined ? {} : { model }),
@@ -434,10 +434,10 @@ export function createProjectRuntimeRoutes() {
             assertRequiredKeys(
                 body,
                 body["action"] === "list"
-                    ? ["action", "agentId", "directory", "cursor"]
+                    ? ["action", "harness", "directory", "cursor"]
                     : body["action"] === "find"
-                      ? ["action", "agentId", "directory", "sessionId"]
-                      : ["action", "agentId", "directory", "sessionId"],
+                      ? ["action", "harness", "directory", "sessionId"]
+                      : ["action", "harness", "directory", "sessionId"],
             );
             const command = decodeNativeSessionRequest(
                 JSON.stringify({

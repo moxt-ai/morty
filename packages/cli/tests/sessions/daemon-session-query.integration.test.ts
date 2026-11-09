@@ -14,11 +14,11 @@ import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specifica
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 
-const NATIVE_AGENT_ID = "claude";
+const NATIVE_HARNESS = "claude";
 
 class ControlledAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
-    readonly id = NATIVE_AGENT_ID;
+    readonly id = NATIVE_HARNESS;
     readonly label = "Controlled Claude";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
@@ -48,7 +48,7 @@ async function createSession(peer: RealDaemonPeer, directory: string): Promise<R
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionCreateCommand({
-            agentId: NATIVE_AGENT_ID,
+            harness: NATIVE_HARNESS,
             directory,
             kind: "session.create",
             requestId,

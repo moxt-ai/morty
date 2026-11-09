@@ -357,7 +357,7 @@ export function sessionPanePresentation(
 }
 
 interface SessionIdentity {
-    readonly agentId: string;
+    readonly harness: string;
     readonly directory: string;
 }
 
@@ -473,7 +473,7 @@ export function createSessionPaneModel(options: {
     // Working in a conversation makes its harness the reference for the next draft. Its settings carry into New
     // Session only where the user changes them: the others are the Agent's and its directory's, which the draft reads
     // for itself.
-    saveLastHarnessPreference(computerId, session.agentRef);
+    saveLastHarnessPreference(computerId, session.harness);
     const fallbackStartedAt = Date.now();
     const initialTurn: CurrentTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
@@ -538,7 +538,7 @@ export function createSessionPaneModel(options: {
             (message) => message.commandId === commandId,
         ) ?? null;
     const sessionIdentity: SessionIdentity = {
-        agentId: session.agentRef,
+        harness: session.harness,
         directory: session.result.ready.directory,
     };
     /**
@@ -880,7 +880,7 @@ export function createSessionPaneModel(options: {
                               );
                     // Freeze semantic intent before delivery owns retries, including identity.
                     return {
-                        agentId: session.agentRef,
+                        harness: session.harness,
                         directory: session.result.ready.directory,
                         attachments: uploadedAttachments,
                         content: content.trim(),
@@ -1355,7 +1355,7 @@ export function createSessionPaneModel(options: {
                 try {
                     await requests.managedSession(
                         {
-                            harness: session.result.ready.agentId,
+                            harness: session.result.ready.harness,
                             sessionId: session.entry.sessionId,
                         },
                         signal,
@@ -1673,7 +1673,7 @@ export function createSessionPaneModel(options: {
         tasks,
         welcome,
         /** The agent the session runs on; the harness lock offers it. */
-        agentRef: session.agentRef,
+        harness: session.harness,
         /** The opened session record; scopes the execution context. */
         session,
         /** Whether the Session's Agent lets a queued message steer the running turn. */

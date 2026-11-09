@@ -11,7 +11,7 @@ const directoryPath = v.custom<string>(isDirectoryPath);
 
 /** The binding of an existing Session: each omitted field is the Session's own. */
 export const sessionBindingEntries = {
-    agentId: v.optional(identifier),
+    harness: v.optional(identifier),
     directory: v.optional(directoryPath),
 };
 

@@ -53,7 +53,7 @@ test.each(["request", "result"] as const)(
         await runtime.client.runtimes.nativeSessions(
             {
                 action: "list",
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
                 cursor: null,
             },
@@ -62,7 +62,7 @@ test.each(["request", "result"] as const)(
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date", "setTimeout", "clearTimeout"] });
         const operationId = crypto.randomUUID();
         const input = {
-            agentId: "claude",
+            harness: "claude",
             directory: ".",
             sessionId: "native-fork-source",
         };
@@ -80,7 +80,7 @@ test.each(["request", "result"] as const)(
             const [first, concurrent] = await Promise.all([fork(), fork()]);
             expect(concurrent).toEqual(first);
             expect(first.result.target).toEqual(target);
-            expect(first.result.ready).toMatchObject({ target, agentId: "claude", restored: true });
+            expect(first.result.ready).toMatchObject({ target, harness: "claude", restored: true });
             expect(first.entry.sessionId).toBe(input.sessionId);
             expect(await fork()).toEqual(first);
             const sessions = await runtime.client.runtimes.listSessions(100, signal);
@@ -106,7 +106,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     const runtime = await platform.connectAgent(project.computerId, undefined, new Set(["recovery-native-source"]));
     const listingInput = {
         action: "list" as const,
-        agentId: "claude",
+        harness: "claude",
         cursor: null,
         directory: ".",
     };
@@ -115,7 +115,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         throw new Error("No native source");
     }
     const body = JSON.stringify({
-        agentId: "claude",
+        harness: "claude",
         directory: ".",
         sessionId: directory.entries[0].sessionId,
     });
@@ -173,7 +173,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
             method: "POST",
             headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
             body: JSON.stringify({
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
                 sessionId: "another-source",
             }),

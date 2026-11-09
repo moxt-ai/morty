@@ -121,7 +121,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
                 kind: "session.create",
                 requestId,
                 operationId: randomUUID(),
-                agentId: "codex",
+                harness: "codex",
                 directory: ".",
                 configurations: [],
             }),
@@ -137,7 +137,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         const commandId = randomUUID();
         socket.send(
             encodeSessionPromptCommand({
-                agentId: "codex",
+                harness: "codex",
                 commandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,

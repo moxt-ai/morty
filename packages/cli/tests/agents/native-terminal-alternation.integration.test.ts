@@ -89,7 +89,7 @@ async function promptFromMorty(
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            agentId: sessionTarget.harness,
+            harness: sessionTarget.harness,
             directory: ".",
             attachments: [],
             prompt,
@@ -142,9 +142,9 @@ async function historyInMorty(peer: DaemonConnectionPeer, sessionTarget: NativeS
 
 test.each(["claude", "pi"] as const)(
     "Given a real %s Session alternates between its terminal and Morty, When either side continues it, Then each side shows and sends every earlier message",
-    async (agentId) => {
+    async (harness) => {
         const conversations: string[] = [];
-        const definition = agents[agentId];
+        const definition = agents[harness];
         const { provider, agent, specification } = await definition.start(conversations);
         await using _provider = provider;
         await using _agent = agent;
@@ -164,7 +164,7 @@ test.each(["claude", "pi"] as const)(
                 );
 
             await terminal("TERMINAL_ONE reply without tools", true);
-            const sessionTarget = await importRealSession(peer, agentId, sessionId);
+            const sessionTarget = await importRealSession(peer, harness, sessionId);
             await promptFromMorty(peer, sessionTarget, "MORTY_TWO reply without tools");
             await terminal("TERMINAL_THREE reply without tools");
             expect(sentWith("TERMINAL_THREE").some((conversation) => conversation.includes("MORTY_TWO"))).toBe(true);

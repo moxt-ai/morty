@@ -28,7 +28,7 @@ interface ChatConfigurationSelectControl {
     readonly locked?: boolean | undefined;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly {
-        readonly agentRef?: string;
+        readonly harness?: string;
         readonly installed?: boolean;
         readonly label: string;
         readonly tabLabel?: string;
@@ -98,7 +98,7 @@ function HarnessSelect({
                             type="button"
                         >
                             <HarnessMark
-                                agentRef={option.agentRef ?? option.value}
+                                harness={option.harness ?? option.value}
                                 appearance="line"
                                 label={option.label}
                                 testId={dataTestId.harnessMark}
@@ -648,7 +648,7 @@ export function ChatConfigurationMenu({
         >
             {selectedHarness !== undefined && (
                 <HarnessMark
-                    agentRef={selectedHarness.agentRef ?? selectedHarness.value}
+                    harness={selectedHarness.harness ?? selectedHarness.value}
                     appearance="line"
                     label={selectedHarness.label}
                     testId={dataTestId.harnessTriggerMark}
@@ -747,7 +747,7 @@ export function ChatConfigurationMenu({
                                         data-testid={dataTestId.agentHarness(selectedHarness.value)}
                                     >
                                         <HarnessMark
-                                            agentRef={selectedHarness.agentRef ?? selectedHarness.value}
+                                            harness={selectedHarness.harness ?? selectedHarness.value}
                                             appearance="line"
                                             label={selectedHarness.label}
                                         />

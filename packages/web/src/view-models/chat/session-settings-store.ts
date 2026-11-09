@@ -23,7 +23,7 @@ type SettingsChange =
 
 /** The Session binding a settings change states, as the pane that opened the Session read it. */
 interface SessionBinding {
-    readonly agentId: string;
+    readonly harness: string;
     readonly directory: string;
 }
 
@@ -158,7 +158,7 @@ export function createSessionSettingsStore(options: {
                     signal.throwIfAborted();
                     rememberAgentSettingChoice(
                         options.computerId,
-                        binding.agentId,
+                        binding.harness,
                         option.type === "boolean"
                             ? { configId: option.id, kind: "boolean", value: booleanValue }
                             : { configId: option.id, kind: "select", value },

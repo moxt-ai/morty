@@ -314,7 +314,7 @@ test.for([
                         requestId: "prepare-after-output-drain",
                         operationId: crypto.randomUUID(),
                         configurations: [],
-                        agentId: "codex",
+                        harness: "codex",
                         directory: ".",
                     },
                     peer.signal,
@@ -382,7 +382,7 @@ test.for([
                 expect.objectContaining({
                     ...expected,
                     event: "agent_probe_failed",
-                    agentId: "codex",
+                    harness: "codex",
                     attempt: "1",
                     timeoutMilliseconds: expected.source === "acp_readiness" ? "60000" : "10000",
                     timestamp: "2026-10-29T00:00:00.000Z",
@@ -392,7 +392,7 @@ test.for([
             expect(report.entries).toContainEqual(
                 expect.objectContaining({
                     event: "agent_discovery_result",
-                    agentId: "codex",
+                    harness: "codex",
                     code,
                 }),
             );
@@ -425,7 +425,7 @@ test("Given a version launcher exited but a descendant holds its output open, Wh
             expect.arrayContaining(
                 ["1", "2"].map((attempt) =>
                     expect.objectContaining({
-                        agentId: "codex",
+                        harness: "codex",
                         source: "agent_version",
                         attempt,
                         failureCode: "process_timeout",
@@ -435,7 +435,7 @@ test("Given a version launcher exited but a descendant holds its output open, Wh
             ),
         );
         expect(report.entries).toContainEqual(
-            expect.objectContaining({ event: "agent_discovery_result", agentId: "codex", code: "agent_probe_timeout" }),
+            expect.objectContaining({ event: "agent_discovery_result", harness: "codex", code: "agent_probe_timeout" }),
         );
         await expectWriterStopped(first);
         await expectWriterStopped(second);
@@ -464,7 +464,7 @@ test("Given a version pipe times out once, When the retry drains normally, Then 
             expect.objectContaining({ attempt: "1", failureCode: "process_timeout", source: "agent_version" }),
         ]);
         expect(report.entries).toContainEqual(
-            expect.objectContaining({ event: "agent_discovery_result", agentId: "codex", code: "ready" }),
+            expect.objectContaining({ event: "agent_discovery_result", harness: "codex", code: "ready" }),
         );
         await expectWriterStopped(first);
     } finally {

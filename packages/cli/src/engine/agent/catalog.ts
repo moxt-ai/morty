@@ -28,9 +28,9 @@ export class LocalAgentCatalog {
         this.#snapshot = this.validate(agents);
     }
 
-    readonly find = (agentId: string): AcpAgentDefinition => {
+    readonly find = (harness: string): AcpAgentDefinition => {
         for (const agent of this.#snapshot.agents) {
-            if (agent.id === agentId) {
+            if (agent.id === harness) {
                 return agent;
             }
         }

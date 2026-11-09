@@ -115,8 +115,8 @@ export async function runRuntime(
         (target, content, contentSignal) => externalContent.put({ ...content, target, signal: contentSignal }),
         externalContent.linkedResources,
     );
-    const resolveAgent = async (agentId: string, resolveSignal: AbortSignal, target?: NativeSessionTarget) => {
-        const catalogAgent = await resolveCatalogAgent(config, agentId, resolveSignal);
+    const resolveAgent = async (harness: string, resolveSignal: AbortSignal, target?: NativeSessionTarget) => {
+        const catalogAgent = await resolveCatalogAgent(config, harness, resolveSignal);
         const environment = target === undefined ? undefined : config.sessionEnvironment?.(target);
         const agent =
             environment === undefined

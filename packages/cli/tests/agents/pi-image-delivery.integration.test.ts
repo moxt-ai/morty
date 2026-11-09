@@ -27,7 +27,7 @@ for (const side of [128, 500]) {
             const image = imageFixture(side);
             await writeFile(join(peer.workspace, "picture.png"), image);
             await verifyImageDelivery(peer, {
-                agentId: "pi",
+                harness: "pi",
                 image,
                 reference: `morty-content:image:${createHash("sha256").update(image).digest("hex")}`,
                 prompt,

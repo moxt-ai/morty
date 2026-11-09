@@ -28,9 +28,9 @@ const command = `node -e "require('node:fs').writeFileSync('fork-permission.txt'
 
 test.each(["codex", "claude"] as const)(
     "Given a real %s Session with explicit approval, When it is forked before and after restart, Then each child retains approval and enforces the user's decision",
-    async (agentId) => {
+    async (harness) => {
         await using provider =
-            agentId === "codex"
+            harness === "codex"
                 ? await FakeOpenAiProvider.start("morty-test-model", "FORK_PERMISSION_DONE", {
                       toolPrompt,
                       toolSequence: [
@@ -48,7 +48,7 @@ test.each(["codex", "claude"] as const)(
             provider instanceof FakeOpenAiProvider
                 ? await CodexFixture.create(provider)
                 : await ClaudeFixture.create(provider);
-        if (agentId === "claude") {
+        if (harness === "claude") {
             const config = agent.environment["CLAUDE_CONFIG_DIR"];
             if (config === undefined) {
                 throw new Error("Missing Claude fixture home");
@@ -59,13 +59,13 @@ test.each(["codex", "claude"] as const)(
                 JSON.stringify({ permissions: { defaultMode: "bypassPermissions" } }),
             );
         }
-        const mode = agentId === "codex" ? "read-only" : "default";
+        const mode = harness === "codex" ? "read-only" : "default";
         await withRealDaemon(
-            agentId === "codex" ? new CodexAgentSpecification() : new ClaudeCodeAgentSpecification(),
+            harness === "codex" ? new CodexAgentSpecification() : new ClaudeCodeAgentSpecification(),
             agent.environment,
             async (peer) => {
                 const identity = {
-                    agentId,
+                    harness,
                     directory: ".",
                 };
                 const prompt = (sessionTarget: RealDaemonPeer["target"], text: string, selectMode = false): void =>
@@ -123,7 +123,7 @@ test.each(["codex", "claude"] as const)(
                     if (decision === "allow_once") {
                         await peer.restart();
                     }
-                    const source = await nativeSource(peer, agentId, agent.environment["CLAUDE_CONFIG_DIR"]);
+                    const source = await nativeSource(peer, harness, agent.environment["CLAUDE_CONFIG_DIR"]);
                     const requestId = randomUUID();
                     peer.send(
                         encodeNativeSessionCommand({
@@ -163,7 +163,7 @@ test.each(["codex", "claude"] as const)(
     },
 );
 
-async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirectory: string | undefined) {
+async function nativeSource(peer: RealDaemonPeer, harness: string, configDirectory: string | undefined) {
     // Claude flushes native history after live completion. Retry the public list
     // only when its isolated native home changes; no sleeps or timing assumptions.
     type NativeWrite = { readonly kind: "changed" } | { readonly kind: "failed"; readonly cause: Error };
@@ -181,7 +181,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
-                    agentId,
+                    harness,
                     directory: ".",
                     kind: "native.session.request",
                     requestId,

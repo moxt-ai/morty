@@ -338,7 +338,7 @@ async function exercise(count) {
                             JSON.stringify({
                                 kind: "session.prepare",
                                 requestId,
-                                agentId: "pressure-agent",
+                                harness: "pressure-agent",
                                 directory: ".",
                                 sessionId: `pressure-${offset + index}`,
                             }),
@@ -389,7 +389,7 @@ async function exercise(count) {
                     kind: "session.prompt",
                     commandId: `${phase}-${sessionId}`,
                     sessionId,
-                    agentId: "pressure-agent",
+                    harness: "pressure-agent",
                     directory: ".",
                     disposition: "append",
                     prompt: `${phase}|${sessionId}`,

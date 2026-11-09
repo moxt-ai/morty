@@ -24,7 +24,7 @@ test("Given a creation operation still applying initial settings, When another c
         const signal = AbortSignal.timeout(30000);
         const operationId = crypto.randomUUID();
         const input = {
-            agentId: "configuration-test",
+            harness: "configuration-test",
             directory: ".",
             computerId: runtime.computerId,
             operationId,

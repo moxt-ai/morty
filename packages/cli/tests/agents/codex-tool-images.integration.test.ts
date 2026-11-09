@@ -40,7 +40,7 @@ for (const tool of ["view_image", "mcp"] as const) {
             await verifyImageDelivery(
                 { ...peer, target: sessionTarget },
                 {
-                    agentId: "codex",
+                    harness: "codex",
                     image,
                     reference:
                         tool === "mcp"

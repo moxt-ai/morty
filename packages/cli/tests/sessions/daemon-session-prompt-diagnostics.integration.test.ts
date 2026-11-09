@@ -29,7 +29,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
             },
             async (peer) => {
                 const identity = {
-                    agentId: "controlled-acp",
+                    harness: "controlled-acp",
                     directory: ".",
                 };
                 const prepareId = randomUUID();
@@ -105,7 +105,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                             code: "acp_agent_error",
                             commandId,
                             event: "session_prompt_failed",
-                            agentId: peer.target.harness,
+                            harness: peer.target.harness,
                         }),
                     );
                     // The exported report carries correlation identifiers and codes,

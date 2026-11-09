@@ -29,7 +29,7 @@ type DraftSettingsState =
     | { readonly kind: "failed"; readonly message: string }
     | {
           readonly kind: "switching";
-          readonly agentRef: string;
+          readonly harness: string;
       }
     | {
           readonly kind: "refreshing";
@@ -50,13 +50,13 @@ type ReadyDraftSettings = Extract<DraftSettingsState, { readonly kind: "ready" }
 
 export function draftHarnessSelection(settings: DraftSettingsState, configuration: BotRuntimeConfiguration | null) {
     const options = harnessOptions(configuration?.runtime ?? null);
-    const agentRef =
+    const harness =
         settings.kind === "switching"
-            ? settings.agentRef
+            ? settings.harness
             : settings.kind === "ready" || settings.kind === "refreshing"
-              ? settings.selectedAgent.agentRef
+              ? settings.selectedAgent.harness
               : null;
-    return { options, value: options.find((option) => option.agentRef === agentRef)?.value ?? "" };
+    return { options, value: options.find((option) => option.harness === harness)?.value ?? "" };
 }
 
 export function draftConfiguration(settings: DraftSettingsState): ChatDraftConfiguration | null {
@@ -64,7 +64,7 @@ export function draftConfiguration(settings: DraftSettingsState): ChatDraftConfi
         return null;
     }
     return {
-        agentRef: settings.selectedAgent.agentRef,
+        harness: settings.selectedAgent.harness,
         workspaceRef: settings.cwd.directory,
         workspaceLabel: settings.cwd.directoryLabel,
         configurations: settings.options
@@ -169,17 +169,17 @@ export const createDraftControlsStore = (
         };
         type SettingsOperation = ReturnType<typeof beginSettingsOperation>;
         const readAgentSettings = async (
-            agentRef: string,
+            harness: string,
             cwd: WorkspaceEntriesEvent,
             refresh: boolean,
             operation: SettingsOperation,
         ) => {
-            const key = JSON.stringify([agentRef, cwd.directory]);
+            const key = JSON.stringify([harness, cwd.directory]);
             const cached = refresh ? undefined : agentSettings.get(key);
             if (cached !== undefined) {
                 return cached;
             }
-            const result = await requests.agentSettings(agentRef, cwd.directory, operation.signal);
+            const result = await requests.agentSettings(harness, cwd.directory, operation.signal);
             if (operation.current()) {
                 agentSettings.set(key, result);
             }
@@ -229,7 +229,7 @@ export const createDraftControlsStore = (
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
-            saveLastCwdPreference(selected.computerId, selected.agentRef, directory.directory);
+            saveLastCwdPreference(selected.computerId, selected.harness, directory.directory);
             return saveRecentCwdPreference(computerId, {
                 directory: directory.directory,
                 directoryLabel: directory.directoryLabel,
@@ -251,7 +251,7 @@ export const createDraftControlsStore = (
             result: Awaited<ReturnType<BotChatApi["agentSettings"]>>,
             rememberHarness: boolean,
         ): void => {
-            const restoredSettings = restoreLastAgentSettings(computerId, selectedAgent.agentRef, result.options);
+            const restoredSettings = restoreLastAgentSettings(computerId, selectedAgent.harness, result.options);
             const ready = {
                 kind: "ready" as const,
                 selectedAgent,
@@ -264,7 +264,7 @@ export const createDraftControlsStore = (
             // are actually applied. A fallback to another connected Agent, or
             // a load that fails, must leave the user's choice in place.
             if (rememberHarness) {
-                saveLastHarnessPreference(computerId, selectedAgent.agentRef);
+                saveLastHarnessPreference(computerId, selectedAgent.harness);
             }
             // The directory is remembered only where the user chooses one (`rememberDirectory`, a handoff), never
             // from the directory a draft happened to load in.
@@ -370,7 +370,7 @@ export const createDraftControlsStore = (
             }
             try {
                 const switching = currentSettings.kind === "switching";
-                const requestedHarness = switching ? currentSettings.agentRef : readLastHarnessPreference(computerId);
+                const requestedHarness = switching ? currentSettings.harness : readLastHarnessPreference(computerId);
                 const configuration = runtimeConfiguration();
                 if (configuration?.runtime.online === false) {
                     awaitRuntime();
@@ -379,7 +379,7 @@ export const createDraftControlsStore = (
                 const agents = configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime);
                 // A requested harness the Runtime does not offer must not block the draft; the first connected Agent
                 // stands in until the user chooses again.
-                const requestedAgent = agents.find((agent) => agent.agentRef === requestedHarness);
+                const requestedAgent = agents.find((agent) => agent.harness === requestedHarness);
                 const selected = requestedAgent ?? agents[0];
                 if (selected === undefined) {
                     // The Runtime the page follows offers no Agent to load yet.
@@ -388,7 +388,7 @@ export const createDraftControlsStore = (
                 }
                 const defaultCwd = await requests.directory(".", operation.signal);
                 operation.signal.throwIfAborted();
-                const savedDirectory = readLastCwdPreference(selected.computerId, selected.agentRef);
+                const savedDirectory = readLastCwdPreference(selected.computerId, selected.harness);
                 let cwd = defaultCwd;
                 if (savedDirectory !== null && savedDirectory !== defaultCwd.directory) {
                     try {
@@ -402,7 +402,7 @@ export const createDraftControlsStore = (
                 }
                 // The settings are read in the directory the Session would start in. A deliberate Agent switch must
                 // be acknowledged by the live Runtime, not satisfied by settings cached before the user made the choice.
-                const result = await readAgentSettings(selected.agentRef, cwd, switching, operation);
+                const result = await readAgentSettings(selected.harness, cwd, switching, operation);
                 operation.signal.throwIfAborted();
                 if (!operation.current()) {
                     return;
@@ -439,7 +439,7 @@ export const createDraftControlsStore = (
             });
             try {
                 const result = await readAgentSettings(
-                    settings.selectedAgent.agentRef,
+                    settings.selectedAgent.harness,
                     settings.cwd,
                     refresh,
                     operation,
@@ -504,7 +504,7 @@ export const createDraftControlsStore = (
                     selectedAgent !== null &&
                     connectedChatRuntimeAgents(configuration.runtime).some(
                         (agent) =>
-                            agent.computerId === selectedAgent.computerId && agent.agentRef === selectedAgent.agentRef,
+                            agent.computerId === selectedAgent.computerId && agent.harness === selectedAgent.harness,
                     );
                 if (offered && (settings.kind === "ready" || settings.kind === "refreshing")) {
                     await refreshSettings(settings, true, signal);
@@ -634,7 +634,7 @@ export const createDraftControlsStore = (
                 if (agent === undefined) {
                     return;
                 }
-                set({ settings: { kind: "switching", agentRef: agent.agentRef } });
+                set({ settings: { kind: "switching", harness: agent.harness } });
                 await load(signal);
             },
             selectOption: (configId, value) => {
@@ -650,7 +650,7 @@ export const createDraftControlsStore = (
                     ),
                 };
                 if (settings.options.some((option) => option.id === configId && option.type === "select")) {
-                    rememberAgentSettingChoice(computerId, settings.selectedAgent.agentRef, {
+                    rememberAgentSettingChoice(computerId, settings.selectedAgent.harness, {
                         configId,
                         kind: "select",
                         value,
@@ -674,7 +674,7 @@ export const createDraftControlsStore = (
                 };
                 const toggled = ready.options.find((option) => option.id === configId);
                 if (toggled?.type === "boolean") {
-                    rememberAgentSettingChoice(computerId, settings.selectedAgent.agentRef, {
+                    rememberAgentSettingChoice(computerId, settings.selectedAgent.harness, {
                         configId,
                         kind: "boolean",
                         value: toggled.booleanValue,

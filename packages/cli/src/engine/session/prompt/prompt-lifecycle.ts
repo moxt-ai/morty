@@ -23,7 +23,7 @@ interface QueuedPromptRequest {
     readonly target: NativeSessionTarget;
     readonly targetCommandId?: string;
     readonly context: {
-        readonly agentId: string;
+        readonly harness: string;
         readonly directory: string;
     };
 }
@@ -102,7 +102,7 @@ export class PromptLifecycle {
             content: promptContent(command),
             disposition: command.disposition,
             context: {
-                agentId: command.agentId,
+                harness: command.harness,
                 directory: command.directory,
             },
             target: command.target,

@@ -34,7 +34,7 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
                 <dd className="min-w-0 font-medium text-foreground">
                     <span className="inline-flex min-w-0 items-center gap-1.5">
                         <HarnessMark
-                            agentRef={context.agentRef}
+                            harness={context.harness}
                             appearance="line"
                             label={context.agent}
                             testId={dataTestId.executionDetailsHarnessMark}

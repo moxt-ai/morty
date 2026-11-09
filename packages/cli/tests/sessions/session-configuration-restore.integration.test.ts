@@ -91,7 +91,7 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
 });
 
 const identity = (_peer: RealDaemonPeer) => ({
-    agentId: "controlled-acp",
+    harness: "controlled-acp",
     directory: ".",
 });
 

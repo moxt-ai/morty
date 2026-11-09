@@ -48,7 +48,7 @@ export async function executePrompt({
     try {
         const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(
-            command.agentId,
+            command.harness,
             signal,
             command.target,
         );
@@ -167,7 +167,7 @@ export async function executePrompt({
         // chain deliberately stay out of the log. The message still reaches the
         // user through the failure event above.
         reportFailure("session_prompt_failed", command.commandId, {
-            agentId: command.agentId,
+            harness: command.harness,
             code: failureCode,
             commandId: command.commandId,
             sessionId: command.target.sessionId,

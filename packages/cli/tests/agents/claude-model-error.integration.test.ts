@@ -39,7 +39,7 @@ test("Given Claude receives a model-not-found response, When I send a prompt, Th
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "claude",
+                    harness: "claude",
                     commandId,
                     directory: ".",
                     disposition: SessionPromptDisposition.Append,

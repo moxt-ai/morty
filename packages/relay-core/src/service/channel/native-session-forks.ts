@@ -76,7 +76,7 @@ export class NativeSessionForks {
         request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) => {
-        const requestHash = await hashSecret(JSON.stringify([input.agentId, input.sessionId, input.directory]));
+        const requestHash = await hashSecret(JSON.stringify([input.harness, input.sessionId, input.directory]));
         signal.throwIfAborted();
         const key = JSON.stringify([scope.computerId, operationId]);
         const prior = this.#storage.read(scope.computerId, operationId);
@@ -117,7 +117,7 @@ export class NativeSessionForks {
                     );
                     if (
                         ready.kind !== "session.ready" ||
-                        ready.target.harness !== input.agentId ||
+                        ready.target.harness !== input.harness ||
                         ready.target.sessionId === input.sessionId ||
                         ready.directory !== source.entry.directory
                     ) {
@@ -183,7 +183,7 @@ export class NativeSessionForks {
                     JSON.stringify({
                         kind: "native.session.request",
                         action: "fork",
-                        agentId: input.agentId,
+                        harness: input.harness,
                         directory: found.entry.directory,
                         requestId: operationId,
                         sessionId: found.entry.sessionId,
@@ -191,7 +191,7 @@ export class NativeSessionForks {
                 );
                 this.#storage.start(scope.computerId, operationId, requestHash, JSON.stringify(found));
                 const result = forkResult(JSON.stringify(await request(scope, command, controller.signal)));
-                if (result.target.harness !== input.agentId || result.target.sessionId === input.sessionId) {
+                if (result.target.harness !== input.harness || result.target.sessionId === input.sessionId) {
                     throw new PairingDirectoryError("invalid_native_session_response", "The Fork target is invalid");
                 }
                 const receipt = { source: found, result };

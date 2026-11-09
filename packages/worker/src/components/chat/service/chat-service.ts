@@ -66,17 +66,17 @@ export type ChatScope = {
 
 type NativeListInput = {
     readonly action: "list";
-    readonly agentId: string;
+    readonly harness: string;
     readonly directory: string;
     readonly cursor: string | null;
 };
 type NativeEntryInput = {
-    readonly agentId: string;
+    readonly harness: string;
     readonly directory: string;
 };
 type NativePreviewInput = Omit<NativeEntryInput, never> & { readonly sessionId: string };
 type NewChatInput = {
-    readonly agentRef: string;
+    readonly harness: string;
     readonly conversationKey: string;
     readonly configurations: readonly {
         readonly booleanValue: boolean;
@@ -89,7 +89,7 @@ type NewChatInput = {
 type OpenChatInput = NativeSessionTarget | NewChatInput;
 type ConfigureBotInput = {
     readonly computerId: string;
-    readonly agentRef: string;
+    readonly harness: string;
 };
 type ManagedSessionArchival = { readonly close: "confirmed" | "unconfirmed" };
 
@@ -266,9 +266,9 @@ export class ChatService {
         return runtime;
     };
 
-    readonly #requireRuntimeAgent = async (scope: ChatScope, agentRef: string) => {
+    readonly #requireRuntimeAgent = async (scope: ChatScope, harness: string) => {
         const runtime = await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
-        if (!runtime.agents.some((agent) => agent.agentRef === agentRef)) {
+        if (!runtime.agents.some((agent) => agent.harness === harness)) {
             throw new PlatformProjectError(
                 "AGENT_UNAVAILABLE",
                 "Choose an agent provided by this Machine's Runtime.",
@@ -307,7 +307,7 @@ export class ChatService {
                         directory: details.directory,
                         directoryLabel: details.directoryLabel,
                         prompted: details.prompted,
-                        target: { harness: details.agentId, sessionId: details.sessionId },
+                        target: { harness: details.harness, sessionId: details.sessionId },
                         status: details.status,
                         title: details.title,
                         updatedAt: details.updatedAt,
@@ -441,13 +441,13 @@ export class ChatService {
     /** The settings a new Session of this Agent starts with in the draft's directory. */
     readonly agentSettings = async (
         scope: ChatScope,
-        draft: { readonly agentRef: string; readonly workspaceRef: string },
+        draft: { readonly harness: string; readonly workspaceRef: string },
     ) => {
         const bot = await this.#bot(scope);
         if (bot?.configuration === null || bot === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        await this.#requireRuntimeAgent(scope, draft.agentRef);
+        await this.#requireRuntimeAgent(scope, draft.harness);
         const discovered = await this.#platform.discoverChatAgentSettings(
             scope.computerId,
             { computerId: bot.configuration.computerId, ...draft },
@@ -478,12 +478,12 @@ export class ChatService {
      * identity. A failed retry never removes ownership established by a previous attempt.
      */
     readonly #openNewChat = async (scope: ChatScope, input: NewChatInput) => {
-        await this.#requireRuntimeAgent(scope, input.agentRef);
+        await this.#requireRuntimeAgent(scope, input.harness);
         const session = {
             operationId: await chatOperationId(scope, input.conversationKey),
 
             computerId: scope.computerId,
-            agentRef: input.agentRef,
+            harness: input.harness,
             workspaceRef: input.workspaceRef,
         };
         // Serialize creation, initial configuration, and ownership recovery for the same operation.
@@ -507,7 +507,7 @@ export class ChatService {
                         );
                         if (
                             recovered !== null &&
-                            recovered.agentId === input.agentRef &&
+                            recovered.harness === input.harness &&
                             recovered.directory === input.workspaceRef
                         ) {
                             await this.#chatSessions.save(
@@ -549,7 +549,7 @@ export class ChatService {
                 target,
 
                 computerId: scope.computerId,
-                agentRef: metadata.agentId,
+                harness: metadata.harness,
                 workspaceRef: metadata.directory,
             },
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
@@ -647,14 +647,14 @@ export class ChatService {
             bot.configuration === null
                 ? undefined
                 : await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
-        const agent = runtime?.agents.find((item) => item.agentRef === harness);
+        const agent = runtime?.agents.find((item) => item.harness === harness);
         if (runtime === undefined || agent === undefined) {
             throw new PlatformProjectError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
         }
         const found = await this.#platform.findNativeSessionBySessionId(
             scope.computerId,
             {
-                agentId: agent.agentRef,
+                harness: agent.harness,
                 directory: ".",
                 sessionId: sessionId,
             },
@@ -665,7 +665,7 @@ export class ChatService {
             scope.computerId,
             {
                 action: "import",
-                agentId: agent.agentRef,
+                harness: agent.harness,
                 directory: entry.directory,
                 sessionId: entry.sessionId,
             },
@@ -674,7 +674,7 @@ export class ChatService {
         if (result.action !== "import") {
             throw new PlatformProjectError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
         }
-        const stored = { agentRef: agent.agentRef, result, entry };
+        const stored = { harness: agent.harness, result, entry };
         await this.#chatSessions.save(scope.computerId, scope.userId, result.target, scope.signal);
         return stored;
     };
@@ -687,9 +687,9 @@ export class ChatService {
         const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
         const events = await this.#platform.previewRuntimeNativeEvents(
             scope.computerId,
-            { harness: input.agentId, sessionId: input.sessionId },
+            { harness: input.harness, sessionId: input.sessionId },
             {
-                agentId: input.agentId,
+                harness: input.harness,
                 directory: input.directory,
             },
             { cursor: null, eventLimit: 200 },
@@ -748,7 +748,7 @@ export class ChatService {
     readonly #readNativeTarget = async (scope: ChatScope, ready: SessionReadyEvent): Promise<NativeSessionTarget> => {
         const entries = await this.#platform.queryChatSessions(scope.computerId, [ready.target], scope.signal);
         const entry = entries.find(
-            (entry) => sameNativeSession(entry.target, ready.target) && entry.agentId === ready.agentId,
+            (entry) => sameNativeSession(entry.target, ready.target) && entry.harness === ready.harness,
         );
         if (entry === undefined) {
             throw new PlatformProjectError(
@@ -757,7 +757,7 @@ export class ChatService {
                 502,
             );
         }
-        return { harness: entry.agentId, sessionId: entry.sessionId };
+        return { harness: entry.harness, sessionId: entry.sessionId };
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
@@ -765,7 +765,7 @@ export class ChatService {
         if (input.computerId !== scope.computerId) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This chat belongs to a different computer.", 409);
         }
-        await this.#requireRuntimeAgent(scope, input.agentRef);
+        await this.#requireRuntimeAgent(scope, input.harness);
         await this.#platform.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
         const result = await this.#managedBots.configureBot(
             scope.userId,

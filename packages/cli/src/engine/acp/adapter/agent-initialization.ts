@@ -28,7 +28,7 @@ export async function validateAgentRuntime(agent: AcpAgentDefinition, signal: Ab
 
 export async function initializeAgentConnection(
     connection: Pick<AgentConnection, "connection" | "initialize" | "race">,
-    agentId: string,
+    harness: string,
     verifiedVersion: string,
     signal: AbortSignal,
 ) {
@@ -69,7 +69,7 @@ export async function initializeAgentConnection(
     }
     return {
         capabilities: normalizeAcpCapabilities(initialized),
-        agentName: truncate(initialized.agentInfo?.title ?? initialized.agentInfo?.name ?? agentId, 255),
+        agentName: truncate(initialized.agentInfo?.title ?? initialized.agentInfo?.name ?? harness, 255),
         agentVersion: truncate(
             verifiedVersion.length > 0 ? verifiedVersion : (initialized.agentInfo?.version ?? ""),
             128,

@@ -1501,12 +1501,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         fail("RUNTIME_START_FAILED");
     }
 
-    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, computerId: string, agentRef: string): boolean {
+    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, computerId: string, harness: string): boolean {
         return (
             runtime["computerId"] === computerId &&
             runtime["online"] === true &&
             Array.isArray(runtime["agents"]) &&
-            runtime["agents"].some((agent) => object(agent)["agentRef"] === agentRef)
+            runtime["agents"].some((agent) => object(agent)["harness"] === harness)
         );
     }
 
@@ -1540,7 +1540,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (current === undefined || !Array.isArray(current["agents"])) {
             return null;
         }
-        return current["agents"].map((agent) => identifier(object(agent)["agentRef"]));
+        return current["agents"].map((agent) => identifier(object(agent)["harness"]));
     }
 
     async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
@@ -1667,11 +1667,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function bindAgent(context: Context, runtime: RuntimeSelection, harness: string) {
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
         const computerId = runtime.computerId;
-        const agentRef = identifier(harness);
         try {
             await request(context, `/chat/computers/${context.identity.computerId}/setup`, {
                 computerId,
-                agentRef,
+                harness,
             });
         } catch (cause) {
             // Cancellation and the setup budget keep their own codes.
@@ -1695,7 +1694,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     /** Waits until the bound Machine's Runtime is online and offers the harness this run bound. */
     async function waitForReadiness(context: Context, runtime: RuntimeSelection, harness: string) {
-        const agentRef = identifier(harness);
+        const harness = identifier(harness);
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
@@ -1704,7 +1703,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 `/chat/computers/${context.identity.computerId}/workspace`,
                 {},
             );
-            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.computerId, agentRef)) {
+            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.computerId, harness)) {
                 return;
             }
             if (attempts++ % 10 === 0) {

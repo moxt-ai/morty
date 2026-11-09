@@ -29,7 +29,7 @@ export function SessionAgentTabs({
     value,
 }: {
     readonly agents: readonly {
-        readonly agentRef: string;
+        readonly harness: string;
         readonly installed?: boolean;
         readonly label: string;
         readonly value: string;
@@ -61,7 +61,7 @@ export function SessionAgentTabs({
                             value={optionValue}
                         >
                             <HarnessMark
-                                agentRef={agent.agentRef}
+                                harness={agent.harness}
                                 appearance="line"
                                 className="max-sm:size-5 max-sm:[&>svg]:size-[13px]"
                                 label={agent.label}

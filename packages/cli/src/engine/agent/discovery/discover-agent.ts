@@ -56,7 +56,7 @@ async function probeWithRetry<Value>(
             return await probe();
         } catch (failure) {
             context.onProbeDiagnostic?.({
-                agentId: specification.id,
+                harness: specification.id,
                 source,
                 event: signal.aborted ? "agent_probe_cancelled" : "agent_probe_failed",
                 attempt,

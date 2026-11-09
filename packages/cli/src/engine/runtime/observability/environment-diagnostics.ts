@@ -28,8 +28,8 @@ function executableLocation(agent: CatalogAgent): string {
     return "other";
 }
 
-function overrideVariable(agentId: string): string | null {
-    switch (agentId) {
+function overrideVariable(harness: string): string | null {
+    switch (harness) {
         case "codex":
             return "MORTY_CODEX_PATH";
         case "claude":
@@ -64,7 +64,7 @@ export function runtimeEnvironmentDiagnostics(config: RuntimeConfig): readonly R
             return {
                 event: "agent_inventory",
                 timestamp,
-                agentId: override === null ? "custom" : agent.id,
+                harness: override === null ? "custom" : agent.id,
                 agentVersion: version(agent.agentVersion),
                 adapterVersion: version(agent.adapterVersion),
                 versionSource: "runtime_catalog",

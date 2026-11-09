@@ -22,7 +22,7 @@ for (const client of ["SDK", "HTTP"] as const) {
             );
             const runtime = await platform.connectAgent(project.computerId);
             const request = {
-                agentId: "claude",
+                harness: "claude",
                 configurations: [],
                 directory: ".",
                 computerId: runtime.computerId,
@@ -53,13 +53,13 @@ for (const client of ["SDK", "HTTP"] as const) {
             expect(ready).toMatchObject({
                 kind: "session.ready",
                 target: sessionTarget,
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
             });
             await runtime.client.turns.submitToRuntime(
                 sessionTarget,
                 {
-                    agentId: "claude",
+                    harness: "claude",
                     attachments: [],
                     content: "Remember this conversation",
                     directory: ".",
@@ -70,7 +70,7 @@ for (const client of ["SDK", "HTTP"] as const) {
 
             await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
                 expect.objectContaining({
-                    agentId: "claude",
+                    harness: "claude",
                     directory: expect.any(String),
                     prompted: true,
                     target: sessionTarget,
@@ -139,7 +139,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         expect(listing.directory).toBe(directory);
         expect(listing.directoryLabel).toBe(canonical);
         expect(listing.parentDirectory).toBe(dirname(canonical));
-        const identity = { agentId: "claude", directory };
+        const identity = { harness: "claude", directory };
         const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 ...identity,
@@ -205,7 +205,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
         const runtime = await platform.connectAgent(project.computerId);
         const { target: sessionTarget } = await runtime.client.sessions.create(
             {
-                agentId: "claude",
+                harness: "claude",
                 configurations: [],
                 directory,
                 computerId: runtime.computerId,
@@ -236,7 +236,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
 
         expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({
-                agentId: "claude",
+                harness: "claude",
                 directory,
                 directoryLabel,
                 prompted: true,

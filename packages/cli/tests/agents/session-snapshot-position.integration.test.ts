@@ -19,8 +19,8 @@ import { prepareNewRealSession, withRealDaemon } from "../support/agents/real-da
 import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
-for (const agentId of ["codex", "claude", "pi"] as const) {
-    test(`Given real ${agentId} is answering, When a client loads history before and after its reply, Then each snapshot identifies the live events it covers`, async () => {
+for (const harness of ["codex", "claude", "pi"] as const) {
+    test(`Given real ${harness} is answering, When a client loads history before and after its reply, Then each snapshot identifies the live events it covers`, async () => {
         const entered = Promise.withResolvers<void>();
         const release = Promise.withResolvers<void>();
         let holdResponse = false;
@@ -34,24 +34,24 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
         };
         const answer = "SNAPSHOT_POSITION_REPLY";
         const provider =
-            agentId === "claude"
+            harness === "claude"
                 ? await FakeAnthropicProvider.start("claude-sonnet-4-6", answer, options)
-                : await FakeOpenAiProvider.start(agentId === "pi" ? "gpt-4.1" : "morty-test-model", answer, options);
+                : await FakeOpenAiProvider.start(harness === "pi" ? "gpt-4.1" : "morty-test-model", answer, options);
         const agent =
             provider instanceof FakeAnthropicProvider
                 ? await ClaudeFixture.create(provider)
-                : agentId === "pi"
+                : harness === "pi"
                   ? await PiFixture.create(provider)
                   : await CodexFixture.create(provider);
         const specification =
-            agentId === "claude"
+            harness === "claude"
                 ? new ClaudeCodeAgentSpecification()
-                : agentId === "pi"
+                : harness === "pi"
                   ? new PiAgentSpecification()
                   : new CodexAgentSpecification();
         try {
             await withRealDaemon(specification, agent.environment, async (peer) => {
-                const sessionTarget = await prepareNewRealSession(peer, agentId);
+                const sessionTarget = await prepareNewRealSession(peer, harness);
                 holdResponse = true;
                 const observed: SessionLiveEvent[] = [];
                 const readPage = async (limit: number, cursor: string | null = null) => {
@@ -88,7 +88,7 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                         kind: "session.prompt",
                         target: sessionTarget,
                         commandId,
-                        agentId,
+                        harness,
                         directory: ".",
                         prompt: "Reply with the requested answer.",
                         attachments: [],

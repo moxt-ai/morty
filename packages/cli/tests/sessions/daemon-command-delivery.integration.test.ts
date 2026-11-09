@@ -19,7 +19,7 @@ import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/rea
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
 const identity = (_peer: RealDaemonPeer) => ({
-    agentId: "controlled-acp",
+    harness: "controlled-acp",
     directory: ".",
 });
 

@@ -117,7 +117,7 @@ async function expire(native: string, pid: string, timer: IdleTimeoutTimer): Pro
 function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): void {
     peer.send(
         encodeSessionPromptCommand({
-            agentId: "claude",
+            harness: "claude",
             commandId: crypto.randomUUID(),
             directory: ".",
             disposition: SessionPromptDisposition.Append,
@@ -235,7 +235,7 @@ test.each(["resume", "load"] as const)(
                         kind: "native.session.request",
                         action: "list",
                         requestId: crypto.randomUUID(),
-                        agentId: "claude",
+                        harness: "claude",
                         directory: ".",
                         cursor: null,
                     }),
@@ -278,7 +278,7 @@ test("Given a client read a conversation's settings before its idle process exit
         const configureId = crypto.randomUUID();
         peer.send(
             encodeSessionConfigureCommand({
-                agentId: "claude",
+                harness: "claude",
                 booleanValue: false,
                 configId: "model",
                 directory: ".",
@@ -343,7 +343,7 @@ test("Given a retained native session browser, When two idle hours pass, Then it
                 encodeNativeSessionCommand({
                     kind: "native.session.request",
                     requestId: crypto.randomUUID(),
-                    agentId: "claude",
+                    harness: "claude",
                     directory: ".",
                     action: "list",
                     cursor: null,
@@ -382,7 +382,7 @@ test("Given an old retained process was closed and the daemon restarted, When it
                 kind: "session.prepare",
                 requestId: crypto.randomUUID(),
                 target: sessionTarget,
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
             }),
         );
@@ -411,7 +411,7 @@ test("Given native history is loading in a retained process, When three hours pa
                 kind: "session.prepare",
                 requestId: crypto.randomUUID(),
                 target: sessionTarget,
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
             }),
         );
@@ -434,7 +434,7 @@ test("Given native history is loading in a retained process, When three hours pa
             encodeSessionRestoreCommand({
                 kind: "session.restore",
                 requestId: crypto.randomUUID(),
-                target: { harness: entry.agentId, sessionId: entry.sessionId },
+                target: { harness: entry.harness, sessionId: entry.sessionId },
             }),
         );
         const restored = nextResponse(peer, "session.restored");

@@ -137,7 +137,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
             return await activeSessions.executionSnapshot(
                 request.target,
                 async (command) => {
-                    if (!sameNativeSession(command.target, request.target) || command.agentId !== request.agentId) {
+                    if (!sameNativeSession(command.target, request.target) || command.harness !== request.harness) {
                         return false;
                     }
                     const cwd = await directories.resolve(command.directory, requestOptions.signal);

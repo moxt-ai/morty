@@ -223,13 +223,13 @@ function warnIgnoredSetting(
     event: string,
     commandId: string,
     sessionTarget: NativeSessionTarget,
-    agentId: string,
+    harness: string,
     selection: SessionConfigurationSelection,
     category: string,
     reason: string,
 ): void {
     const details: Readonly<Record<string, string>> = {
-        agentId,
+        harness,
         category,
         configId: selection.configId,
         reason,

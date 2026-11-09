@@ -12,7 +12,7 @@ import type {
 const MAX_SETTINGS_DISCOVERY_ROUTES = 4;
 
 const pendingAgentSettingsDiscoverySchema = v.object({
-    agentId: v.pipe(v.string(), v.minLength(1)),
+    harness: v.pipe(v.string(), v.minLength(1)),
     requestId: v.pipe(v.string(), v.minLength(1)),
 });
 const historyRequestSchema = v.object({
@@ -121,14 +121,14 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         return attachment;
     };
     readonly close = (code: number, reason: string): void => this.#socket.close(code, reason);
-    readonly consumeAgentSettingsDiscovery = (requestId: string, agentId: string): boolean => {
+    readonly consumeAgentSettingsDiscovery = (requestId: string, harness: string): boolean => {
         if (this.identity().role === "viewer") {
             return false;
         }
         const attachment = this.hostAttachment();
         let consumed = false;
         const pendingAgentSettingsDiscoveries = attachment.pendingAgentSettingsDiscoveries.filter((pending) => {
-            if (pending.requestId === requestId && pending.agentId === agentId) {
+            if (pending.requestId === requestId && pending.harness === harness) {
                 consumed = true;
                 return false;
             }
@@ -202,18 +202,18 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         return identity.role === "relay" || (identity.role === "host" && identity.credential.kind === "project");
     };
     readonly send = (message: string | ArrayBuffer): void => this.#socket.send(message);
-    readonly trackAgentSettingsDiscovery = (requestId: string, agentId: string): "tracked" | "duplicate" | "busy" => {
+    readonly trackAgentSettingsDiscovery = (requestId: string, harness: string): "tracked" | "duplicate" | "busy" => {
         const attachment = this.hostAttachment();
         const existing = attachment.pendingAgentSettingsDiscoveries.find((pending) => pending.requestId === requestId);
         if (existing !== undefined) {
-            return existing.agentId === agentId ? "duplicate" : "busy";
+            return existing.harness === harness ? "duplicate" : "busy";
         }
         if (attachment.pendingAgentSettingsDiscoveries.length >= MAX_SETTINGS_DISCOVERY_ROUTES) {
             return "busy";
         }
         this.#socket.serializeAttachment({
             ...attachment,
-            pendingAgentSettingsDiscoveries: [...attachment.pendingAgentSettingsDiscoveries, { agentId, requestId }],
+            pendingAgentSettingsDiscoveries: [...attachment.pendingAgentSettingsDiscoveries, { harness, requestId }],
         });
         return "tracked";
     };

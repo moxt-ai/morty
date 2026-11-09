@@ -90,7 +90,7 @@ export const configValueSchema = z
 export type SessionConfigValue = z.infer<typeof configValueSchema>;
 
 export const sessionIdentityFields = {
-    agentId: IDENTIFIER,
+    harness: IDENTIFIER,
     directory: DIRECTORY_PATH,
     target: nativeSessionTargetSchema,
 };

@@ -107,7 +107,7 @@ export class MortySessionAccessRevocation {
 
 /** Creates an Agent-owned Session with its initial settings. Reuse the operation ID after response loss. */
 export interface CreateMortySessionRequest {
-    readonly agentId: string;
+    readonly harness: string;
     readonly configurations: readonly SessionConfigurationSelection[];
     readonly directory: string;
     readonly computerId: string;
@@ -120,7 +120,7 @@ export interface CreateMortySessionRequest {
  * require every field, so leave fields out only with a Relay that resolves them.
  */
 export interface MortySessionBinding {
-    readonly agentId?: string;
+    readonly harness?: string;
     readonly directory?: string;
 }
 

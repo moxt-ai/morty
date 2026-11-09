@@ -104,16 +104,16 @@ async function executeSessionHistoryPageLoad(
     eventProjection: PromptLifecycle,
     signal: AbortSignal,
 ): Promise<void> {
-    let agentId: string | undefined;
+    let harness: string | undefined;
     try {
         const [entry] = await nativeSessions.querySessions([command.target], signal);
         if (entry === undefined) {
             throw new SessionError("session_not_found", "The Session was not found");
         }
-        agentId = entry.agentId;
+        harness = entry.harness;
         const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(entry.agentId, signal, command.target)),
+            ...(await resolveAgent(entry.harness, signal, command.target)),
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -139,7 +139,7 @@ async function executeSessionHistoryPageLoad(
                 "session_history_v2_load_failed",
                 command.requestId,
                 {
-                    ...(agentId === undefined ? {} : { agentId }),
+                    ...(harness === undefined ? {} : { harness }),
                     code: operationErrorCode(error),
                     sessionId: command.target.sessionId,
                 },
@@ -162,7 +162,7 @@ async function executeSessionPreviewHistoryPageLoad(
     try {
         const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(command.agentId, signal, command.target)),
+            ...(await resolveAgent(command.harness, signal, command.target)),
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -188,7 +188,7 @@ async function executeSessionPreviewHistoryPageLoad(
                 "session_history_v2_load_failed",
                 command.requestId,
                 {
-                    agentId: command.agentId,
+                    harness: command.harness,
                     code: operationErrorCode(error),
                     sessionId: command.target.sessionId,
                 },

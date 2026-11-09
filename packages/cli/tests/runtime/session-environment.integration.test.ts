@@ -60,7 +60,7 @@ test("Given scoped environments, When Sessions run concurrently and restore, The
             encodeSessionRestoreCommand({
                 kind: "session.restore",
                 requestId: "restore-a",
-                target: { harness: entry.agentId, sessionId: entry.sessionId },
+                target: { harness: entry.harness, sessionId: entry.sessionId },
             }),
         );
         await peer.next("restore-a", ["session.restored"]);
@@ -231,12 +231,12 @@ test.for(["import", "fork"] as const)(
             const seed = await peer.create();
             await peer.prompt(seed, "seed-history");
             await peer.restart("competing-runtime");
-            const candidates: { agentId: string; sessionId: string }[] = [];
-            for (const agentId of ["codex", "other-codex"]) {
-                const requestId = `list-${agentId}`;
+            const candidates: { harness: string; sessionId: string }[] = [];
+            for (const harness of ["codex", "other-codex"]) {
+                const requestId = `list-${harness}`;
                 peer.send(
                     encodeNativeSessionCommand({
-                        ...peer.base(agentId),
+                        ...peer.base(harness),
                         kind: NATIVE_SESSION_REQUEST_KIND,
                         requestId,
                         action: "list",
@@ -247,14 +247,14 @@ test.for(["import", "fork"] as const)(
                 if (result.action !== "list" || result.entries[0] === undefined) {
                     throw new Error("Expected native history for each Agent");
                 }
-                candidates.push({ agentId, sessionId: result.entries[0].sessionId });
+                candidates.push({ harness, sessionId: result.entries[0].sessionId });
             }
             const outcomes = await Promise.all(
-                candidates.map(async ({ agentId, sessionId }) => {
-                    const requestId = `open-${agentId}`;
+                candidates.map(async ({ harness, sessionId }) => {
+                    const requestId = `open-${harness}`;
                     peer.send(
                         encodeNativeSessionCommand({
-                            ...peer.base(agentId),
+                            ...peer.base(harness),
                             kind: NATIVE_SESSION_REQUEST_KIND,
                             requestId,
                             action,
@@ -262,16 +262,16 @@ test.for(["import", "fork"] as const)(
                         }),
                     );
                     const frame = await peer.next(requestId, ["native.session.result", "session.operation.failed"]);
-                    return { agentId, result: decodeDaemonToServiceMessage(frame) };
+                    return { harness, result: decodeDaemonToServiceMessage(frame) };
                 }),
             );
             expect(outcomes.filter(({ result }) => result.kind === "native.session.result")).toHaveLength(2);
-            for (const { agentId, result } of outcomes) {
+            for (const { harness, result } of outcomes) {
                 if (result.kind !== "native.session.result" || result.action !== action) {
                     throw new Error("Expected native open result");
                 }
-                expect(result.target.harness).toBe(agentId);
-                await peer.prompt(result.target, `owner-continues-${agentId}`);
+                expect(result.target.harness).toBe(harness);
+                await peer.prompt(result.target, `owner-continues-${harness}`);
             }
         } finally {
             await peer.close();
@@ -502,11 +502,11 @@ await import(${JSON.stringify(agentPeer)});
         }
         socket.send(frame);
     };
-    const binding = (agentId = "codex") => ({
-        agentId,
+    const binding = (harness = "codex") => ({
+        harness,
         directory: ".",
     });
-    const base = (agentId = "codex") => ({ ...binding(agentId) });
+    const base = (harness = "codex") => ({ ...binding(harness) });
     const readContexts = async (path: string) =>
         (await readFile(path, "utf8"))
             .trim()

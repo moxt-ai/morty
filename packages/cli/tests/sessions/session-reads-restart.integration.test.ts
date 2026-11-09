@@ -16,18 +16,18 @@ import { UnretainedExternalContentStore } from "../support/unretained-external-c
 import { fakeAgentPath } from "./acp-feature-fixture.ts";
 
 async function controlledAgent(
-    agentId: string,
+    harness: string,
     additionalArguments: readonly string[] = [],
 ): Promise<{ agent: AcpAgentDefinition; stateDirectory: string }> {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-config-reads-"));
     const agent = new AcpAgentDefinition(
-        agentId,
+        harness,
         "Controlled ACP",
         process.execPath,
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: agentId,
+                    id: harness,
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, ...additionalArguments],
                     environment: options.environment,

@@ -118,7 +118,7 @@ test("Given native task notifications and user-pasted notification text, When Cl
         await writeFile(join(project, `${nativeId}.jsonl`), `${records.join("\n")}\n`);
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
                 cursor: null,
                 eventLimit: 200,
@@ -216,7 +216,7 @@ test("Given Claude is running a background command, When two idle hours pass and
                             kind: "session.prompt",
                             commandId,
                             target: sessionTarget,
-                            agentId: "claude",
+                            harness: "claude",
                             directory: ".",
                             attachments: [],
                             prompt,

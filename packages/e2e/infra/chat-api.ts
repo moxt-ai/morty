@@ -92,26 +92,26 @@ export class ChatApi {
         });
     }
 
-    async readPairedAgent(_computerId: string, agentId: string) {
+    async readPairedAgent(_computerId: string, harness: string) {
         const paired = await this.#request(`/morty/api/management/pairing`);
         if (
             paired["status"] !== "paired" ||
             !Array.isArray(paired["agents"]) ||
-            !paired["agents"].some((agent) => object(agent, "agent")["id"] === agentId)
+            !paired["agents"].some((agent) => object(agent, "agent")["id"] === harness)
         ) {
-            throw new Error(`The paired Runtime does not expose ${agentId}`);
+            throw new Error(`The paired Runtime does not expose ${harness}`);
         }
         return { computerId: text(paired["computerId"], "computerId") };
     }
 
-    async bindAgent(computerId: string, agentId: string) {
+    async bindAgent(computerId: string, harness: string) {
         const identity = this.#requireIdentity();
         await this.#request(`/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/setup`, {
-            body: { computerId, agentRef: agentId },
+            body: { computerId, harness: harness },
         });
     }
 
-    async readBinding(agentId: string) {
+    async readBinding(harness: string) {
         const identity = this.#requireIdentity();
         const configuration = await this.#request(
             `/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/workspace`,
@@ -121,9 +121,9 @@ export class ChatApi {
         if (
             runtime["online"] !== true ||
             !Array.isArray(runtime["agents"]) ||
-            !runtime["agents"].some((agent) => object(agent, "agent")["agentRef"] === agentId)
+            !runtime["agents"].some((agent) => object(agent, "agent")["harness"] === harness)
         ) {
-            throw new Error(`The configured Bot does not expose ${agentId}`);
+            throw new Error(`The configured Bot does not expose ${harness}`);
         }
     }
 

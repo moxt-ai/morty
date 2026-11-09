@@ -2,7 +2,7 @@ import type { SessionConfigOption } from "@morty-build/client/protocol";
 
 /** Evidence from the response that supplied the menu; never a new discovery made while reporting. */
 export interface AgentModelCatalog {
-    readonly agentId: string;
+    readonly harness: string;
     readonly agentVersion: string;
     readonly observedAt: string;
     readonly requestId: string;
