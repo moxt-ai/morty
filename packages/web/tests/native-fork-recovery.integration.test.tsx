@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
-test("Given a Fork completes before Morty loses its response, When the user retries, Then the original Session is registered once and opened", {
+test("Given a Fork completes before Morty loses its response, When the user retries, Then the original Session is listed once and opened", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -49,10 +49,12 @@ test("Given a Fork completes before Morty loses its response, When the user retr
             expect(response.status).toBe(200);
             return await response.json();
         };
-        expect(await managed()).toEqual({ sessions: [] });
+        // The Runtime holds the Fork it completed, so it is listed before the retry.
+        const forked = { sessions: [{ title: "Native fork-recovery-source (Fork #1)" }] };
+        expect(await managed()).toMatchObject(forked);
         await app.user.click(getByRole(dialog, "button", { name: "Fork" }));
         await app.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Open Session" })).toBeNull());
-        expect(await managed()).toMatchObject({ sessions: [{ title: "Native fork-recovery-source (Fork #1)" }] });
+        expect(await managed()).toEqual({ sessions: [expect.objectContaining(forked.sessions[0])] });
     } finally {
         await application?.close();
         await environment.close();

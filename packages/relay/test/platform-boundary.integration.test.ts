@@ -13,6 +13,7 @@ import {
     encodeFileBeginEvent,
     encodeNativeSessionRequest,
     encodeNativeSessionResult,
+    encodeSessionArchivedEvent,
     encodeSessionClosedEvent,
     encodeSessionConfigReadResult,
     encodeSessionConfigUpdatedEvent,
@@ -483,6 +484,31 @@ describe.sequential("Platform Session-only boundary", () => {
                 requestId: closeCommand.requestId,
                 target: nativeTarget("session-to-close"),
             });
+            const archiveResponse = worker.fetch(
+                new Request(
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/session-to-close/archive`,
+                    {
+                        body: "{}",
+                        headers: credentialHeaders(appCredential),
+                        method: "POST",
+                    },
+                ),
+                environment,
+            );
+            const archiveCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
+            if (archiveCommand.kind !== "session.archive") {
+                throw new Error("Expected a Session archive command");
+            }
+            expect(archiveCommand.target).toEqual(nativeTarget("session-to-close"));
+            expect(decodeServiceToDaemonMessage(await hostMessages.next())).toMatchObject(archiveCommand);
+            const archived = {
+                kind: "session.archived",
+                requestId: archiveCommand.requestId,
+                target: nativeTarget("session-to-close"),
+            } as const;
+            daemon.send(encodeSessionArchivedEvent(archived));
+            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual(archived);
+            expect(await responseJson(await archiveResponse, 200)).toEqual(archived);
             // Native HTTP probes use request-reply connections, while this viewer keeps its live subscription.
             for (const outcome of ["idle", "busy"] as const) {
                 const activeTurnResponse = worker.fetch(
@@ -3274,84 +3300,70 @@ describe.sequential("Platform Turn submission", () => {
     });
 });
 
-it.each(["completed", "interrupted"] as const)(
-    "Given a %s Fork, When its request is replayed across Relay eviction, Then the recorded outcome prevents another execution",
-    async (outcome) => {
-        const runtime = await connectRuntimeDaemon(`fork-receipt-${outcome}`);
-        const input = {
+function forkResult(requestId: string, target: NativeSessionTarget) {
+    return {
+        kind: "native.session.result",
+        action: "fork",
+        requestId,
+        target,
+        title: "Source (fork 1)",
+        ready: {
+            kind: "session.ready",
+            requestId,
+            target,
             harness: "codex",
+            agentName: "Codex",
+            agentVersion: "1.0.0",
+            restored: true,
+            directory: ".",
+            directoryLabel: "Workspace",
+            configurationRevision: "revision-1",
+            capabilities: readyAgents[0]?.capabilities,
+            commands: [],
+            configOptions: [],
+        },
+    };
+}
+
+it("Given a Fork in flight, When it is requested again concurrently and after Relay eviction, Then each Runtime request carries the operation identity and the Relay keeps no outcome of its own", async () => {
+    const runtime = await connectRuntimeDaemon("fork-operation-identity");
+    const input = {
+        harness: "codex",
+        sessionId: "native-source",
+        directory: ".",
+    };
+    const operationId = "retained-fork-operation";
+    try {
+        const first = runtime.forkNative(operationId, input);
+        // The controlled daemon owns fork allocation; the request never carries a destination.
+        const fork = record(JSON.parse(await runtime.daemonMessages.next()));
+        expect(fork).toMatchObject({
+            kind: "native.session.request",
+            action: "fork",
+            requestId: operationId,
             sessionId: "native-source",
             directory: ".",
-        };
-        const operationId = "retained-fork-operation";
-        try {
-            const first = runtime.forkNative(operationId, input);
-            // The controlled daemon owns fork allocation; the request never carries a destination.
-            const find = record(JSON.parse(await runtime.daemonMessages.next()));
-            expect(find).toMatchObject({
-                kind: "native.session.request",
-                action: "find",
-                sessionId: "native-source",
-            });
-            const source = {
-                kind: "native.session.result",
-                action: "find",
-                requestId: text(find, "requestId"),
-                entry: {
-                    sessionId: "native-source",
-                    title: "Source",
-                    directory: ".",
-                    directoryLabel: "Workspace",
-                    updatedAt: null,
-                },
-            };
-            runtime.daemon.send(JSON.stringify(source));
-            const fork = record(JSON.parse(await runtime.daemonMessages.next()));
-            expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", sessionId: "native-source" });
-            expect(fork).not.toHaveProperty("targetSessionId");
-            const forkTarget = nativeTarget("harness-fork-destination");
-            const concurrent = runtime.forkNative(operationId, input);
-            if (outcome === "completed") {
-                runtime.daemon.send(
-                    JSON.stringify({
-                        kind: "native.session.result",
-                        action: "fork",
-                        requestId: text(fork, "requestId"),
-                        target: forkTarget,
-                        title: "Source (fork 1)",
-                        ready: {
-                            kind: "session.ready",
-                            requestId: text(fork, "requestId"),
-                            target: forkTarget,
-                            harness: "codex",
-                            agentName: "Codex",
-                            agentVersion: "1.0.0",
-                            restored: true,
-                            directory: ".",
-                            directoryLabel: "Workspace",
-                            configurationRevision: "revision-1",
-                            capabilities: readyAgents[0]?.capabilities,
-                            commands: [],
-                            configOptions: [],
-                        },
-                    }),
-                );
-            } else {
-                runtime.daemon.close(1000, "Runtime stopped without returning the Fork outcome");
-            }
-            const expectedStatus = outcome === "completed" ? 200 : 409;
-            const original = await responseJson(await first, expectedStatus);
-            expect(await responseJson(await concurrent, expectedStatus)).toEqual(original);
-            if (outcome === "interrupted") {
-                expect(original).toMatchObject({ error: { code: "native_fork_outcome_unknown" } });
-            }
-            await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
-            expect(await responseJson(await runtime.forkNative(operationId, input), expectedStatus)).toEqual(original);
-        } finally {
-            runtime.daemon.close(1000, "Fork recovery scenario completed");
-        }
-    },
-);
+        });
+        expect(fork).not.toHaveProperty("targetSessionId");
+        const concurrent = runtime.forkNative(operationId, input);
+        const conflicting = await runtime.forkNative(operationId, { ...input, sessionId: "another-source" });
+        expect(await responseJson(conflicting, 409)).toMatchObject({ error: { code: "idempotency_conflict" } });
+        const forkTarget = nativeTarget("harness-fork-destination");
+        runtime.daemon.send(JSON.stringify(forkResult(operationId, forkTarget)));
+        const original = await responseJson(await first, 200);
+        expect(original).toMatchObject({ action: "fork", target: forkTarget });
+        expect(await responseJson(await concurrent, 200)).toEqual(original);
+
+        await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
+        const replayed = runtime.forkNative(operationId, input);
+        // The Runtime answers the retry from the receipt it keeps under the same operation identity.
+        expect(record(JSON.parse(await runtime.daemonMessages.next()))).toEqual(fork);
+        runtime.daemon.send(JSON.stringify(forkResult(operationId, forkTarget)));
+        expect(await responseJson(await replayed, 200)).toEqual(original);
+    } finally {
+        runtime.daemon.close(1000, "Fork recovery scenario completed");
+    }
+});
 
 it("Given the Runtime rejects a Fork, When the same operation is retried, Then the rejection is reported and the retry forks again", async () => {
     const runtime = await connectRuntimeDaemon("fork-rejected");
@@ -3362,26 +3374,6 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
     };
     const operationId = "rejected-fork-operation";
     const forkCommand = async () => {
-        const find = record(JSON.parse(await runtime.daemonMessages.next()));
-        expect(find).toMatchObject({
-            kind: "native.session.request",
-            action: "find",
-            sessionId: "native-source",
-        });
-        runtime.daemon.send(
-            JSON.stringify({
-                kind: "native.session.result",
-                action: "find",
-                requestId: text(find, "requestId"),
-                entry: {
-                    sessionId: "native-source",
-                    title: "Source",
-                    directory: ".",
-                    directoryLabel: "Workspace",
-                    updatedAt: null,
-                },
-            }),
-        );
         const fork = record(JSON.parse(await runtime.daemonMessages.next()));
         expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", sessionId: "native-source" });
         return fork;
@@ -3406,33 +3398,9 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
         expect(text(fork, "requestId")).toBe(text(rejected, "requestId"));
         expect(fork).not.toHaveProperty("targetSessionId");
         const forkTarget = nativeTarget("harness-fork-after-refusal");
-        runtime.daemon.send(
-            JSON.stringify({
-                kind: "native.session.result",
-                action: "fork",
-                requestId: text(fork, "requestId"),
-                target: forkTarget,
-                title: "Source (fork 1)",
-                ready: {
-                    kind: "session.ready",
-                    requestId: text(fork, "requestId"),
-                    target: forkTarget,
-                    harness: "codex",
-                    agentName: "Codex",
-                    agentVersion: "1.0.0",
-                    restored: true,
-                    directory: ".",
-                    directoryLabel: "Workspace",
-                    configurationRevision: "revision-1",
-                    capabilities: readyAgents[0]?.capabilities,
-                    commands: [],
-                    configOptions: [],
-                },
-            }),
-        );
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         const forked = await responseJson(await retried, 200);
-        expect(forked).toMatchObject({ result: { action: "fork", target: forkTarget } });
-        expect(await responseJson(await runtime.forkNative(operationId, input), 200)).toEqual(forked);
+        expect(forked).toMatchObject({ action: "fork", target: forkTarget });
     } finally {
         runtime.daemon.close(1000, "Fork rejection scenario completed");
     }

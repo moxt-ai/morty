@@ -1,47 +1,9 @@
 import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import { sameNativeSession } from "@morty-build/client/native-session";
-import {
-    decodeNativeSessionRequest,
-    decodeNativeSessionResult,
-    decodeSessionCreationReadCommand,
-    decodeSessionQueryCommand,
-} from "@morty-build/client/protocol";
-import { type ComputerScope, RuntimeOperationFailedError } from "../../entity/do/session.ts";
-import { hashSecret, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
+import { decodeNativeSessionRequest, type NativeSessionResult } from "@morty-build/client/protocol";
+import type { ComputerScope } from "../../entity/do/session.ts";
+import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
-import type { NativeSessionForkStorage } from "../../storage/native-session-fork-storage.ts";
-
-function forkResult(value: string) {
-    const result = decodeNativeSessionResult(value);
-    if (result.action !== "fork" || !sameNativeSession(result.ready.target, result.target)) {
-        throw new PairingDirectoryError("invalid_native_session_response", "The Runtime returned an invalid Fork");
-    }
-    return result;
-}
-
-function sourceResult(value: unknown) {
-    const source = decodeNativeSessionResult(JSON.stringify(value));
-    if (source.action !== "find") {
-        throw new PairingDirectoryError("invalid_native_session_response", "The Fork source is invalid");
-    }
-    return source;
-}
-
-function forkReceipt(value: string) {
-    const encoded: unknown = JSON.parse(value);
-    if (typeof encoded !== "object" || encoded === null || !("source" in encoded) || !("result" in encoded)) {
-        throw new PairingDirectoryError("invalid_native_session_response", "The Fork receipt is invalid");
-    }
-    return { source: sourceResult(encoded.source), result: forkResult(JSON.stringify(encoded.result)) };
-}
-
-function unknownOutcome(cause?: unknown): PairingDirectoryError {
-    return new PairingDirectoryError(
-        "native_fork_outcome_unknown",
-        "The Fork outcome is unknown. Check local sessions before starting another Fork.",
-        { cause },
-    );
-}
 
 async function waitForFork<T>(completion: Promise<T>, signal: AbortSignal): Promise<T> {
     signal.throwIfAborted();
@@ -52,20 +14,23 @@ async function waitForFork<T>(completion: Promise<T>, signal: AbortSignal): Prom
     });
 }
 
-/** A Fork operation retains the harness's returned pair, never an assigned destination. */
+/**
+ * Forwards a Fork to the Runtime under its operation identity. The Runtime keeps the Fork's receipt under that identity,
+ * so a retry after an ambiguous failure answers with the original Fork, and reusing it with other inputs is refused.
+ * The Relay keeps no receipt; it only joins concurrent requests for one operation into one Runtime request, since the
+ * Runtime refuses a second request under an identity it is still answering.
+ */
 export class NativeSessionForks {
-    readonly #storage: NativeSessionForkStorage;
     readonly #waitUntil: (operation: Promise<void>) => void;
     readonly #running = new Map<
         string,
         {
-            readonly requestHash: string;
-            readonly completion: Promise<ReturnType<typeof forkReceipt>>;
+            readonly input: string;
+            readonly completion: Promise<NativeSessionResult>;
         }
     >();
 
-    constructor(storage: NativeSessionForkStorage, waitUntil: (operation: Promise<void>) => void) {
-        this.#storage = storage;
+    constructor(waitUntil: (operation: Promise<void>) => void) {
         this.#waitUntil = waitUntil;
     }
 
@@ -75,152 +40,55 @@ export class NativeSessionForks {
         input: ForkMortyNativeSessionRequest,
         request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
-    ) => {
-        const requestHash = await hashSecret(JSON.stringify([input.harness, input.sessionId, input.directory]));
+    ): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
         const key = JSON.stringify([scope.computerId, operationId]);
-        const prior = this.#storage.read(scope.computerId, operationId);
+        const requested = JSON.stringify([input.harness, input.sessionId, input.directory]);
         const running = this.#running.get(key);
-        if (
-            (prior !== undefined && prior.requestHash !== requestHash) ||
-            (running !== undefined && running.requestHash !== requestHash)
-        ) {
-            throw new PairingDirectoryError("idempotency_conflict", "This Fork operation has different inputs");
-        }
-        if (prior?.resultJson != null) {
-            return forkReceipt(prior.resultJson);
-        }
         if (running !== undefined) {
+            if (running.input !== requested) {
+                throw new PairingDirectoryError("idempotency_conflict", "This Fork operation has different inputs");
+            }
             return await waitForFork(running.completion, signal);
         }
+        // Every request joined to this Fork waits on it, so one caller leaving does not cancel it for the others.
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(new DOMException("Fork timed out", "TimeoutError")), 120_000);
-        const completion = Promise.resolve().then(async () => {
+        const completion = Promise.resolve().then(async (): Promise<NativeSessionResult> => {
             try {
-                if (prior !== undefined) {
-                    if (prior.attemptJson === null) {
-                        throw unknownOutcome();
-                    }
-                    const source = sourceResult(JSON.parse(prior.attemptJson));
-                    // A completed local receipt survives Relay response loss and daemon restarts.
-                    const ready = await request(
-                        scope,
-
-                        decodeSessionCreationReadCommand(
-                            JSON.stringify({
-                                kind: "session.creation.read",
-                                requestId: crypto.randomUUID(),
-                                operationId,
-                            }),
-                        ),
-                        controller.signal,
-                    );
-                    if (
-                        ready.kind !== "session.ready" ||
-                        ready.target.harness !== input.harness ||
-                        ready.target.sessionId === input.sessionId ||
-                        ready.directory !== source.entry.directory
-                    ) {
-                        throw unknownOutcome();
-                    }
-                    const queried = await request(
-                        scope,
-
-                        decodeSessionQueryCommand(
-                            JSON.stringify({
-                                kind: "session.query",
-                                requestId: crypto.randomUUID(),
-                                targets: [ready.target],
-                            }),
-                        ),
-                        controller.signal,
-                    );
-                    const entry =
-                        queried.kind === "session.queried"
-                            ? queried.entries.find((entry) => sameNativeSession(entry.target, ready.target))
-                            : undefined;
-                    if (entry === undefined) {
-                        throw unknownOutcome();
-                    }
-                    const result = forkResult(
-                        JSON.stringify({
-                            kind: "native.session.result",
-                            action: "fork",
-                            requestId: operationId,
-                            target: ready.target,
-                            ready,
-                            title: entry.title,
-                        }),
-                    );
-                    const receipt = { source, result };
-                    this.#storage.complete(scope.computerId, operationId, JSON.stringify(receipt));
-                    return receipt;
-                }
-                const found = await request(
+                const result = await request(
                     scope,
                     decodeNativeSessionRequest(
                         JSON.stringify({
-                            ...input,
-                            action: "find",
                             kind: "native.session.request",
-                            requestId: crypto.randomUUID(),
+                            action: "fork",
+                            harness: input.harness,
+                            directory: input.directory,
+                            requestId: operationId,
+                            sessionId: input.sessionId,
                         }),
                     ),
                     controller.signal,
                 );
                 if (
-                    found.kind !== "native.session.result" ||
-                    found.action !== "find" ||
-                    found.entry.sessionId !== input.sessionId
+                    result.kind !== "native.session.result" ||
+                    result.action !== "fork" ||
+                    !sameNativeSession(result.ready.target, result.target) ||
+                    result.target.harness !== input.harness ||
+                    result.target.sessionId === input.sessionId
                 ) {
                     throw new PairingDirectoryError(
                         "invalid_native_session_response",
-                        "The native session could not be found",
+                        "The Runtime returned an invalid Fork",
                     );
                 }
-                controller.signal.throwIfAborted();
-                const command = decodeNativeSessionRequest(
-                    JSON.stringify({
-                        kind: "native.session.request",
-                        action: "fork",
-                        harness: input.harness,
-                        directory: found.entry.directory,
-                        requestId: operationId,
-                        sessionId: found.entry.sessionId,
-                    }),
-                );
-                this.#storage.start(scope.computerId, operationId, requestHash, JSON.stringify(found));
-                const result = forkResult(JSON.stringify(await request(scope, command, controller.signal)));
-                if (result.target.harness !== input.harness || result.target.sessionId === input.sessionId) {
-                    throw new PairingDirectoryError("invalid_native_session_response", "The Fork target is invalid");
-                }
-                const receipt = { source: found, result };
-                this.#storage.complete(scope.computerId, operationId, JSON.stringify(receipt));
-                return receipt;
-            } catch (cause) {
-                if (controller.signal.aborted) {
-                    throw controller.signal.reason;
-                }
-                // This refusal is returned before the daemon admits a harness fork. It is safe to retry the same
-                // operation later; transport failures and post-admission errors retain the unknown-outcome receipt.
-                if (
-                    prior === undefined &&
-                    cause instanceof RuntimeOperationFailedError &&
-                    cause.code === "native_session_unsupported"
-                ) {
-                    this.#storage.abandon(scope.computerId, operationId);
-                    throw cause;
-                }
-                if (this.#storage.read(scope.computerId, operationId) === undefined) {
-                    throw cause;
-                }
-                throw unknownOutcome(cause);
+                return result;
             } finally {
                 clearTimeout(timer);
                 this.#running.delete(key);
             }
         });
-        this.#running.set(key, { requestHash, completion });
+        this.#running.set(key, { input: requested, completion });
         this.#waitUntil(
             completion.then(
                 () => undefined,

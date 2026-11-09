@@ -25,6 +25,7 @@ import {
     decodeNativeSessionRequest,
     decodeRuntimeDiagnosticsRequest,
     decodeRuntimePingCommand,
+    decodeSessionArchiveCommand,
     decodeSessionCancelBeforeStartCommand,
     decodeSessionCancelCommand,
     decodeSessionCloseCommand,
@@ -62,6 +63,8 @@ import {
     RUNTIME_PONG_KIND,
     RUNTIME_STATUS_KIND,
     readNativeSessionTarget,
+    SESSION_ARCHIVE_KIND,
+    SESSION_ARCHIVED_KIND,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
     SESSION_CLOSE_KIND,
@@ -536,6 +539,8 @@ export class ChannelActor {
                 return;
             case SESSION_CLOSED_KIND:
                 return;
+            case SESSION_ARCHIVED_KIND:
+                return;
             case SESSION_CLOSE_NOTICE_KIND:
                 return;
             case SESSION_LISTED_KIND:
@@ -613,6 +618,10 @@ export class ChannelActor {
             }
             case SESSION_CLOSE_KIND: {
                 const command = decodeSessionCloseCommand(message);
+                return { message: command, requestId: command.requestId, target: command.target };
+            }
+            case SESSION_ARCHIVE_KIND: {
+                const command = decodeSessionArchiveCommand(message);
                 return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_LIST_KIND: {

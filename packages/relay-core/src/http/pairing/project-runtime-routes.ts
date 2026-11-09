@@ -1,6 +1,7 @@
 import {
     decodeAgentSettingsDiscoverCommand,
     decodeNativeSessionRequest,
+    decodeSessionArchiveCommand,
     decodeSessionCloseCommand,
     decodeSessionCreateCommand,
     decodeSessionCreationReadCommand,
@@ -271,6 +272,28 @@ export function createProjectRuntimeRoutes() {
                 const command = decodeSessionCloseCommand(
                     JSON.stringify({
                         kind: "session.close",
+                        requestId: crypto.randomUUID(),
+                        target: sessionTarget(context),
+                    }),
+                );
+                const result = await context.env.services.runtimePairings.requestControl(
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    bearerToken(context.req.raw),
+                    command,
+                    context.req.raw.signal,
+                );
+                context.header("Cache-Control", "no-store");
+                return context.json(result);
+            },
+        )
+        .post(
+            "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/archive",
+            bodyParser<RelayHttpEnvironment>(),
+            async (context) => {
+                validated(emptySessionRequestSchema, context.req.valid("json"));
+                const command = decodeSessionArchiveCommand(
+                    JSON.stringify({
+                        kind: "session.archive",
                         requestId: crypto.randomUUID(),
                         target: sessionTarget(context),
                     }),

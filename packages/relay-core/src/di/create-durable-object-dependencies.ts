@@ -12,7 +12,6 @@ import { LocalRuntimeRequests } from "../service/channel/local-runtime-requests.
 import { NativeSessionForks } from "../service/channel/native-session-forks.ts";
 import { RuntimeConnectionService } from "../service/channel/runtime-connection-service.ts";
 import { type RuntimeCredentials, type RuntimePeers, RuntimeService } from "../service/channel/runtime-service.ts";
-import { NativeSessionForkStorage } from "../storage/native-session-fork-storage.ts";
 import { RuntimeConnectionStorage } from "../storage/runtime-connection-storage.ts";
 
 function createRuntimeRelayDependencies(cx: {
@@ -167,7 +166,7 @@ export function createDurableObjectDependencies(cx: {
         utilities: cx.utilities,
         services: {
             ...runtime.services,
-            nativeForks: new NativeSessionForks(new NativeSessionForkStorage(cx.doDatabase), cx.utilities.waitUntil),
+            nativeForks: new NativeSessionForks(cx.utilities.waitUntil),
         },
         applications: {
             runtime: createRuntimeRoutes(runtime.services.runtime),
