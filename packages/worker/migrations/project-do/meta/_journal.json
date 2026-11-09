@@ -323,6 +323,13 @@
             "when": 1794213579583,
             "tag": "0057_elite_dexter_bennett",
             "breakpoints": true
+        },
+        {
+            "idx": 58,
+            "version": "6",
+            "when": 1794216235157,
+            "tag": "0058_abnormal_swordsman",
+            "breakpoints": true
         }
     ]
 }

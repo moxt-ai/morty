@@ -1,5 +1,6 @@
 import type { StoreApi } from "zustand";
 import { CopyLinkButton } from "../../components/chat/copy-link-button.tsx";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { dialogBodyStackClassName, dialogSectionTitleClassName } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
@@ -159,8 +160,10 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
     const state = useExternalStore(store, (state) => state.state);
     const choose = useExternalStore(store, (state) => state.choose);
     // The Worker states the duration a link grants; until the first link exists there is nothing to show.
-    const duration = state.kind === "ready" ? state.transfer.accessDuration : state.duration;
-    const showDeviceAccess = duration !== null || state.kind === "loading";
+    const duration =
+        state.kind === "ready" ? state.transfer.accessDuration : state.kind === "initial" ? null : state.duration;
+    const loading = state.kind === "initial" || state.kind === "loading";
+    const showDeviceAccess = duration !== null || loading;
     return (
         <div className={dialogBodyStackClassName}>
             <MortyAlert tone="warning">
@@ -173,6 +176,7 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
                         <IdentitySharingDeviceAccessSkeleton />
                     ) : (
                         <Select
+                            disabled={state.kind === "refused"}
                             label="Device access"
                             onValueChange={(value) => {
                                 const chosen = deviceAccessDurations.find((option) => option === value);
@@ -186,8 +190,18 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
                     )}
                 </div>
             )}
-            {state.kind === "failed" && <p role="alert">Could not create a sharing link.</p>}
-            {state.kind === "loading" ? (
+            {state.kind === "unconfirmed" && (
+                <div className="space-y-2">
+                    <p role="alert">Could not confirm the sharing link. Retry to recover it safely.</p>
+                    <Button onClick={store.getState().retry}>Retry sharing link</Button>
+                </div>
+            )}
+            {state.kind === "refused" && (
+                <p role="alert">
+                    The previous link or your access is no longer available. Close this dialog and share again.
+                </p>
+            )}
+            {loading ? (
                 <IdentitySharingTransferSection loading />
             ) : state.kind === "ready" ? (
                 <IdentitySharingTransferSection

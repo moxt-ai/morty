@@ -3,7 +3,7 @@ import * as v from "valibot";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
 import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import { json } from "../../../infra/http.ts";
-import { bodyParser, optionalBodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
+import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
 import {
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
@@ -18,6 +18,8 @@ import type { ManagementHttpEnvironment } from "./management-http-environment.ts
 
 const shareInput = v.pipe(
     v.object({
+        /** Stable across retries of this exact issuance intent. */
+        operationId: v.pipe(v.string(), v.uuid()),
         /** How long the device the link adds keeps access; a day unless chosen. */
         accessDuration: v.optional(v.picklist(deviceAccessDurations)),
         /** A link this access shared that no one opened yet; it stops working once the new one is issued. */
@@ -121,12 +123,16 @@ export function createAuthenticationRoutes() {
         })
         .post(
             "/identity/transfers",
-            optionalBodyParser<ManagementHttpEnvironment, typeof shareInput>(shareInput),
+            bodyParser<ManagementHttpEnvironment, typeof shareInput>(shareInput),
             async (context) => {
                 const input = context.req.valid("json");
                 const transfer = await context.env.services.authentication.createTransfer(
                     context.get("bearerToken"),
-                    { duration: input.accessDuration ?? defaultDeviceAccessDuration, replaces: input.replaces ?? null },
+                    {
+                        operationId: input.operationId,
+                        duration: input.accessDuration ?? defaultDeviceAccessDuration,
+                        replaces: input.replaces ?? null,
+                    },
                     context.req.raw.signal,
                 );
                 if (transfer === null) {

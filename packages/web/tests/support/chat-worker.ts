@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
+import { createResponseLossProxy } from "../../../platform-test-support/src/response-loss-proxy.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
@@ -12,7 +13,11 @@ import type { Clock } from "../../src/services/time/clock.ts";
  */
 export const dedicatedEnvironmentTimeout = 60_000;
 
-export async function createChatWorkerEnvironment(loseTurnResponses = false, delayExecutionReads = false) {
+export async function createChatWorkerEnvironment(
+    loseTurnResponses = false,
+    delayExecutionReads = false,
+    loseSharingResponses = false,
+) {
     const cloud = await createIdentityFixture({
         listenOnLoopback: true,
         ...(loseTurnResponses ? { loseTurnResponses: true as const } : {}),
@@ -21,7 +26,11 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         workerEntryPoint: resolve(process.cwd(), "../worker/tests/support/credential-storage-worker.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
-    const origin = cloud.origin;
+    const sharingNetwork = loseSharingResponses ? await createResponseLossProxy(cloud.origin) : null;
+    const origin = sharingNetwork?.origin ?? cloud.origin;
+    if (sharingNetwork !== null) {
+        await cloud.changeAppOrigin(origin);
+    }
     const createApplication = async (clock?: Clock) => {
         const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
             method: "POST",
@@ -153,6 +162,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         return {
             botId,
             network: cloud.network,
+            sharingNetwork,
             executionNetwork: cloud.executionNetwork,
             connectAgent: async (
                 agent: ControlledAgent = { id: "claude", label: "Codex" },
@@ -165,7 +175,9 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 return { failure: runtime.failure, computerId: runtime.computerId };
             },
             createTransferUrl: async () => {
-                const response = await request(`computers/${identity.computerId}/identity/transfers`, {});
+                const response = await request(`computers/${identity.computerId}/identity/transfers`, {
+                    operationId: crypto.randomUUID(),
+                });
                 if (response.status !== 201) {
                     throw new Error(`Could not create a transfer link: ${response.status} ${await response.text()}`);
                 }
@@ -187,6 +199,12 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
     };
     return {
         createApplication,
-        close: cloud.close,
+        close: async () => {
+            try {
+                await sharingNetwork?.close();
+            } finally {
+                await cloud.close();
+            }
+        },
     };
 }

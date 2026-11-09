@@ -16,11 +16,12 @@ afterAll(async () => {
 
 test("Given local, browser and recovery credentials, When their operations end access, Then each preserves the other credential kinds", async () => {
     const owner = await fixture.createAnonymousUser();
-    const request = (path: string, token: string, method = "GET") =>
+    const request = (path: string, token: string, method = "GET", body?: object) =>
         fetchPublicApplication(
             new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 method,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             }),
             fixture.environment(),
         );
@@ -28,7 +29,9 @@ test("Given local, browser and recovery credentials, When their operations end a
     expect(recoveryResponse.status).toBe(201);
     const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
     const share = async () => {
-        const response = await request("/identity/transfers", owner.token, "POST");
+        const response = await request("/identity/transfers", owner.token, "POST", {
+            operationId: crypto.randomUUID(),
+        });
         return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
     };
     const redeem = async (code: string) =>
@@ -95,7 +98,9 @@ test("Given a browser that joined through a link, When it asks for recovery acce
         v.object({ botId: v.string() }),
         await (await request(`${project}/management/bot`, owner.token)).json(),
     ).botId;
-    const transfer = await request(`${project}/identity/transfers`, owner.token, "POST");
+    const transfer = await request(`${project}/identity/transfers`, owner.token, "POST", {
+        operationId: crypto.randomUUID(),
+    });
     const code = new URL(v.parse(v.object({ url: v.string() }), await transfer.json()).url).hash.slice(6);
     const redeemed = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
@@ -126,7 +131,9 @@ test("Given a browser that joined through a link, When it asks for recovery acce
         }
     }
     // Shared access still shares onward, as the sharing dialog offers, and still ends itself.
-    expect((await request(`${project}/identity/transfers`, browser, "POST")).status).toBe(201);
+    expect(
+        (await request(`${project}/identity/transfers`, browser, "POST", { operationId: crypto.randomUUID() })).status,
+    ).toBe(201);
     expect((await request(`${project}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
     expect((await request(`${project}/session`, browser)).status).toBe(401);
 });
@@ -143,7 +150,8 @@ test("Given browser access granted through a link, When the access term its link
     const transfer = await fetchPublicApplication(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
             method: "POST",
-            headers: { authorization: `Bearer ${owner.token}` },
+            headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ operationId: crypto.randomUUID() }),
         }),
         fixture.environment(),
     );
@@ -178,7 +186,8 @@ test("Given browser access granted through a link, When that browser shares a ne
         const response = await fetchPublicApplication(
             new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
                 method: "POST",
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                body: JSON.stringify({ operationId: crypto.randomUUID() }),
             }),
             fixture.environment(),
         );

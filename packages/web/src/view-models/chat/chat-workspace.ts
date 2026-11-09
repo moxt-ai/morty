@@ -275,6 +275,7 @@ export function createChatWorkspace(options: {
     const sidebar: ChatWorkspaceSidebar = {
         dialogs: createSidebarDialogs({
             clock: options.clock,
+            signal: () => operationsLifetime.signal,
             botId,
             requests,
             runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,

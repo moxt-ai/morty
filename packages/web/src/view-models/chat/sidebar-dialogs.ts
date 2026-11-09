@@ -52,6 +52,7 @@ const MOBILE_SHEET_DISMISS_LOCK_MILLISECONDS = 450;
 
 export function createSidebarDialogs(options: {
     readonly clock: Clock;
+    readonly signal: () => AbortSignal;
     readonly botId: string;
     readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">;
     /** The Runtime the page follows. */
@@ -126,7 +127,9 @@ export function createSidebarDialogs(options: {
             if (get().sharing !== null) {
                 return;
             }
-            set({ sharing: createIdentitySharingStore(createTransfer) });
+            const sharing = createIdentitySharingStore(createTransfer);
+            set({ sharing });
+            sharing.getState().start(options.signal());
         },
         closeSharing: () => {
             const store = get().sharing;

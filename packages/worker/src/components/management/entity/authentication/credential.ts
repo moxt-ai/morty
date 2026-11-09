@@ -70,6 +70,19 @@ export interface SharedLinkTerms {
     readonly accessLimitedBySharer: boolean;
 }
 
+/** Reconstructs the committed terms; retrying never moves either deadline forward. */
+export function issuedLinkTerms(
+    duration: DeviceAccessDuration,
+    record: { readonly createdAt: number; readonly expiresAt: number; readonly accessExpiresAt: number },
+): SharedLinkTerms {
+    return {
+        accessDuration: duration,
+        expiresAt: record.expiresAt,
+        accessExpiresAt: record.accessExpiresAt,
+        accessLimitedBySharer: record.accessExpiresAt < record.createdAt + deviceAccessLifetimes[duration],
+    };
+}
+
 /**
  * A link adds one device within ten minutes, and that device keeps access for the chosen duration from the link's
  * creation. Neither outlasts the access that shares it, so a device cannot extend its own access by adding another.

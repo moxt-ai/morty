@@ -825,7 +825,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
             })
         ).status,
     ).toBe(202);
-    const shared = await fixture.request("identity/transfers", {});
+    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
     const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     const redeemed = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
@@ -908,7 +908,7 @@ test("Given two browsers joined through links, When one disconnects the other br
         ).status,
     ).toBe(202);
     const share = async () => {
-        const shared = await fixture.request("identity/transfers", {});
+        const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
         return new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     };
     const redeem = async (code: string) =>
@@ -970,7 +970,7 @@ test("Given a browser connecting from a city, When it opens a link through the b
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
-    const shared = await fixture.request("identity/transfers", {});
+    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
     const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
         headers: {

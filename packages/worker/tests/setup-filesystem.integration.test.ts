@@ -1205,14 +1205,17 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         const other = await fixture.createAnonymousUser();
         const configuration = savedSetupState(fixture.origin, owner);
         await writeFile(join(configurationDirectory, "config.json"), configuration, { mode: 0o600 });
-        const request = (computerId: string, path: string, token: string, method = "GET") =>
+        const request = (computerId: string, path: string, token: string, method = "GET", body?: object) =>
             fetch(`${fixture.origin}/morty/api/computers/${computerId}${path}`, {
                 method,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 signal,
             });
         const share = async (computerId: string, token: string) => {
-            const response = await request(computerId, "/identity/transfers", token, "POST");
+            const response = await request(computerId, "/identity/transfers", token, "POST", {
+                operationId: crypto.randomUUID(),
+            });
             expect(response.status).toBe(201);
             return v.parse(v.object({ url: v.string() }), await response.json()).url;
         };
@@ -1270,7 +1273,13 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         }
         for (const token of [...tokens, recoveryToken]) {
             expect((await request(owner.computerId, "/session", token)).status).toBe(401);
-            expect((await request(owner.computerId, "/identity/transfers", token, "POST")).status).toBe(401);
+            expect(
+                (
+                    await request(owner.computerId, "/identity/transfers", token, "POST", {
+                        operationId: crypto.randomUUID(),
+                    })
+                ).status,
+            ).toBe(401);
         }
         expect(await readFile(join(configurationDirectory, "config.json"), "utf8")).toBe(configuration);
         expect((await request(owner.computerId, "/session", owner.token)).status).toBe(200);
@@ -1297,10 +1306,11 @@ test("Given setup replaced the Project but stopped before ending the previous id
     const signal = AbortSignal.timeout(30000);
     try {
         const previous = await fixture.createAnonymousUser();
-        const request = (computerId: string, path: string, token: string, method = "GET") =>
+        const request = (computerId: string, path: string, token: string, method = "GET", body?: object) =>
             fetch(`${fixture.origin}/morty/api/computers/${computerId}${path}`, {
                 method,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 signal,
             });
         const replaced = await request(previous.computerId, "/management/computer/replacement", previous.token, "POST");
@@ -1331,7 +1341,13 @@ test("Given setup replaced the Project but stopped before ending the previous id
         expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: current.computerId });
         expect(JSON.stringify(events)).not.toContain(previous.token);
         expect((await request(previous.computerId, "/session", previous.token)).status).toBe(401);
-        expect((await request(previous.computerId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
+        expect(
+            (
+                await request(previous.computerId, "/identity/transfers", previous.token, "POST", {
+                    operationId: crypto.randomUUID(),
+                })
+            ).status,
+        ).toBe(401);
         expect((await request(current.computerId, "/session", current.token)).status).toBe(200);
         expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
             JSON.parse(

@@ -25,3 +25,32 @@ export function createProjectCredential(kind: v.InferOutput<typeof credentialKin
         .replace(/=+$/u, "");
     return `${kind}.${v.parse(computerId, requestedComputerId)}.${value}`;
 }
+
+/** A sharing operation recovers its secret without storing a redeemable credential in the database. */
+export async function sharingOperationCredential(
+    requestedComputerId: string,
+    issuerToken: string,
+    operationId: string,
+    signal: AbortSignal,
+): Promise<string> {
+    signal.throwIfAborted();
+    const target = v.parse(computerId, requestedComputerId);
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(issuerToken),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+    );
+    const signed = await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(JSON.stringify(["morty-sharing-operation-v1", target, operationId])),
+    );
+    signal.throwIfAborted();
+    const value = btoa(String.fromCharCode(...new Uint8Array(signed)))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replace(/=+$/u, "");
+    return `morty_transfer_v1.${target}.${value}`;
+}

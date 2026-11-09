@@ -7,6 +7,7 @@ import {
     type CredentialOperation,
     type DeviceAccessDuration,
     deviceAccess,
+    issuedLinkTerms,
     mayPerform,
     type PermittedCredential,
     sharedLinkTerms,
@@ -15,8 +16,9 @@ import type { Session } from "../entity/authentication/session.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { PlatformProjectError } from "../entity/platform-project.ts";
+import { sharingOperationCredential } from "../entity/project-credential.ts";
 import type { IdentityStorage, IdentityTransfer, JoiningDevice } from "../storage/identity-storage.ts";
-import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
+import { type AnonymousIdentity, digest } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
     | {
@@ -242,7 +244,11 @@ export class AuthenticationService {
     /** Shares this access through a link whose device keeps access for `duration`, replacing an unopened link. */
     readonly createTransfer = async (
         token: string | undefined,
-        request: { readonly duration: DeviceAccessDuration; readonly replaces: string | null },
+        request: {
+            readonly operationId: string;
+            readonly duration: DeviceAccessDuration;
+            readonly replaces: string | null;
+        },
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         const access = await this.authorize(token, "shareAccess", signal);
@@ -250,14 +256,28 @@ export class AuthenticationService {
             return null;
         }
         const now = Date.now();
-        return await this.identities.createTransfer(
+        if (this.#computerId === null) {
+            throw new Error("Sharing needs a computer identity");
+        }
+        const code = await sharingOperationCredential(this.#computerId, access.token, request.operationId, signal);
+        const requestHash = await digest(JSON.stringify([request.duration, request.replaces]));
+        const issued = await this.identities.createTransfer(
             access.credential.userId,
             access.token,
             now,
             sharedLinkTerms(access.credential, now, request.duration),
             request.replaces,
+            { code, requestHash },
             signal,
         );
+        if (issued.kind === "conflict") {
+            throw new ManagementError(
+                "TRANSFER_CONFLICT",
+                "This sharing operation changed or its previous link is no longer available. Open a new sharing dialog.",
+                409,
+            );
+        }
+        return { code, ...issuedLinkTerms(request.duration, issued) };
     };
 
     readonly createRecoveryToken = async (
