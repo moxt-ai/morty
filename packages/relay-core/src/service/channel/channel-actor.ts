@@ -179,7 +179,7 @@ export class ChannelActor {
                 reason,
                 skippedCount: this.#skippedCount,
                 runtimeId: this.#runtimeId,
-                accountId: this.#accountId,
+                computerId: this.#computerId,
             },
             "Relay skipped unsupported input",
         );
@@ -187,23 +187,23 @@ export class ChannelActor {
         this.#skippedCount = 0;
     };
     readonly #peers: ChannelPeers;
-    readonly #accountId: string;
+    readonly #computerId: string;
     readonly #runtimeId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
-        readonly config: { readonly accountId: string; readonly runtimeId: string };
+        readonly config: { readonly computerId: string; readonly runtimeId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
-        const { accountId, runtimeId } = cx.config;
+        const { computerId, runtimeId } = cx.config;
         const { peers, notifications } = cx.gateways;
         this.#peers = peers;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
         this.#runtimeId = runtimeId;
-        this.#liveEvents = new SessionLiveEventRelay(accountId, runtimeId, peers, notifications);
+        this.#liveEvents = new SessionLiveEventRelay(computerId, runtimeId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {
@@ -289,7 +289,7 @@ export class ChannelActor {
             if (kind === SESSION_INFO_UPDATED_KIND) {
                 this.broadcast(
                     this.#peers.hosts(),
-                    JSON.stringify({ ...JSON.parse(wire), accountId: this.#accountId }),
+                    JSON.stringify({ ...JSON.parse(wire), computerId: this.#computerId }),
                     message.sessionId,
                 );
                 return;

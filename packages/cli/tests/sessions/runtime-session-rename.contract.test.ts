@@ -14,7 +14,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             },
             cancellation.signal,
         );
-        const runtime = await platform.connectAgent(project.accountId);
+        const runtime = await platform.connectAgent(project.computerId);
         const sessionId = `session-${crypto.randomUUID()}`;
         await runtime.client.sessions.create(
             {

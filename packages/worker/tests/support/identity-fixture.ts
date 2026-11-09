@@ -21,8 +21,8 @@ import { startTestPlatform } from "./test-platform.ts";
 export const AUTH_TIME = new Date("2026-09-07T00:00:00.000Z");
 export const APP_ORIGIN = "http://localhost:5173";
 
-export function accountRequest(token?: string, accountId?: string): Request {
-    return new Request(`${APP_ORIGIN}/morty/api${accountId === undefined ? "" : `/accounts/${accountId}`}/session`, {
+export function accountRequest(token?: string, computerId?: string): Request {
+    return new Request(`${APP_ORIGIN}/morty/api${computerId === undefined ? "" : `/computers/${computerId}`}/session`, {
         headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
     });
 }
@@ -156,14 +156,14 @@ async function startIdentityFixture(
         const { baseConfiguration, cloudflare, ready, runtimeOptions } = await startChatWorker();
         try {
             let cloudBindings = await cloudflare.getBindings();
-            let accountObjects = await cloudflare.getDurableObjectNamespace("CHAT_ACCOUNTS");
+            let computerObjects = await cloudflare.getDurableObjectNamespace("CHAT_COMPUTERS");
             const chatProjects = {
-                idFromName: (name: string) => accountObjects.idFromName(name),
+                idFromName: (name: string) => computerObjects.idFromName(name),
                 get: (
-                    id: ReturnType<typeof accountObjects.idFromName>,
-                    options?: Parameters<typeof accountObjects.get>[1],
+                    id: ReturnType<typeof computerObjects.idFromName>,
+                    options?: Parameters<typeof computerObjects.get>[1],
                 ) => {
-                    const object = accountObjects.get(id, options);
+                    const object = computerObjects.get(id, options);
                     return {
                         fetch: async (request: Request) => {
                             const response = await object.fetch(request.url, {
@@ -187,7 +187,7 @@ async function startIdentityFixture(
                 ...baseConfiguration,
                 APP_ORIGIN: appOrigin,
                 ASSETS: { fetch: () => Promise.resolve(new Response()) },
-                CHAT_ACCOUNTS: chatProjects,
+                CHAT_COMPUTERS: chatProjects,
             });
             /** Restarts the Worker with the changed deployment settings, keeping its storage. */
             const reconfigure = async () => {
@@ -195,7 +195,7 @@ async function startIdentityFixture(
                     convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
                 );
                 cloudBindings = await cloudflare.getBindings();
-                accountObjects = await cloudflare.getDurableObjectNamespace("CHAT_ACCOUNTS");
+                computerObjects = await cloudflare.getDurableObjectNamespace("CHAT_COMPUTERS");
             };
             const createAnonymousUser = async () => {
                 const response = await worker.fetch(
@@ -208,7 +208,7 @@ async function startIdentityFixture(
                 );
                 expect(response.status).toBe(201);
                 return v.parse(
-                    v.object({ token: v.string(), userId: v.string(), accountId: v.string() }),
+                    v.object({ token: v.string(), userId: v.string(), computerId: v.string() }),
                     await response.json(),
                 );
             };

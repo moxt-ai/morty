@@ -3,7 +3,7 @@ import type {
     ProjectPermission,
     RuntimeAccessContext,
 } from "../../entity/authentication/project-authentication.ts";
-import type { AccountScope } from "../../entity/do/session.ts";
+import type { ComputerScope } from "../../entity/do/session.ts";
 import type {
     AgentDescriptor,
     ChannelDescriptor,
@@ -33,26 +33,26 @@ export interface PairingOperations {
     >;
     readonly authorizeHost: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
     readonly authorizeProjectRuntimeHost: (
-        accountId: string,
+        computerId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<ProjectCredentialHostAccess>;
     readonly authorizeProject: (
-        accountId: string,
+        computerId: string,
         token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<ProjectAccessContext>;
     readonly authorizeProjectRuntime: (
-        accountId: string,
+        computerId: string,
         runtimeId: string,
         token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
-    readonly authorizeAccountScopeRuntime: (
-        scope: AccountScope,
+    readonly authorizeComputerScopeRuntime: (
+        scope: ComputerScope,
         runtimeId: string,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
@@ -62,7 +62,7 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<CreatedChannelAccessGrant>;
     readonly createBrowserCredential: (
-        accountId: string,
+        computerId: string,
         token: string,
         lifetimeMilliseconds: number,
         signal: AbortSignal,
@@ -71,7 +71,7 @@ export interface PairingOperations {
     // the original identity, secrets, and deadline, including after expiration
     // or revocation. A failed response may follow a commit; retry the same key.
     readonly createProjectRuntimePairing: (
-        accountId: string,
+        computerId: string,
         token: string,
         idempotencyKey: string,
         signal: AbortSignal,
@@ -82,13 +82,13 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<readonly LinkedChannelDevice[]>;
     readonly listProjectRuntimes: (
-        accountId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<readonly ChannelDescriptor[]>;
     /** Whether the Project's Runtime was revoked; false for one the Project never had. */
     readonly isProjectRuntimeRevoked: (
-        accountId: string,
+        computerId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,
@@ -97,7 +97,7 @@ export interface PairingOperations {
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that
     // order. Passing the deadline never expires an already registered Runtime.
     readonly readProjectRuntimePairing: (
-        accountId: string,
+        computerId: string,
         pairingId: string,
         token: string,
         signal: AbortSignal,
@@ -126,7 +126,7 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<ChannelHostCredential>;
     readonly revokeBrowserCredential: (
-        accountId: string,
+        computerId: string,
         credentialId: string,
         token: string,
         signal: AbortSignal,
@@ -135,7 +135,7 @@ export interface PairingOperations {
     // revocation timestamp. Retrying after a lost response or disconnect failure
     // is safe; an unclaimed identity can also be cancelled through this command.
     readonly revokeProjectRuntime: (
-        accountId: string,
+        computerId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,

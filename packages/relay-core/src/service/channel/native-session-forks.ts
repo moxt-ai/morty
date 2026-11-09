@@ -6,7 +6,7 @@ import {
     decodeSessionRestoreCommand,
     RUNTIME_WORKSPACE_BINDING_ID,
 } from "@morty-build/client/protocol";
-import { type AccountScope, RuntimeOperationFailedError } from "../../entity/do/session.ts";
+import { type ComputerScope, RuntimeOperationFailedError } from "../../entity/do/session.ts";
 import { hashSecret, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
 import type { NativeSessionForkStorage } from "../../storage/native-session-fork-storage.ts";
@@ -63,11 +63,11 @@ export class NativeSessionForks {
     }
 
     async #recover(
-        scope: AccountScope,
+        scope: ComputerScope,
         runtimeId: string,
         input: ForkMortyNativeSessionRequest,
         attemptJson: string,
-        request: SessionRuntimeOperations["requestAccountScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) {
         try {
@@ -125,10 +125,10 @@ export class NativeSessionForks {
 
     /** Whether a Runtime that has finished handling a Fork command holds no Session for its target. */
     async #targetAbsent(
-        scope: AccountScope,
+        scope: ComputerScope,
         runtimeId: string,
         targetSessionId: string,
-        request: SessionRuntimeOperations["requestAccountScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) {
         try {
@@ -155,19 +155,19 @@ export class NativeSessionForks {
     }
 
     readonly fork = async (
-        scope: AccountScope,
+        scope: ComputerScope,
         runtimeId: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
-        request: SessionRuntimeOperations["requestAccountScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) => {
         const requestHash = await hashSecret(
             JSON.stringify([input.agentId, input.nativeSessionId, input.directoryId, input.additionalDirectoryIds]),
         );
         signal.throwIfAborted();
-        const key = JSON.stringify([scope.accountId, operationId]);
-        const prior = this.#storage.read(scope.accountId, operationId);
+        const key = JSON.stringify([scope.computerId, operationId]);
+        const prior = this.#storage.read(scope.computerId, operationId);
         const running = this.#running.get(key);
         if (
             (prior !== undefined && prior.requestHash !== requestHash) ||
@@ -199,7 +199,7 @@ export class NativeSessionForks {
                         request,
                         controller.signal,
                     );
-                    this.#storage.complete(scope.accountId, operationId, JSON.stringify(receipt));
+                    this.#storage.complete(scope.computerId, operationId, JSON.stringify(receipt));
                     return receipt;
                 }
                 // Resolve and authorize the native identity before recording any possible side effect.
@@ -249,7 +249,7 @@ export class NativeSessionForks {
                     throw new PairingDirectoryError("invalid_request", "The Fork request is invalid");
                 }
                 this.#storage.start(
-                    scope.accountId,
+                    scope.computerId,
                     operationId,
                     requestHash,
                     JSON.stringify({
@@ -268,7 +268,7 @@ export class NativeSessionForks {
                         );
                     }
                     const receipt = { source: found, result };
-                    this.#storage.complete(scope.accountId, operationId, JSON.stringify(receipt));
+                    this.#storage.complete(scope.computerId, operationId, JSON.stringify(receipt));
                     return receipt;
                 } catch (cause) {
                     // The Runtime's own failure reply is final only without a target: it can still report an abort
@@ -283,7 +283,7 @@ export class NativeSessionForks {
                             controller.signal,
                         ))
                     ) {
-                        this.#storage.abandon(scope.accountId, operationId);
+                        this.#storage.abandon(scope.computerId, operationId);
                         throw cause;
                     }
                     throw unknownOutcome(cause);

@@ -57,7 +57,7 @@ export type ChatScope = {
     readonly userId: string;
     /** When the requesting access ends, if it does; the Session credentials it obtains end no later. */
     readonly accessExpiresAt: number | null;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly botId: string;
     readonly signal: AbortSignal;
 };
@@ -130,7 +130,7 @@ class OwnedManagedSession {
         scope: ChatScope,
         sessionId: string,
     ): Promise<OwnedManagedSession | null> =>
-        (await sessions.ownsSession(scope.accountId, scope.userId, scope.botId, sessionId, scope.signal))
+        (await sessions.ownsSession(scope.computerId, scope.userId, scope.botId, sessionId, scope.signal))
             ? new OwnedManagedSession(scope, sessionId)
             : null;
 }
@@ -160,13 +160,13 @@ export class ChatService {
 
     readonly authorize = async (
         requester: { readonly userId: string; readonly accessExpiresAt: number | null },
-        accountId: string,
+        computerId: string,
         botId: string,
         signal: AbortSignal,
     ): Promise<ChatScope> => {
         const { userId, accessExpiresAt } = requester;
         const [ownsProject, ownsBot] = await Promise.all([
-            this.#identities.ownsProject(userId, accountId, signal),
+            this.#identities.ownsProject(userId, computerId, signal),
             this.#managedBots.ownsBot(userId, botId, signal),
         ]);
         if (!ownsProject) {
@@ -175,26 +175,26 @@ export class ChatService {
         if (!ownsBot) {
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
-        return { userId, accessExpiresAt, accountId, botId, signal };
+        return { userId, accessExpiresAt, computerId, botId, signal };
     };
 
     readonly runtimeConfiguration = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
         return {
-            runtime: await this.#platform.getChatRuntimeAgents(scope.accountId, runtime.runtimeId, scope.signal),
+            runtime: await this.#platform.getChatRuntimeAgents(scope.computerId, runtime.runtimeId, scope.signal),
         };
     };
 
     readonly daemonDiagnostics = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
-        return await this.#platform.readRuntimeDiagnostics(scope.accountId, runtime.runtimeId, scope.signal);
+        return await this.#platform.readRuntimeDiagnostics(scope.computerId, runtime.runtimeId, scope.signal);
     };
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
         const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
-            this.#platform.measureRelayLatency(scope.accountId, scope.signal),
-            this.#platform.measureRuntimeLatency(scope.accountId, runtime.runtimeId, scope.signal),
+            this.#platform.measureRelayLatency(scope.computerId, scope.signal),
+            this.#platform.measureRuntimeLatency(scope.computerId, runtime.runtimeId, scope.signal),
         ]);
         return {
             relayOrigin: this.#platform.configuration().origin,
@@ -208,7 +208,7 @@ export class ChatService {
         if (bot.configuration !== null && !(await this.#runtimeRevoked(scope, bot.configuration.runtimeId))) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine already has a configured Runtime.", 409);
         }
-        return { runtimes: await this.#platform.chatRuntimes(scope.accountId, scope.signal) };
+        return { runtimes: await this.#platform.chatRuntimes(scope.computerId, scope.signal) };
     };
 
     readonly listDirectory = async (scope: ChatScope, directoryId: string) => {
@@ -217,7 +217,7 @@ export class ChatService {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
         const listing = await this.#platform.listChatDirectory(
-            scope.accountId,
+            scope.computerId,
             bot.configuration.runtimeId,
             directoryId,
             scope.signal,
@@ -235,7 +235,7 @@ export class ChatService {
 
     readonly #runtimeRevoked = async (scope: ChatScope, runtimeId: string): Promise<boolean> => {
         try {
-            await this.#platform.getChatRuntimeAgents(scope.accountId, runtimeId, scope.signal);
+            await this.#platform.getChatRuntimeAgents(scope.computerId, runtimeId, scope.signal);
             return false;
         } catch (cause) {
             if (cause instanceof PlatformProjectError && cause.code === "RUNTIME_REVOKED") {
@@ -292,7 +292,7 @@ export class ChatService {
     };
 
     readonly #requireRuntimeAgent = async (scope: ChatScope, runtimeId: string, agentRef: string) => {
-        const runtime = await this.#platform.getChatRuntimeAgents(scope.accountId, runtimeId, scope.signal);
+        const runtime = await this.#platform.getChatRuntimeAgents(scope.computerId, runtimeId, scope.signal);
         if (!runtime.agents.some((agent) => agent.agentRef === agentRef)) {
             throw new PlatformProjectError(
                 "AGENT_UNAVAILABLE",
@@ -304,12 +304,12 @@ export class ChatService {
 
     readonly managedSessions = async (scope: ChatScope) => {
         const runtime = await this.localRuntime(scope);
-        const owned = await this.#chatSessions.list(scope.accountId, scope.userId, scope.botId, scope.signal);
+        const owned = await this.#chatSessions.list(scope.computerId, scope.userId, scope.botId, scope.signal);
         if (owned.length === 0) {
             return { sessions: [] };
         }
         const metadata = await this.#platform.queryChatSessions(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             owned.map((session) => session.id),
             scope.signal,
@@ -352,7 +352,7 @@ export class ChatService {
     ): Promise<void> => {
         const runtime = await this.localRuntime(scope);
         scope.signal.throwIfAborted();
-        const socket = await this.#platform.openChatRuntimeHost(scope.accountId, runtime.runtimeId, signal);
+        const socket = await this.#platform.openChatRuntimeHost(scope.computerId, runtime.runtimeId, signal);
         // The authorization deadline bounds opening the stream, not the reads made while it runs.
         const following: ChatScope = { ...scope, signal };
         await new Promise<void>((_resolve, reject) => {
@@ -380,7 +380,7 @@ export class ChatService {
             const publishOwned = (event: SessionStatusChangedEvent | SessionCloseNoticeEvent): void =>
                 inOrder(async () => {
                     const owned = await this.#chatSessions.ownsSession(
-                        scope.accountId,
+                        scope.computerId,
                         scope.userId,
                         scope.botId,
                         event.sessionId,
@@ -473,7 +473,7 @@ export class ChatService {
         }
         await this.#requireRuntimeAgent(scope, bot.configuration.runtimeId, draft.agentRef);
         const discovered = await this.#platform.discoverChatAgentSettings(
-            scope.accountId,
+            scope.computerId,
             { runtimeId: bot.configuration.runtimeId, ...draft },
             scope.signal,
         );
@@ -512,20 +512,20 @@ export class ChatService {
         // Serialize creation and initial configuration for the same Session.
         const ready = await this.#runSessionOperation(session.sessionId, scope.signal, async () => {
             await this.#chatSessions.save(
-                scope.accountId,
+                scope.computerId,
                 scope.userId,
                 scope.botId,
                 { id: session.sessionId },
                 scope.signal,
             );
             return await this.#platform.createChatSession(
-                scope.accountId,
+                scope.computerId,
                 { ...session, configurations: input.configurations },
                 scope.signal,
             );
         });
         return await this.#platform.createdChatSessionAccess(
-            scope.accountId,
+            scope.computerId,
             session,
             ready,
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
@@ -535,13 +535,13 @@ export class ChatService {
 
     readonly #reopenManagedSession = async ({ scope, sessionId }: OwnedManagedSession, runtimeId: string) => {
         const metadata = (
-            await this.#platform.queryChatSessions(scope.accountId, runtimeId, [sessionId], scope.signal)
+            await this.#platform.queryChatSessions(scope.computerId, runtimeId, [sessionId], scope.signal)
         ).find((session) => session.sessionId === sessionId);
         if (metadata === undefined) {
             throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
         return await this.#platform.openChatSession(
-            scope.accountId,
+            scope.computerId,
             {
                 sessionId,
                 runtimeId,
@@ -561,7 +561,7 @@ export class ChatService {
         }
         const runtime = await this.localRuntime(scope);
         return await this.#platform.nativeSessionAccess(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             session.sessionId,
             sessionCredentialLifetime(RENEWED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
@@ -574,7 +574,7 @@ export class ChatService {
         return await this.#withOwnedManagedSession(scope, sessionId, notInRecentSessions, async (session) => {
             const runtime = await this.localRuntime(scope);
             return {
-                ...(await this.#platform.readChatSession(scope.accountId, runtime, session.sessionId, scope.signal)),
+                ...(await this.#platform.readChatSession(scope.computerId, runtime, session.sessionId, scope.signal)),
                 instructions: bot.instructions,
             };
         });
@@ -590,7 +590,7 @@ export class ChatService {
                 let close: ManagedSessionArchival["close"] = "unconfirmed";
                 try {
                     await this.#platform.closeChatSession(
-                        scope.accountId,
+                        scope.computerId,
                         runtime.runtimeId,
                         session.sessionId,
                         scope.signal,
@@ -601,7 +601,7 @@ export class ChatService {
                 }
                 // Archival stays available to an offline Runtime, but does not prove its process stopped.
                 await this.#chatSessions.archive(
-                    scope.accountId,
+                    scope.computerId,
                     scope.userId,
                     scope.botId,
                     session.sessionId,
@@ -613,7 +613,7 @@ export class ChatService {
 
     readonly nativeSessions = async (scope: ChatScope, requestedRuntimeId: string, input: NativeListInput) => {
         const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
-        const result = await this.#platform.nativeSessions(scope.accountId, runtime.runtimeId, input, scope.signal);
+        const result = await this.#platform.nativeSessions(scope.computerId, runtime.runtimeId, input, scope.signal);
         if (result.action !== "list") {
             throw new PlatformProjectError(
                 "PLATFORM_INVALID_RESPONSE",
@@ -630,13 +630,17 @@ export class ChatService {
         const runtime =
             bot.configuration === null
                 ? undefined
-                : await this.#platform.getChatRuntimeAgents(scope.accountId, bot.configuration.runtimeId, scope.signal);
+                : await this.#platform.getChatRuntimeAgents(
+                      scope.computerId,
+                      bot.configuration.runtimeId,
+                      scope.signal,
+                  );
         const agent = runtime?.agents.find((item) => item.agentRef === harness);
         if (runtime === undefined || agent === undefined) {
             throw new PlatformProjectError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
         }
         const found = await this.#platform.findNativeSessionByNativeSessionId(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             {
                 agentId: agent.agentRef,
@@ -648,7 +652,7 @@ export class ChatService {
         );
         const entry = found.entry;
         const result = await this.#platform.nativeSessions(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             {
                 action: "import",
@@ -665,7 +669,7 @@ export class ChatService {
         }
         const stored = { agentRef: agent.agentRef, result, entry, instructions: bot.instructions };
         await this.#chatSessions.save(
-            scope.accountId,
+            scope.computerId,
             scope.userId,
             scope.botId,
             { id: result.ready.sessionId },
@@ -677,7 +681,7 @@ export class ChatService {
     readonly previewNativeSession = async (scope: ChatScope, requestedRuntimeId: string, input: NativePreviewInput) => {
         const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
         const events = await this.#platform.previewRuntimeNativeEvents(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             input.nativeSessionId,
             {
@@ -699,7 +703,7 @@ export class ChatService {
     ) => {
         const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
         const result = await this.#platform.nativeSessions(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             { ...input, entryId, action: "import" },
             scope.signal,
@@ -712,7 +716,7 @@ export class ChatService {
             );
         }
         await this.#chatSessions.save(
-            scope.accountId,
+            scope.computerId,
             scope.userId,
             scope.botId,
             { id: result.ready.sessionId },
@@ -731,14 +735,14 @@ export class ChatService {
         // Operation identity belongs to this user and Machine, even when they share a Platform Project.
         const scopedOperationId = await chatSessionId(scope.botId, `${scope.userId}\u0000fork\u0000${operationId}`);
         const receipt = await this.#platform.forkNativeSession(
-            scope.accountId,
+            scope.computerId,
             runtime.runtimeId,
             scopedOperationId,
             input,
             scope.signal,
         );
         await this.#chatSessions.save(
-            scope.accountId,
+            scope.computerId,
             scope.userId,
             scope.botId,
             { id: receipt.result.ready.sessionId },
@@ -763,7 +767,7 @@ export class ChatService {
         }
         await this.#requireRuntimeAgent(scope, input.runtimeId, input.agentRef);
         await this.#platform.discoverChatAgentSettings(
-            scope.accountId,
+            scope.computerId,
             { ...input, workspaceRef: "default" },
             scope.signal,
         );

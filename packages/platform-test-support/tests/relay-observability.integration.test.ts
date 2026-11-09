@@ -44,7 +44,7 @@ beforeAll(async () => {
             compatibilityDate: "2026-09-03",
             durableObjects: {
                 RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                ACCOUNT_RELAY: { className: "AccountDO", useSQLite: true },
+                COMPUTER_RELAY: { className: "ComputerDO", useSQLite: true },
                 UNAVAILABLE_PROJECT: { className: "UnavailableProject", useSQLite: true },
             },
             d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
@@ -132,13 +132,13 @@ async function provisionProject() {
         },
         201,
     );
-    return { ...app, accountId: text(project, "accountId") };
+    return { ...app, computerId: text(project, "computerId") };
 }
 
 async function pairRuntime() {
-    const { accountId, appCredential } = await provisionProject();
+    const { computerId, appCredential } = await provisionProject();
     const pairing = await api(
-        `/v1/accounts/${accountId}/runtime-pairings`,
+        `/v1/computers/${computerId}/runtime-pairings`,
         {
             method: "POST",
             headers: { authorization: `Bearer ${appCredential}` },
@@ -159,17 +159,17 @@ async function pairRuntime() {
         },
         200,
     );
-    return { accountId, pairing, claimed };
+    return { computerId, pairing, claimed };
 }
 
 let loggingRuntime:
-    | Promise<{ readonly accountId: string; readonly runtimeId: string; readonly channelId: string }>
+    | Promise<{ readonly computerId: string; readonly runtimeId: string; readonly channelId: string }>
     | undefined;
 
 /** Internal Runtime Relay scenarios enter after public pairing registered the Runtime in an active Project. */
 function registeredLoggingRuntime() {
-    loggingRuntime ??= pairRuntime().then(({ accountId, pairing, claimed }) => ({
-        accountId,
+    loggingRuntime ??= pairRuntime().then(({ computerId, pairing, claimed }) => ({
+        computerId,
         runtimeId: text(claimed, "runtimeId"),
         channelId: text(pairing, "channelId"),
     }));
@@ -236,7 +236,7 @@ it.each(["primitive", "object", "circular", "deep", "long", "secrets", "getter"]
 
 // @no-uc: Technical regression; a failing DO hop must identify its target rather than only its caller.
 it("identifies the failing Runtime Durable Object through the public pairing and connect APIs", async () => {
-    const { accountId, pairing, claimed } = await pairRuntime();
+    const { computerId, pairing, claimed } = await pairRuntime();
     const start = logs.length;
     const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/runtimes/connect", {
         headers: {
@@ -258,8 +258,8 @@ it("identifies the failing Runtime Durable Object through the public pairing and
             durableObjectId: expect.any(String),
             runtimeId: text(claimed, "runtimeId"),
             channelId: text(pairing, "channelId"),
-            accountId,
-            path: `/accounts/${accountId}/daemon`,
+            computerId,
+            path: `/computers/${computerId}/daemon`,
             cfRay: "runtime-failure-ray",
             err: expect.objectContaining({ message: expect.stringContaining("Runtime DO overloaded") }),
         }),
@@ -269,9 +269,9 @@ it("identifies the failing Runtime Durable Object through the public pairing and
 // @no-uc: Technical regression; Project routing failures must identify the target DO and retain overload details.
 it("identifies a Project Relay overload through the public HTTP API", async () => {
     const start = logs.length;
-    const accountId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
+    const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
     await api(
-        `/v1/accounts/${accountId}/runtimes`,
+        `/v1/computers/${computerId}/runtimes`,
         { headers: { "x-test-project-failure": "1", "cf-ray": "project-failure-ray" } },
         500,
     );
@@ -281,9 +281,9 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
     expect(logs.slice(start)).toContainEqual(
         expect.objectContaining({
             event: "project_relay_request_failed",
-            durableObjectClass: "AccountDO",
+            durableObjectClass: "ComputerDO",
             durableObjectId: expect.any(String),
-            accountId,
+            computerId,
             cfRay: "project-failure-ray",
             err: expect.objectContaining({
                 overloaded: true,
@@ -316,9 +316,9 @@ it("identifies a Project database overload through the public project creation A
     const log = logs.slice(start).find((log) => log["event"] === "project_database_request_failed");
     expect(log).toMatchObject({
         event: "project_database_request_failed",
-        durableObjectClass: "AccountDO",
+        durableObjectClass: "ComputerDO",
         durableObjectId: expect.any(String),
-        accountId: expect.any(String),
+        computerId: expect.any(String),
         operation: expect.any(String),
         err: expect.objectContaining({ overloaded: true, message: expect.stringContaining("Project DO overloaded") }),
     });
@@ -327,8 +327,8 @@ it("identifies a Project database overload through the public project creation A
 
 // @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.
 it("keeps ordinary Host closes quiet after the real platform close callback completes", async () => {
-    const { accountId, runtimeId, channelId } = await registeredLoggingRuntime();
-    const response = await runtime.dispatchFetch(`https://relay.test/accounts/${accountId}/host`, {
+    const { computerId, runtimeId, channelId } = await registeredLoggingRuntime();
+    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
         headers: {
             Upgrade: "websocket",
             "x-morty-runtime-id": runtimeId,
@@ -365,9 +365,9 @@ it("keeps ordinary Host closes quiet after the real platform close callback comp
 });
 
 async function daemon() {
-    const { accountId, runtimeId, channelId } = await registeredLoggingRuntime();
+    const { computerId, runtimeId, channelId } = await registeredLoggingRuntime();
     const start = logs.length;
-    const response = await runtime.dispatchFetch(`https://relay.test/accounts/${accountId}/daemon`, {
+    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
         headers: {
             Upgrade: "websocket",
             "x-morty-runtime-id": runtimeId,
@@ -399,7 +399,7 @@ async function daemon() {
 
 // @no-uc: Technical regression; real close callbacks must retain peer diagnostics while detach and reconnect still work.
 it("records overload close details and connection epochs without logging healthy heartbeats", async () => {
-    const { accountId, runtimeId } = await registeredLoggingRuntime();
+    const { computerId, runtimeId } = await registeredLoggingRuntime();
     const socket = await daemon();
     try {
         const start = logs.length;
@@ -420,7 +420,7 @@ it("records overload close details and connection epochs without logging healthy
             wasClean: true,
             role: "daemon",
             runtimeId,
-            accountId,
+            computerId,
             durableObjectId: expect.any(String),
             connectionId: expect.any(String),
             connectionEpoch: 1,

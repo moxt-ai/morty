@@ -6,13 +6,13 @@ import {
     projectStorageBindingsSchema,
 } from "../infra/cloud-bindings.ts";
 
-export async function accountBindings(
+export async function computerBindings(
     bindings: CloudBindings,
-    accountId: string,
+    computerId: string,
     signal: AbortSignal,
 ): Promise<CloudBindings & ProjectStorageBindings> {
     signal.throwIfAborted();
-    if (bindings.CHAT_ACCOUNT_ID !== accountId) {
+    if (bindings.CHAT_COMPUTER_ID !== computerId) {
         throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
     }
     const parsed = v.safeParse(projectStorageBindingsSchema, bindings);

@@ -70,7 +70,7 @@ export class ChannelService {
         logger.warn(
             {
                 event: "runtime_credential_reused",
-                accountId: rotation.access.accountId,
+                computerId: rotation.access.computerId,
                 runtimeId: rotation.access.runtimeId,
             },
             "A retired Runtime credential was presented; the Runtime was revoked",

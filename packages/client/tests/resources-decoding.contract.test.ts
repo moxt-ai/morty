@@ -33,7 +33,7 @@ const runtime = {
     channelId: "channel-1",
     machineName: "MacBook",
     online: true,
-    accountId: "project-1",
+    computerId: "project-1",
     runtimeId: "runtime-1",
     workspaceName: "contract",
 };
@@ -42,7 +42,7 @@ const pairedStatus = {
     agents: [],
     channelId: "channel-1",
     machineName: "MacBook",
-    accountId: "project-1",
+    computerId: "project-1",
     runtimeId: "runtime-1",
     status: "paired",
     workspaceName: "contract",

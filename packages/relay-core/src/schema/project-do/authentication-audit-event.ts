@@ -7,7 +7,7 @@ export const authenticationAuditEvent = sqliteTable(
     "authentication_audit_events",
     {
         auditId: text("audit_id").primaryKey(),
-        accountId: text("project_id").notNull(),
+        computerId: text("project_id").notNull(),
         actorKind: text("actor_kind", { enum: authenticationActorKinds }).notNull(),
         actorId: text("actor_id").notNull(),
         actorRef: text("actor_ref").notNull(),
@@ -23,6 +23,6 @@ export const authenticationAuditEvent = sqliteTable(
             sql`${table.actorKind} in ('application', 'browser_access', 'external_identity')`,
         ),
         check("authentication_audit_events_outcome_check", sql`${table.outcome} in ('succeeded', 'denied')`),
-        index("authentication_audit_events_project").on(table.accountId, desc(table.recordedAt), desc(table.auditId)),
+        index("authentication_audit_events_project").on(table.computerId, desc(table.recordedAt), desc(table.auditId)),
     ],
 );

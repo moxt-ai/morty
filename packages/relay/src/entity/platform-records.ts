@@ -45,17 +45,17 @@ export interface PlatformAuditRecord {
     readonly auditId: string;
     readonly detailsJson: string;
     readonly outcome: "succeeded" | "denied";
-    readonly accountId: string;
+    readonly computerId: string;
     readonly recordedAt: number;
     readonly subjectId: string;
 }
 
-export const PlatformAccountScopeRowSchema = v.object({
+export const PlatformComputerScopeRowSchema = v.object({
     app_id: v.string(),
     lifecycle,
     project_id: v.string(),
 });
-export type PlatformAccountScopeRow = Readonly<v.InferOutput<typeof PlatformAccountScopeRowSchema>>;
+export type PlatformComputerScopeRow = Readonly<v.InferOutput<typeof PlatformComputerScopeRowSchema>>;
 
 export const ProjectRowSchema = v.object({
     app_id: v.string(),

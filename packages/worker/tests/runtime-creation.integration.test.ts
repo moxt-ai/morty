@@ -9,7 +9,7 @@ test("Given a Session still applying initial settings, When another caller creat
     const release = Promise.withResolvers<void>();
     try {
         const identity = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(identity.accountId, [
+        await using runtime = await cloud.connectAgent(identity.computerId, [
             {
                 id: "configuration-test",
                 label: "Settings Agent",

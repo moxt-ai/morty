@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
-import { accountObject } from "../../../gateway/account-object-routing.ts";
+import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
@@ -10,7 +10,7 @@ import type { ManagementHttpEnvironment } from "./management-http-environment.ts
 export function createPlatformProjectRoutes() {
     return new Hono<ManagementHttpEnvironment>()
         .use(
-            "/account",
+            "/computer",
             bodyLimit({
                 maxSize: 4096,
                 onError: () => {
@@ -18,16 +18,16 @@ export function createPlatformProjectRoutes() {
                 },
             }),
         )
-        .get("/account", authenticatedSession, async (context) => {
+        .get("/computer", authenticatedSession, async (context) => {
             const session = context.get("session");
             return json({
-                account: await context.env.services.management.readProject(
+                computer: await context.env.services.management.readProject(
                     session.userId,
                     AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]),
                 ),
             });
         })
-        .post("/account/replacement", async (context) => {
+        .post("/computer/replacement", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
             const { authentication, management } = context.env.services;
             const local = await authentication.authorize(context.get("bearerToken"), "replaceProject", signal);
@@ -48,7 +48,7 @@ export function createPlatformProjectRoutes() {
             const setupRunId = v.safeParse(v.pipe(v.string(), v.uuid()), context.req.header("x-morty-setup-run-id"));
             const audit = {
                 event: "project_replacement",
-                previousAccountId: context.env.config.bindings.CHAT_ACCOUNT_ID,
+                previousComputerId: context.env.config.bindings.CHAT_COMPUTER_ID,
                 setupRunId: setupRunId.success ? setupRunId.output : null,
             };
             context.env.logger.info({ ...audit, stage: "requested" }, "Project replacement requested");
@@ -56,14 +56,14 @@ export function createPlatformProjectRoutes() {
                 const project = await management.replaceProject(local.credential.userId, signal);
                 // Repeating the same saved local identity reuses its successor credential, even if bootstrap
                 // committed only part of its data. An explicitly revoked successor credential is never reissued.
-                const response = await accountObject(context.env.config.bindings, project.accountId).fetch(
-                    new Request("https://account.internal/__account/bootstrap", {
+                const response = await computerObject(context.env.config.bindings, project.computerId).fetch(
+                    new Request("https://computer.internal/__computer/bootstrap", {
                         body: JSON.stringify({
-                            account: project,
+                            computer: project,
                             userId: local.credential.userId,
                             origin: {
                                 kind: "replacement",
-                                previousAccountId: audit.previousAccountId,
+                                previousComputerId: audit.previousComputerId,
                                 token: local.token,
                             },
                         }),
@@ -75,7 +75,12 @@ export function createPlatformProjectRoutes() {
                 signal.throwIfAborted();
                 if (!response.ok) {
                     context.env.logger.warn(
-                        { ...audit, accountId: project.accountId, stage: "bootstrap_failed", status: response.status },
+                        {
+                            ...audit,
+                            computerId: project.computerId,
+                            stage: "bootstrap_failed",
+                            status: response.status,
+                        },
                         "Project replacement did not reach access revocation",
                     );
                     return response;
@@ -96,7 +101,7 @@ export function createPlatformProjectRoutes() {
                     );
                 }
                 context.env.logger.info(
-                    { ...audit, accountId: project.accountId, stage: "access_revoked" },
+                    { ...audit, computerId: project.computerId, stage: "access_revoked" },
                     "Earlier shared access revoked by Project replacement",
                 );
                 return response;

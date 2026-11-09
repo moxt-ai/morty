@@ -121,7 +121,7 @@ export async function createTestApp(
         if (page.identity === true) {
             const scope = v.parse(identityScopeSchema, {
                 botId: current.botId,
-                accountId: current.identity.accountId,
+                computerId: current.identity.computerId,
                 userId: current.userId,
             });
             destination.searchParams.set("identity", encodeIdentityScope(scope));
@@ -138,7 +138,7 @@ export async function createTestApp(
         // the anonymous session restores it on load.
         const scope = v.parse(identityScopeSchema, {
             botId: current.botId,
-            accountId: current.identity.accountId,
+            computerId: current.identity.computerId,
             userId: current.userId,
         });
         destination.searchParams.set("identity", encodeIdentityScope(scope));

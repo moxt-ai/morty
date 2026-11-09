@@ -29,7 +29,7 @@ export class CreatedRuntimePairing {
     readonly pairingCode: string;
     readonly pairingId: string;
     readonly pollToken: string;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly runtimeId: string;
 
     constructor(
@@ -38,7 +38,7 @@ export class CreatedRuntimePairing {
         pairingCode: string,
         pairingId: string,
         pollToken: string,
-        accountId: string,
+        computerId: string,
         runtimeId: string,
     ) {
         this.channelId = channelId;
@@ -46,7 +46,7 @@ export class CreatedRuntimePairing {
         this.pairingCode = pairingCode;
         this.pairingId = pairingId;
         this.pollToken = pollToken;
-        this.accountId = accountId;
+        this.computerId = computerId;
         this.runtimeId = runtimeId;
     }
 }
@@ -66,7 +66,7 @@ export interface CreatedChannelAccessGrant {
 export interface RedeemedChannelAccessGrant {
     readonly channelId: string;
     readonly hostToken: string;
-    readonly accountId: string;
+    readonly computerId: string;
 }
 
 export class LinkedChannelDevice {
@@ -84,13 +84,13 @@ export class LinkedChannelDevice {
 export class VerifiedChannelAccess {
     readonly agents: readonly AgentDescriptor[];
     readonly channelId: string;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly runtimeId: string;
 
-    constructor(channelId: string, runtimeId: string, accountId: string, agents: readonly AgentDescriptor[]) {
+    constructor(channelId: string, runtimeId: string, computerId: string, agents: readonly AgentDescriptor[]) {
         this.agents = agents;
         this.channelId = channelId;
-        this.accountId = accountId;
+        this.computerId = computerId;
         this.runtimeId = runtimeId;
     }
 }
@@ -98,8 +98,8 @@ export class VerifiedChannelAccess {
 export class ChannelHostCredential extends VerifiedChannelAccess {
     readonly credentialId: string;
 
-    constructor(channelId: string, runtimeId: string, accountId: string, credentialId: string) {
-        super(channelId, runtimeId, accountId, []);
+    constructor(channelId: string, runtimeId: string, computerId: string, credentialId: string) {
+        super(channelId, runtimeId, computerId, []);
         this.credentialId = credentialId;
     }
 }
@@ -112,8 +112,8 @@ export class ChannelHostCredential extends VerifiedChannelAccess {
 export class ProjectCredentialHostAccess extends VerifiedChannelAccess {
     readonly credentialId: string;
 
-    constructor(channelId: string, runtimeId: string, accountId: string, credentialId: string) {
-        super(channelId, runtimeId, accountId, []);
+    constructor(channelId: string, runtimeId: string, computerId: string, credentialId: string) {
+        super(channelId, runtimeId, computerId, []);
         this.credentialId = credentialId;
     }
 }
@@ -129,7 +129,7 @@ export class ChannelDescriptor {
     readonly agents: readonly AgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly runtimeId: string;
     readonly workspaceName: string;
 
@@ -138,7 +138,7 @@ export class ChannelDescriptor {
         channelId: string,
         machineName: string,
         workspaceName: string,
-        accountId: string,
+        computerId: string,
         runtimeId: string,
     ) {
         this.agents = agents.map((agent) => ({
@@ -148,7 +148,7 @@ export class ChannelDescriptor {
         }));
         this.channelId = channelId;
         this.machineName = machineName;
-        this.accountId = accountId;
+        this.computerId = computerId;
         this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }
@@ -157,13 +157,13 @@ export class ChannelDescriptor {
 export class CreatedBrowserCredential {
     readonly credentialId: string;
     readonly expiresAt: string;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly token: string;
 
-    constructor(credentialId: string, expiresAt: string, accountId: string, token: string) {
+    constructor(credentialId: string, expiresAt: string, computerId: string, token: string) {
         this.credentialId = credentialId;
         this.expiresAt = expiresAt;
-        this.accountId = accountId;
+        this.computerId = computerId;
         this.token = token;
     }
 }
@@ -197,7 +197,7 @@ export class PairedPairingStatus extends PairingStatus {
     readonly agents: readonly AgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly runtimeId: string;
     readonly status = PairingLifecycle.Paired;
     readonly workspaceName: string;
@@ -207,14 +207,14 @@ export class PairedPairingStatus extends PairingStatus {
         channelId: string,
         machineName: string,
         workspaceName: string,
-        accountId: string,
+        computerId: string,
         runtimeId: string,
     ) {
         super();
         this.agents = agents;
         this.channelId = channelId;
         this.machineName = machineName;
-        this.accountId = accountId;
+        this.computerId = computerId;
         this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }

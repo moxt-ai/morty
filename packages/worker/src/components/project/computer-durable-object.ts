@@ -4,43 +4,43 @@ import application from "../../application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
-import { cloudAccountId } from "../../middleware/account-context.ts";
+import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
-import { accountBootstrap } from "../management/entity/account-bootstrap.ts";
+import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
 import { platformIdentifier } from "../management/entity/platform-project.ts";
 
 /**
- * One account's storage. Only the account's bootstrap binds the object and creates its schema; a request for an account
+ * One computer's storage. Only the computer's bootstrap binds the object and creates its schema; a request for an computer
  * the object does not hold leaves no storage behind.
  */
-export class AccountDurableObject extends DurableObject<CloudBindings> {
+export class ComputerDurableObject extends DurableObject<CloudBindings> {
     #database: DurableObjectDatabase | undefined;
     readonly #sessionOperations = new ManagedSessionOperations();
 
     override async fetch(request: Request): Promise<Response> {
         const url = new URL(request.url);
-        if (url.origin === "https://account.internal" && url.pathname === "/__account/bootstrap") {
+        if (url.origin === "https://computer.internal" && url.pathname === "/__computer/bootstrap") {
             return await this.#bootstrap(request);
         }
-        const accountId = await cloudAccountId(request);
-        if (accountId === null) {
+        const computerId = await cloudComputerId(request);
+        if (computerId === null) {
             return json({ error: { code: "PROJECT_REQUIRED", message: "Morty context is required." } }, 400);
         }
-        const validatedAccountId = v.parse(platformIdentifier, accountId);
+        const validatedComputerId = v.parse(platformIdentifier, computerId);
         const bound: unknown = await this.ctx.storage.get("project-id");
         if (bound === undefined) {
-            return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty account does not exist." } }, 404);
+            return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty computer does not exist." } }, 404);
         }
-        if (bound !== validatedAccountId) {
-            throw new Error("Durable Object account identity does not match the request.");
+        if (bound !== validatedComputerId) {
+            throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await application.fetch(request, this.#bindings(validatedAccountId));
+        return await application.fetch(request, this.#bindings(validatedComputerId));
     }
 
     readonly #bootstrap = async (request: Request): Promise<Response> => {
         const input: unknown = await request.json();
-        const parsed = v.parse(accountBootstrap, input);
-        await this.#bindAccount(parsed.account.accountId);
+        const parsed = v.parse(computerBootstrap, input);
+        await this.#bindComputer(parsed.computer.computerId);
         return await application.fetch(
             new Request(request.url, {
                 body: JSON.stringify(parsed),
@@ -48,7 +48,7 @@ export class AccountDurableObject extends DurableObject<CloudBindings> {
                 method: "POST",
                 signal: request.signal,
             }),
-            this.#bindings(parsed.account.accountId),
+            this.#bindings(parsed.computer.computerId),
         );
     };
 
@@ -78,22 +78,22 @@ export class AccountDurableObject extends DurableObject<CloudBindings> {
         return result;
     };
 
-    readonly #bindAccount = async (accountId: string): Promise<void> => {
+    readonly #bindComputer = async (computerId: string): Promise<void> => {
         const stored: unknown = await this.ctx.storage.get("project-id");
         if (stored === undefined) {
-            await this.ctx.storage.put("project-id", accountId);
+            await this.ctx.storage.put("project-id", computerId);
             return;
         }
-        if (stored !== accountId) {
-            throw new Error("Durable Object account identity does not match the request.");
+        if (stored !== computerId) {
+            throw new Error("Durable Object computer identity does not match the request.");
         }
     };
 
-    readonly #bindings = (accountId: string): CloudBindings => {
+    readonly #bindings = (computerId: string): CloudBindings => {
         this.#database ??= new DurableObjectDatabase(this.ctx.storage);
         return {
             ...this.env,
-            CHAT_ACCOUNT_ID: accountId,
+            CHAT_COMPUTER_ID: computerId,
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,
             DATABASE: this.#database,

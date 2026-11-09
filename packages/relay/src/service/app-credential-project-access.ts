@@ -1,6 +1,6 @@
 import {
-    AccountScope,
     AuditActor,
+    ComputerScope,
     PerpetualProjectAccessLifetime,
     ProjectAccessContext,
     ProjectAuthenticationError,
@@ -20,13 +20,13 @@ import { appCredentialActive, credentialPermissions } from "./app-credential-aut
 export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     readonly #storage: Pick<
         PlatformControlPlaneStorage,
-        "readActiveAccountScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
+        "readActiveComputerScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
     >;
 
     constructor(
         storage: Pick<
             PlatformControlPlaneStorage,
-            "readActiveAccountScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
+            "readActiveComputerScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
         >,
     ) {
         this.#storage = storage;
@@ -34,11 +34,11 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
 
     readonly authorize = async (
         row: CredentialRow,
-        accountId: string,
+        computerId: string,
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => {
-        const project = await this.#storage.readActiveAccountScope(accountId, signal);
+        const project = await this.#storage.readActiveComputerScope(computerId, signal);
         if (project === null || project.app_id !== row.app_id) {
             throw new ProjectAuthenticationError(
                 "project_access_denied",
@@ -47,7 +47,7 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
         }
         if (row.all_projects !== 1) {
             const hasProject =
-                (await this.#storage.scopedProjects(row.credential_id, [accountId], signal)).length === 1;
+                (await this.#storage.scopedProjects(row.credential_id, [computerId], signal)).length === 1;
             if (!hasProject) {
                 throw new ProjectAuthenticationError(
                     "project_access_denied",
@@ -63,7 +63,7 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
             );
         }
         return new ProjectAccessContext(
-            new AccountScope(project.project_id),
+            new ComputerScope(project.project_id),
             granted,
             new AuditActor(PlatformAuditActorKind.Application, row.app_id),
             row.credential_id,
@@ -78,14 +78,14 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
      */
     readonly authorizeSessionCredential = async (
         row: CredentialRow,
-        accountId: string,
+        computerId: string,
         requiredPermissions: readonly ProjectPermission[],
         issuedAt: number,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => {
         const [access, revokedAt] = await Promise.all([
-            this.authorize(row, accountId, requiredPermissions, signal),
-            this.#storage.readSessionAccessRevocation(accountId, signal),
+            this.authorize(row, computerId, requiredPermissions, signal),
+            this.#storage.readSessionAccessRevocation(computerId, signal),
         ]);
         if (revokedAt !== null && issuedAt <= sessionAccessRevokedThrough(revokedAt)) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session credential has been revoked");
@@ -94,19 +94,19 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     };
 
     readonly grants: ProjectCredentialAuthority["grants"] = async (
-        accountId,
+        computerId,
         credentialId,
         requiredPermissions,
         signal,
     ) =>
         await this.#grantsThrough(
             credentialId,
-            async (row) => await this.authorize(row, accountId, requiredPermissions, signal),
+            async (row) => await this.authorize(row, computerId, requiredPermissions, signal),
             signal,
         );
 
     readonly grantsSessionCredential: ProjectCredentialAuthority["grantsSessionCredential"] = async (
-        accountId,
+        computerId,
         credentialId,
         issuedAt,
         requiredPermissions,
@@ -114,7 +114,8 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     ) =>
         await this.#grantsThrough(
             credentialId,
-            async (row) => await this.authorizeSessionCredential(row, accountId, requiredPermissions, issuedAt, signal),
+            async (row) =>
+                await this.authorizeSessionCredential(row, computerId, requiredPermissions, issuedAt, signal),
             signal,
         );
 

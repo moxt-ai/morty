@@ -7,7 +7,7 @@ import { PlatformProjectError, platformIdentifier } from "../../management/entit
 const summarySchema = v.pipe(
     v.object({
         createdAt: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
-        accountId: platformIdentifier,
+        computerId: platformIdentifier,
         userId: platformIdentifier,
         id: platformIdentifier,
     }),
@@ -28,19 +28,19 @@ export class ManagedSessionStorage {
         return database;
     };
 
-    readonly list = async (accountId: string, userId: string, botId: string, signal: AbortSignal) => {
+    readonly list = async (computerId: string, userId: string, botId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
             .select({
                 createdAt: chatManagedSession.createdAt,
-                accountId: chatManagedSession.accountId,
+                computerId: chatManagedSession.computerId,
                 userId: chatManagedSession.userId,
                 id: chatManagedSession.resourceId,
             })
             .from(chatManagedSession)
             .where(
                 and(
-                    eq(chatManagedSession.accountId, accountId),
+                    eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
                 ),
@@ -51,7 +51,7 @@ export class ManagedSessionStorage {
     };
 
     readonly save = async (
-        accountId: string,
+        computerId: string,
         userId: string,
         botId: string,
         record: { readonly id: string },
@@ -60,14 +60,14 @@ export class ManagedSessionStorage {
         const value = v.parse(summarySchema, {
             ...record,
             createdAt: Date.now(),
-            accountId,
+            computerId,
             userId,
         });
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(chatManagedSession)
             .values({
-                accountId: value.accountId,
+                computerId: value.computerId,
                 userId: value.userId,
                 botId,
                 resourceId: value.id,
@@ -79,7 +79,7 @@ export class ManagedSessionStorage {
     };
 
     readonly ownsSession = async (
-        accountId: string,
+        computerId: string,
         userId: string,
         botId: string,
         id: string,
@@ -91,7 +91,7 @@ export class ManagedSessionStorage {
             .from(chatManagedSession)
             .where(
                 and(
-                    eq(chatManagedSession.accountId, accountId),
+                    eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
                     eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
@@ -103,7 +103,7 @@ export class ManagedSessionStorage {
     };
 
     readonly archive = async (
-        accountId: string,
+        computerId: string,
         userId: string,
         botId: string,
         id: string,
@@ -114,7 +114,7 @@ export class ManagedSessionStorage {
             .delete(chatManagedSession)
             .where(
                 and(
-                    eq(chatManagedSession.accountId, accountId),
+                    eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
                     eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),

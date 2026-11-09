@@ -3,13 +3,18 @@ import type { SessionStatusNotifications } from "../../infra/session-status-noti
 import type { ChannelPeers } from "./channel-actor.ts";
 
 export class SessionLiveEventRelay {
-    readonly #accountId: string;
+    readonly #computerId: string;
     readonly #runtimeId: string;
     readonly #peers: ChannelPeers;
     readonly #notifications: SessionStatusNotifications | undefined;
 
-    constructor(accountId: string, runtimeId: string, peers: ChannelPeers, notifications?: SessionStatusNotifications) {
-        this.#accountId = accountId;
+    constructor(
+        computerId: string,
+        runtimeId: string,
+        peers: ChannelPeers,
+        notifications?: SessionStatusNotifications,
+    ) {
+        this.#computerId = computerId;
         this.#runtimeId = runtimeId;
         this.#peers = peers;
         this.#notifications = notifications;
@@ -66,7 +71,7 @@ export class SessionLiveEventRelay {
         const events = envelope.events.filter((event) => event.mortyMetadata?.restated !== true);
         if (events.length > 0) {
             this.#notifications?.publish(
-                { accountId: this.#accountId, runtimeId: this.#runtimeId },
+                { computerId: this.#computerId, runtimeId: this.#runtimeId },
                 events.length === envelope.events.length ? envelope : { ...envelope, events },
             );
         }

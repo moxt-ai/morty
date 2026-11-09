@@ -217,7 +217,7 @@ test("Given an expired handoff with no retained access, When the failure page sh
 }, async () => {
     const app = await createTestApp({
         page: {
-            code: (application) => `morty_transfer_v1.${application.identity.accountId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.computerId}.${"a".repeat(43)}`,
             harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
@@ -244,7 +244,7 @@ test("Given an expired handoff with no retained access, When the user copies the
 }, async () => {
     const app = await createTestApp({
         page: {
-            code: (application) => `morty_transfer_v1.${application.identity.accountId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.computerId}.${"a".repeat(43)}`,
             harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
@@ -426,7 +426,7 @@ test("Given an end confirmation for access revoked elsewhere, When the API rejec
     });
     const signal = new AbortController().signal;
     const revoked = await app.transport.fetch(
-        new Request(`${app.origin}/morty/api/accounts/${app.identity.accountId}/identity/v1/local-credential`, {
+        new Request(`${app.origin}/morty/api/computers/${app.identity.computerId}/identity/v1/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${await app.identity.getToken(signal)}` },
             signal,
@@ -467,7 +467,7 @@ test("Given an expired sharing link with no retained access, When I open it, The
     const app = await createTestApp({
         page: {
             kind: "share",
-            code: (application) => `morty_transfer_v1.${application.identity.accountId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.computerId}.${"a".repeat(43)}`,
         },
     });
     await app.waitForView(() =>
@@ -487,7 +487,7 @@ for (const linkKind of ["handoff", "sharing"] as const) {
         timeout: 30_000,
     }, async () => {
         const code = (application: TestApp["identity"]) =>
-            `morty_transfer_v1.${application.accountId}.${"a".repeat(43)}`;
+            `morty_transfer_v1.${application.computerId}.${"a".repeat(43)}`;
         const app = await createTestApp({
             page:
                 linkKind === "handoff"
@@ -614,7 +614,7 @@ test("Given other browsers joined this computer, When the user disconnects one f
     const app = await joined.reload();
     const session = (token: string) =>
         app.transport.fetch(
-            new Request(`${app.origin}/morty/api/accounts/${app.identity.accountId}/session`, {
+            new Request(`${app.origin}/morty/api/computers/${app.identity.computerId}/session`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
         );
@@ -689,7 +689,7 @@ test("Given a browser that acknowledged a new device, When another device joins 
         expect(redeemed.status).toBe(200);
     };
     // This browser looked at its devices before, when there were none; a device joined since.
-    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.accountId), new Date(0).toISOString());
+    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.computerId), new Date(0).toISOString());
     await join(joined, "iPhone · Safari");
     const app = await joined.reload();
     const first = await app.waitForView(() => getByRole(document.body, "status", { name: "New device connected" }));
@@ -721,7 +721,7 @@ test("Given a new device and this browser's access in the sidebar, When the user
         }),
     );
     expect(redeemed.status).toBe(200);
-    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.accountId), new Date(0).toISOString());
+    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.computerId), new Date(0).toISOString());
     const app = await joined.reload();
     const carousel = await app.waitForView(() => {
         const region = getByRole(document.body, "region", { name: "Access notices" });
@@ -762,7 +762,7 @@ test("Given this browser already dismissed its access notice, When a new device 
     await app.user.click(getByRole(access, "button", { name: "Got it" }));
     expect(queryByRole(document.body, "status", { name: "This browser's access" })).toBeNull();
 
-    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.accountId), new Date(0).toISOString());
+    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.computerId), new Date(0).toISOString());
     const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
     const redeemed = await app.transport.fetch(
         new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {

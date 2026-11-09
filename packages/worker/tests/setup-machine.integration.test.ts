@@ -185,12 +185,12 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
         v.object({ identity: v.object({ user_token: v.string(), project_id: v.string() }) }),
         JSON.parse(await readFile(join(state, "config.json"), "utf8")),
     );
-    const machine = await fetch(`${fixture.origin}/morty/api/accounts/${saved.identity.project_id}/management/bot`, {
+    const machine = await fetch(`${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/bot`, {
         headers: { authorization: `Bearer ${saved.identity.user_token}` },
     });
     const actual: unknown = await machine.json();
     const original = await fetch(
-        `${fixture.origin}/morty/api/accounts/${saved.identity.project_id}/management/runtime-pairings/${lostPairing.pairingId}`,
+        `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/runtime-pairings/${lostPairing.pairingId}`,
         { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
     );
     expect(original.status).toBe(200);
@@ -257,7 +257,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const machineRuntime = async () => {
         const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
         const response = await worker.fetch(
-            new Request(`${fixture.origin}/morty/api/accounts/${identity.project_id}/management/bot`, {
+            new Request(`${fixture.origin}/morty/api/computers/${identity.project_id}/management/bot`, {
                 headers: { authorization: `Bearer ${identity.user_token}` },
             }),
             fixture.environment(fixture.origin),
@@ -269,7 +269,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const before = await machineRuntime();
     const revoked = await fixture.platformRequest(
         new Request(
-            `https://platform.test/morty/api/v1/accounts/${before.identity.project_id}/runtimes/${before.runtimeId}`,
+            `https://platform.test/morty/api/v1/computers/${before.identity.project_id}/runtimes/${before.runtimeId}`,
             {
                 method: "DELETE",
                 headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },

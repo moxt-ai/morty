@@ -94,7 +94,7 @@ export class SessionAccessSigner {
             throw new ProtocolMessageError("The Session credential lifetime is invalid");
         }
         const issuedAheadMilliseconds = issuedAtEpochMilliseconds - nowEpochMilliseconds;
-        // AccountDO issues credentials that RuntimeRelay verifies using an independent Worker clock.
+        // ComputerDO issues credentials that RuntimeRelay verifies using an independent Worker clock.
         if (issuedAheadMilliseconds > MAXIMUM_ISSUANCE_CLOCK_SKEW_MILLISECONDS) {
             throw new ProtocolMessageError(
                 `The Session credential was issued ${issuedAheadMilliseconds} milliseconds ahead of the verifier`,

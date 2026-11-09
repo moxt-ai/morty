@@ -34,7 +34,7 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
             baseUrl: bindings.origin,
             service,
             connectAgent: async (
-                accountId: string,
+                computerId: string,
                 harnesses?: readonly FakeAgentHarnessDefinition[],
                 nativeSessionIds?: ReadonlySet<string>,
             ) => {
@@ -43,7 +43,7 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
                     ...(harnesses === undefined ? {} : { harnesses }),
                     ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
                     origin: bindings.origin,
-                    accountId,
+                    computerId,
                     server: app,
                     signal: cancellation.signal,
                 });

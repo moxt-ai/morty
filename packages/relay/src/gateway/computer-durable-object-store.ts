@@ -6,33 +6,33 @@ import {
 } from "@morty-build/relay-core/contracts";
 import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
-import type { AccountDO } from "../durable-objects/account-do.ts";
-import { decodeAccountPlacement } from "../entity/machine-account-id.ts";
+import type { ComputerDO } from "../durable-objects/computer-do.ts";
+import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformProjectStore, PlatformProjectStores } from "../infra/platform-project-store.ts";
 
 const OPERATION_TIMEOUT_MILLISECONDS = 15_000;
 
-type ProjectStub = DurableObjectStub<AccountDO>;
+type ProjectStub = DurableObjectStub<ComputerDO>;
 
 /**
  * A Project's store reached through its Account Durable Object. Every operation executes there as one unit;
  * cancelling or timing out here stops waiting for the result but cannot undo an operation already delivered.
  */
-class AccountDurableObjectStore implements PlatformProjectStore {
-    readonly #namespace: DurableObjectNamespace<AccountDO>;
-    readonly #accountId: string;
+class ComputerDurableObjectStore implements PlatformProjectStore {
+    readonly #namespace: DurableObjectNamespace<ComputerDO>;
+    readonly #computerId: string;
     readonly #locationHint: ProjectLocationHint;
     #stub: ProjectStub | null = null;
 
-    constructor(namespace: DurableObjectNamespace<AccountDO>, accountId: string, locationHint: ProjectLocationHint) {
+    constructor(namespace: DurableObjectNamespace<ComputerDO>, computerId: string, locationHint: ProjectLocationHint) {
         this.#namespace = namespace;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
         this.#locationHint = locationHint;
     }
 
     private readonly call = async <Value>(
         operation: string,
-        invoke: (stub: ProjectStub, accountId: string) => Promise<Value>,
+        invoke: (stub: ProjectStub, computerId: string) => Promise<Value>,
         signal: AbortSignal,
     ): Promise<Value> => {
         signal.throwIfAborted();
@@ -41,9 +41,9 @@ class AccountDurableObjectStore implements PlatformProjectStore {
         const deadline = AbortSignal.any([signal, timeout.signal]);
         let abort = (): void => {};
         try {
-            this.#stub ??= this.#namespace.getByName(this.#accountId, { locationHint: this.#locationHint });
+            this.#stub ??= this.#namespace.getByName(this.#computerId, { locationHint: this.#locationHint });
             const value = await Promise.race([
-                invoke(this.#stub, this.#accountId),
+                invoke(this.#stub, this.#computerId),
                 new Promise<never>((_resolve, reject) => {
                     abort = () => reject(deadline.reason);
                     deadline.addEventListener("abort", abort, { once: true });
@@ -61,9 +61,9 @@ class AccountDurableObjectStore implements PlatformProjectStore {
             logger.error(
                 {
                     event: "project_database_request_failed",
-                    durableObjectClass: "AccountDO",
-                    durableObjectId: this.#namespace.idFromName(this.#accountId).toString(),
-                    accountId: this.#accountId,
+                    durableObjectClass: "ComputerDO",
+                    durableObjectId: this.#namespace.idFromName(this.#computerId).toString(),
+                    computerId: this.#computerId,
                     operation,
                     err: cause,
                 },
@@ -83,92 +83,92 @@ class AccountDurableObjectStore implements PlatformProjectStore {
     readonly authenticateHost: PlatformProjectStore["authenticateHost"] = (channelId, tokenHash, now, signal) =>
         this.call(
             "authenticateHost",
-            (stub, accountId) => stub.authenticateHost(accountId, channelId, tokenHash, now),
+            (stub, computerId) => stub.authenticateHost(computerId, channelId, tokenHash, now),
             signal,
         );
 
     readonly isHostCredentialActive: PlatformProjectStore["isHostCredentialActive"] = (identity, signal) =>
         this.call(
             "isHostCredentialActive",
-            (stub, accountId) => stub.isHostCredentialActive(accountId, identity),
+            (stub, computerId) => stub.isHostCredentialActive(computerId, identity),
             signal,
         );
 
     readonly listLinkedDevices: PlatformProjectStore["listLinkedDevices"] = (channelId, signal) =>
-        this.call("listLinkedDevices", (stub, accountId) => stub.listLinkedDevices(accountId, channelId), signal);
+        this.call("listLinkedDevices", (stub, computerId) => stub.listLinkedDevices(computerId, channelId), signal);
 
     readonly revokeLinkedDevice: PlatformProjectStore["revokeLinkedDevice"] = (channelId, credentialId, now, signal) =>
         this.call(
             "revokeLinkedDevice",
-            (stub, accountId) => stub.revokeLinkedDevice(accountId, channelId, credentialId, now),
+            (stub, computerId) => stub.revokeLinkedDevice(computerId, channelId, credentialId, now),
             signal,
         );
 
     readonly createAccessGrant: PlatformProjectStore["createAccessGrant"] = (value, signal) =>
-        this.call("createAccessGrant", (stub, accountId) => stub.createAccessGrant(accountId, value), signal);
+        this.call("createAccessGrant", (stub, computerId) => stub.createAccessGrant(computerId, value), signal);
 
     readonly redeemAccessGrant: PlatformProjectStore["redeemAccessGrant"] = (value, signal) =>
         this.call(
             "redeemAccessGrant",
-            async (stub, accountId): Promise<AccessGrantRedemption> => await stub.redeemAccessGrant(accountId, value),
+            async (stub, computerId): Promise<AccessGrantRedemption> => await stub.redeemAccessGrant(computerId, value),
             signal,
         );
 
     readonly createBrowserCredential: PlatformProjectStore["createBrowserCredential"] = (value, signal) =>
         this.call(
             "createBrowserCredential",
-            (stub, accountId) => stub.createBrowserCredential(accountId, value),
+            (stub, computerId) => stub.createBrowserCredential(computerId, value),
             signal,
         );
 
     readonly revokeBrowserCredential: PlatformProjectStore["revokeBrowserCredential"] = (credentialId, now, signal) =>
         this.call(
             "revokeBrowserCredential",
-            (stub, accountId) => stub.revokeBrowserCredential(accountId, credentialId, now),
+            (stub, computerId) => stub.revokeBrowserCredential(computerId, credentialId, now),
             signal,
         );
 
     readonly updateAgentCatalog: PlatformProjectStore["updateAgentCatalog"] = (channelId, tokenHash, agents, signal) =>
         this.call(
             "updateAgentCatalog",
-            (stub, accountId) => stub.updateAgentCatalog(accountId, channelId, tokenHash, agents),
+            (stub, computerId) => stub.updateAgentCatalog(computerId, channelId, tokenHash, agents),
             signal,
         );
 
     readonly isRuntimeActive: PlatformProjectStore["isRuntimeActive"] = (runtimeId, signal) =>
-        this.call("isRuntimeActive", (stub, accountId) => stub.isRuntimeActive(accountId, runtimeId), signal);
+        this.call("isRuntimeActive", (stub, computerId) => stub.isRuntimeActive(computerId, runtimeId), signal);
 
     readonly readRuntime: PlatformProjectStore["readRuntime"] = (runtimeId, signal) =>
-        this.call("readRuntime", (stub, accountId) => stub.readRuntime(accountId, runtimeId), signal);
+        this.call("readRuntime", (stub, computerId) => stub.readRuntime(computerId, runtimeId), signal);
 
     readonly listRuntimes: PlatformProjectStore["listRuntimes"] = (signal) =>
-        this.call("listRuntimes", (stub, accountId) => stub.listRuntimes(accountId), signal);
+        this.call("listRuntimes", (stub, computerId) => stub.listRuntimes(computerId), signal);
 
     readonly readChannel: PlatformProjectStore["readChannel"] = (channelId, signal) =>
-        this.call("readChannel", (stub, accountId) => stub.readChannel(accountId, channelId), signal);
+        this.call("readChannel", (stub, computerId) => stub.readChannel(computerId, channelId), signal);
 
     readonly requestRuntimePairing: PlatformProjectStore["requestRuntimePairing"] = (value, signal) =>
         this.call(
             "requestRuntimePairing",
-            async (stub, accountId): Promise<RuntimePairingRequest> =>
-                await stub.requestRuntimePairing(accountId, value),
+            async (stub, computerId): Promise<RuntimePairingRequest> =>
+                await stub.requestRuntimePairing(computerId, value),
             signal,
         );
 
     readonly readRuntimePairing: PlatformProjectStore["readRuntimePairing"] = (pairingId, signal) =>
-        this.call("readRuntimePairing", (stub, accountId) => stub.readRuntimePairing(accountId, pairingId), signal);
+        this.call("readRuntimePairing", (stub, computerId) => stub.readRuntimePairing(computerId, pairingId), signal);
 
     readonly readPairingCode: PlatformProjectStore["readPairingCode"] = (codeHash, signal) =>
-        this.call("readPairingCode", (stub, accountId) => stub.readPairingCode(accountId, codeHash), signal);
+        this.call("readPairingCode", (stub, computerId) => stub.readPairingCode(computerId, codeHash), signal);
 
     readonly claimPairing: PlatformProjectStore["claimPairing"] = (value, signal) =>
-        this.call("claimPairing", (stub, accountId) => stub.claimPairing(accountId, value), signal);
+        this.call("claimPairing", (stub, computerId) => stub.claimPairing(computerId, value), signal);
 
     readonly revokeRuntime: PlatformProjectStore["revokeRuntime"] = (value, signal) =>
-        this.call("revokeRuntime", (stub, accountId) => stub.revokeRuntime(accountId, value), signal);
+        this.call("revokeRuntime", (stub, computerId) => stub.revokeRuntime(computerId, value), signal);
 
     readonly findCredential: PlatformProjectStore["findCredential"] = (credential, signal) =>
-        this.call("findCredential", (stub, accountId) => stub.findCredential(accountId, credential), signal);
+        this.call("findCredential", (stub, computerId) => stub.findCredential(computerId, credential), signal);
 
     readonly rotateRuntimeCredential: PlatformProjectStore["rotateRuntimeCredential"] = (
         presentedHash,
@@ -177,48 +177,48 @@ class AccountDurableObjectStore implements PlatformProjectStore {
     ) =>
         this.call<Awaited<ReturnType<PlatformProjectStore["rotateRuntimeCredential"]>>>(
             "rotateRuntimeCredential",
-            (stub, accountId) => stub.rotateRuntimeCredential(accountId, presentedHash, successorHash),
+            (stub, computerId) => stub.rotateRuntimeCredential(computerId, presentedHash, successorHash),
             signal,
         );
 
     readonly recordAudit: PlatformProjectStore["recordAudit"] = (audit, signal) =>
-        this.call("recordAudit", (stub, accountId) => stub.recordAudit(accountId, audit), signal);
+        this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);
 
     readonly listAuditEvents: PlatformProjectStore["listAuditEvents"] = (limit, signal) =>
-        this.call("listAuditEvents", (stub, accountId) => stub.listAuditEvents(accountId, limit), signal);
+        this.call("listAuditEvents", (stub, computerId) => stub.listAuditEvents(computerId, limit), signal);
 }
 
 /**
  * Locates Project stores. Inside a Account Durable Object its own Project resolves to the local store; every other
  * Project resolves to its own Durable Object.
  */
-export class AccountDurableObjectStores implements PlatformProjectStores {
-    readonly #namespace: DurableObjectNamespace<AccountDO>;
-    readonly #local: { readonly accountId: string; readonly store: PlatformProjectStore } | null;
+export class ComputerDurableObjectStores implements PlatformProjectStores {
+    readonly #namespace: DurableObjectNamespace<ComputerDO>;
+    readonly #local: { readonly computerId: string; readonly store: PlatformProjectStore } | null;
     readonly #remote = new Map<string, PlatformProjectStore>();
 
     constructor(
-        namespace: DurableObjectNamespace<AccountDO>,
-        local: { readonly accountId: string; readonly store: PlatformProjectStore } | null = null,
+        namespace: DurableObjectNamespace<ComputerDO>,
+        local: { readonly computerId: string; readonly store: PlatformProjectStore } | null = null,
     ) {
         this.#namespace = namespace;
         this.#local = local;
     }
 
-    readonly forProject: PlatformProjectStores["forProject"] = (accountId) => {
-        if (this.#local?.accountId === accountId) {
+    readonly forProject: PlatformProjectStores["forProject"] = (computerId) => {
+        if (this.#local?.computerId === computerId) {
             return this.#local.store;
         }
-        const existing = this.#remote.get(accountId);
+        const existing = this.#remote.get(computerId);
         if (existing !== undefined) {
             return existing;
         }
-        const placement = decodeAccountPlacement(accountId);
+        const placement = decodeComputerPlacement(computerId);
         if (placement === null) {
             throw new PairingDirectoryError("directory_unavailable", "Project storage is unavailable");
         }
-        const store = new AccountDurableObjectStore(this.#namespace, accountId, placement.locationHint);
-        this.#remote.set(accountId, store);
+        const store = new ComputerDurableObjectStore(this.#namespace, computerId, placement.locationHint);
+        this.#remote.set(computerId, store);
         return store;
     };
 

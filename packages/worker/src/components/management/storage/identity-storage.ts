@@ -76,16 +76,16 @@ export interface IdentityTransfer extends SharedLinkTerms {
 
 export class IdentityStorage {
     readonly #database: unknown;
-    readonly #accountId: string | null;
+    readonly #computerId: string | null;
 
-    constructor(database: unknown, accountId: string | null = null) {
+    constructor(database: unknown, computerId: string | null = null) {
         this.#database = database;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly createAnonymous = async (
         userId: string,
-        accountId: string,
+        computerId: string,
         now: number,
         signal: AbortSignal,
         token: string,
@@ -121,11 +121,11 @@ export class IdentityStorage {
             )
             .get();
         signal.throwIfAborted();
-        return credential === undefined ? null : { token, userId, accountId };
+        return credential === undefined ? null : { token, userId, computerId };
     };
 
     readonly findCredential = async (token: string, signal: AbortSignal) => {
-        if (this.#accountId === null) {
+        if (this.#computerId === null) {
             return null;
         }
         signal.throwIfAborted();
@@ -272,7 +272,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
-        const code = createProjectCredential("morty_transfer_v1", v.parse(v.string(), this.#accountId));
+        const code = createProjectCredential("morty_transfer_v1", v.parse(v.string(), this.#computerId));
         // Check the issuing credential in the write itself so ending its access cannot race issuance. Its term needs no
         // check here: the terms are capped by it, so a link shared after it ended adds no device.
         const database = requireIdentityDatabase(this.#database);
@@ -332,7 +332,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<string | null> => {
         signal.throwIfAborted();
-        const token = createProjectCredential("morty_recovery_v1", v.parse(v.string(), this.#accountId));
+        const token = createProjectCredential("morty_recovery_v1", v.parse(v.string(), this.#computerId));
         const database = requireIdentityDatabase(this.#database);
         const result = await database
             .insert(anonymousCredential)
@@ -414,7 +414,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
         const parsed = readProjectCredential(code);
-        if (parsed?.kind !== "morty_transfer_v1" || parsed.accountId !== this.#accountId) {
+        if (parsed?.kind !== "morty_transfer_v1" || parsed.computerId !== this.#computerId) {
             return null;
         }
         signal.throwIfAborted();
@@ -546,7 +546,7 @@ export class IdentityStorage {
         ) {
             return null;
         }
-        return { token, userId: issuedThroughLink.userId, accountId: parsed.accountId };
+        return { token, userId: issuedThroughLink.userId, computerId: parsed.computerId };
     };
 
     readonly revokeCredential = async (
@@ -618,9 +618,9 @@ export class IdentityStorage {
         return true;
     };
 
-    readonly ownsProject = async (userId: string, accountId: string, signal: AbortSignal): Promise<boolean> => {
+    readonly ownsProject = async (userId: string, computerId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
-        if (this.#accountId !== accountId) {
+        if (this.#computerId !== computerId) {
             return false;
         }
         const row = await requireIdentityDatabase(this.#database)

@@ -41,12 +41,12 @@ async function createChatFixture(
     nativeSessionIds: ReadonlySet<string> = new Set(),
 ) {
     const identity = await cloud.createAnonymousUser();
-    const runtime = await cloud.connectAgent(identity.accountId, agents, nativeSessionIds);
+    const runtime = await cloud.connectAgent(identity.computerId, agents, nativeSessionIds);
     const environment = cloud.environment();
     const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
         worker.fetch(
             new Request(
-                `${APP_ORIGIN}/morty/api/${path.startsWith("chat/") ? path.replace("chat/", `chat/accounts/${identity.accountId}/`) : `accounts/${identity.accountId}/${path}`}`,
+                `${APP_ORIGIN}/morty/api/${path.startsWith("chat/") ? path.replace("chat/", `chat/computers/${identity.computerId}/`) : `computers/${identity.computerId}/${path}`}`,
                 {
                     method,
                     headers: {
@@ -62,7 +62,7 @@ async function createChatFixture(
     const { botId } = v.parse(v.object({ botId: v.string() }), await served.json());
     return {
         botId,
-        accountId: identity.accountId,
+        computerId: identity.computerId,
         request,
         runtime,
         [Symbol.asyncDispose]: () => runtime[Symbol.asyncDispose](),
@@ -398,7 +398,7 @@ for (const configured of [false, true]) {
     }) => {
         const nativeSessionId = crypto.randomUUID();
         await using fixture = await createChatFixture(cloud, undefined, new Set([nativeSessionId]));
-        await using bound = configured ? await cloud.connectAgent(fixture.accountId) : null;
+        await using bound = configured ? await cloud.connectAgent(fixture.computerId) : null;
         if (bound !== null) {
             expect(
                 (
@@ -695,12 +695,12 @@ test("Given a chat opened with a Session credential, When the machine's owner re
     });
     expect(opened.status).toBe(200);
     const access = v.parse(
-        v.object({ endpoint: v.string(), accountId: v.string(), sessionId: v.string(), credential: v.string() }),
+        v.object({ endpoint: v.string(), computerId: v.string(), sessionId: v.string(), credential: v.string() }),
         await opened.json(),
     );
     const client = new MortyClient({
         endpoint: access.endpoint,
-        accountId: access.accountId,
+        computerId: access.computerId,
         credentialProvider: { credential: async () => access.credential },
     });
     const readHistory = () =>
@@ -771,7 +771,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
             kind: "subscribe",
             subscriptionId: "statuses",
             method: "POST",
-            path: `/morty/api/chat/accounts/${fixture.accountId}/bots/${fixture.botId}/managed-session/status-events`,
+            path: `/morty/api/chat/computers/${fixture.computerId}/bots/${fixture.botId}/managed-session/status-events`,
             headers: [["authorization", `Bearer ${browser}`]],
             body: null,
         }),
@@ -836,7 +836,7 @@ test("Given two browsers joined through links, When one disconnects the other br
             }),
             cloud.environment(),
         );
-    const opened = await asBrowser(other, `chat/accounts/${fixture.accountId}/bots/${fixture.botId}/access`, "POST", {
+    const opened = await asBrowser(other, `chat/computers/${fixture.computerId}/bots/${fixture.botId}/access`, "POST", {
         agentRef: "codex",
         configurations: [],
         conversationKey: "other-browser-window",
@@ -844,24 +844,24 @@ test("Given two browsers joined through links, When one disconnects the other br
     });
     expect(opened.status).toBe(200);
     const window = v.parse(
-        v.object({ endpoint: v.string(), accountId: v.string(), sessionId: v.string(), credential: v.string() }),
+        v.object({ endpoint: v.string(), computerId: v.string(), sessionId: v.string(), credential: v.string() }),
         await opened.json(),
     );
     const readHistory = () =>
         new MortyClient({
             endpoint: window.endpoint,
-            accountId: window.accountId,
+            computerId: window.computerId,
             credentialProvider: { credential: async () => window.credential },
         }).events.list(window.sessionId, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
-    const ended = await asBrowser(owner, `accounts/${fixture.accountId}/identity/v1/other-browser-access`, "DELETE");
+    const ended = await asBrowser(owner, `computers/${fixture.computerId}/identity/v1/other-browser-access`, "DELETE");
 
     expect(ended.status).toBe(200);
     expect(await ended.json()).toEqual({ status: "other_browser_access_ended", sessionAccess: "revoked" });
-    expect((await asBrowser(owner, `accounts/${fixture.accountId}/session`)).status).toBe(200);
+    expect((await asBrowser(owner, `computers/${fixture.computerId}/session`)).status).toBe(200);
     expect((await fixture.request("session")).status).toBe(200);
-    const refused = await asBrowser(other, `accounts/${fixture.accountId}/session`);
+    const refused = await asBrowser(other, `computers/${fixture.computerId}/session`);
     expect(refused.status).toBe(401);
     expect(await refused.json()).toMatchObject({ error: { reason: "ACCESS_REVOKED" } });
     await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });

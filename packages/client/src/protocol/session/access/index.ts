@@ -8,7 +8,7 @@ const claimsSchema = z
     .object({
         expiresAtEpochMilliseconds: z.number().int().nonnegative(),
         issuedAtEpochMilliseconds: z.number().int().nonnegative(),
-        accountId: identifierStringSchema,
+        computerId: identifierStringSchema,
         purpose: z.literal("session-access"),
         runtimeId: identifierStringSchema,
         sessionId: identifierStringSchema,

@@ -1,5 +1,5 @@
 import { isProjectLocationHint } from "@morty-build/client/protocol";
-import { projectBucketLocation } from "../entity/machine-account-id.ts";
+import { projectBucketLocation } from "../entity/computer-id.ts";
 import type { PlatformProjectPlacement, PlatformProjectPlacementRegistry } from "../entity/platform-control-plane.ts";
 
 export interface PlatformStorageBindings {

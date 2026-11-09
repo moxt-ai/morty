@@ -48,7 +48,7 @@ export async function followSetupInstructions(options: {
     assert.ok(isSetupModule(bundle));
     const events: Readonly<Record<string, unknown>>[] = [];
     const exitCode = await bundle.runSetup(
-        [...args, ...(options.replaceProject === undefined ? [] : ["--replace-account", options.replaceProject])],
+        [...args, ...(options.replaceProject === undefined ? [] : ["--replace-computer", options.replaceProject])],
         {
             ...(options.clock === undefined ? {} : { clock: options.clock }),
             state: options.state,
@@ -74,7 +74,7 @@ export async function followSetupInstructions(options: {
         ready,
         identity: {
             botId: text(ready["botId"], "ready Bot"),
-            accountId: text(configuration["project_id"], "saved project"),
+            computerId: text(configuration["project_id"], "saved project"),
             userId: text(configuration["user_id"], "saved user"),
         },
     };

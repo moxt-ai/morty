@@ -9,12 +9,12 @@ import { platformAuditEvent } from "../schema/project-do/index.ts";
  * constructs this; everything else reaches these tables through its operations.
  */
 export class SqlitePlatformProjectStore extends SqliteProjectStore implements PlatformProjectStore {
-    readonly #accountId: string;
+    readonly #computerId: string;
     readonly #database: SqlDatabase;
 
-    constructor(accountId: string, database: SqlDatabase) {
-        super(accountId, database);
-        this.#accountId = accountId;
+    constructor(computerId: string, database: SqlDatabase) {
+        super(computerId, database);
+        this.#computerId = computerId;
         this.#database = database;
     }
 
@@ -22,9 +22,9 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
         await relayDrizzle(this.#database, signal)
             .insert(platformAuditEvent)
             .values({
-                auditId: audit.action === "project.created" ? `pae_created_${this.#accountId}` : audit.auditId,
+                auditId: audit.action === "project.created" ? `pae_created_${this.#computerId}` : audit.auditId,
                 appId: audit.appId,
-                accountId: this.#accountId,
+                computerId: this.#computerId,
                 actorKind: audit.actorKind,
                 actorId: audit.actorId,
                 actorRef: audit.actorRef,
@@ -41,7 +41,7 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
         const rows = await relayDrizzle(this.#database, signal)
             .select()
             .from(platformAuditEvent)
-            .where(eq(platformAuditEvent.accountId, this.#accountId))
+            .where(eq(platformAuditEvent.computerId, this.#computerId))
             .orderBy(desc(platformAuditEvent.recordedAt), desc(platformAuditEvent.auditId))
             .limit(limit);
         return rows.map((row) => ({
@@ -53,7 +53,7 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
             audit_id: row.auditId,
             details_json: row.detailsJson,
             outcome: row.outcome,
-            project_id: row.accountId,
+            project_id: row.computerId,
             recorded_at: row.recordedAt,
             subject_id: row.subjectId,
         }));

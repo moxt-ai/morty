@@ -40,7 +40,7 @@ test("Given an identity creation whose reply was lost, When the client retries i
             v.object({
                 token: v.string(),
                 userId: v.string(),
-                accountId: v.string(),
+                computerId: v.string(),
                 bot: v.object({ botId: v.string() }),
             }),
             await response.json(),
@@ -51,7 +51,7 @@ test("Given an identity creation whose reply was lost, When the client retries i
     const retried = await create();
 
     expect(retried).toEqual(lost);
-    const session = await worker.fetch(accountRequest(retried.token, retried.accountId), environment);
+    const session = await worker.fetch(accountRequest(retried.token, retried.computerId), environment);
     expect(session.status).toBe(200);
     expect(await session.json()).toMatchObject({ userId: lost.userId });
 });
@@ -61,7 +61,7 @@ test("Given a device that opened a link and opens the next one, When the reply i
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
@@ -105,7 +105,7 @@ test("Given a device that shared links before and after renewing its credential,
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET") =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}` },
             }),
@@ -195,16 +195,16 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
             environment,
         );
         expect(created.status).toBe(201);
-        const identity = v.parse(v.object({ token: v.string(), accountId: v.string() }), await created.json());
+        const identity = v.parse(v.object({ token: v.string(), computerId: v.string() }), await created.json());
         const projectRequest = () =>
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/account`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
                 headers: { authorization: `Bearer ${identity.token}` },
             });
         const response = await worker.fetch(projectRequest(), environment);
         expect(response.status).toBe(200);
-        const initial = v.parse(v.object({ account: v.object({ accountId: v.string() }) }), await response.json());
+        const initial = v.parse(v.object({ computer: v.object({ computerId: v.string() }) }), await response.json());
         const projectCode = { apac: "ap", "apac-ne": "an", "apac-se": "as", wnam: "wn" }[region];
-        expect(initial.account.accountId).toMatch(new RegExp(`^prj_${projectCode}_01_`));
+        expect(initial.computer.computerId).toMatch(new RegExp(`^prj_${projectCode}_01_`));
         const revisited = await worker.fetch(
             new GeolocatedRequest(projectRequest(), region === "wnam" ? "AS" : "NA", region === "wnam" ? "CN" : "US"),
             environment,
@@ -238,8 +238,8 @@ test("Given explicit location choices, When users create Morty identities, Then 
         );
 
         expect(response.status).toBe(201);
-        const identity = v.parse(v.object({ accountId: v.string() }), await response.json());
-        expect(identity.accountId).toMatch(new RegExp(`^prj_${projectCode}_01_`, "u"));
+        const identity = v.parse(v.object({ computerId: v.string() }), await response.json());
+        expect(identity.computerId).toMatch(new RegExp(`^prj_${projectCode}_01_`, "u"));
     }
 });
 
@@ -252,7 +252,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
             this.cf = { continent };
         }
     }
-    const identitySchema = v.object({ userId: v.string(), accountId: v.string(), token: v.string() });
+    const identitySchema = v.object({ userId: v.string(), computerId: v.string(), token: v.string() });
     const asian = await worker.fetch(new RegionalRequest("AS"), environment);
     const american = await worker.fetch(new RegionalRequest("NA"), environment);
     expect(asian.status).toBe(201);
@@ -262,7 +262,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
     const sameRegionResponse = await worker.fetch(new RegionalRequest("AS"), environment);
     expect(sameRegionResponse.status).toBe(201);
     const sameRegion = v.parse(identitySchema, await sameRegionResponse.json());
-    expect((await worker.fetch(accountRequest(apac.token, sameRegion.accountId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(apac.token, sameRegion.computerId), environment)).status).toBe(401);
     expect((await worker.fetch(accountRequest(apac.token), environment)).status).toBe(401);
     for (const [identity, other] of [
         [apac, wnam],
@@ -271,12 +271,12 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
         if (identity === undefined || other === undefined) {
             throw new Error("Missing identity fixture");
         }
-        const session = await worker.fetch(accountRequest(identity.token, identity.accountId), environment);
+        const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
         expect(session.status).toBe(200);
         expect(await session.json()).toMatchObject({ userId: identity.userId });
-        expect((await worker.fetch(accountRequest(identity.token, other.accountId), environment)).status).toBe(401);
+        expect((await worker.fetch(accountRequest(identity.token, other.computerId), environment)).status).toBe(401);
         const transfer = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/identity/transfers`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/transfers`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${identity.token}` },
             }),
@@ -296,7 +296,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
             );
         const redeemed = await redeem();
         expect(redeemed.status).toBe(200);
-        expect(await redeemed.json()).toMatchObject({ userId: identity.userId, accountId: identity.accountId });
+        expect(await redeemed.json()).toMatchObject({ userId: identity.userId, computerId: identity.computerId });
         // A link adds one device.
         expect((await redeem()).status).toBe(410);
     }
@@ -304,7 +304,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
 
 test("Given a first-time visitor, When their identity and Bot are managed, Then both persist behind the Project boundary", async () => {
     const identity = await fixture.createAnonymousUser();
-    const response = await worker.fetch(accountRequest(identity.token, identity.accountId), fixture.environment());
+    const response = await worker.fetch(accountRequest(identity.token, identity.computerId), fixture.environment());
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -313,7 +313,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         accessExpiresAt: null,
     });
     const served = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/bot`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bot`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
@@ -321,7 +321,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     expect(served.status).toBe(200);
     const bot = v.parse(v.object({ botId: v.string(), runtimeId: v.null() }), await served.json());
     const persisted = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/bots/${bot.botId}`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bots/${bot.botId}`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
@@ -333,16 +333,16 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         instructions: "",
     });
     const projectResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/account`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
     );
-    const { account } = v.parse(
-        v.object({ account: v.object({ accountId: v.string() }) }),
+    const { computer } = v.parse(
+        v.object({ computer: v.object({ computerId: v.string() }) }),
         await projectResponse.json(),
     );
-    expect(identity.accountId).toBe(account.accountId);
+    expect(identity.computerId).toBe(computer.computerId);
     expect(identity.token).toMatch(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
     // A Project that was never created is not found, whichever credential asks for it.
     expect(
@@ -355,14 +355,14 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const served = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/bot`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bot`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
     const { botId } = v.parse(v.object({ botId: v.string() }), await served.json());
     const response = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/chat/accounts/${identity.accountId}/bots/${botId}/setup/runtimes`, {
+        new Request(`${APP_ORIGIN}/morty/api/chat/computers/${identity.computerId}/bots/${botId}/setup/runtimes`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${identity.token}`,
@@ -380,7 +380,7 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const created = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/transfers`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}` },
         }),
@@ -417,10 +417,10 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
     expect(await reused.json()).toMatchObject({
         error: { code: "TRANSFER_UNAVAILABLE", message: "This link was already used, has expired, or was revoked." },
     });
-    expect((await worker.fetch(accountRequest(device, owner.accountId), environment)).status).toBe(200);
+    expect((await worker.fetch(accountRequest(device, owner.computerId), environment)).status).toBe(200);
 
     const recoveryResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/recovery-token`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/recovery-token`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}` },
         }),
@@ -432,23 +432,23 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
         await recoveryResponse.json(),
     ).token;
     const ended = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/v1/browser-access`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/v1/browser-access`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${device}` },
         }),
         environment,
     );
     expect(ended.status).toBe(204);
-    expect((await worker.fetch(accountRequest(device, owner.accountId), environment)).status).toBe(401);
-    expect((await worker.fetch(accountRequest(recoveryToken, owner.accountId), environment)).status).toBe(200);
-    expect((await worker.fetch(accountRequest(owner.token, owner.accountId), environment)).status).toBe(200);
+    expect((await worker.fetch(accountRequest(device, owner.computerId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(recoveryToken, owner.computerId), environment)).status).toBe(200);
+    expect((await worker.fetch(accountRequest(owner.token, owner.computerId), environment)).status).toBe(200);
 });
 
 test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the user's Bot", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const servedResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/bot`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bot`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
@@ -456,7 +456,7 @@ test("Given an anonymous user with a Machine, When a transfer link is redeemed, 
     expect(servedResponse.status).toBe(200);
     const served = v.parse(v.object({ botId: v.string() }), await servedResponse.json());
     const transfer = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/identity/transfers`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/transfers`, {
             method: "POST",
             headers: { authorization: `Bearer ${identity.token}` },
         }),
@@ -476,7 +476,7 @@ test("Given an anonymous user with a Machine, When a transfer link is redeemed, 
     expect(redeemed.status).toBe(200);
     expect(await redeemed.json()).toMatchObject({
         userId: identity.userId,
-        accountId: identity.accountId,
+        computerId: identity.computerId,
         botId: served.botId,
     });
 });
@@ -485,7 +485,7 @@ test("Given the first browser for Morty, When it retires its local credential af
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const recoveryResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/identity/recovery-token`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/recovery-token`, {
             method: "POST",
             headers: { authorization: `Bearer ${identity.token}` },
         }),
@@ -495,7 +495,7 @@ test("Given the first browser for Morty, When it retires its local credential af
     const recoveryToken = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
 
     const ended = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/identity/v1/local-credential`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/v1/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${identity.token}` },
         }),
@@ -503,8 +503,8 @@ test("Given the first browser for Morty, When it retires its local credential af
     );
 
     expect(ended.status).toBe(204);
-    expect((await worker.fetch(accountRequest(identity.token, identity.accountId), environment)).status).toBe(401);
-    expect((await worker.fetch(accountRequest(recoveryToken, identity.accountId), environment)).status).toBe(200);
+    expect((await worker.fetch(accountRequest(identity.token, identity.computerId), environment)).status).toBe(401);
+    expect((await worker.fetch(accountRequest(recoveryToken, identity.computerId), environment)).status).toBe(200);
 });
 
 test("Given anonymous Morty sessions, When the account endpoint authenticates them, Then only valid active identities are disclosed", async () => {
@@ -516,7 +516,7 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     }
     const environment = fixture.environment();
     const local = await fixture.createAnonymousUser();
-    const response = await worker.fetch(accountRequest(local.token, local.accountId), environment);
+    const response = await worker.fetch(accountRequest(local.token, local.computerId), environment);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
         authentication: { kind: "anonymous" },
@@ -529,7 +529,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const transfer = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/transfers`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/transfers`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}` },
         }),
@@ -546,7 +546,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
     );
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     const revoked = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/revoke-all-access`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}` },
         }),
@@ -555,7 +555,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
     expect(revoked.status).toBe(200);
     const management = (token: string) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/management/bot`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/management/bot`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
             environment,
@@ -564,7 +564,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
 
     // Released pages read the status and code, which stay as they were.
     for (const response of [
-        await worker.fetch(accountRequest(browser, owner.accountId), environment),
+        await worker.fetch(accountRequest(browser, owner.computerId), environment),
         await management(browser),
     ]) {
         expect(response.status).toBe(401);
@@ -573,13 +573,13 @@ test("Given browser access the owner revoked, When the browser presents its cred
         });
     }
     for (const response of [
-        await worker.fetch(accountRequest(unknownToken, owner.accountId), environment),
+        await worker.fetch(accountRequest(unknownToken, owner.computerId), environment),
         await management(unknownToken),
     ]) {
         expect(response.status).toBe(401);
         expect(await response.json()).toEqual({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } });
     }
-    expect((await worker.fetch(accountRequest(owner.token, owner.accountId), environment)).status).toBe(200);
+    expect((await worker.fetch(accountRequest(owner.token, owner.computerId), environment)).status).toBe(200);
 });
 
 test("Given a browser that opened one link, When it opens another link for the same user and later ends its access, Then its earlier credential stops at once while another device keeps its own access", async () => {
@@ -587,7 +587,7 @@ test("Given a browser that opened one link, When it opens another link for the s
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
@@ -640,7 +640,7 @@ test("Given a device with a month of access, When it opens a link that grants le
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
@@ -705,7 +705,7 @@ test("Given two tabs of one browser open new links at once, When the browser lat
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
@@ -753,7 +753,7 @@ test("Given browsers that joined through links shared by the computer and by ano
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}` },
             }),
@@ -776,7 +776,7 @@ test("Given browsers that joined through links shared by the computer and by ano
     const listed = async (token: string) => {
         // Through the public entry, as browsers without the WebSocket bridge and other clients reach it.
         const response = await fetchPublicApplication(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/devices`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/devices`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
             environment,
@@ -819,7 +819,7 @@ test("Given the owner chooses how long a shared device keeps access, When the li
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
@@ -877,7 +877,7 @@ test("Given two devices that joined through links, When one disconnects the othe
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),
@@ -933,7 +933,7 @@ test("Given a browser whose credential a later link replaced, When a stale tab o
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
                 ...init,
                 headers: { authorization: `Bearer ${token}`, ...init.headers },
             }),

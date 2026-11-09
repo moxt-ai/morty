@@ -9,11 +9,7 @@ import {
     ProjectPermission,
     validateIdentifier,
 } from "@morty-build/relay-core";
-import {
-    decodeAccountPlacement,
-    encodePlatformAccountId,
-    projectBucketLocation,
-} from "../entity/machine-account-id.ts";
+import { decodeComputerPlacement, encodePlatformComputerId, projectBucketLocation } from "../entity/computer-id.ts";
 import {
     hasControlCharacters,
     PlatformAppCredentialAccess,
@@ -54,7 +50,7 @@ function projectResource(row: ProjectRow): object {
         deletedAt: typeof row.deleted_at === "number" ? iso(row.deleted_at) : "",
         displayName: row.display_name,
         lifecycle: row.lifecycle,
-        accountId: row.project_id,
+        computerId: row.project_id,
         updatedAt: iso(row.updated_at),
     };
 }
@@ -73,9 +69,9 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
     readonly #placements: PlatformProjectPlacementRegistry;
     readonly #appAuthentication: AppCredentialAuthenticationService;
     readonly #projectAccess: AppCredentialProjectAccess;
-    readonly resolveProjectPlacement = (accountId: string, signal: AbortSignal): { readonly location: string } => {
+    readonly resolveProjectPlacement = (computerId: string, signal: AbortSignal): { readonly location: string } => {
         signal.throwIfAborted();
-        const placement = decodeAccountPlacement(accountId);
+        const placement = decodeComputerPlacement(computerId);
         if (placement === null) {
             throw new PlatformControlPlaneError("invalid_request", "The Project identifier is invalid", 400);
         }
@@ -144,7 +140,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
             );
         }
         const now = Date.now();
-        const accountId = encodePlatformAccountId(placement, createRandomToken(18));
+        const computerId = encodePlatformComputerId(placement, createRandomToken(18));
         const project: ProjectRow = {
             app_id: principal.appId,
             client_reference: clientReference,
@@ -154,7 +150,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
             idempotency_key: normalizedIdempotencyKey,
             lifecycle: "active",
             location_hint: placement.locationHint,
-            project_id: accountId,
+            project_id: computerId,
             updated_at: now,
         };
         if (!(await this.#storage.registerMachineAccount(project, principal.credentialId, signal))) {
@@ -192,7 +188,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
                 auditId: `pae_created_${project.project_id}`,
                 detailsJson: "{}",
                 outcome: "succeeded",
-                accountId: project.project_id,
+                computerId: project.project_id,
                 recordedAt: project.created_at,
                 subjectId: project.project_id,
             },
@@ -214,11 +210,11 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
                 "This AppCredential requires an explicit Project target",
             );
         }
-        const accountId = projects[0];
-        if (accountId === undefined) {
+        const computerId = projects[0];
+        if (computerId === undefined) {
             throw new ProjectAuthenticationError("project_access_denied", "The AppCredential has no Project access");
         }
-        return await this.authorizeCredentialForProject(row, accountId, requiredPermission, actorRef, signal);
+        return await this.authorizeCredentialForProject(row, computerId, requiredPermission, actorRef, signal);
     };
     readonly authenticate = async (
         credential: ReturnType<typeof decodeProjectCredential>,
@@ -226,7 +222,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => await this.authorize(credential, requiredPermission, "", signal);
     readonly authorizeProject = async (
-        accountId: string,
+        computerId: string,
         credentialValue: string,
         requiredPermission: ProjectPermission,
         actorRef: string,
@@ -236,14 +232,14 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         const row = await this.authenticatedCredential(credentialValue, signal);
         return await this.authorizeCredentialForProject(
             row,
-            validateIdentifier(accountId, "project_id"),
+            validateIdentifier(computerId, "project_id"),
             requiredPermission,
             actorReference(actorRef),
             signal,
         );
     };
     readonly authorizeSessionCredentialRecord = async (
-        accountId: string,
+        computerId: string,
         credential: CredentialRow,
         requiredPermission: ProjectPermission,
         issuedAt: number,
@@ -251,43 +247,46 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
     ): Promise<ProjectAccessContext> =>
         await this.#projectAccess.authorizeSessionCredential(
             credential,
-            validateIdentifier(accountId, "project_id"),
+            validateIdentifier(computerId, "project_id"),
             [requiredPermission],
             issuedAt,
             signal,
         );
     readonly revokeSessionAccess = async (
-        accountId: string,
+        computerId: string,
         credentialValue: string,
         signal: AbortSignal,
     ): Promise<number> => {
-        await this.authorizePlatformCredential(accountId, credentialValue, ProjectPermission.SessionWrite, "", signal);
+        await this.authorizePlatformCredential(computerId, credentialValue, ProjectPermission.SessionWrite, "", signal);
         return sessionAccessRevokedThrough(
             await this.#storage.recordSessionAccessRevocation(
-                validateIdentifier(accountId, "project_id"),
+                validateIdentifier(computerId, "project_id"),
                 Date.now(),
                 signal,
             ),
         );
     };
     readonly readSessionAccessRevokedThrough = async (
-        accountId: string,
+        computerId: string,
         signal: AbortSignal,
     ): Promise<number | null> => {
         const revokedAt = await this.#storage.readSessionAccessRevocation(
-            validateIdentifier(accountId, "project_id"),
+            validateIdentifier(computerId, "project_id"),
             signal,
         );
         return revokedAt === null ? null : sessionAccessRevokedThrough(revokedAt);
     };
-    readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (accountId, signal) => {
-        const project = await this.#storage.readActiveAccountScope(validateIdentifier(accountId, "project_id"), signal);
+    readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (computerId, signal) => {
+        const project = await this.#storage.readActiveComputerScope(
+            validateIdentifier(computerId, "project_id"),
+            signal,
+        );
         if (project === null) {
             throw new ProjectAuthenticationError("project_access_denied", "The Project is unavailable");
         }
     };
     readonly authorizePlatformCredential = async (
-        accountId: string,
+        computerId: string,
         credentialValue: string,
         requiredPermission: ProjectPermission,
         actorRef: string,
@@ -296,7 +295,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         const row = await this.authenticatedCredential(credentialValue, signal);
         const project = await this.authorizeCredentialForProject(
             row,
-            validateIdentifier(accountId, "project_id"),
+            validateIdentifier(computerId, "project_id"),
             requiredPermission,
             actorReference(actorRef),
             signal,
@@ -305,18 +304,18 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
     };
     private readonly authorizeCredentialForProject = async (
         row: CredentialRow,
-        accountId: string,
+        computerId: string,
         requiredPermission: ProjectPermission,
         _actorRef: string,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> =>
-        await this.#projectAccess.authorize(row, accountId, [requiredPermission], signal);
+        await this.#projectAccess.authorize(row, computerId, [requiredPermission], signal);
     private readonly authenticatedCredential = async (
         credentialValue: string,
         signal: AbortSignal,
     ): Promise<CredentialRow> => await this.#appAuthentication.verify(credentialValue, signal);
     private readonly allowedProjects = async (row: CredentialRow, signal: AbortSignal): Promise<readonly string[]> => {
-        const projects = await this.#storage.listActiveAccountIds(row.app_id, signal);
+        const projects = await this.#storage.listActiveComputerIds(row.app_id, signal);
         if (row.all_projects === 1) {
             return Object.freeze(projects);
         }

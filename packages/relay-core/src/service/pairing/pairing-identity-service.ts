@@ -1,5 +1,5 @@
 import { RuntimeAccessContext } from "../../entity/authentication/project-authentication.ts";
-import { AccountScope } from "../../entity/do/session.ts";
+import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../entity/pairing/pairing.ts";
 import type { PairingIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { PairingScopeRow } from "../../entity/pairing/pairing-records.ts";
@@ -42,7 +42,7 @@ export class PairingIdentityService {
         signal: AbortSignal,
     ): Promise<ProjectStorageContext> => {
         const identity = await this.authenticate(credential, signal);
-        const project = await this.#projects.resolve(identity.accountId, signal);
+        const project = await this.#projects.resolve(identity.computerId, signal);
         signal.throwIfAborted();
         if (project === null) {
             throw unmatchedCredential(credential);
@@ -94,10 +94,10 @@ export class PairingIdentityService {
             if (matches.length !== 1 || match === undefined) {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
             }
-            const accountId = validateIdentifier(match.row.project_id, "project_id");
+            const computerId = validateIdentifier(match.row.project_id, "project_id");
             const runtimeId = validateIdentifier(match.row.runtime_id, "runtime_id");
             const channelId = validateIdentifier(match.row.channel_id, "channel_id");
-            const project = await this.#projects.resolve(accountId, signal);
+            const project = await this.#projects.resolve(computerId, signal);
             signal.throwIfAborted();
             if (project === null) {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
@@ -108,7 +108,7 @@ export class PairingIdentityService {
             return {
                 kind: match.kind,
                 access: new RuntimeAccessContext(
-                    new AccountScope(accountId),
+                    new ComputerScope(computerId),
                     runtimeId,
                     channelId,
                     `daemon:${channelId}`,
@@ -131,7 +131,7 @@ export class PairingIdentityService {
     private readonly authenticate = async (credential: PairingIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
-            const matches: { readonly accountId: string; readonly source: ProjectStore }[] = [];
+            const matches: { readonly computerId: string; readonly source: ProjectStore }[] = [];
             for (const source of this.#sources) {
                 for (const row of await source.findCredential(credential, signal)) {
                     signal.throwIfAborted();
@@ -152,7 +152,7 @@ export class PairingIdentityService {
                             throw new PairingDirectoryError("credential_expired", "The browser credential expired");
                         }
                     }
-                    matches.push({ accountId: validateIdentifier(row.project_id, "project_id"), source });
+                    matches.push({ computerId: validateIdentifier(row.project_id, "project_id"), source });
                 }
             }
             const match = matches[0];

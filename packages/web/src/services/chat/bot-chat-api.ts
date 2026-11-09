@@ -35,7 +35,7 @@ const identifier = v.custom<Identifier>(isIdentifier);
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
-        accountId: identifier,
+        computerId: identifier,
         sessionId: identifier,
         credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
@@ -69,7 +69,7 @@ const managedSessionSchema = v.pipe(
         directoryLabel: v.string(),
         directoryId: v.string(),
         additionalDirectoryIds: v.array(v.string()),
-        accountId: identifier,
+        computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
         status: managedSessionStatusSchema,
@@ -145,7 +145,7 @@ export type ConversationActiveTurn =
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string };
 const sessionAccessSchema = v.object({
     sessionId: identifier,
-    accountId: identifier,
+    computerId: identifier,
     credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
@@ -280,7 +280,7 @@ class BrowserSessionTransport implements MortyHttpTransport, MortyLiveEventTrans
 export class BotChatApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
-    readonly #accountId: string;
+    readonly #computerId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #credentialRejected: (() => void) | undefined;
@@ -294,7 +294,7 @@ export class BotChatApi {
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
-        readonly accountId: string;
+        readonly computerId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         /**
          * The access that replaced `rejected`, once whoever replaces it has finished, or null when nothing did. A
@@ -309,7 +309,7 @@ export class BotChatApi {
         readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
-        this.#accountId = v.parse(identifier, options.accountId);
+        this.#computerId = v.parse(identifier, options.computerId);
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#replacedToken = options.replacedToken;
@@ -403,7 +403,7 @@ export class BotChatApi {
         await this.#subscribe(
             new Request(
                 new URL(
-                    `/morty/api/chat/accounts/${encodeURIComponent(this.#accountId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
+                    `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
                     this.#origin,
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
@@ -525,7 +525,7 @@ export class BotChatApi {
     };
     /** Resolves once the Machine's Runtime binding differs from the binding this client last read. */
     readonly waitForRuntimeBindingChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#accountId, botId), "GET", parent);
+        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#computerId, botId), "GET", parent);
     readonly waitForRuntimeConfigurationChange = async (
         botId: string,
         parent: AbortSignal,
@@ -533,7 +533,7 @@ export class BotChatApi {
     ): Promise<void> =>
         await this.#waitForResourceChange(
             new URL(
-                `/morty/api/chat/accounts/${encodeURIComponent(this.#accountId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
+                `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
                 this.#origin,
             ),
             "POST",
@@ -644,13 +644,13 @@ export class BotChatApi {
         };
         let access = initialAccess ?? (await readAccess(signal));
         const endpoint = sessionEndpoint(access.endpoint);
-        const accountId = access.accountId;
+        const computerId = access.computerId;
         if (access.sessionId !== sessionId) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
         return new MortyClient({
             endpoint,
-            accountId,
+            computerId,
             operationTimeoutMilliseconds: 120000,
             maxStreamReconnectAttempts: 0,
             transport: this.#sessionTransport,
@@ -661,7 +661,7 @@ export class BotChatApi {
                     }
                     if (
                         sessionEndpoint(access.endpoint) !== endpoint ||
-                        access.accountId !== accountId ||
+                        access.computerId !== computerId ||
                         access.sessionId !== sessionId
                     ) {
                         throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
@@ -698,7 +698,7 @@ export class BotChatApi {
             this.#fetchRequest(
                 new Request(
                     new URL(
-                        `/morty/api/chat/accounts/${encodeURIComponent(this.#accountId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
                         this.#origin,
                     ),
                     {

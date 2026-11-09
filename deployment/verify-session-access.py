@@ -46,10 +46,10 @@ def verify(origin, app_credential, root_key, revision):
     })
     if status != 201:
         fail('Verification Project provisioning', status, project)
-    account_id = project['accountId']
+    computer_id = project['computerId']
     session_id = 'deployment-' + revision[:12]
     runtime_id = 'deployment-verification'
-    status, access = request(origin + '/v1/accounts/' + account_id + '/sessions/' + session_id + '/access-credentials', app_credential, {
+    status, access = request(origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/access-credentials', app_credential, {
         'expiresInSeconds': 60, 'runtimeId': runtime_id,
     })
     if status != 201:
@@ -67,9 +67,9 @@ def verify(origin, app_credential, root_key, revision):
     if not hmac.compare_digest(signature, encoded_signature):
         raise ValueError('Production Session signature does not match the configured signing secret')
     # The Session credential selects RuntimeRelay; the Runtime verifies it before answering this public route.
-    verify_url = origin + '/v1/accounts/' + account_id + '/sessions/' + session_id + '/live-event-subscription-target'
+    verify_url = origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/live-event-subscription-target'
     status, selected = request(verify_url, credential)
-    if status != 200 or selected.get('accountId') != account_id or selected.get('runtimeId') != runtime_id:
+    if status != 200 or selected.get('computerId') != computer_id or selected.get('runtimeId') != runtime_id:
         fail('Production Runtime verification', status, selected)
     stored_digest = hashlib.sha256(app_credential.encode()).hexdigest().encode()
     forged = signed.decode() + '_' + base64.urlsafe_b64encode(hmac.digest(stored_digest, signed, 'sha256')).rstrip(b'=').decode()

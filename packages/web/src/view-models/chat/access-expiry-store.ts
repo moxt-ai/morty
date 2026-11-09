@@ -64,11 +64,11 @@ export interface AccessExpiryStore {
  * phone may have slept through the moment the reminder was due.
  */
 export function createAccessExpiryStore(options: {
-    readonly accountId: string;
+    readonly computerId: string;
     readonly accessExpiresAt: (signal: AbortSignal) => Promise<string | null>;
     readonly clock: Clock;
 }) {
-    const acknowledged = accessAcknowledgedEntry(options.accountId);
+    const acknowledged = accessAcknowledgedEntry(options.computerId);
     return createStore<AccessExpiryStore>()((set, get) => {
         const tell = (expiresAt: string) =>
             set({

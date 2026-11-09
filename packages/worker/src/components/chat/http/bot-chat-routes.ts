@@ -81,10 +81,10 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
 
 async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeout = 45000) {
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
-    const accountId = v.parse(platformIdentifier, context.req.param("accountId"));
+    const computerId = v.parse(platformIdentifier, context.req.param("computerId"));
     const botId = v.parse(platformIdentifier, context.req.param("botId"));
     const requester = { userId: context.get("session").userId, accessExpiresAt: context.get("accessExpiresAt") };
-    return await context.env.services.chat.authorize(requester, accountId, botId, signal);
+    return await context.env.services.chat.authorize(requester, computerId, botId, signal);
 }
 
 /**

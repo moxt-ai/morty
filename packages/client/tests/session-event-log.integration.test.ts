@@ -78,7 +78,7 @@ describe("Session Event Log V2 SDK", () => {
         const client = new MortyClient({
             credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
-            accountId: "project-1",
+            computerId: "project-1",
         });
         const signal = new AbortController().signal;
 
@@ -104,11 +104,11 @@ describe("Session Event Log V2 SDK", () => {
         expect(received).toEqual([
             {
                 method: "GET",
-                path: "/morty/api/v1/accounts/project-1/sessions/source-session/events-v2?limit=500",
+                path: "/morty/api/v1/computers/project-1/sessions/source-session/events-v2?limit=500",
             },
             {
                 method: "GET",
-                path: `/morty/api/v1/accounts/project-1/sessions/source-session/files/content?maxBytes=3&path=morty-content%3Aimage%3A${"a".repeat(64)}`,
+                path: `/morty/api/v1/computers/project-1/sessions/source-session/files/content?maxBytes=3&path=morty-content%3Aimage%3A${"a".repeat(64)}`,
             },
         ]);
     });

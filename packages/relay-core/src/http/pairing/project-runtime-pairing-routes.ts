@@ -17,12 +17,12 @@ export function createProjectRuntimePairingRoutes() {
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .use("/runtime-pairings/:pairingId/redeem", pairingTimeoutMiddleware("Runtime pairing redemption timed out"))
-        .use("/accounts/:accountId/runtime-pairings", pairingTimeoutMiddleware("Runtime pairing creation timed out"))
+        .use("/computers/:computerId/runtime-pairings", pairingTimeoutMiddleware("Runtime pairing creation timed out"))
         .use(
-            "/accounts/:accountId/runtime-pairings/:pairingId",
+            "/computers/:computerId/runtime-pairings/:pairingId",
             pairingTimeoutMiddleware("Runtime pairing lookup timed out"),
         )
-        .use("/accounts/:accountId/runtimes/:runtimeId", pairingTimeoutMiddleware("Runtime revocation timed out"))
+        .use("/computers/:computerId/runtimes/:runtimeId", pairingTimeoutMiddleware("Runtime revocation timed out"))
         .post(
             "/runtime-pairings/:pairingId/redeem",
             bodyParser<RelayHttpEnvironment>(["agents", "machineName", "pairingCode", "workspaceName"]),
@@ -63,14 +63,14 @@ export function createProjectRuntimePairingRoutes() {
             }
         })
         .post(
-            "/accounts/:accountId/runtime-pairings",
+            "/computers/:computerId/runtime-pairings",
             bodyParser<RelayHttpEnvironment>(["idempotencyKey"]),
             async (context) => {
                 const request = context.req.raw;
                 const body = context.req.valid("json");
                 return context.json(
                     await context.env.services.runtimePairings.createProjectRuntimePairing(
-                        validateIdentifier(context.req.param("accountId"), "project_id"),
+                        validateIdentifier(context.req.param("computerId"), "project_id"),
                         bearerToken(request),
                         validateIdentifier(readString(body, "idempotencyKey"), "idempotency_key"),
                         context.var.signal,
@@ -79,31 +79,31 @@ export function createProjectRuntimePairingRoutes() {
                 );
             },
         )
-        .get("/accounts/:accountId/runtime-pairings/:pairingId", async (context) => {
+        .get("/computers/:computerId/runtime-pairings/:pairingId", async (context) => {
             const request = context.req.raw;
             return context.json(
                 await context.env.services.runtimePairings.readProjectRuntimePairing(
-                    validateIdentifier(context.req.param("accountId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     validateIdentifier(context.req.param("pairingId"), "pairing_id"),
                     bearerToken(request),
                     context.var.signal,
                 ),
             );
         })
-        .get("/accounts/:accountId/runtimes/:runtimeId/host", async (context) => {
+        .get("/computers/:computerId/runtimes/:runtimeId/host", async (context) => {
             const request = context.req.raw;
             const access = await context.env.services.runtimePairings.authorizeProjectRuntimeHost(
-                validateIdentifier(context.req.param("accountId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
                 bearerToken(request),
                 request.signal,
             );
             return await context.env.gateways.channelGateway.acceptHost(access, request, request.signal);
         })
-        .delete("/accounts/:accountId/runtimes/:runtimeId", async (context) => {
+        .delete("/computers/:computerId/runtimes/:runtimeId", async (context) => {
             const request = context.req.raw;
             await context.env.services.runtimePairings.revokeProjectRuntime(
-                validateIdentifier(context.req.param("accountId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
                 bearerToken(request),
                 context.var.signal,

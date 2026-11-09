@@ -186,7 +186,7 @@ async function exercise(count) {
                     compatibilityDate: "2026-09-03",
                     durableObjects: {
                         RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                        ACCOUNT_RELAY: { className: "AccountDO", useSQLite: true },
+                        COMPUTER_RELAY: { className: "ComputerDO", useSQLite: true },
                     },
                     d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
                     r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
@@ -238,7 +238,7 @@ async function exercise(count) {
             undefined,
             201,
         );
-        const base = `/v1/accounts/${project.accountId}`;
+        const base = `/v1/computers/${project.computerId}`;
         const pairing = await api(`${base}/runtime-pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
         const claimed = await api(`/v1/runtime-pairings/${pairing.pairingId}/redeem`, "POST", {
             pairingCode: pairing.pairingCode,

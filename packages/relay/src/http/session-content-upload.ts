@@ -5,15 +5,15 @@ import type { SessionAccessService } from "../service/session-access-service.ts"
 /** Shared by transport admission and execution; never executes a content write. */
 export async function authorizeSessionContentUpload(request: Request, sessions: SessionAccessService) {
     const path = new URL(request.url).pathname;
-    const prefix = `${MORTY_API_PREFIX}/v1/accounts/`;
+    const prefix = `${MORTY_API_PREFIX}/v1/computers/`;
     const parts = path.startsWith(prefix) ? path.slice(prefix.length).split("/") : [];
-    const [accountId, resource, sessionId, operation, contentKey] = parts;
+    const [computerId, resource, sessionId, operation, contentKey] = parts;
     if (
         request.method !== "PUT" ||
         parts.length !== 5 ||
         resource !== "sessions" ||
         operation !== "content" ||
-        accountId === undefined ||
+        computerId === undefined ||
         sessionId === undefined ||
         contentKey === undefined ||
         !/^[a-f0-9]{64}$/u.test(contentKey)
@@ -34,7 +34,7 @@ export async function authorizeSessionContentUpload(request: Request, sessions: 
         const access = await sessions.authorizeSession(
             {
                 kind: "session",
-                accountId: validateIdentifier(accountId, "project_id"),
+                computerId: validateIdentifier(computerId, "project_id"),
                 sessionId: validateIdentifier(sessionId, "session_id"),
             },
             credential,

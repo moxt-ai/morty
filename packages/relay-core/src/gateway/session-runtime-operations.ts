@@ -1,23 +1,23 @@
 import type { ContentAvailableEvent, ContentWriteCommand, FileReadCommand } from "@morty-build/client/protocol";
-import type { AccountScope } from "../entity/do/session.ts";
+import type { ComputerScope } from "../entity/do/session.ts";
 import type { RuntimeControlCommand, RuntimeControlResult } from "../service/pairing/runtime-control-request.ts";
 
 /** Session operations after the public API has authorized the selected Session. */
 export interface SessionRuntimeOperations {
-    readonly requestAccountScopeControl: (
-        scope: AccountScope,
+    readonly requestComputerScopeControl: (
+        scope: ComputerScope,
         runtimeId: string,
         command: RuntimeControlCommand,
         signal: AbortSignal,
     ) => Promise<RuntimeControlResult>;
     readonly readProjectSessionFile: (
-        scope: AccountScope,
+        scope: ComputerScope,
         runtimeId: string,
         command: FileReadCommand,
         signal: AbortSignal,
     ) => Promise<Response>;
     readonly writeProjectSessionContent: (
-        scope: AccountScope,
+        scope: ComputerScope,
         runtimeId: string,
         command: ContentWriteCommand,
         body: ReadableStream<Uint8Array>,

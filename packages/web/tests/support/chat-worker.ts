@@ -37,7 +37,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
             v.object({
                 token: v.string(),
                 userId: v.string(),
-                accountId: v.string(),
+                computerId: v.string(),
                 bot: v.object({ botId: v.string() }),
             }),
             await identityResponse.json(),
@@ -55,8 +55,8 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         const transport = new WebSocketApiTransport(origin, clock);
         transport.open();
         const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
-            const runtime = await cloud.connectAgent(identity.accountId, agents, nativeSessionIds);
-            const setup = await request(`chat/accounts/${identity.accountId}/bots/${botId}/setup`, {
+            const runtime = await cloud.connectAgent(identity.computerId, agents, nativeSessionIds);
+            const setup = await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
                 runtimeId: runtime.runtimeId,
                 agentRef: agents[0]?.id ?? "codex",
             });
@@ -137,7 +137,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 revoke: async (): Promise<void> => {
                     const response = await cloud.platformRequest(
                         new Request(
-                            `https://platform.test/morty/api/v1/accounts/${identity.accountId}/runtimes/${runtime.runtimeId}`,
+                            `https://platform.test/morty/api/v1/computers/${identity.computerId}/runtimes/${runtime.runtimeId}`,
                             {
                                 method: "DELETE",
                                 headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
@@ -162,11 +162,11 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
             connectAgents: async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) =>
                 await connect(agents, nativeSessionIds),
             connectRuntime: async () => {
-                const runtime = await cloud.connectAgent(identity.accountId);
+                const runtime = await cloud.connectAgent(identity.computerId);
                 return { failure: runtime.failure, runtimeId: runtime.runtimeId };
             },
             createTransferUrl: async () => {
-                const response = await request(`accounts/${identity.accountId}/identity/transfers`, {});
+                const response = await request(`computers/${identity.computerId}/identity/transfers`, {});
                 if (response.status !== 201) {
                     throw new Error(`Could not create a transfer link: ${response.status} ${await response.text()}`);
                 }
@@ -178,7 +178,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                     signal.throwIfAborted();
                     return identity.token;
                 },
-                accountId: identity.accountId,
+                computerId: identity.computerId,
             },
             origin,
             transport,

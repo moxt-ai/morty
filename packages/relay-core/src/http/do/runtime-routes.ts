@@ -1,6 +1,6 @@
 import { isIdentifier } from "@morty-build/client/protocol";
 import { Hono } from "hono";
-import { AccountScope } from "../../entity/do/session.ts";
+import { ComputerScope } from "../../entity/do/session.ts";
 import type { HostCredential } from "../../entity/pairing/pairing.ts";
 import type { RuntimeAdmission, RuntimeService } from "../../service/channel/runtime-service.ts";
 
@@ -23,23 +23,23 @@ function hostCredential(credentialId: string | null, kind: string | null): HostC
 }
 
 export function createRuntimeRoutes(runtime: RuntimeService) {
-    return new Hono().all("/accounts/:accountId/*", async (c) => {
+    return new Hono().all("/computers/:computerId/*", async (c) => {
         const request = c.req.raw;
         if (request.method === "DELETE" && new URL(request.url).pathname.endsWith("/session-viewers/revoke")) {
             const revokedThrough = Number(request.headers.get("x-morty-session-access-revoked-through"));
             if (!Number.isSafeInteger(revokedThrough)) {
                 return unauthorized("A verified Session access revocation is required");
             }
-            runtime.revokeSessionViewers(new AccountScope(c.req.param("accountId")), revokedThrough);
+            runtime.revokeSessionViewers(new ComputerScope(c.req.param("computerId")), revokedThrough);
             return new Response(null, { status: 204 });
         }
         const channelId = request.headers.get("x-morty-channel-id");
         const runtimeId = request.headers.get("x-morty-runtime-id");
-        const accountId = c.req.param("accountId");
-        if (channelId === null || runtimeId === null || accountId === null) {
+        const computerId = c.req.param("computerId");
+        if (channelId === null || runtimeId === null || computerId === null) {
             return unauthorized("Verified channel access is required");
         }
-        const scope = new AccountScope(accountId);
+        const scope = new ComputerScope(computerId);
         const url = new URL(request.url);
         const credentialId = request.headers.get("x-morty-host-credential-id");
         if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
@@ -107,7 +107,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                         channelId,
                         credential,
                         runtimeId,
-                        accountId,
+                        computerId,
                         ...(nativeRequestId === null ? {} : { nativeRequestId }),
                         ...(sessionFilter === null ? {} : { sessionFilter }),
                     },
@@ -117,7 +117,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
         }
         if (url.pathname.endsWith("/live-history")) {
             return admitted(
-                await runtime.acceptHost({ role: "relay", channelId, runtimeId, accountId }, request.signal),
+                await runtime.acceptHost({ role: "relay", channelId, runtimeId, computerId }, request.signal),
             );
         }
         return new Response(null, { status: 404 });

@@ -10,33 +10,33 @@ import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
 export async function registerRuntimeFixture(
-    accountId: string,
+    computerId: string,
     runtimeId: string,
 ): Promise<{ readonly hostCredentialId: string }> {
     const registeredAt = Date.UTC(2026, 9, 27);
-    const appId = `app_${accountId}`;
+    const appId = `app_${computerId}`;
     const directory = platformDrizzle(env.PLATFORM_DIRECTORY_DATABASE);
     await directory.batch([
         directory
             .insert(machineAccount)
             .values({
-                accountId,
+                computerId,
                 appId,
                 displayName: "Registered test Project",
-                clientReference: accountId,
-                idempotencyKey: accountId,
+                clientReference: computerId,
+                idempotencyKey: computerId,
                 lifecycle: "active",
                 createdAt: registeredAt,
                 updatedAt: registeredAt,
             })
             .onConflictDoNothing(),
     ]);
-    await runInDurableObject(env.ACCOUNT_RELAY.getByName(accountId), async (_instance, state) => {
+    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         await database.batch([
             database
                 .insert(runtimeIdentity)
-                .values({ runtimeId, accountId, channelId: runtimeId, createdAt: registeredAt })
+                .values({ runtimeId, computerId, channelId: runtimeId, createdAt: registeredAt })
                 .onConflictDoNothing(),
             database
                 .insert(runtimeRegistration)
@@ -53,7 +53,7 @@ export async function registerRuntimeFixture(
     const project = await directory
         .select({ appId: machineAccount.appId })
         .from(machineAccount)
-        .where(eq(machineAccount.accountId, accountId))
+        .where(eq(machineAccount.computerId, computerId))
         .get();
     if (project === undefined) {
         throw new Error("Missing fixture project");

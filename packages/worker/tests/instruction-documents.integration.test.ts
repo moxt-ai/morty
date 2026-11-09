@@ -140,7 +140,7 @@ test("Given a missing saved connection, When an agent follows setup instructions
 
     expect(document).toContain("PROJECT_REPLACEMENT_REQUIRED");
     expect(document).toContain("Merely asking to run setup or reconnect is not approval.");
-    expect(document).toContain("--replace-account <accountId>");
+    expect(document).toContain("--replace-computer <computerId>");
     expect(document).toContain("Do not retry with this option automatically");
     expect(document).toContain("Do not wait for ready to report this access change.");
     expect(document).toContain("error.replacementAccess.message");

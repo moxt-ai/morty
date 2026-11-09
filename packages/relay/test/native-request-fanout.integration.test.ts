@@ -35,13 +35,13 @@ class Inbox {
 // @no-uc: Runtime transport regression. HTTP native queries must not multiply live-event egress.
 it("isolates native query replies from live fanout across hibernation and daemon disconnect", async () => {
     const runtimeId = `fanout-${crypto.randomUUID()}`;
-    const accountId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(accountId, runtimeId);
+    const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    await registerRuntimeFixture(computerId, runtimeId);
     const relay = env.RUNTIME_RELAY.getByName(runtimeId);
     const clients: WebSocket[] = [];
     const connect = async (path: string) => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
-        const response = await relay.fetch(`https://runtime.internal/accounts/${accountId}/${path}`, {
+        const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
                 "x-morty-channel-id": "fanout-channel",
@@ -193,10 +193,10 @@ it("isolates native query replies from live fanout across hibernation and daemon
 
 it("Given a host connection without credential kind, When it reaches the service boundary, Then it is rejected instead of inferred as a channel credential", async () => {
     const runtimeId = `kind-${crypto.randomUUID()}`;
-    const accountId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(accountId, runtimeId);
+    const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    await registerRuntimeFixture(computerId, runtimeId);
     const response = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
-        `https://runtime.internal/accounts/${accountId}/host`,
+        `https://runtime.internal/computers/${computerId}/host`,
         {
             headers: {
                 Upgrade: "websocket",

@@ -235,7 +235,7 @@ export interface MortyEndpointOptions {
 }
 
 export interface MortyClientOptions extends MortyEndpointOptions {
-    readonly accountId: string;
+    readonly computerId: string;
 }
 
 function validatePositiveInteger(value: number, name: string): number {
@@ -283,18 +283,18 @@ function decodeTurnCancellation(value: unknown, turnId: string): MortyTurnCancel
     return { turnId, stopReason: Reflect.get(value, "stopReason") };
 }
 
-function projectPath(accountId: string, resourcePath: string): string {
-    if (!isIdentifier(accountId)) {
+function projectPath(computerId: string, resourcePath: string): string {
+    if (!isIdentifier(computerId)) {
         throw new MortyValidationError("The Morty project identifier is invalid");
     }
-    return `v1/accounts/${encodeURIComponent(accountId)}/${resourcePath}`;
+    return `v1/computers/${encodeURIComponent(computerId)}/${resourcePath}`;
 }
 
-function sessionPath(accountId: string, sessionId: string, resourcePath: string): string {
+function sessionPath(computerId: string, sessionId: string, resourcePath: string): string {
     if (!isIdentifier(sessionId)) {
         throw new MortyValidationError("The Morty Session identifier is invalid");
     }
-    return projectPath(accountId, `sessions/${encodeURIComponent(sessionId)}/${resourcePath}`);
+    return projectPath(computerId, `sessions/${encodeURIComponent(sessionId)}/${resourcePath}`);
 }
 
 function requestUrl(endpoint: URL, path: string): URL {
@@ -740,11 +740,11 @@ export async function readExactResponseBytes(
 
 export class MortyCredentialResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #accountId: string;
+    readonly #computerId: string;
 
-    constructor(executor: MortyRequestExecutor, accountId: string) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly issue = async (
@@ -752,7 +752,7 @@ export class MortyCredentialResources {
         signal: AbortSignal,
     ): Promise<MortyBrowserCredential> =>
         decodeMortyBrowserCredential(
-            await this.#executor.post(projectPath(this.#accountId, "browser-credentials"), request, signal),
+            await this.#executor.post(projectPath(this.#computerId, "browser-credentials"), request, signal),
         );
 
     readonly revoke = async (credentialId: string, signal: AbortSignal): Promise<void> => {
@@ -760,7 +760,7 @@ export class MortyCredentialResources {
             throw new MortyValidationError("The browser credential identifier is invalid");
         }
         await this.#executor.deleteEmpty(
-            projectPath(this.#accountId, `browser-credentials/${encodeURIComponent(credentialId)}`),
+            projectPath(this.#computerId, `browser-credentials/${encodeURIComponent(credentialId)}`),
             signal,
         );
     };
@@ -857,20 +857,20 @@ export class MortyChannelAccessClient {
 
 export class MortyRuntimeResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #accountId: string;
+    readonly #computerId: string;
 
-    constructor(executor: MortyRequestExecutor, accountId: string) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly list = async (signal: AbortSignal): Promise<readonly MortyRuntimeDescriptor[]> =>
-        decodeMortyRuntimeList(await this.#executor.get(projectPath(this.#accountId, "runtimes"), signal));
+        decodeMortyRuntimeList(await this.#executor.get(projectPath(this.#computerId, "runtimes"), signal));
 
     readonly getAgents = async (runtimeId: string, signal: AbortSignal) =>
         decodeRuntimeDescriptor(
             await this.#executor.get(
-                projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/agents`),
+                projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/agents`),
                 signal,
             ),
         ).agents;
@@ -889,7 +889,7 @@ export class MortyRuntimeResources {
         return decodeRuntimeDiagnosticsResult(
             JSON.stringify(
                 await this.#executor.get(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/diagnostics`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/diagnostics`),
                     signal,
                 ),
             ),
@@ -904,7 +904,7 @@ export class MortyRuntimeResources {
         decodeWorkspaceEntriesEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/workspace`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/workspace`),
                     { directoryId },
                     signal,
                 ),
@@ -919,7 +919,7 @@ export class MortyRuntimeResources {
         const listing = decodeWorkspaceEntriesEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/workspace`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/workspace`),
                     { directoryId, view: "metadata" },
                     signal,
                 ),
@@ -938,7 +938,7 @@ export class MortyRuntimeResources {
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(
-                        this.#accountId,
+                        this.#computerId,
                         `runtimes/${encodeURIComponent(runtimeId)}/agents/${encodeURIComponent(agentId)}/settings`,
                     ),
                     request,
@@ -963,7 +963,7 @@ export class MortyRuntimeResources {
         decodeNativeSessionResult(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/native-sessions`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/native-sessions`),
                     request,
                     signal,
                 ),
@@ -982,7 +982,7 @@ export class MortyRuntimeResources {
     ) => {
         const receipt = await this.#executor.post(
             projectPath(
-                this.#accountId,
+                this.#computerId,
                 `runtimes/${encodeURIComponent(runtimeId)}/native-session-forks/${encodeURIComponent(operationId)}`,
             ),
             request,
@@ -1006,7 +1006,7 @@ export class MortyRuntimeResources {
         decodeSessionsQueriedEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/sessions/query`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/sessions/query`),
                     { sessionIds },
                     signal,
                 ),
@@ -1019,7 +1019,7 @@ export class MortyRuntimeResources {
         }
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/sessions`),
+            projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/sessions`),
         );
         path.searchParams.set("limit", limit.toString());
         return decodeSessionsListedEvent(
@@ -1038,7 +1038,7 @@ export class MortyRuntimeResources {
         const result = decodeNativeSessionResult(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}/native-sessions`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}/native-sessions`),
                     { ...request, action: "find" },
                     signal,
                 ),
@@ -1055,7 +1055,7 @@ export class MortyRuntimeResources {
             throw new MortyValidationError("The Runtime identifier is invalid");
         }
         await this.#executor.deleteEmpty(
-            projectPath(this.#accountId, `runtimes/${encodeURIComponent(runtimeId)}`),
+            projectPath(this.#computerId, `runtimes/${encodeURIComponent(runtimeId)}`),
             signal,
         );
     };
@@ -1063,16 +1063,16 @@ export class MortyRuntimeResources {
 
 export class MortyRuntimePairingResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #accountId: string;
+    readonly #computerId: string;
 
-    constructor(executor: MortyRequestExecutor, accountId: string) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly create = async (request: MortyRuntimePairingRequest, signal: AbortSignal): Promise<MortyRuntimePairing> =>
         decodeMortyRuntimePairing(
-            await this.#executor.post(projectPath(this.#accountId, "runtime-pairings"), request, signal),
+            await this.#executor.post(projectPath(this.#computerId, "runtime-pairings"), request, signal),
         );
 
     readonly read = async (pairingId: string, signal: AbortSignal): Promise<MortyRuntimePairingStatus> => {
@@ -1081,7 +1081,7 @@ export class MortyRuntimePairingResources {
         }
         return decodeMortyRuntimePairingStatus(
             await this.#executor.get(
-                projectPath(this.#accountId, `runtime-pairings/${encodeURIComponent(pairingId)}`),
+                projectPath(this.#computerId, `runtime-pairings/${encodeURIComponent(pairingId)}`),
                 signal,
             ),
         );
@@ -1135,18 +1135,18 @@ function waitForPairingPoll(milliseconds: number, signal: AbortSignal): Promise<
 
 export class MortySessionResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #accountId: string;
+    readonly #computerId: string;
 
-    constructor(executor: MortyRequestExecutor, accountId: string) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly create = async (request: CreateMortySessionRequest, signal: AbortSignal) =>
         decodeSessionReadyEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#accountId, `runtimes/${encodeURIComponent(request.runtimeId)}/sessions`),
+                    projectPath(this.#computerId, `runtimes/${encodeURIComponent(request.runtimeId)}/sessions`),
                     request,
                     signal,
                 ),
@@ -1165,7 +1165,7 @@ export class MortySessionResources {
     ) =>
         new MortySessionAccess(
             await this.#executor.post(
-                sessionPath(this.#accountId, sessionId, "access-credentials"),
+                sessionPath(this.#computerId, sessionId, "access-credentials"),
                 { expiresInSeconds, runtimeId },
                 signal,
             ),
@@ -1177,7 +1177,7 @@ export class MortySessionResources {
      */
     readonly revokeAccess = async (signal: AbortSignal) =>
         new MortySessionAccessRevocation(
-            await this.#executor.post(projectPath(this.#accountId, "session-access/revocations"), {}, signal),
+            await this.#executor.post(projectPath(this.#computerId, "session-access/revocations"), {}, signal),
         );
 
     readonly load = async (
@@ -1194,7 +1194,7 @@ export class MortySessionResources {
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(
-                        this.#accountId,
+                        this.#computerId,
                         `runtimes/${encodeURIComponent(runtimeId)}/sessions/${encodeURIComponent(sessionId)}/load`,
                     ),
                     request,
@@ -1208,7 +1208,7 @@ export class MortySessionResources {
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(
-                        this.#accountId,
+                        this.#computerId,
                         `runtimes/${encodeURIComponent(runtimeId)}/sessions/${encodeURIComponent(sessionId)}/restore`,
                     ),
                     {},
@@ -1222,7 +1222,7 @@ export class MortySessionResources {
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(
-                        this.#accountId,
+                        this.#computerId,
                         `runtimes/${encodeURIComponent(runtimeId)}/sessions/${encodeURIComponent(sessionId)}/close`,
                     ),
                     {},
@@ -1244,13 +1244,13 @@ export class MortySessionResources {
         const result =
             operation.length === 3
                 ? await this.#executor.post(
-                      sessionPath(this.#accountId, operation[0], "configuration"),
+                      sessionPath(this.#computerId, operation[0], "configuration"),
                       operation[1],
                       operation[2],
                   )
                 : await this.#executor.post(
                       projectPath(
-                          this.#accountId,
+                          this.#computerId,
                           `runtimes/${encodeURIComponent(operation[0])}/sessions/${encodeURIComponent(operation[1])}/configuration`,
                       ),
                       operation[2],
@@ -1266,10 +1266,10 @@ export class MortySessionResources {
     ) => {
         const result =
             operation.length === 2
-                ? await this.#executor.get(sessionPath(this.#accountId, operation[0], "configuration"), operation[1])
+                ? await this.#executor.get(sessionPath(this.#computerId, operation[0], "configuration"), operation[1])
                 : await this.#executor.get(
                       projectPath(
-                          this.#accountId,
+                          this.#computerId,
                           `runtimes/${encodeURIComponent(operation[0])}/sessions/${encodeURIComponent(operation[1])}/configuration`,
                       ),
                       operation[2],
@@ -1285,13 +1285,13 @@ export class MortySessionResources {
         const result =
             operation.length === 3
                 ? await this.#executor.post(
-                      sessionPath(this.#accountId, operation[0], "rename"),
+                      sessionPath(this.#computerId, operation[0], "rename"),
                       { title: operation[1] },
                       operation[2],
                   )
                 : await this.#executor.post(
                       projectPath(
-                          this.#accountId,
+                          this.#computerId,
                           `runtimes/${encodeURIComponent(operation[0])}/sessions/${encodeURIComponent(operation[1])}/rename`,
                       ),
                       { title: operation[2] },
@@ -1321,7 +1321,7 @@ export class MortySessionResources {
         const query = new URLSearchParams({ uri: input.uri });
         return decodePromptAttachment(
             await this.#executor.putContent(
-                `${sessionPath(this.#accountId, sessionId, `content/${input.contentKey}`)}?${query.toString()}`,
+                `${sessionPath(this.#computerId, sessionId, `content/${input.contentKey}`)}?${query.toString()}`,
                 input.bytes,
                 { contentKind: input.kind, mediaType: input.mediaType, name: input.name },
                 signal,
@@ -1348,7 +1348,7 @@ export class MortySessionResources {
         }
         const query = new URLSearchParams({ maxBytes: maximumBytes.toString(), path });
         return await this.#executor.getFile(
-            `${sessionPath(this.#accountId, sessionId, "files/content")}?${query.toString()}`,
+            `${sessionPath(this.#computerId, sessionId, "files/content")}?${query.toString()}`,
             maximumBytes,
             signal,
         );
@@ -1371,7 +1371,7 @@ export class MortySessionResources {
     ): Promise<NativeSessionEvents> => {
         const result = await this.#executor.post(
             projectPath(
-                this.#accountId,
+                this.#computerId,
                 `runtimes/${encodeURIComponent(runtimeId)}/sessions/${encodeURIComponent(sessionId)}/native-events-preview`,
             ),
             {
@@ -1392,7 +1392,7 @@ export class MortySessionResources {
     ): Promise<NativeSessionEvents> => {
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            sessionPath(this.#accountId, sessionId, "native-events-preview"),
+            sessionPath(this.#computerId, sessionId, "native-events-preview"),
         );
         setSessionBindingQuery(path.searchParams, identity);
         path.searchParams.set("eventLimit", page.eventLimit.toString());
@@ -1422,7 +1422,7 @@ export class MortySessionResources {
     > => {
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            sessionPath(this.#accountId, sessionId, "active-turn"),
+            sessionPath(this.#computerId, sessionId, "active-turn"),
         );
         setSessionBindingQuery(path.searchParams, identity);
         if (commandId !== undefined) {
@@ -1455,7 +1455,7 @@ export class MortySessionResources {
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(
-                        this.#accountId,
+                        this.#computerId,
                         `runtimes/${encodeURIComponent(runtimeId)}/sessions/${encodeURIComponent(sessionId)}/active-turn`,
                     ),
                     identity,
@@ -1472,11 +1472,11 @@ export class MortySessionResources {
 
 export class MortyTurnResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #accountId: string;
+    readonly #computerId: string;
 
-    constructor(executor: MortyRequestExecutor, accountId: string) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly submit = async (
@@ -1485,7 +1485,7 @@ export class MortyTurnResources {
         signal: AbortSignal,
     ): Promise<MortyTurn> => {
         const turn = decodeMortyTurn(
-            await this.#executor.post(sessionPath(this.#accountId, sessionId, "turns"), request, signal),
+            await this.#executor.post(sessionPath(this.#computerId, sessionId, "turns"), request, signal),
         );
         if (turn === null) {
             throw new MortyProtocolError("The service returned an invalid Turn");
@@ -1501,7 +1501,7 @@ export class MortyTurnResources {
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.post(
             projectPath(
-                this.#accountId,
+                this.#computerId,
                 `runtimes/${encodeURIComponent(runtimeId)}/sessions/${encodeURIComponent(sessionId)}/turns`,
             ),
             {
@@ -1524,7 +1524,7 @@ export class MortyTurnResources {
     readonly cancel = async (sessionId: string, turnId: string, signal: AbortSignal): Promise<MortyTurnCancellation> =>
         decodeTurnCancellation(
             await this.#executor.post(
-                sessionPath(this.#accountId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel`),
+                sessionPath(this.#computerId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel`),
                 {},
                 signal,
             ),
@@ -1534,7 +1534,7 @@ export class MortyTurnResources {
     /** Withdraws a queued prompt only when the Runtime confirms it did not execute. */
     readonly cancelQueued = async (sessionId: string, turnId: string, signal: AbortSignal): Promise<void> => {
         const result = await this.#executor.post(
-            sessionPath(this.#accountId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel-before-start`),
+            sessionPath(this.#computerId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel-before-start`),
             {},
             signal,
         );
@@ -1549,7 +1549,7 @@ export class MortyTurnResources {
         signal: AbortSignal,
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.put(
-            sessionPath(this.#accountId, sessionId, `turns/${encodeURIComponent(turnId)}/disposition`),
+            sessionPath(this.#computerId, sessionId, `turns/${encodeURIComponent(turnId)}/disposition`),
             { disposition: SessionPromptDisposition.Steer },
             signal,
         );
@@ -1562,11 +1562,11 @@ export class MortyTurnResources {
 
 export class MortyInteractionResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #accountId: string;
+    readonly #computerId: string;
 
-    constructor(executor: MortyRequestExecutor, accountId: string) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     // The Platform serves no interaction read routes: pending interactions come from the Session's lifecycle events and
@@ -1578,7 +1578,7 @@ export class MortyInteractionResources {
         signal: AbortSignal,
     ): Promise<void> => {
         const result = await this.#executor.post(
-            sessionPath(this.#accountId, sessionId, `interactions/${encodeURIComponent(interactionId)}/responses`),
+            sessionPath(this.#computerId, sessionId, `interactions/${encodeURIComponent(interactionId)}/responses`),
             request,
             signal,
         );
@@ -1746,13 +1746,13 @@ export class MortyLiveEventSubscription {
 export class MortyEventResources {
     readonly #executor: MortyRequestExecutor;
     readonly #maximumReconnectAttempts: number;
-    readonly #accountId: string;
+    readonly #computerId: string;
     readonly #liveSubscriptions = new Set<MortyLiveEventSubscription>();
 
-    constructor(executor: MortyRequestExecutor, accountId: string, maximumReconnectAttempts: number) {
+    constructor(executor: MortyRequestExecutor, computerId: string, maximumReconnectAttempts: number) {
         this.#executor = executor;
         this.#maximumReconnectAttempts = maximumReconnectAttempts;
-        this.#accountId = accountId;
+        this.#computerId = computerId;
     }
 
     readonly subscribeLive = async (
@@ -1762,7 +1762,7 @@ export class MortyEventResources {
     ): Promise<MortyLiveEventSubscription> => {
         const subscription = new MortyLiveEventSubscription(
             this.#executor,
-            sessionPath(this.#accountId, sessionId, "events-v2"),
+            sessionPath(this.#computerId, sessionId, "events-v2"),
             observer,
             signal,
             this.#maximumReconnectAttempts,
@@ -1780,7 +1780,7 @@ export class MortyEventResources {
     ): Promise<SessionEventLogPage> => {
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            sessionPath(this.#accountId, sessionId, "events-v2"),
+            sessionPath(this.#computerId, sessionId, "events-v2"),
         );
         path.searchParams.set("limit", page.limit.toString());
         if (page.cursor.length > 0) {
@@ -1816,13 +1816,13 @@ export class MortyClient {
             throw new MortyValidationError("The stream reconnect attempt limit is invalid");
         }
         this.channels = new MortyChannelResources(executor);
-        this.credentials = new MortyCredentialResources(executor, options.accountId);
-        this.events = new MortyEventResources(executor, options.accountId, reconnectAttempts);
-        this.interactions = new MortyInteractionResources(executor, options.accountId);
-        this.runtimePairings = new MortyRuntimePairingResources(executor, options.accountId);
-        this.runtimes = new MortyRuntimeResources(executor, options.accountId);
-        this.sessions = new MortySessionResources(executor, options.accountId);
-        this.turns = new MortyTurnResources(executor, options.accountId);
+        this.credentials = new MortyCredentialResources(executor, options.computerId);
+        this.events = new MortyEventResources(executor, options.computerId, reconnectAttempts);
+        this.interactions = new MortyInteractionResources(executor, options.computerId);
+        this.runtimePairings = new MortyRuntimePairingResources(executor, options.computerId);
+        this.runtimes = new MortyRuntimeResources(executor, options.computerId);
+        this.sessions = new MortySessionResources(executor, options.computerId);
+        this.turns = new MortyTurnResources(executor, options.computerId);
     }
 
     readonly close = (): void => {

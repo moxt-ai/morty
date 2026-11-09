@@ -19,7 +19,7 @@ import {
     MAX_RUNTIMES_PER_PROJECT,
 } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
-import { accountDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
+import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { SqlitePlatformProjectStore } from "../src/storage/sqlite-platform-project-store.ts";
 import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
 
@@ -30,7 +30,7 @@ const pairingSchema = v.object({
     pairingCode: v.string(),
     pairingId: v.string(),
     pollToken: v.string(),
-    accountId: v.string(),
+    computerId: v.string(),
     runtimeId: v.string(),
 });
 type Pairing = Readonly<v.InferOutput<typeof pairingSchema>>;
@@ -63,8 +63,8 @@ async function project(_name = "Runtime pairing") {
             }),
             env,
         );
-    const { accountId } = v.parse(
-        v.object({ accountId: v.string() }),
+    const { computerId } = v.parse(
+        v.object({ computerId: v.string() }),
         await responseJson(
             await dashboard("machine-accounts", {
                 displayName: "Runtime pairing Project",
@@ -74,7 +74,7 @@ async function project(_name = "Runtime pairing") {
             201,
         ),
     );
-    const stub = env.ACCOUNT_RELAY.getByName(accountId);
+    const stub = env.COMPUTER_RELAY.getByName(computerId);
     const request = async (path: string, method = "GET", body?: object, token = defaultCredential.credential) => {
         const result = await runInDurableObject(stub, async (_instance, state) => {
             const response = await worker.fetch(
@@ -85,11 +85,11 @@ async function project(_name = "Runtime pairing") {
                 }),
                 {
                     ...env,
-                    MORTY_ACCOUNT_STORE: new SqlitePlatformProjectStore(
-                        accountId,
+                    MORTY_COMPUTER_STORE: new SqlitePlatformProjectStore(
+                        computerId,
                         new DurableObjectDatabaseAdapter(state.storage),
                     ),
-                    MORTY_ACCOUNT_ID: accountId,
+                    MORTY_COMPUTER_ID: computerId,
                 },
             );
             // Consume the HTTP body within its DO request context so an unread
@@ -102,14 +102,15 @@ async function project(_name = "Runtime pairing") {
         });
     };
     const create = async (idempotencyKey: string) =>
-        request(`/v1/accounts/${accountId}/runtime-pairings`, "POST", { idempotencyKey });
+        request(`/v1/computers/${computerId}/runtime-pairings`, "POST", { idempotencyKey });
     return {
-        accountId,
+        computerId,
         credentialId: defaultCredential.credentialId,
         create,
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
-        status: async (pairing: Pairing) => request(`/v1/accounts/${accountId}/runtime-pairings/${pairing.pairingId}`),
+        status: async (pairing: Pairing) =>
+            request(`/v1/computers/${computerId}/runtime-pairings/${pairing.pairingId}`),
         claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", machineName = "Runtime machine") =>
             request(
                 endpoint === "claim" ? "/pairings/claim" : `/v1/runtime-pairings/${pairing.pairingId}/redeem`,
@@ -122,8 +123,8 @@ async function project(_name = "Runtime pairing") {
                 },
             ),
         revoke: async (pairing: Pairing) =>
-            request(`/v1/accounts/${accountId}/runtimes/${pairing.runtimeId}`, "DELETE"),
-        list: async () => request(`/v1/accounts/${accountId}/runtimes`),
+            request(`/v1/computers/${computerId}/runtimes/${pairing.runtimeId}`, "DELETE"),
+        list: async () => request(`/v1/computers/${computerId}/runtimes`),
         publish: async (pairing: Pairing, token: string) =>
             request(`/channels/${pairing.channelId}/catalog`, "PUT", { agents: [] }, token),
         readChannel: async (pairing: Pairing, token: string) =>
@@ -170,7 +171,7 @@ it("Given pending reservations at capacity, When their deadline passes without e
     vi.setSystemTime(new Date(first.expiresAt));
     expect(await responseJson(await app.status(first), 200)).toEqual({ status: "expired" });
     expect(await responseJson(await app.claim(first), 400)).toMatchObject({ error: { code: "invalid_pairing_code" } });
-    expect(await app.pair("replacement")).toMatchObject({ accountId: app.accountId });
+    expect(await app.pair("replacement")).toMatchObject({ computerId: app.computerId });
     expect(await app.pair("reservation-0")).toEqual(first);
 });
 
@@ -194,7 +195,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     // Execute the original command against the real Project database after
     // newer transactions, as can happen when a database request is delayed.
     const claimed = await app.storage(async (storage) =>
-        new RuntimeDirectoryStorage(app.accountId, new DurableObjectDatabaseAdapter(storage)).claim(
+        new RuntimeDirectoryStorage(app.computerId, new DurableObjectDatabaseAdapter(storage)).claim(
             {
                 pairingId: pairing.pairingId,
                 codeHash,
@@ -298,7 +299,7 @@ async function pairedChannelWithLegacyOwner() {
         v.object({ runtimeCredential: v.string() }),
         await responseJson(await app.claim(pairing), 200),
     );
-    const hostToken = `${app.accountId}_${"H".repeat(43)}`;
+    const hostToken = `${app.computerId}_${"H".repeat(43)}`;
     // Owner credentials issued before Runtime pairing remain valid channel callers.
     await app.storage(async (storage) => {
         new DurableObjectSqlDatabase(storage).orm
@@ -334,7 +335,7 @@ it("Given channel credentials and an unused access link, When their Runtime is r
         throw new Error("Expected both redemption responses");
     }
     const linked = v.parse(
-        v.strictObject({ hostToken: v.string(), channelId: v.string(), accountId: v.string() }),
+        v.strictObject({ hostToken: v.string(), channelId: v.string(), computerId: v.string() }),
         await responseJson(redeemed, 200),
     );
     expect(await responseJson(repeated, 409)).toMatchObject({ error: { code: "access_grant_redeemed" } });
@@ -468,10 +469,10 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
     const app = await project();
     const remaining = await app.storage(async (storage) => {
         await storage.deleteAll();
-        const upgrade = accountDurableObjectMigrations.findIndex(
+        const upgrade = computerDurableObjectMigrations.findIndex(
             (migration) => migration.name === "0008_remove_control_host_leases.sql",
         );
-        applyDurableObjectMigrations(storage, accountDurableObjectMigrations.slice(0, upgrade));
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations.slice(0, upgrade));
         const database = new DurableObjectSqlDatabase(storage);
         const credential = (credentialId: string, authority: "owner" | "linked", sourceGrantId: string | null) =>
             database.run(
@@ -483,7 +484,7 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
         credential("ctl_lease", "linked", null);
         credential("ctlX_owner", "owner", null);
         credential("lnk_device", "linked", "grant-device");
-        applyDurableObjectMigrations(storage, accountDurableObjectMigrations);
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
         return database.query("SELECT credential_id FROM channel_host_credentials ORDER BY credential_id");
     });
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);

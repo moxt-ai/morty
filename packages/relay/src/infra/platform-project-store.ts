@@ -9,5 +9,5 @@ export interface PlatformProjectStore extends ProjectStore {
 }
 
 export interface PlatformProjectStores extends ProjectStoreResolver {
-    readonly forProject: (accountId: string) => PlatformProjectStore;
+    readonly forProject: (computerId: string) => PlatformProjectStore;
 }

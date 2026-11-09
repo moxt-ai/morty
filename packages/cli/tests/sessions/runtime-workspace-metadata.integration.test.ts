@@ -23,12 +23,12 @@ it("describes a selected directory without browsing its children and still rejec
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.accountId);
+        const runtime = await platform.connectAgent(project.computerId);
         const listing = await runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 
         const invalid = await fetch(
-            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/accounts/${project.accountId}/runtimes/${runtime.runtimeId}/workspace`,
+            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/runtimes/${runtime.runtimeId}/workspace`,
             {
                 method: "POST",
                 headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },

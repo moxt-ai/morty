@@ -257,9 +257,9 @@ export function readableComputer(value: unknown): RememberedComputer | null {
 // ---------------------------------------------------------------------------
 
 /** When the latest device this browser was told about joined the Project; later joins are new to it. */
-export const linkedDevicesSeenEntry = (accountId: string): LocalStorageEntry<string> =>
+export const linkedDevicesSeenEntry = (computerId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:linked-devices-seen:v1:", accountId),
+        key: scopedKey("morty:linked-devices-seen:v1:", computerId),
         schema: v.pipe(v.string(), v.isoTimestamp()),
     });
 
@@ -273,9 +273,9 @@ export interface AccessAcknowledgement {
 }
 
 /** What the user was already told about this browser's access, so it is not repeated for the same access. */
-export const accessAcknowledgedEntry = (accountId: string): LocalStorageEntry<AccessAcknowledgement> =>
+export const accessAcknowledgedEntry = (computerId: string): LocalStorageEntry<AccessAcknowledgement> =>
     jsonLocalStorageEntry({
-        key: scopedKey("morty:access-acknowledged:v1:", accountId),
+        key: scopedKey("morty:access-acknowledged:v1:", computerId),
         schema: v.object({
             expiresAt: v.pipe(v.string(), v.isoTimestamp()),
             through: v.picklist(["joined", "ending"]),

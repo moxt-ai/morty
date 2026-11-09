@@ -19,7 +19,7 @@ const relayOrigin = "https://platform.test";
 function bindings(): PlatformRelayBindings {
     return {
         PLATFORM_DIRECTORY_DATABASE: env.PLATFORM_DIRECTORY_DATABASE,
-        ACCOUNT_RELAY: env.ACCOUNT_RELAY,
+        COMPUTER_RELAY: env.COMPUTER_RELAY,
         R2_BUCKET_APAC: env.R2_BUCKET_APAC,
         R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
         RUNTIME_RELAY: env.RUNTIME_RELAY,
@@ -65,7 +65,7 @@ async function pairedRuntime(name: string) {
     const pairing = await responseJson(
         await worker.fetch(
             new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/accounts/${text(project, "accountId")}/runtime-pairings`,
+                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${text(project, "computerId")}/runtime-pairings`,
                 {
                     body: JSON.stringify({ idempotencyKey: name }),
                     headers,

@@ -2,12 +2,12 @@ import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import worker from "../src/application.ts";
-import { accountObject } from "../src/gateway/account-object-routing.ts";
+import { computerObject } from "../src/gateway/computer-object-routing.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const replacementSchema = v.object({
     bot: v.object({ botId: v.string(), displayName: v.string() }),
-    accountId: v.string(),
+    computerId: v.string(),
     // Independently retained setup decoder from main at 81157fb4: no new token format is required.
     token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
     userId: v.string(),
@@ -30,7 +30,7 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     const original = await fixture.createAnonymousUser();
     const replace = async () =>
         await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/accounts/${original.accountId}/management/account/replacement`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${original.computerId}/management/computer/replacement`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${original.token}` },
             }),
@@ -41,18 +41,18 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     expect(response.status).toBe(201);
     const replacement = v.parse(replacementSchema, await response.json());
     expect(replacement.userId).toBe(original.userId);
-    expect(replacement.accountId).not.toBe(original.accountId);
+    expect(replacement.computerId).not.toBe(original.computerId);
     expect(replacement.token).not.toBe(original.token);
 
     const retryResponse = await replace();
     expect(retryResponse.status).toBe(201);
     const retry = v.parse(replacementSchema, await retryResponse.json());
-    expect(retry.accountId).toBe(replacement.accountId);
+    expect(retry.computerId).toBe(replacement.computerId);
     expect(retry.bot.botId).toBe(replacement.bot.botId);
     expect(retry.token).toBe(replacement.token);
 
     const sessionResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${replacement.accountId}/session`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/session`, {
             headers: { authorization: `Bearer ${replacement.token}` },
         }),
         environment,
@@ -60,7 +60,7 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     expect(sessionResponse.status).toBe(200);
 
     const previousCredential = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${replacement.accountId}/session`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/session`, {
             headers: { authorization: `Bearer ${original.token}` },
         }),
         environment,
@@ -69,7 +69,7 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
 
     const bindingResponse = await worker.fetch(
         new Request(
-            `${APP_ORIGIN}/morty/api/accounts/${replacement.accountId}/management/bots/${replacement.bot.botId}/runtime-binding`,
+            `${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/management/bots/${replacement.bot.botId}/runtime-binding`,
             { headers: { authorization: `Bearer ${replacement.token}` } },
         ),
         environment,
@@ -82,7 +82,7 @@ test("Given a revoked successor local credential, When the previous Machine retr
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
-            projectRequest(original.accountId, "/management/account/replacement", original.token, "POST"),
+            projectRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
             fixture.environment(),
         );
     const response = await replace();
@@ -91,7 +91,7 @@ test("Given a revoked successor local credential, When the previous Machine retr
     expect(
         (
             await worker.fetch(
-                projectRequest(replacement.accountId, "/identity/v1/local-credential", replacement.token, "DELETE"),
+                projectRequest(replacement.computerId, "/identity/v1/local-credential", replacement.token, "DELETE"),
                 fixture.environment(),
             )
         ).status,
@@ -102,15 +102,15 @@ test("Given a revoked successor local credential, When the previous Machine retr
     expect(
         (
             await worker.fetch(
-                projectRequest(replacement.accountId, "/session", replacement.token),
+                projectRequest(replacement.computerId, "/session", replacement.token),
                 fixture.environment(),
             )
         ).status,
     ).toBe(401);
 });
 
-function projectRequest(accountId: string, path: string, token: string, method = "GET"): Request {
-    return new Request(`${APP_ORIGIN}/morty/api/accounts/${accountId}${path}`, {
+function projectRequest(computerId: string, path: string, token: string, method = "GET"): Request {
+    return new Request(`${APP_ORIGIN}/morty/api/computers/${computerId}${path}`, {
         method,
         headers: { authorization: `Bearer ${token}` },
     });
@@ -120,19 +120,19 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
-            projectRequest(original.accountId, "/management/account/replacement", original.token, "POST"),
+            projectRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
             fixture.environment(),
         );
     const response = await replace();
     expect(response.status).toBe(201);
     const issued = v.parse(replacementSchema, await response.json());
-    const storage = accountObject(fixture.environment(), issued.accountId);
+    const storage = computerObject(fixture.environment(), issued.computerId);
     expect(
-        (await storage.fetch(new Request("https://account.internal/incomplete-bootstrap", { method: "DELETE" })))
+        (await storage.fetch(new Request("https://computer.internal/incomplete-bootstrap", { method: "DELETE" })))
             .status,
     ).toBe(204);
     expect(
-        (await worker.fetch(projectRequest(issued.accountId, "/session", issued.token), fixture.environment())).status,
+        (await worker.fetch(projectRequest(issued.computerId, "/session", issued.token), fixture.environment())).status,
     ).toBe(401);
 
     // Reload the real Worker with its durable storage intact before resuming the incomplete bootstrap.
@@ -142,16 +142,16 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     expect(retry.status).toBe(201);
     const completed = v.parse(replacementSchema, await retry.json());
     expect(completed.token).toBe(issued.token);
-    expect(completed.accountId).toBe(issued.accountId);
+    expect(completed.computerId).toBe(issued.computerId);
     expect(
-        (await worker.fetch(projectRequest(completed.accountId, "/session", completed.token), fixture.environment()))
+        (await worker.fetch(projectRequest(completed.computerId, "/session", completed.token), fixture.environment()))
             .status,
     ).toBe(200);
     expect(
         (
             await worker.fetch(
                 projectRequest(
-                    completed.accountId,
+                    completed.computerId,
                     `/management/bots/${completed.bot.botId}/runtime-binding`,
                     completed.token,
                 ),
@@ -161,9 +161,9 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     ).toBe(200);
 });
 
-async function share(accountId: string, token: string): Promise<string> {
+async function share(computerId: string, token: string): Promise<string> {
     const response = await worker.fetch(
-        projectRequest(accountId, "/identity/transfers", token, "POST"),
+        projectRequest(computerId, "/identity/transfers", token, "POST"),
         fixture.environment(),
     );
     expect(response.status).toBe(201);
@@ -183,20 +183,20 @@ async function redeem(code: string): Promise<Response> {
 
 test("Given access shared from a saved Machine, When its Project is replaced, Then nothing shared before opens the previous Project and the local identity can still repeat the replacement", async () => {
     const original = await fixture.createAnonymousUser();
-    const redeemed = await redeem(await share(original.accountId, original.token));
+    const redeemed = await redeem(await share(original.computerId, original.token));
     expect(redeemed.status).toBe(200);
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     const recoveryResponse = await worker.fetch(
-        projectRequest(original.accountId, "/identity/recovery-token", original.token, "POST"),
+        projectRequest(original.computerId, "/identity/recovery-token", original.token, "POST"),
         fixture.environment(),
     );
     expect(recoveryResponse.status).toBe(201);
     const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
-    const unredeemed = await share(original.accountId, original.token);
+    const unredeemed = await share(original.computerId, original.token);
 
     const replace = async () =>
         await worker.fetch(
-            projectRequest(original.accountId, "/management/account/replacement", original.token, "POST"),
+            projectRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
             fixture.environment(),
         );
     const response = await replace();
@@ -205,29 +205,29 @@ test("Given access shared from a saved Machine, When its Project is replaced, Th
 
     for (const token of [browser, recovery]) {
         expect(
-            (await worker.fetch(projectRequest(original.accountId, "/session", token), fixture.environment())).status,
+            (await worker.fetch(projectRequest(original.computerId, "/session", token), fixture.environment())).status,
         ).toBe(401);
     }
     expect((await redeem(unredeemed)).status).toBe(410);
     // A reply the local identity never received can be asked for again.
     const retry = await replace();
     expect(retry.status).toBe(201);
-    expect(v.parse(replacementSchema, await retry.json()).accountId).toBe(replacement.accountId);
+    expect(v.parse(replacementSchema, await retry.json()).computerId).toBe(replacement.computerId);
 });
 
 test("Given a browser that opened a shared link, When it asks to replace the Project, Then only the machine's own identity may", async () => {
     const original = await fixture.createAnonymousUser();
-    const redeemed = await redeem(await share(original.accountId, original.token));
+    const redeemed = await redeem(await share(original.computerId, original.token));
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
 
     const response = await worker.fetch(
-        projectRequest(original.accountId, "/management/account/replacement", browser, "POST"),
+        projectRequest(original.computerId, "/management/computer/replacement", browser, "POST"),
         fixture.environment(),
     );
 
     expect(response.status).toBe(403);
     expect(
-        (await worker.fetch(projectRequest(original.accountId, "/session", original.token), fixture.environment()))
+        (await worker.fetch(projectRequest(original.computerId, "/session", original.token), fixture.environment()))
             .status,
     ).toBe(200);
 });
@@ -235,7 +235,7 @@ test("Given a browser that opened a shared link, When it asks to replace the Pro
 test("Given an unauthenticated request, When a Project replacement is requested, Then it is rejected", async () => {
     const identity = await fixture.createAnonymousUser();
     const response = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/accounts/${identity.accountId}/management/account/replacement`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer/replacement`, {
             method: "POST",
         }),
         fixture.environment(),

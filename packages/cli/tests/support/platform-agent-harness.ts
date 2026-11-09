@@ -19,7 +19,7 @@ type TestServerApp = { readonly request: (request: Request) => Response | Promis
 
 const runtimePairingSchema = v.object({
     pairingId: v.string(),
-    accountId: v.string(),
+    computerId: v.string(),
     runtimeId: v.string(),
     channelId: v.string(),
     pairingCode: v.string(),
@@ -43,7 +43,7 @@ export async function createFakeAgentHarnessRuntime(options: {
     readonly origin: string;
     readonly relayOrigin?: string;
     readonly runtimeOptions?: RunRuntimeOptions;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly server: TestServerApp;
     readonly signal: AbortSignal;
 }) {
@@ -78,7 +78,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             runtimePairingSchema,
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/accounts/${options.accountId}/runtime-pairings`, {
+                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/runtime-pairings`, {
                         body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                         headers: {
                             authorization: `Bearer ${options.credential}`,
@@ -152,7 +152,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         }
         const client = new MortyClient({
             endpoint: options.origin,
-            accountId: pairing.accountId,
+            computerId: pairing.computerId,
             credentialProvider: new StaticMortyCredentialProvider(options.credential),
             transport: { fetch: async (request: Request) => await options.server.request(request) },
         });

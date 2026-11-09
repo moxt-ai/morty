@@ -125,10 +125,10 @@ try {
     } finally {
         try {
             identity = JSON.parse(await readFile(join(state, "config.json"), "utf8")).identity;
-            receipt.accountId = identity.project_id;
+            receipt.computerId = identity.project_id;
             await writeFile(
                 join(output, `${label}-owned-project.json`),
-                `${JSON.stringify({ accountId: identity.project_id, origin })}\n`,
+                `${JSON.stringify({ computerId: identity.project_id, origin })}\n`,
             );
         } catch {
             /* A preflight failure may leave no identity. */
@@ -224,7 +224,7 @@ try {
     receipt.localCleanup = localClean;
     if (identity?.project_id && identity?.user_token) {
         const call = (path, method) =>
-            fetch(new URL(`/morty/api/accounts/${encodeURIComponent(identity.project_id)}${path}`, origin), {
+            fetch(new URL(`/morty/api/computers/${encodeURIComponent(identity.project_id)}${path}`, origin), {
                 method,
                 headers: { authorization: `Bearer ${identity.user_token}`, "content-type": "application/json" },
                 ...(method === "POST" ? { body: "{}" } : {}),

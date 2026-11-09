@@ -62,14 +62,14 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
             const environment = {
                 ...this.#environment,
                 MORTY_RUNTIME_EXECUTION: {
-                    accountId: current.accountId,
+                    computerId: current.computerId,
                     runtimeId: current.runtimeId,
-                    operations: createLocalSessionOperations(this.#context, current.accountId, current.runtimeId),
+                    operations: createLocalSessionOperations(this.#context, current.computerId, current.runtimeId),
                 },
             };
             if (
                 new URL(request.url).pathname ===
-                `${MORTY_API_PREFIX}/v1/accounts/${current.accountId}/runtimes/${current.runtimeId}/transport`
+                `${MORTY_API_PREFIX}/v1/computers/${current.computerId}/runtimes/${current.runtimeId}/transport`
             ) {
                 return acceptWebSocketHttpTransport(
                     request,
@@ -92,7 +92,7 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
                             const target = runtimeRequestTarget(operation);
                             return (
                                 target !== null &&
-                                target.accountId === current.accountId &&
+                                target.computerId === current.computerId &&
                                 target.runtimeId === current.runtimeId &&
                                 !new URL(operation.url).pathname.endsWith("/transport")
                             );

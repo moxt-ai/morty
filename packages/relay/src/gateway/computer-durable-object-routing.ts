@@ -1,28 +1,30 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { logger } from "@morty-build/relay-core/logging";
-import type { AccountDO } from "../durable-objects/account-do.ts";
-import { encodeAccountDurableObjectPath } from "../entity/account-durable-object-path.ts";
-import { accountIdFromPrefixedValue, decodeAccountPlacement } from "../entity/machine-account-id.ts";
+import type { ComputerDO } from "../durable-objects/computer-do.ts";
+import { encodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
+import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 
-export interface AccountWorkerRoutingBindings {
-    readonly ACCOUNT_RELAY: DurableObjectNamespace<AccountDO>;
+export interface ComputerWorkerRoutingBindings {
+    readonly COMPUTER_RELAY: DurableObjectNamespace<ComputerDO>;
 }
 
 /** A request executing inside the Account Durable Object, beside the Project's own store. */
-export interface AccountDurableObjectExecutionBindings extends AccountWorkerRoutingBindings {
-    readonly MORTY_ACCOUNT_STORE: PlatformProjectStore;
-    readonly MORTY_ACCOUNT_ID: string;
+export interface ComputerDurableObjectExecutionBindings extends ComputerWorkerRoutingBindings {
+    readonly MORTY_COMPUTER_STORE: PlatformProjectStore;
+    readonly MORTY_COMPUTER_ID: string;
 }
 
-export type AccountDurableObjectRoutingBindings = AccountWorkerRoutingBindings | AccountDurableObjectExecutionBindings;
+export type ComputerDurableObjectRoutingBindings =
+    | ComputerWorkerRoutingBindings
+    | ComputerDurableObjectExecutionBindings;
 
 function failure(code: string, status: number): Response {
     return Response.json({ error: { code, message: "Account routing is unavailable" } }, { status });
 }
 
-function accountIdFromPath(pathname: string): string | null {
-    const prefix = `${MORTY_API_PREFIX}/v1/accounts/`;
+function computerIdFromPath(pathname: string): string | null {
+    const prefix = `${MORTY_API_PREFIX}/v1/computers/`;
     if (!pathname.startsWith(prefix)) {
         return null;
     }
@@ -33,7 +35,7 @@ function accountIdFromPath(pathname: string): string | null {
     }
 }
 
-async function accountIdFromUnscopedRequest(request: Request): Promise<string | null> {
+async function computerIdFromUnscopedRequest(request: Request): Promise<string | null> {
     const pathname = new URL(request.url).pathname;
     for (const segment of pathname.split("/")) {
         let value: string;
@@ -42,16 +44,16 @@ async function accountIdFromUnscopedRequest(request: Request): Promise<string | 
         } catch {
             return "";
         }
-        const accountId = accountIdFromPrefixedValue(value);
-        if (accountId !== null) {
-            return accountId;
+        const computerId = computerIdFromPrefixedValue(value);
+        if (computerId !== null) {
+            return computerId;
         }
     }
     const pairingPrefix = `${MORTY_API_PREFIX}/v1/runtime-pairings/`;
     if (pathname.startsWith(pairingPrefix) && pathname.endsWith("/redeem")) {
         try {
             const pairingId = decodeURIComponent(pathname.slice(pairingPrefix.length, -"/redeem".length));
-            return accountIdFromPrefixedValue(pairingId) ?? "";
+            return computerIdFromPrefixedValue(pairingId) ?? "";
         } catch {
             return "";
         }
@@ -59,31 +61,31 @@ async function accountIdFromUnscopedRequest(request: Request): Promise<string | 
     if (pathname === `${MORTY_API_PREFIX}/v1/runtimes/connect`) {
         const authorization = request.headers.get("authorization") ?? "";
         const token = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-        return accountIdFromPrefixedValue(token) ?? "";
+        return computerIdFromPrefixedValue(token) ?? "";
     }
     const authorization = request.headers.get("authorization") ?? "";
     const bearer = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-    const credentialProject = accountIdFromPrefixedValue(bearer);
+    const credentialProject = computerIdFromPrefixedValue(bearer);
     if (credentialProject !== null) {
         return credentialProject;
     }
     return null;
 }
 
-export async function routeAccountDurableObject(
+export async function routeComputerDurableObject(
     request: Request,
-    bindings: AccountDurableObjectRoutingBindings,
+    bindings: ComputerDurableObjectRoutingBindings,
     allowedOrigins: ReadonlySet<string>,
 ): Promise<Response | null> {
-    if ("MORTY_ACCOUNT_STORE" in bindings) {
+    if ("MORTY_COMPUTER_STORE" in bindings) {
         return null;
     }
     const pathname = new URL(request.url).pathname;
     if (pathname === `${MORTY_API_PREFIX}/dashboard` || pathname.startsWith(`${MORTY_API_PREFIX}/dashboard/`)) {
         return null;
     }
-    const accountId = accountIdFromPath(pathname) ?? (await accountIdFromUnscopedRequest(request));
-    if (accountId === null) {
+    const computerId = computerIdFromPath(pathname) ?? (await computerIdFromUnscopedRequest(request));
+    if (computerId === null) {
         return null;
     }
     const origin = request.headers.get("origin");
@@ -93,17 +95,17 @@ export async function routeAccountDurableObject(
             { status: 403 },
         );
     }
-    const placement = decodeAccountPlacement(accountId);
+    const placement = decodeComputerPlacement(computerId);
     if (placement === null) {
         return failure("project_id_invalid", 400);
     }
     request.signal.throwIfAborted();
     const durableObjectUrl = new URL(request.url);
-    durableObjectUrl.pathname = encodeAccountDurableObjectPath(accountId, durableObjectUrl.pathname);
+    durableObjectUrl.pathname = encodeComputerDurableObjectPath(computerId, durableObjectUrl.pathname);
     const body = request.body === null ? undefined : await request.arrayBuffer();
     request.signal.throwIfAborted();
     try {
-        return await bindings.ACCOUNT_RELAY.getByName(accountId, { locationHint: placement.locationHint }).fetch(
+        return await bindings.COMPUTER_RELAY.getByName(computerId, { locationHint: placement.locationHint }).fetch(
             durableObjectUrl,
             {
                 method: request.method,
@@ -117,9 +119,9 @@ export async function routeAccountDurableObject(
         logger.error(
             {
                 event: "project_relay_request_failed",
-                durableObjectClass: "AccountDO",
-                durableObjectId: bindings.ACCOUNT_RELAY.idFromName(accountId).toString(),
-                accountId,
+                durableObjectClass: "ComputerDO",
+                durableObjectId: bindings.COMPUTER_RELAY.idFromName(computerId).toString(),
+                computerId,
                 cfRay: request.headers.get("cf-ray")?.slice(0, 128) ?? null,
                 method: request.method,
                 path: durableObjectUrl.pathname,

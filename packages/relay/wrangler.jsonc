@@ -11,8 +11,8 @@
                 "class_name": "RuntimeRelay"
             },
             {
-                "name": "ACCOUNT_RELAY",
-                "class_name": "AccountDO"
+                "name": "COMPUTER_RELAY",
+                "class_name": "ComputerDO"
             }
         ]
     },
@@ -62,7 +62,7 @@
             "tag": "platform-runtime-browser-transport",
             "deleted_classes": ["WebSocketTransport"]
         },
-        { "tag": "rename-machine-account-object", "renamed_classes": [{ "from": "ProjectDO", "to": "AccountDO" }] }
+        { "tag": "rename-computer-object", "renamed_classes": [{ "from": "ProjectDO", "to": "ComputerDO" }] }
     ],
     "d1_databases": [
         {

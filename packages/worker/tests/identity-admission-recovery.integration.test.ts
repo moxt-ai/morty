@@ -34,7 +34,7 @@ const setupModule = v.custom<SetupModule>(
 const identitySchema = v.object({
     token: v.string(),
     userId: v.string(),
-    accountId: v.string(),
+    computerId: v.string(),
     bot: v.object({ botId: v.string() }),
 });
 
@@ -187,10 +187,10 @@ test("Given setup and a lost creation response, When setup retries across tempor
             kind: "ready",
             user_token: identity.token,
             user_id: identity.userId,
-            project_id: identity.accountId,
+            project_id: identity.computerId,
         });
         expect(new Set(creationKeys)).toEqual(new Set([pending["creation_key"]]));
-        const session = await fetch(`${origin}/morty/api/accounts/${identity.accountId}/session`, {
+        const session = await fetch(`${origin}/morty/api/computers/${identity.computerId}/session`, {
             headers: { authorization: `Bearer ${identity.token}` },
         });
         expect(session.status).toBe(200);

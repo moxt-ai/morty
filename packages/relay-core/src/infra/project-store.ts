@@ -33,7 +33,7 @@ export interface RedeemAccessGrant {
 
 /** The outcome of redeeming an access grant; anything but `redeemed` issued no credential. */
 export type AccessGrantRedemption =
-    | { readonly kind: "redeemed"; readonly accountId: string }
+    | { readonly kind: "redeemed"; readonly computerId: string }
     | { readonly kind: "invalid" }
     | { readonly kind: "already_redeemed" }
     | { readonly kind: "runtime_revoked" }

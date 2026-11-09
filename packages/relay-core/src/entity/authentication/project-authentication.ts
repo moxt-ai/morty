@@ -1,5 +1,5 @@
 import { PROJECT_PERMISSION_NAMES, type ProjectPermissionName } from "@morty-build/client/protocol";
-import type { AccountScope } from "../do/session.ts";
+import type { ComputerScope } from "../do/session.ts";
 import type { HttpError } from "../http-error.ts";
 import { VerifiedChannelAccess } from "../pairing/pairing.ts";
 
@@ -206,14 +206,14 @@ export class ProjectAccessContext {
     readonly credentialId: string;
     readonly lifetime: ProjectAccessLifetime;
     readonly permissions: ReadonlySet<ProjectPermission>;
-    readonly scope: AccountScope;
+    readonly scope: ComputerScope;
 
-    get accountId(): string {
-        return this.scope.accountId;
+    get computerId(): string {
+        return this.scope.computerId;
     }
 
     constructor(
-        scope: AccountScope,
+        scope: ComputerScope,
         permissions: ReadonlySet<ProjectPermission>,
         actor: AuditActor,
         credentialId: string,
@@ -310,10 +310,10 @@ function projectAuthenticationErrorStatus(code: string): number {
 
 export class RuntimeAccessContext extends VerifiedChannelAccess {
     readonly credentialId: string;
-    readonly scope: AccountScope;
+    readonly scope: ComputerScope;
 
-    constructor(scope: AccountScope, runtimeId: string, channelId: string, credentialId: string) {
-        super(channelId, runtimeId, scope.accountId, []);
+    constructor(scope: ComputerScope, runtimeId: string, channelId: string, credentialId: string) {
+        super(channelId, runtimeId, scope.computerId, []);
         this.scope = scope;
         this.credentialId = credentialId;
     }

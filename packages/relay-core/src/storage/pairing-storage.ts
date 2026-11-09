@@ -27,7 +27,7 @@ export class PairingStorage {
             .select({
                 channel_id: runtimeIdentity.channelId,
                 runtime_id: runtimeIdentity.runtimeId,
-                project_id: runtimeIdentity.accountId,
+                project_id: runtimeIdentity.computerId,
                 credential_id: channelHostCredential.credentialId,
                 authority: channelHostCredential.authority,
             })
@@ -75,7 +75,7 @@ export class PairingStorage {
     /** Records a browser credential issued by `ownerId`; false when it was not recorded. */
     readonly createBrowser = async (
         credentialId: string,
-        accountId: string,
+        computerId: string,
         tokenHash: string,
         ownerId: string,
         now: number,
@@ -86,7 +86,7 @@ export class PairingStorage {
             .insert(projectBrowserCredential)
             .values({
                 credentialId,
-                accountId,
+                computerId,
                 tokenHash,
                 createdByCredentialId: ownerId,
                 createdAt: now,
@@ -240,7 +240,7 @@ export class PairingStorage {
 
     /** Revokes a browser credential of the Project, keeping its first revocation time; false when none matched. */
     readonly revokeBrowser = async (
-        accountId: string,
+        computerId: string,
         credentialId: string,
         now: number,
         signal: AbortSignal,
@@ -251,7 +251,7 @@ export class PairingStorage {
             .where(
                 and(
                     eq(projectBrowserCredential.credentialId, credentialId),
-                    eq(projectBrowserCredential.accountId, accountId),
+                    eq(projectBrowserCredential.computerId, computerId),
                 ),
             )
             .returning({ credentialId: projectBrowserCredential.credentialId });

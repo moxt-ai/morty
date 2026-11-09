@@ -11,7 +11,7 @@ const bootstrapOrigin = v.variant("kind", [
     v.pipe(
         v.object({
             kind: v.literal("replacement"),
-            previousAccountId: platformIdentifier,
+            previousComputerId: platformIdentifier,
             token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
         }),
         v.readonly(),
@@ -20,9 +20,9 @@ const bootstrapOrigin = v.variant("kind", [
 
 export type BootstrapOrigin = v.InferOutput<typeof bootstrapOrigin>;
 
-export const accountBootstrap = v.pipe(
+export const computerBootstrap = v.pipe(
     v.object({
-        account: platformProjectSchema,
+        computer: platformProjectSchema,
         userId: platformIdentifier,
         origin: bootstrapOrigin,
     }),

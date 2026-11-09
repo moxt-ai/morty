@@ -23,7 +23,7 @@ import { type SetupHandoffModel, setupHandoffModel } from "./send-link-store.ts"
  */
 interface ChatIdentity {
     readonly botId: string;
-    readonly accountId: string;
+    readonly computerId: string;
     readonly getToken: (signal: AbortSignal) => Promise<string>;
 }
 
@@ -126,7 +126,7 @@ export function createMortyApplication(options: {
         const identity = session.identity;
         const scope: ChatIdentity = {
             botId: identity.botId,
-            accountId: identity.accountId,
+            computerId: identity.computerId,
             getToken: async (signal) => {
                 signal.throwIfAborted();
                 return storedToken(identity.userId) ?? identity.token;
@@ -147,7 +147,7 @@ export function createMortyApplication(options: {
             replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
             credentialRejected: () => void credentialRejected(),
             origin: options.origin,
-            accountId: identity.accountId,
+            computerId: identity.computerId,
             subscribe: transport.subscribe,
             recoverBridge: transport.recover,
             waitForBridge: transport.waitForBridge,
@@ -172,7 +172,7 @@ export function createMortyApplication(options: {
                             return storedToken(saved.userId) ?? saved.token;
                         },
                         origin: options.origin,
-                        accountId: saved.accountId,
+                        computerId: saved.computerId,
                         subscribe: transport.subscribe,
                         waitForChange: transport.waitForChange,
                     }),
@@ -180,7 +180,7 @@ export function createMortyApplication(options: {
             entry: session.entry,
             botId: identity.botId,
             bugReportDialog,
-            accountId: identity.accountId,
+            computerId: identity.computerId,
             requests,
             url: options.url ?? window.location.href,
             createTransfer: access.createTransfer,

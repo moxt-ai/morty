@@ -35,11 +35,14 @@ test("Given a workspace read before an Agent change, When its watch starts after
         const signal = AbortSignal.timeout(15_000);
         const token = await app.identity.getToken(signal);
         const workspace = () =>
-            new Request(`${app.origin}/morty/api/chat/accounts/${app.identity.accountId}/bots/${app.botId}/workspace`, {
-                method: "POST",
-                headers: { authorization: `Bearer ${token}` },
-                signal,
-            });
+            new Request(
+                `${app.origin}/morty/api/chat/computers/${app.identity.computerId}/bots/${app.botId}/workspace`,
+                {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${token}` },
+                    signal,
+                },
+            );
         const before = await transport.fetch(workspace());
         expect(before.status).toBe(200);
         expect(await before.text()).not.toContain('"agentRef":"pi"');
@@ -75,11 +78,14 @@ test("Given an earlier workspace read, When a snapshot watch starts after an Age
         const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(20_000)]);
         const token = await app.identity.getToken(signal);
         const workspace = () =>
-            new Request(`${app.origin}/morty/api/chat/accounts/${app.identity.accountId}/bots/${app.botId}/workspace`, {
-                method: "POST",
-                headers: { authorization: `Bearer ${token}` },
-                signal,
-            });
+            new Request(
+                `${app.origin}/morty/api/chat/computers/${app.identity.computerId}/bots/${app.botId}/workspace`,
+                {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${token}` },
+                    signal,
+                },
+            );
         const before = await transport.fetch(workspace());
         expect(await before.text()).not.toContain('"agentRef":"pi"');
         await app.daemon.replaceAgents([
@@ -115,7 +121,7 @@ test("Given an unbound Machine was read, When pairing completes before the bindi
     const token = await app.identity.getToken(signal);
     const binding = () =>
         new Request(
-            `${app.origin}/morty/api/accounts/${app.identity.accountId}/management/bots/${app.botId}/runtime-binding`,
+            `${app.origin}/morty/api/computers/${app.identity.computerId}/management/bots/${app.botId}/runtime-binding`,
             { headers: { authorization: `Bearer ${token}` }, signal },
         );
     const unbound = await app.transport.fetch(binding());
@@ -176,7 +182,7 @@ test("Given an open conversation, When the Chat WebSocket bridge drops, Then no 
     // again without waiting for the rest of the retry budget.
     const token = await app.identity.getToken(new AbortController().signal);
     const workspace = await app.transport.fetch(
-        new Request(`${app.origin}/morty/api/chat/accounts/${app.identity.accountId}/bots/${app.botId}/workspace`, {
+        new Request(`${app.origin}/morty/api/chat/computers/${app.identity.computerId}/bots/${app.botId}/workspace`, {
             method: "POST",
             headers: { authorization: `Bearer ${token}` },
         }),

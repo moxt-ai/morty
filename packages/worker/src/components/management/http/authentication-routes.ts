@@ -1,16 +1,16 @@
 import { Hono } from "hono";
 import * as v from "valibot";
-import { accountObject } from "../../../gateway/account-object-routing.ts";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
+import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser, optionalBodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
-import { anonymousCreationKey } from "../entity/account-bootstrap.ts";
 import {
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
     deviceAccessDurations,
 } from "../entity/authentication/credential.ts";
 import { clientLocationHeader, decodeClientLocation } from "../entity/client-location.ts";
+import { anonymousCreationKey } from "../entity/computer-bootstrap.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
@@ -104,10 +104,10 @@ export function createAuthenticationRoutes() {
                 signal,
                 input.locationHint ?? projectLocationHint(request),
             );
-            const response = await accountObject(context.env.config.bindings, project.accountId).fetch(
-                new Request("https://account.internal/__account/bootstrap", {
+            const response = await computerObject(context.env.config.bindings, project.computerId).fetch(
+                new Request("https://computer.internal/__computer/bootstrap", {
                     body: JSON.stringify({
-                        account: project,
+                        computer: project,
                         userId,
                         origin: { kind: "created", creationKey: input.creationKey },
                     }),

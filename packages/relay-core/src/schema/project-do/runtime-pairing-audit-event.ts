@@ -13,7 +13,7 @@ export const runtimePairingAuditEvent = sqliteTable(
     "runtime_pairing_audit_events",
     {
         auditId: text("audit_id").primaryKey(),
-        accountId: text("project_id").notNull(),
+        computerId: text("project_id").notNull(),
         pairingId: text("pairing_id").notNull(),
         runtimeId: text("runtime_id").notNull(),
         actorKind: text("actor_kind").notNull(),
@@ -27,7 +27,7 @@ export const runtimePairingAuditEvent = sqliteTable(
             "runtime_pairing_audit_events_action_check",
             sql`${table.action} in ('runtime_pairing.requested', 'runtime_pairing.claimed', 'runtime_pairing.expired', 'runtime_pairing.revoked', 'runtime_pairing.rejected')`,
         ),
-        index("runtime_pairing_audit_project").on(table.accountId, desc(table.recordedAt), desc(table.auditId)),
+        index("runtime_pairing_audit_project").on(table.computerId, desc(table.recordedAt), desc(table.auditId)),
         uniqueIndex("runtime_pairing_audit_lifecycle")
             .on(table.pairingId, table.action)
             .where(sql`${table.action} <> 'runtime_pairing.rejected'`),
