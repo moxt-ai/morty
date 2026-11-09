@@ -1,3 +1,5 @@
+import type { HeldRuntimeCredentials } from "./runtime-credentials.ts";
+
 export interface RuntimeConnectionInput {
     readonly channelId: string;
     readonly defaultWorkspace: string;
@@ -19,11 +21,8 @@ export class VerifiedRuntimeConnection {
     readonly installationId: string;
     readonly pairingId: string;
     readonly relayOrigin: URL;
-    /**
-     * The credential issued when the connection was paired. It rotates on every connection, so the credential the
-     * Relay accepts now is read through `RuntimeInstallationStore.runtimeCredentials`.
-     */
-    readonly runtimeCredential: string;
+    /** The credential state saved with this pairing; live users read it through the installation store. */
+    readonly credentials: HeldRuntimeCredentials;
 
     readonly runtimeId: string;
 
@@ -35,7 +34,7 @@ export class VerifiedRuntimeConnection {
         defaultWorkspace: string,
         pairingId: string,
         relayOrigin: URL,
-        runtimeCredential: string,
+        credentials: HeldRuntimeCredentials,
         runtimeId: string,
     ) {
         this.activation = activation;
@@ -45,7 +44,7 @@ export class VerifiedRuntimeConnection {
         this.installationId = installationId;
         this.pairingId = pairingId;
         this.relayOrigin = relayOrigin;
-        this.runtimeCredential = runtimeCredential;
+        this.credentials = credentials;
         this.runtimeId = runtimeId;
     }
 }
