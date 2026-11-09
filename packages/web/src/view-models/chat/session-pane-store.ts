@@ -4,7 +4,6 @@ import {
     MortyPageRequest,
     type MortySessionEventObserver,
     MortyTimeoutError,
-    type PromptAttachment,
     type SessionConfigOption,
 } from "@morty-build/client";
 import type { SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
@@ -22,7 +21,7 @@ import { agentQuestionAnswer, openAgentQuestions } from "./agent-question-answer
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMortySession } from "./open-session.ts";
-import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
+import { uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
 import type { SessionComposerStore } from "./session-composer-store.ts";
@@ -526,33 +525,6 @@ export function createSessionPaneModel(options: {
                 throw cause;
             }
         };
-    const instructionUri = "morty://bot/instructions";
-    const withInstructions = async <T extends { readonly attachments: readonly PromptAttachment[] }>(
-        connected: MortyClient,
-        request: T,
-        signal: AbortSignal,
-    ): Promise<T> => {
-        const instructions = (session.instructions ?? "").trim();
-        if (instructions.length === 0) {
-            return request;
-        }
-        const attachment = await uploadPromptAttachment(
-            connected.sessions,
-            sessionId,
-            {
-                bytes: new TextEncoder().encode(instructions),
-                kind: "resource",
-                mediaType: "text/plain",
-                name: "Agent instructions",
-                uri: instructionUri,
-            },
-            signal,
-        );
-        return {
-            ...request,
-            attachments: [...request.attachments.filter((item) => item.uri !== instructionUri), attachment],
-        };
-    };
     /**
      * Submits through the client the attempt started with. Closing a client ends only its live subscriptions, so the
      * attempt keeps its requests when this pane reconnects or stops.
@@ -917,18 +889,14 @@ export function createSessionPaneModel(options: {
                                   attachments.values,
                                   attemptSignal,
                               );
-                    // Freeze semantic intent before delivery owns retries, including instructions and identity.
-                    return await withInstructions(
-                        connected,
-                        {
-                            ...request,
-                            agentId: session.agentRef,
-                            directoryId: session.result.ready.directoryId,
-                            attachments: uploadedAttachments,
-                            content: content.trim(),
-                        },
-                        attemptSignal,
-                    );
+                    // Freeze semantic intent before delivery owns retries, including identity.
+                    return {
+                        ...request,
+                        agentId: session.agentRef,
+                        directoryId: session.result.ready.directoryId,
+                        attachments: uploadedAttachments,
+                        content: content.trim(),
+                    };
                 },
                 submit: submitCommand(connected, commandId, sentAt),
             });

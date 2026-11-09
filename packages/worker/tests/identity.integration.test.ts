@@ -330,7 +330,6 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         botId: bot.botId,
         configured: false,
         displayName: "My Machine",
-        instructions: "",
     });
     const projectResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/project`, {
