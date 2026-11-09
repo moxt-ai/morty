@@ -99,7 +99,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                               computerId: saved.computerId,
                               defaultWorkspace: workspace,
                               relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                              credentials: memoryRuntimeCredentials(saved.runtimeCredential),
+                              credentials: memoryRuntimeCredentials(saved.credentials.current),
                           },
                       };
             const expected: { readonly context: string; readonly base: string }[] = [];

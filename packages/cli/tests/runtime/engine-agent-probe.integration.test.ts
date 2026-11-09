@@ -147,7 +147,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
                       computerId: saved.computerId,
                       defaultWorkspace: workspace,
                       relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                      credentials: memoryRuntimeCredentials(saved.runtimeCredential),
+                      credentials: memoryRuntimeCredentials(saved.credentials.current),
                   },
               };
     const execution = engine.runLoop({

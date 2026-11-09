@@ -232,6 +232,9 @@ export function createChatWorkspace(options: {
         options.clock,
         titles,
         (sessionId) => {
+            // Closing changes directory membership. Replace any read started before that change in the same
+            // lifecycle that owns refreshes, so its delayed answer cannot put the closed Session back.
+            startDirectoryLoad();
             if (selectedConversationId(home.getState().selection) !== sessionId) {
                 return;
             }

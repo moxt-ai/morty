@@ -455,6 +455,7 @@ export function createSessionPaneModel(options: {
         BotChatApi,
         | "connectSession"
         | "managedSession"
+        | "managedSessions"
         | "runtimeConfiguration"
         | "recoverBridge"
         | "waitForBridge"
@@ -1553,9 +1554,22 @@ export function createSessionPaneModel(options: {
             const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
             try {
                 const connected = await waitForConnectionReady(requestSignal);
-                const result = await connected.sessions.rename(sessionId, pending.title, requestSignal);
-                titles.getState().observed(sessionId, result.title);
-                rename.getState().settled(pending.title);
+                await connected.sessions.rename(sessionId, pending.title, requestSignal);
+                requestSignal.throwIfAborted();
+                // The acknowledgement describes this operation, not the current title. Confirm through the same
+                // guarded directory read as the sidebar, keeping the editor open until its title can take focus.
+                const startedWith = titles.getState().titles;
+                try {
+                    const sessions = await requests.managedSessions(botId, requestSignal);
+                    requestSignal.throwIfAborted();
+                    titles.getState().directoryLoaded(sessions, startedWith);
+                    rename.getState().settled(pending.title);
+                } catch {
+                    requestSignal.throwIfAborted();
+                    rename
+                        .getState()
+                        .failed(pending.title, "The title was saved, but its current value could not be refreshed.");
+                }
             } catch (cause) {
                 if (signal.aborted) {
                     return;

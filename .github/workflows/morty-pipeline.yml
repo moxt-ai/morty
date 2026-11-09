@@ -10,6 +10,10 @@ on:
         description: The change touches only Markdown, so only static checks and the security scan apply.
         type: boolean
         default: false
+      release:
+        description: Build the release candidate for this main commit, carrying its release version.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -151,6 +155,8 @@ jobs:
         if: steps.archive.outputs.restored != 'true'
       - name: Assign the stable version
         if: steps.archive.outputs.restored != 'true'
+        env:
+          MORTY_RELEASE_CANDIDATE: ${{ inputs.release }}
         run: node scripts/prepare-release.mjs
       - run: pnpm build:cli
         if: steps.archive.outputs.restored != 'true'

@@ -245,7 +245,9 @@ it("Given saved and provided connections with opaque credentials, When a host se
         expect(catalogs).toEqual([expect.objectContaining({ agents: [] }), expect.objectContaining({ agents: [] })]);
         const [savedSuccessor] = successors;
         expect(savedSuccessor).toMatch(/^[A-Za-z0-9_-]{73}$/u);
-        expect(await manager.list(deadline)).toEqual([saved]);
+        expect(await manager.list(deadline)).toEqual([
+            { ...saved, credentials: { current: savedSuccessor, successor: null } },
+        ]);
 
         revoke = true;
         await expect(engine.runLoop({ connection: connections[0], signal: deadline })).rejects.toMatchObject({
