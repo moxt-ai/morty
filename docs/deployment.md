@@ -63,10 +63,20 @@ assigns that commit's stable patch version, builds one CLI archive and its match
 cloud artifact, and tests the archive on every supported OS/Node combination. The
 release workflow publishes that accepted archive instead of rebuilding and
 retesting the same source; a commit without an accepted archive is built and
-validated by the release workflow before publication. npm publication and
-registry integrity verification precede production deployment. Only successful
-production health and artifact checks allow creation of the source tag and GitHub
-Release. Pull requests exercise the gates without publication credentials.
+validated by the release workflow before publication. Pull requests exercise the
+gates without publication credentials.
+
+Expose a release only after production verified it. The release deploys the cloud
+Workers first and verifies production health, assets and Session access. If any
+check fails, it restores the Workers to the versions that served before the
+release and stops, leaving npm `latest` and the hosted setup unchanged. Only a
+verified cloud deployment allows npm publication, which moves `latest`. The hosted
+setup installs `latest`, so it is replaced only after the registry serves the
+accepted archive. Only the completed chain allows creation of the source tag and
+GitHub Release. Until publication completes, the new Workers serve the previous
+CLI and setup, which the compatibility contract already requires. Database
+migrations are applied before the Workers and are never reversed, so a migration
+must remain compatible with the Workers a failed release restores.
 
 Release versions are derived from a committed stable-version baseline and the
 number of first-parent main commits since its recorded source revision. The same
@@ -85,8 +95,10 @@ release tag. Build and deployment records bind version, source revision and
 archive integrity; GitHub Release assets retain the accepted artifacts beyond
 Actions artifact retention.
 
-Every failed gate stops dependent stages. npm and Cloudflare are independent
-systems, so a deployment failure after npm publication cannot undo publication;
+Every failed gate stops dependent stages. When the automatic Worker restoration
+itself fails, the job reports it and production keeps the unverified Workers until
+recovery; npm and the hosted setup remain unchanged. npm and Cloudflare are
+independent systems, so a failure after npm publication cannot undo publication;
 it leaves an incomplete release with no final GitHub Release. Inspect the failing
 job, correct the operational cause, and rerun failed jobs with the original
 artifacts. Do not unpublish or repack that version. If code changes are necessary,
