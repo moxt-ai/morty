@@ -64,7 +64,15 @@ test("Given local, browser and recovery credentials, When their operations end a
         }
     }
     for (const token of [browser, recovery]) {
-        expect((await request("/identity/revoke-all-access", token, "POST")).status).toBe(403);
+        const refused = await fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                body: JSON.stringify({ successor: `morty_anon_v1_${"A".repeat(43)}` }),
+            }),
+            fixture.environment(),
+        );
+        expect(refused.status).toBe(403);
     }
     for (const [index, operation] of operations.entries()) {
         expect((await request(operation.path, operation.token, "DELETE")).status).toBe(204);
