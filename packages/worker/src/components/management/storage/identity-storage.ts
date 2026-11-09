@@ -49,13 +49,17 @@ function credentialDeviceNotEnded(database: IdentityDatabase) {
     );
 }
 
+/**
+ * The access a credential belongs to still holds, apart from its device's term: a revoked machine or recovery
+ * credential ends its own access, a browser credential's access ends with its device, and replacement ends neither.
+ */
+function credentialAccessHeld(database: IdentityDatabase) {
+    return and(isNull(anonymousCredential.revokedAt), credentialDeviceNotEnded(database));
+}
+
 /** A credential that authenticates now, apart from its device's term. */
 function credentialInForce(database: IdentityDatabase) {
-    return and(
-        isNull(anonymousCredential.revokedAt),
-        isNull(anonymousCredential.replacedAt),
-        credentialDeviceNotEnded(database),
-    );
+    return and(isNull(anonymousCredential.replacedAt), credentialAccessHeld(database));
 }
 
 /** Ends the access of the matching browser devices whose access has not ended yet; ended access stays ended. */
@@ -586,8 +590,9 @@ export class IdentityStorage {
             gt(continueLink.expiresAt, now),
             gt(continueLink.accessExpiresAt, now),
             unusedLink(database),
-            // Recheck the sharing device in the issuing write. A replaced credential still belongs to that device;
-            // using credentialInForce here would invalidate invitations on ordinary credential renewal.
+            // A link adds no device once the access that shared it ended; checking it in the issuing write means ending
+            // that access needs no separate write to void the link. Renewal replaces a credential without ending its
+            // access, so invitations survive it.
             exists(
                 database
                     .select({ id: anonymousCredential.id })
@@ -596,7 +601,7 @@ export class IdentityStorage {
                         and(
                             eq(anonymousCredential.id, continueLink.createdByCredentialId),
                             eq(anonymousCredential.userId, continueLink.userId),
-                            credentialDeviceNotEnded(database),
+                            credentialAccessHeld(database),
                         ),
                     ),
             ),
@@ -729,8 +734,8 @@ export class IdentityStorage {
 
     /**
      * Ends the access of one of the user's browser devices, and with it every credential of that device, including one
-     * a retried or concurrent redemption issued, and voids its unused invitations in the same transaction. Returns false
-     * when the user has no such device; a device whose access already ended stays ended, so repeating is harmless.
+     * a retried or concurrent redemption issued; its unused invitations add no device once it ended. Returns false when
+     * the user has no such device; a device whose access already ended stays ended, so repeating is harmless.
      */
     readonly endDeviceAccess = async (
         userId: string,
@@ -746,31 +751,7 @@ export class IdentityStorage {
             signal.throwIfAborted();
             return false;
         }
-        await database.batch([
-            endDevices(database, device, now),
-            database
-                .update(continueLink)
-                .set({ revokedAt: now })
-                .where(
-                    and(
-                        eq(continueLink.userId, userId),
-                        isNull(continueLink.revokedAt),
-                        unusedLink(database),
-                        inArray(
-                            continueLink.createdByCredentialId,
-                            database
-                                .select({ id: anonymousCredential.id })
-                                .from(anonymousCredential)
-                                .where(
-                                    and(
-                                        eq(anonymousCredential.userId, userId),
-                                        eq(anonymousCredential.deviceId, deviceId),
-                                    ),
-                                ),
-                        ),
-                    ),
-                ),
-        ]);
+        await endDevices(database, device, now).run();
         signal.throwIfAborted();
         return true;
     };
