@@ -248,11 +248,10 @@ async function exercise(count) {
         });
         const relay = new URL(`${origin}/morty/api/v1/runtimes/connect`);
         relay.protocol = "ws:";
-        relay.searchParams.set("token", claimed.runtimeCredential);
         const connectionStates = [];
         child = fork(
             join(here, "runtime-process.mjs"),
-            [state, pairing.channelId, relay.href, controlPath, repository],
+            [state, pairing.channelId, relay.href, claimed.runtimeCredential, controlPath, repository],
             {
                 env: { PATH: process.env.PATH, HOME: join(state, "home") },
                 stdio: ["ignore", "pipe", "pipe", "ipc"],

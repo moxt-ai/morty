@@ -20,8 +20,17 @@ import type {
     VerifiedChannelAccess,
 } from "../../entity/pairing/pairing.ts";
 export interface PairingOperations {
-    readonly authorizeDaemon: (channelId: string, token: string, signal: AbortSignal) => Promise<RuntimeAccessContext>;
-    readonly authorizeRuntimeCredential: (token: string, signal: AbortSignal) => Promise<RuntimeAccessContext>;
+    /**
+     * Rotates a daemon credential to the successor the daemon saved. A reused credential has already ended the
+     * Runtime's access when this returns; the caller closes its connections.
+     */
+    readonly rotateRuntimeCredential: (
+        token: string,
+        successor: string,
+        signal: AbortSignal,
+    ) => Promise<
+        { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
+    >;
     readonly authorizeHost: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
     readonly authorizeProjectRuntimeHost: (
         projectId: string,
@@ -77,6 +86,13 @@ export interface PairingOperations {
         token: string,
         signal: AbortSignal,
     ) => Promise<readonly ChannelDescriptor[]>;
+    /** Whether the Project's Runtime was revoked; false for one the Project never had. */
+    readonly isProjectRuntimeRevoked: (
+        projectId: string,
+        runtimeId: string,
+        token: string,
+        signal: AbortSignal,
+    ) => Promise<boolean>;
     readonly readChannel: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelDescriptor>;
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that
     // order. Passing the deadline never expires an already registered Runtime.
@@ -124,9 +140,14 @@ export interface PairingOperations {
         token: string,
         signal: AbortSignal,
     ) => Promise<RevokedProjectRuntime>;
+    /**
+     * Records the daemon's Agent catalog. The daemon presents its credential with the successor it saved, if any:
+     * while it saves a rotation its connection just made, the Relay already holds the successor as current.
+     */
     readonly updateAgentCatalog: (
         channelId: string,
         token: string,
+        successor: string | null,
         agents: readonly AgentDescriptor[],
         signal: AbortSignal,
     ) => Promise<void>;

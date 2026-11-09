@@ -20,19 +20,21 @@ export {
     PLATFORM_APP_PROJECT_PERMISSIONS,
     PROJECT_PERMISSION_NAMES,
 } from "./platform/project-permission.ts";
-
+export {
+    isRuntimeCredentialSuccessor,
+    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
+    runtimeCredentialSuccessor,
+} from "./runtime/credential.ts";
 export type {
     RuntimeDiagnosticsRequest,
     RuntimeDiagnosticsResult,
 } from "./runtime/diagnostics.ts";
-
 export {
     decodeRuntimeDiagnosticsRequest,
     decodeRuntimeDiagnosticsResult,
     encodeRuntimeDiagnosticsRequest,
     encodeRuntimeDiagnosticsResult,
 } from "./runtime/diagnostics.ts";
-
 export type {
     RuntimeHeartbeatAckEvent,
     RuntimeHeartbeatEvent,
@@ -41,7 +43,6 @@ export type {
     RuntimePongEvent,
     RuntimeStatusEvent,
 } from "./runtime/liveness.ts";
-
 export {
     decodeRuntimeHeartbeatAckEvent,
     decodeRuntimeHeartbeatEvent,

@@ -53,14 +53,42 @@ export class PairingIdentityService {
         return project;
     };
 
-    readonly authenticateRuntime = async (tokenHash: string, signal: AbortSignal): Promise<RuntimeAccessContext> => {
+    /**
+     * Presents a daemon credential with its successor. The Project store rotates the credential; a retired credential
+     * presented with another successor is reported as reused, for the caller to end the Runtime's access, and one of a
+     * Runtime whose access already ended as revoked.
+     */
+    readonly rotateRuntime = async (
+        presentedHash: string,
+        successorHash: string,
+        signal: AbortSignal,
+    ): Promise<
+        { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
+    > => {
         signal.throwIfAborted();
         try {
-            const matches: { readonly source: ProjectStore; readonly row: PairingScopeRow }[] = [];
+            const matches: {
+                readonly source: ProjectStore;
+                readonly kind: "rotated" | "reused";
+                readonly row: PairingScopeRow;
+            }[] = [];
+            let revoked = false;
             for (const source of this.#sources) {
-                for (const row of await source.findRuntimeCredential(tokenHash, signal)) {
-                    matches.push({ source, row });
+                const rotation = await source.rotateRuntimeCredential(presentedHash, successorHash, signal);
+                switch (rotation.kind) {
+                    case "rotated":
+                    case "reused":
+                        matches.push({ source, kind: rotation.kind, row: rotation.runtime });
+                        break;
+                    case "revoked":
+                        revoked = true;
+                        break;
+                    case "unknown":
+                        break;
                 }
+            }
+            if (revoked && matches.length === 0) {
+                return { kind: "revoked" };
             }
             const match = matches[0];
             if (matches.length !== 1 || match === undefined) {
@@ -77,7 +105,15 @@ export class PairingIdentityService {
             if (!this.matchesPlacement(match.source, project)) {
                 throw new PairingDirectoryError("directory_unavailable", "Runtime storage is unavailable");
             }
-            return new RuntimeAccessContext(new ProjectScope(projectId), runtimeId, channelId, `daemon:${channelId}`);
+            return {
+                kind: match.kind,
+                access: new RuntimeAccessContext(
+                    new ProjectScope(projectId),
+                    runtimeId,
+                    channelId,
+                    `daemon:${channelId}`,
+                ),
+            };
         } catch (cause) {
             signal.throwIfAborted();
             if (cause instanceof PairingDirectoryError) {

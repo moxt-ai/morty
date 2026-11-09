@@ -22,6 +22,8 @@ import {
     platformEndpointBindingsSchema,
 } from "../infra/cloud-bindings.ts";
 
+const relayErrorSchema = v.object({ error: v.object({ code: v.string() }) });
+
 function runtimeSetupMessage(code: string): string {
     // Keep actionable, locally owned explanations without forwarding untrusted upstream text.
     switch (code) {
@@ -144,7 +146,14 @@ export class PlatformProjectGateway {
             });
             signal.throwIfAborted();
             if (!response.ok) {
-                await response.body?.cancel();
+                const refusal = v.safeParse(relayErrorSchema, await response.json().catch(() => null));
+                if (refusal.success && refusal.output.error.code === "runtime_revoked") {
+                    throw new PlatformProjectError(
+                        "RUNTIME_REVOKED",
+                        "This computer was disconnected because its connection key was used somewhere else. Run Morty setup on it again to reconnect.",
+                        410,
+                    );
+                }
                 throw new PlatformProjectError(
                     response.status === 404 ? "NOT_FOUND" : "PLATFORM_UNAVAILABLE",
                     "Morty could not read the Runtime's Agents.",

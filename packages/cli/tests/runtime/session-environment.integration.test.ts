@@ -26,6 +26,7 @@ import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { fakeAgentHarness } from "../support/agent-harness.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 // @no-uc: Compatibility; public Runtime commands and real ACP children verify embedding context isolation.
 test("Given scoped environments, When Sessions run concurrently and restore, Then their children retain the right identity", async ({
@@ -456,11 +457,10 @@ await import(${JSON.stringify(agentPeer)});
     const config = {
         ...createControlledRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 channelId: "environment",
                 defaultWorkspace: workspace,
-                relayUrl: new URL(
-                    `ws://127.0.0.1:${address.port}/morty/api/v1/runtimes/connect?token=${"r".repeat(43)}`,
-                ),
+                relayUrl: new URL(`ws://127.0.0.1:${address.port}/morty/api/v1/runtimes/connect`),
             },
             [agent, otherAgent],
             new RuntimeLocalContext(join(directory, "runtime"), process.env),

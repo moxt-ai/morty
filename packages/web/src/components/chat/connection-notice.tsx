@@ -18,7 +18,10 @@ function noticeTestId(feedback: ConnectionFeedback): string {
  * notice in the product: failures read as errors, everything else is neutral.
  */
 function noticeTone(feedback: VisibleFeedback): MortyAlertTone {
-    const failed = feedback.kind === "failed" || (feedback.kind === "closed" && feedback.reopen === "failed");
+    const failed =
+        feedback.kind === "failed" ||
+        feedback.kind === "action-required" ||
+        (feedback.kind === "closed" && feedback.reopen === "failed");
     return failed ? "error" : "neutral";
 }
 

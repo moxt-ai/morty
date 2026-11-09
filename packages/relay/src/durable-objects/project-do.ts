@@ -173,10 +173,6 @@ export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
         return await this.#operate(projectId).revokeBrowserCredential(credentialId, now, uncancelled);
     }
 
-    async readDaemon(projectId: string, channelId: string, tokenHash: string): Promise<Result<"readDaemon">> {
-        return await this.#operate(projectId).readDaemon(channelId, tokenHash, uncancelled);
-    }
-
     async updateAgentCatalog(
         projectId: string,
         channelId: string,
@@ -229,8 +225,12 @@ export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
         return await this.#operate(projectId).findCredential(credential, uncancelled);
     }
 
-    async findRuntimeCredential(projectId: string, tokenHash: string): Promise<Result<"findRuntimeCredential">> {
-        return await this.#operate(projectId).findRuntimeCredential(tokenHash, uncancelled);
+    async rotateRuntimeCredential(
+        projectId: string,
+        presentedHash: string,
+        successorHash: string,
+    ): Promise<Result<"rotateRuntimeCredential">> {
+        return await this.#operate(projectId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
     }
 
     async recordAudit(projectId: string, audit: PlatformAuditRecord): Promise<void> {

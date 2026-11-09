@@ -1303,7 +1303,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             return { existing, managedConnectionCount: connections.length };
         };
-        if (expectedRuntimeId !== null) {
+        if (expectedRuntimeId !== null && !(await machineRuntimeRevoked(context))) {
             const { existing, managedConnectionCount } = await reusable(expectedRuntimeId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: true } };
@@ -1311,8 +1311,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // Losing the local pairing does not itself authorize ending shared access.
             return await replaceWithApproval("managed_runtime_missing", managedConnectionCount);
         }
-        // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
-        // slots, so continue on it while this machine still manages its connection.
+        if (expectedRuntimeId !== null) {
+            // Morty disconnected this computer because a copy of its connection key was used. The Machine and the
+            // browsers that open it stay; only the computer's connection is paired again.
+            emit({ status: "runtime_revoked", runtimeId: expectedRuntimeId });
+            progress(
+                "pairing",
+                "Morty disconnected this computer because its connection key was used somewhere else. Pairing it again.",
+            );
+        }
+        // The Machine is unbound or its Runtime was revoked. A Runtime an earlier run paired for it still holds one of
+        // the Project's Runtime slots, so continue on it while this machine still manages its connection.
         const pairing = context.identity.pairing;
         if (pairing.kind === "paired") {
             const { existing } = await reusable(pairing.runtimeId);
@@ -1434,6 +1443,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             Array.isArray(runtime["agents"]) &&
             runtime["agents"].some((agent) => object(agent)["agentRef"] === agentRef)
         );
+    }
+
+    /** Whether the Machine's Runtime was revoked, so this computer pairs the Machine with a new one. */
+    async function machineRuntimeRevoked(context: MachineContext): Promise<boolean> {
+        try {
+            await request(context, `/chat/projects/${context.identity.projectId}/bots/${context.botId}/workspace`, {});
+            return false;
+        } catch (cause) {
+            if (errorCode(cause) === "RUNTIME_REVOKED") {
+                return true;
+            }
+            throw cause;
+        }
     }
 
     /** The Agents the Runtime offers while it is online, or null while it is not. */

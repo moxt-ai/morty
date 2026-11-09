@@ -128,9 +128,6 @@ class ProjectDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly readDaemon: PlatformProjectStore["readDaemon"] = (channelId, tokenHash, signal) =>
-        this.call("readDaemon", (stub, projectId) => stub.readDaemon(projectId, channelId, tokenHash), signal);
-
     readonly updateAgentCatalog: PlatformProjectStore["updateAgentCatalog"] = (channelId, tokenHash, agents, signal) =>
         this.call(
             "updateAgentCatalog",
@@ -173,10 +170,14 @@ class ProjectDurableObjectStore implements PlatformProjectStore {
     readonly findCredential: PlatformProjectStore["findCredential"] = (credential, signal) =>
         this.call("findCredential", (stub, projectId) => stub.findCredential(projectId, credential), signal);
 
-    readonly findRuntimeCredential: PlatformProjectStore["findRuntimeCredential"] = (tokenHash, signal) =>
-        this.call(
-            "findRuntimeCredential",
-            (stub, projectId) => stub.findRuntimeCredential(projectId, tokenHash),
+    readonly rotateRuntimeCredential: PlatformProjectStore["rotateRuntimeCredential"] = (
+        presentedHash,
+        successorHash,
+        signal,
+    ) =>
+        this.call<Awaited<ReturnType<PlatformProjectStore["rotateRuntimeCredential"]>>>(
+            "rotateRuntimeCredential",
+            (stub, projectId) => stub.rotateRuntimeCredential(projectId, presentedHash, successorHash),
             signal,
         );
 

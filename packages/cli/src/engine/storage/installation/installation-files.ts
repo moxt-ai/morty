@@ -48,6 +48,10 @@ export async function readInstallationFile(path: string): Promise<InstallationFi
 }
 
 /** Replaces a file atomically with owner-only permissions, creating its directory when it is missing. */
+/**
+ * Replaces a file with `text` durably: the new content reaches the disk before it replaces the old, and the rename
+ * reaches the disk before this returns. A credential the Relay has already rotated must survive a crash or power loss.
+ */
 export async function writeInstallationFile(path: string, text: string, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     const directory = dirname(path);
@@ -55,12 +59,32 @@ export async function writeInstallationFile(path: string, text: string, signal: 
     try {
         await mkdir(directory, { mode: 0o700, recursive: true });
         signal.throwIfAborted();
-        await writeFile(temporaryPath, text, { flag: "wx", mode: 0o600 });
+        const file = await open(temporaryPath, "wx", 0o600);
+        try {
+            await file.writeFile(text);
+            await file.sync();
+        } finally {
+            await file.close();
+        }
         signal.throwIfAborted();
         await rename(temporaryPath, path);
+        await syncDirectory(directory);
     } catch (cause) {
         await unlink(temporaryPath).catch(() => undefined);
         throw cause;
+    }
+}
+
+/** Flushes a rename in `directory`. Windows cannot open a directory to flush it; NTFS journals the rename itself. */
+async function syncDirectory(directory: string): Promise<void> {
+    if (process.platform === "win32") {
+        return;
+    }
+    const handle = await open(directory, "r");
+    try {
+        await handle.sync();
+    } finally {
+        await handle.close();
     }
 }
 

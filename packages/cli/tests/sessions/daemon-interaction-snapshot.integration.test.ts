@@ -45,6 +45,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 class Messages {
     readonly #buffered: string[] = [];
@@ -99,7 +100,6 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
     websocketServer.on("connection", (socket) => connected.resolve(socket));
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/interaction/daemon`);
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "claude",
@@ -122,7 +122,12 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
         },
     );
     const config = createRuntimeConfig(
-        { channelId: "interaction", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "interaction",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -282,7 +287,6 @@ test("Given an Agent announced a tool call with its input, When it requests perm
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/announced-permission/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "claude",
@@ -300,7 +304,12 @@ test("Given an Agent announced a tool call with its input, When it requests perm
             ),
     );
     const config = createRuntimeConfig(
-        { channelId: "announced-permission", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "announced-permission",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -391,7 +400,6 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/null-input-permission/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "claude",
@@ -409,7 +417,12 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
             ),
     );
     const config = createRuntimeConfig(
-        { channelId: "null-input-permission", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "null-input-permission",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -500,7 +513,6 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/orphan-update-permission/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "claude",
@@ -518,7 +530,12 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
             ),
     );
     const config = createRuntimeConfig(
-        { channelId: "orphan-update-permission", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "orphan-update-permission",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -609,7 +626,6 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/session-query/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "codex",
@@ -627,7 +643,12 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
             ),
     );
     const config = createRuntimeConfig(
-        { channelId: "session-query", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "session-query",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -693,7 +714,6 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/session-restore/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "codex",
@@ -712,7 +732,12 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
         { MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent") },
     );
     const config = createRuntimeConfig(
-        { channelId: "session-restore", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "session-restore",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -834,7 +859,6 @@ test("Given queued prompts from the running Agent identity and another one, When
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/queued-identity/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
     const agent = new AcpAgentDefinition(
         "claude",
@@ -875,7 +899,12 @@ test("Given queued prompts from the running Agent identity and another one, When
         },
     );
     const config = createRuntimeConfig(
-        { channelId: "queued-identity", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "queued-identity",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent, otherAgent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );

@@ -13,6 +13,7 @@ import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 test.for(["saved", "provided"] as const)(
     "Given an embedded Engine with a %s connection, When successive loops prepare concurrent Sessions with and without scoped environments, Then Agent children receive only their own loop and Session identity",
@@ -100,7 +101,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                               channelId: saved.channelId,
                               defaultWorkspace: workspace,
                               relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                              runtimeCredential: saved.runtimeCredential,
+                              credentials: memoryRuntimeCredentials(saved.runtimeCredential),
                           },
                       };
             const expected: { readonly context: string; readonly base: string }[] = [];

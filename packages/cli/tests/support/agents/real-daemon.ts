@@ -33,6 +33,7 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/ru
 import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
+import { memoryRuntimeCredentials } from "../runtime-credentials.ts";
 
 export interface RealDaemonPeer {
     /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
@@ -163,7 +164,6 @@ export async function withRealDaemon(
             connected.resolve();
         });
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/real-agent/daemon`);
-        relayUrl.searchParams.set("token", "r".repeat(43));
         // Managed launches perform discovery in the production CLI; only an embedded
         // runtime needs a catalog prepared by the fixture.
         const config =
@@ -183,7 +183,12 @@ export async function withRealDaemon(
                           );
                       }
                       return createRuntimeConfig(
-                          { channelId: "real-agent", defaultWorkspace: workspace, relayUrl },
+                          {
+                              credentials: memoryRuntimeCredentials("r".repeat(43)),
+                              channelId: "real-agent",
+                              defaultWorkspace: workspace,
+                              relayUrl,
+                          },
                           new RuntimeAgentDependencies([agent], adapters),
                           new RuntimeLocalContext(
                               directory,

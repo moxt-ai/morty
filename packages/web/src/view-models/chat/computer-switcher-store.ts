@@ -14,7 +14,7 @@ export interface ComputerChoice {
     readonly key: string;
     readonly name: string;
     readonly href: string;
-    readonly status: "online" | "offline" | "unavailable" | "connecting" | "unpaired";
+    readonly status: "online" | "offline" | "unavailable" | "connecting" | "unpaired" | "revoked";
 }
 
 type RememberedComputerChoice = Omit<ComputerChoice, "status"> &

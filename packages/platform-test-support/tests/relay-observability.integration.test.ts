@@ -6,6 +6,8 @@ import {
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
+    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
+    runtimeCredentialSuccessor,
 } from "@morty-build/client/protocol";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
@@ -239,6 +241,7 @@ it("identifies the failing Runtime Durable Object through the public pairing and
     const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/runtimes/connect", {
         headers: {
             authorization: `Bearer ${text(claimed, "runtimeCredential")}`,
+            [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: runtimeCredentialSuccessor(text(claimed, "runtimeCredential")),
             Upgrade: "websocket",
             "x-test-runtime-failure": "1",
             "cf-ray": "runtime-failure-ray",

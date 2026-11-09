@@ -19,6 +19,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const recorderPath = fileURLToPath(new URL("./fixtures/acp-environment-recorder.ts", import.meta.url));
@@ -97,7 +98,6 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
     });
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_environment/daemon`);
-    relayUrl.searchParams.set("token", "d".repeat(43));
 
     const agent = new AcpAgentDefinition(
         "controlled-acp",
@@ -119,7 +119,12 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
         },
     );
     const config = createControlledRuntimeConfig(
-        { channelId: "channel_environment", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "channel_environment",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         // As the worker does: the Runtime's local data is this installation's directory.
         new RuntimeLocalContext(installationData, daemonEnvironment),

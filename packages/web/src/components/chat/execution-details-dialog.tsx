@@ -18,6 +18,7 @@ function computerStatusDotClassName(status: ExecutionContext["computerStatus"]):
             return "size-1.5 animate-pulse bg-amber-500 motion-reduce:animate-none";
         case "Offline":
         case "Not paired":
+        case "Disconnected for security":
         case "Status unavailable":
             return "size-1.5 bg-muted-foreground/60";
     }

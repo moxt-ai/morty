@@ -1,3 +1,4 @@
+import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import {
     validateAgents,
@@ -45,8 +46,21 @@ export function createProjectRuntimePairingRoutes() {
         )
         .get("/runtimes/connect", async (context) => {
             const request = context.req.raw;
-            const access = await context.env.services.channels.authorizeRuntime(bearerToken(request), request.signal);
-            return await context.env.gateways.channelGateway.acceptDaemon(access, request, request.signal);
+            const connection = await context.env.services.channels.connectRuntime(
+                bearerToken(request),
+                request.headers.get(RUNTIME_SUCCESSOR_CREDENTIAL_HEADER) ?? "",
+                request.signal,
+            );
+            switch (connection.kind) {
+                case "accepted":
+                    return await context.env.gateways.channelGateway.acceptDaemon(
+                        connection.access,
+                        request,
+                        request.signal,
+                    );
+                case "revoked":
+                    return context.env.gateways.channelGateway.refuseRevokedDaemon();
+            }
         })
         .post(
             "/projects/:projectId/runtime-pairings",

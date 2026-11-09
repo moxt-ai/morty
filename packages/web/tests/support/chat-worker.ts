@@ -133,6 +133,21 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
+                /** Revokes the Runtime through the Platform, as the Relay does when its credential was reused. */
+                revoke: async (): Promise<void> => {
+                    const response = await cloud.platformRequest(
+                        new Request(
+                            `https://platform.test/morty/api/v1/projects/${identity.projectId}/runtimes/${runtime.runtimeId}`,
+                            {
+                                method: "DELETE",
+                                headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
+                            },
+                        ),
+                    );
+                    if (response.status !== 204) {
+                        throw new Error(`Could not revoke the test Runtime: ${response.status}`);
+                    }
+                },
                 writeFiles: runtime.writeFiles,
             };
         };

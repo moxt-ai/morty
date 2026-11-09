@@ -1,8 +1,9 @@
-import { and, count, eq, exists, gt, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
+import { and, count, eq, exists, gt, inArray, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
 import { MAX_RUNTIMES_PER_PROJECT } from "../entity/pairing/pairing.ts";
 import type {
     PairingChannelRow,
     PairingClaimRow,
+    RuntimeCredentialRotation,
     RuntimeDirectoryRow,
     RuntimePairingAudit,
     RuntimePairingRow,
@@ -11,6 +12,7 @@ import { type RelayDrizzleDatabase, relayDrizzle } from "../infra/drizzle-databa
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     runtimeDaemonCredential,
+    runtimeDaemonRetiredCredential,
     runtimeIdentity,
     runtimePairingAuditEvent,
     runtimePairingRequest,
@@ -358,10 +360,102 @@ export class RuntimeDirectoryStorage {
         return rows[0] ?? null;
     };
 
+    /**
+     * Presents a daemon credential with the successor the daemon saved before connecting. A current credential is
+     * retired, remembering the successor that replaced it, and the successor becomes current. A retired credential
+     * still identifies its Runtime: presented with the successor that replaced it, while that successor is current, it
+     * repeats a rotation whose reply was lost; presented any other way, a copy of it is in use elsewhere.
+     */
+    readonly rotateDaemonCredential = async (
+        presentedHash: string,
+        successorHash: string,
+        signal: AbortSignal,
+    ): Promise<RuntimeCredentialRotation> => {
+        const database = relayDrizzle(this.#database, signal);
+        const runtimeOf = (revoked: boolean) =>
+            database
+                .select({ runtimeId: runtimeIdentity.runtimeId })
+                .from(runtimeIdentity)
+                .innerJoin(runtimeRegistration, eq(runtimeRegistration.runtimeId, runtimeIdentity.runtimeId))
+                .where(
+                    and(
+                        eq(runtimeIdentity.projectId, this.#projectId),
+                        revoked ? isNotNull(runtimeIdentity.revokedAt) : isNull(runtimeIdentity.revokedAt),
+                    ),
+                );
+        const current = and(
+            eq(runtimeDaemonCredential.tokenHash, presentedHash),
+            inArray(runtimeDaemonCredential.runtimeId, runtimeOf(false)),
+        );
+        // One batch: the presented credential is retired with its successor exactly when the successor replaces it.
+        await this.#database.batch(
+            [
+                database.insert(runtimeDaemonRetiredCredential).select(
+                    database
+                        .select({
+                            tokenHash: runtimeDaemonCredential.tokenHash,
+                            runtimeId: runtimeDaemonCredential.runtimeId,
+                            successorHash: sql<string>`${successorHash}`.as("successor_hash"),
+                        })
+                        .from(runtimeDaemonCredential)
+                        .where(current),
+                ),
+                database.update(runtimeDaemonCredential).set({ tokenHash: successorHash }).where(current),
+            ].map(this.statement),
+            signal,
+        );
+        const rows = await database
+            .select({
+                ...identityFields,
+                successor_hash: runtimeDaemonRetiredCredential.successorHash,
+                current_hash: runtimeDaemonCredential.tokenHash,
+            })
+            .from(runtimeDaemonRetiredCredential)
+            .innerJoin(runtimeIdentity, eq(runtimeIdentity.runtimeId, runtimeDaemonRetiredCredential.runtimeId))
+            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.runtimeId, runtimeIdentity.runtimeId))
+            .where(
+                and(
+                    eq(runtimeDaemonRetiredCredential.tokenHash, presentedHash),
+                    inArray(runtimeDaemonRetiredCredential.runtimeId, runtimeOf(false)),
+                ),
+            )
+            .limit(1);
+        const row = rows[0];
+        if (row !== undefined) {
+            const runtime = { channel_id: row.channel_id, runtime_id: row.runtime_id, project_id: row.project_id };
+            return row.successor_hash === successorHash && row.current_hash === successorHash
+                ? { kind: "rotated", runtime }
+                : { kind: "reused", runtime };
+        }
+        // A revoked Runtime keeps its credential hashes, so its daemon learns that its access ended for good.
+        const revoked = await database
+            .select({ runtimeId: runtimeDaemonCredential.runtimeId })
+            .from(runtimeDaemonCredential)
+            .where(
+                and(
+                    eq(runtimeDaemonCredential.tokenHash, presentedHash),
+                    inArray(runtimeDaemonCredential.runtimeId, runtimeOf(true)),
+                ),
+            )
+            .union(
+                database
+                    .select({ runtimeId: runtimeDaemonRetiredCredential.runtimeId })
+                    .from(runtimeDaemonRetiredCredential)
+                    .where(
+                        and(
+                            eq(runtimeDaemonRetiredCredential.tokenHash, presentedHash),
+                            inArray(runtimeDaemonRetiredCredential.runtimeId, runtimeOf(true)),
+                        ),
+                    ),
+            )
+            .limit(1);
+        return revoked.length === 0 ? { kind: "unknown" } : { kind: "revoked" };
+    };
+
     readonly revokeRuntime = async (
         value: {
             readonly runtimeId: string;
-            readonly ownerId: string;
+            readonly ownerId: string | null;
             readonly now: number;
             readonly actorKind: string;
             readonly actorId: string;
@@ -382,16 +476,6 @@ export class RuntimeDirectoryStorage {
                     then ${value.ownerId} else ${runtimeIdentity.revokedByOwnerCredentialId} end`,
             })
             .where(identity);
-        const credential = database
-            .delete(runtimeDaemonCredential)
-            .where(
-                and(
-                    eq(runtimeDaemonCredential.runtimeId, value.runtimeId),
-                    exists(
-                        database.select({ runtimeId: runtimeIdentity.runtimeId }).from(runtimeIdentity).where(identity),
-                    ),
-                ),
-            );
         const audit = database
             .insert(runtimePairingAuditEvent)
             .select(
@@ -412,7 +496,7 @@ export class RuntimeDirectoryStorage {
                     .where(identity),
             )
             .onConflictDoNothing();
-        const results = await this.#database.batch([revocation, credential, audit].map(this.statement), signal);
+        const results = await this.#database.batch([revocation, audit].map(this.statement), signal);
         // All writers preserve the first revocation time. Reading the committed
         // fact also makes overlapping retries return that same timestamp.
         return results[0]?.meta.changes === 1 ? this.readRuntime(value.runtimeId, signal) : null;

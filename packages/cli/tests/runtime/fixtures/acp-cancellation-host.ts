@@ -17,6 +17,7 @@ import { RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
 import { RuntimeLoop } from "../../../src/engine/runtime/runtime-loop.ts";
 import { ControlledEndpointConnection } from "../../support/agents/controlled-endpoint-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../../support/runtime-credentials.ts";
 
 // External Agent failure modes: cancellation before its initialization promise is
 // observed, cancellation while initialization is pending, and ordinary startup failure.
@@ -109,7 +110,8 @@ const config = createRuntimeConfig(
     {
         channelId: "cancellation-test",
         defaultWorkspace: join(directory, "workspace"),
-        relayUrl: new URL(`ws://127.0.0.1:${address.port}/daemon?token=${"r".repeat(43)}`),
+        relayUrl: new URL(`ws://127.0.0.1:${address.port}/daemon`),
+        credentials: memoryRuntimeCredentials("r".repeat(43)),
     },
     [
         new AcpAgentDefinition(

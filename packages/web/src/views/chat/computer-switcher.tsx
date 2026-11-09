@@ -33,6 +33,8 @@ function connectionLabel(status: BotConnectionStatus): string {
             return "Offline";
         case "unpaired":
             return "Not set up";
+        case "revoked":
+            return "Run setup again";
         case "unavailable":
             return "Status unknown";
     }
@@ -51,6 +53,8 @@ function choiceStatusLabel(status: ComputerChoice["status"]): string | null {
             return "Connecting";
         case "unpaired":
             return "Not set up";
+        case "revoked":
+            return "Run setup again";
     }
 }
 

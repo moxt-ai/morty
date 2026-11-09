@@ -40,6 +40,7 @@ import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -246,7 +247,6 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     });
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-    relayUrl.searchParams.set("token", "d".repeat(43));
     const agent = new AcpAgentDefinition(
         "controlled-acp",
         "Controlled ACP",
@@ -264,7 +264,12 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
         { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
     );
     const config = createRuntimeConfig(
-        { channelId: "channel_alpha", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "channel_alpha",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );

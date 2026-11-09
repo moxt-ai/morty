@@ -30,6 +30,8 @@ import {
     MORTY_API_PREFIX,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
+    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
+    runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
 import { DurableObjectSqlDatabase, RuntimeRelay } from "@morty-build/relay-core";
@@ -90,6 +92,32 @@ const readyAgents = [
         label: "Codex",
     },
 ];
+
+/** Connects as a paired daemon does: each connection presents the credential and a successor that becomes current. */
+class DaemonCredential {
+    #current: string;
+
+    constructor(credential: string) {
+        this.#current = credential;
+    }
+
+    readonly connect = async (fetch: (request: Request) => Response | Promise<Response>): Promise<Response> => {
+        const successor = runtimeCredentialSuccessor(this.#current);
+        const response = await fetch(
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
+                headers: {
+                    authorization: `Bearer ${this.#current}`,
+                    [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: successor,
+                    Upgrade: "websocket",
+                },
+            }),
+        );
+        if (response.status === 101) {
+            this.#current = successor;
+        }
+        return response;
+    };
+}
 
 function bindings(): PlatformRelayBindings {
     return {
@@ -375,12 +403,8 @@ describe.sequential("Platform Session-only boundary", () => {
             ),
         ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], runtimeId });
         const sessionId = "local-codex-session";
-        const daemonResponse = await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-                headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-            }),
-            environment,
-        );
+        const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+        const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         const hostResponse = await worker.fetch(
             new Request(
                 `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/runtimes/${runtimeId}/host?nativeRequestId=viewer-must-stay-live`,
@@ -1105,12 +1129,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 code: "runtime_offline",
             });
             expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: false });
-            const reconnectResponse = await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-                    headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-                }),
-                environment,
-            );
+            const reconnectResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
             expect(reconnectResponse.status).toBe(101);
             if (reconnectResponse.webSocket === null) {
                 throw new Error("Expected the reconnected Runtime socket");
@@ -1132,12 +1151,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 requestId: "settings-before-replacement",
             });
             await evictDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), { webSockets: "hibernate" });
-            const replacementResponse = await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-                    headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-                }),
-                environment,
-            );
+            const replacementResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
             expect(replacementResponse.status).toBe(101);
             if (replacementResponse.webSocket === null) {
                 throw new Error("Expected the replacement Runtime socket");
@@ -1356,12 +1370,8 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     );
     const runtimeId = text(claimed, "runtimeId");
     const sessionId = `${slug}-session`;
-    const daemonResponse = await worker.fetch(
-        new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-            headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-        }),
-        environment,
-    );
+    const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+    const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
     if (daemonResponse.webSocket === null) {
         throw new Error("Expected the Runtime socket");
     }
@@ -1438,13 +1448,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 }),
                 environment,
             ),
-        reconnect: () =>
-            worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-                    headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-                }),
-                environment,
-            ),
+        reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
         subscribe: () =>
             worker.fetch(
                 new Request(
@@ -1754,7 +1758,18 @@ it.each(["text", "binary"])(
                     state.storage.sql.exec("DROP TRIGGER reject_runtime_disconnect");
                 });
             }
-            expect((await runtime.reconnect()).status).toBe(401);
+            // A revoked Runtime's daemon is told so, and stops instead of retrying.
+            const reconnected = await runtime.reconnect();
+            expect(reconnected.status).toBe(101);
+            const refused = reconnected.webSocket;
+            if (refused === null) {
+                throw new Error("Expected the refused Runtime socket");
+            }
+            const refusal = new Promise<CloseEvent>((resolve) =>
+                refused.addEventListener("close", resolve, { once: true }),
+            );
+            refused.accept();
+            expect(await refusal).toMatchObject({ code: 1008, reason: "Runtime revoked" });
             await deliver(
                 format === "text"
                     ? liveEvent(runtime.sessionId, "after revocation")
@@ -2793,12 +2808,8 @@ describe.sequential("Platform Turn submission", () => {
         );
         const runtimeId = text(claimed, "runtimeId");
         const sessionId = "long-prompt-session";
-        const daemonResponse = await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-                headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-            }),
-            environment,
-        );
+        const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+        const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         if (daemonResponse.webSocket === null) {
             throw new Error("Expected the Runtime socket");
         }
@@ -3108,12 +3119,8 @@ describe.sequential("Platform Turn submission", () => {
         // The Relay no longer decides from the catalog. It forwards the steer
         // to the Runtime, whose own rejection answers with the same
         // machine-readable code and a terminal status.
-        const daemonResponse = await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
-                headers: { authorization: `Bearer ${text(claimed, "runtimeCredential")}`, Upgrade: "websocket" },
-            }),
-            environment,
-        );
+        const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+        const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         if (daemonResponse.webSocket === null) {
             throw new Error("Expected the Runtime socket");
         }

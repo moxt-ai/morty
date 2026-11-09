@@ -193,6 +193,7 @@ describe("daemon environment proxy", () => {
             });
             const relayConnection = await connectRelay(
                 new URL(`ws://127.0.0.1:${relayPort}/daemon`),
+                {},
                 AbortSignal.timeout(2_000),
             );
             relayConnection.socket.close();

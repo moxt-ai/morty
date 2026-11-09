@@ -6,6 +6,9 @@ import type { SessionConnection } from "./session-connection.ts";
 const COMPUTER_OFFLINE_RECOVERY = "Make sure it’s awake and online. Your draft is saved.";
 /** Starts the daemon, which resumes the saved connection. */
 const MORTY_START_COMMAND = "npx @morty-build/cli@latest start";
+/** What happened to a revoked computer, and the one step that pairs it again. */
+const COMPUTER_REVOKED_RECOVERY =
+    "Its connection key was used somewhere else, so Morty disconnected it to keep your account safe. Run the Morty setup prompt on that computer again to reconnect it. Your agent's own sessions stay on that computer.";
 
 type ConnectionPresentation = Pick<
     ExecutionContext,
@@ -25,9 +28,11 @@ export function connectionPresentation(
               ? "Offline"
               : computer.kind === "unpaired"
                 ? "Not paired"
-                : computer.kind === "connecting"
-                  ? "Checking availability"
-                  : "Status unavailable";
+                : computer.kind === "revoked"
+                  ? "Disconnected for security"
+                  : computer.kind === "connecting"
+                    ? "Checking availability"
+                    : "Status unavailable";
     const watch = home.configurationWatch;
     const checkedAt =
         watch.kind === "current" ? watch.checkedAt : watch.kind === "unavailable" ? watch.lastCheckedAt : null;
@@ -49,7 +54,10 @@ export function connectionPresentation(
         // Presence can change before the Session stream settles. Keep availability conservative, but let
         // the Session's own recovery lifecycle decide when an interruption needs a composer notice.
         feedback:
-            session?.kind === "ready" && home.networkAvailable && computer.kind !== "unpaired"
+            session?.kind === "ready" &&
+            home.networkAvailable &&
+            computer.kind !== "unpaired" &&
+            computer.kind !== "revoked"
                 ? { kind: "hidden" }
                 : feedback,
         available: indicator.kind === "ready",
@@ -93,6 +101,16 @@ export function connectionPresentation(
                 title: session.kind === "failed" ? "Connection unavailable" : "Couldn’t reconnect",
                 description:
                     session.kind === "failed" ? session.message : "Automatic retries stopped. Your draft is saved.",
+            },
+        );
+    }
+    if (computer.kind === "revoked") {
+        return present(
+            { kind: "offline", label: "Disconnected for security" },
+            {
+                kind: "action-required",
+                title: "This computer was disconnected for your security",
+                description: COMPUTER_REVOKED_RECOVERY,
             },
         );
     }

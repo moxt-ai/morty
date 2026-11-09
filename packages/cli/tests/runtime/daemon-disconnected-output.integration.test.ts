@@ -30,6 +30,7 @@ import { RuntimeTurnActivity } from "../../src/engine/session/turn/runtime-turn-
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 // Failure modes exercised through the production daemon and its real WebSocket transport:
 // - a disconnect discards a batch whose delivery timer has not fired;
@@ -279,7 +280,8 @@ async function startRuntime() {
         {
             channelId: "disconnected-output",
             defaultWorkspace: workspace,
-            relayUrl: new URL(`ws://127.0.0.1:${port(http).toString()}/daemon?token=${"r".repeat(43)}`),
+            relayUrl: new URL(`ws://127.0.0.1:${port(http).toString()}/daemon`),
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
         },
         [
             new AcpAgentDefinition(

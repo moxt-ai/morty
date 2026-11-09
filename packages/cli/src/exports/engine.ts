@@ -6,6 +6,8 @@ export type {
     MortyRuntimePairingOptions,
     RunLoopParams,
     RuntimeConnectionInput,
+    RuntimeCredentialRotation,
+    RuntimeCredentials,
     VerifiedRuntimeConnection,
 } from "../engine/runtime/engine.ts";
 export {

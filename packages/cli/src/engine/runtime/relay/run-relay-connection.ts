@@ -22,8 +22,12 @@ import type { RuntimeConfig } from "../config.ts";
 import { connectRelay } from "./connect.ts";
 import type { RelayConnectionDiagnostics } from "./diagnostics.ts";
 import { RelayConnectionLiveness } from "./liveness.ts";
+import { relayCredentialHeaders } from "./relay-authentication.ts";
 import { isRuntimeRelayRevocation, RuntimeRelayRevokedError } from "./runtime-revocation.ts";
 import type { RuntimeSessionEventPublisher } from "./session-event-publisher.ts";
+
+/** A bounded local write of the credential the Relay accepted. */
+const CREDENTIAL_SAVE_TIMEOUT_MILLISECONDS = 10_000;
 
 function closeRelaySocket(socket: WebSocket, code: number, reason: string): void {
     try {
@@ -80,10 +84,14 @@ export async function runRelayConnection({
     timer,
 }: RelayConnectionOptions): Promise<void> {
     const relayUrl = new URL(config.relayUrl);
-    const relay = await connectRelay(relayUrl, signal, (failure, source) => {
+    const rotation = await config.credentials.prepare(signal);
+    const relay = await connectRelay(relayUrl, relayCredentialHeaders(rotation), signal, (failure, source) => {
         diagnostics.transportFailed(connectionEpoch, failure, source);
     });
     const { socket } = relay;
+    // Saving the rotation waits for the Relay to confirm the connection: a Relay can also open a socket only to close it,
+    // as it does for a revoked Runtime. Until then the next connection repeats the same rotation, which is harmless.
+    let rotationSaved: Promise<void> = Promise.resolve();
     diagnostics.connectionOpened(connectionEpoch);
     const connectionController = new AbortController();
     const commands = createRuntimeCommandDispatcher({
@@ -238,6 +246,23 @@ export async function runRelayConnection({
                             return;
                         }
                         ready = true;
+                        // The Relay made the successor current as it accepted this connection. The save finishes even
+                        // when the daemon stops meanwhile: it records what the Relay already holds.
+                        rotationSaved = config.credentials.complete(
+                            rotation,
+                            AbortSignal.timeout(CREDENTIAL_SAVE_TIMEOUT_MILLISECONDS),
+                        );
+                        rotationSaved.catch((error: unknown) => {
+                            if (finished) {
+                                return;
+                            }
+                            failAndClose(
+                                new Error("The rotated Runtime credential could not be saved", { cause: error }),
+                                1011,
+                                "Runtime credential unavailable",
+                                "credential",
+                            );
+                        });
                         publisher.connect(socket);
                         connectionLiveness.start();
                         onConnected();
@@ -269,6 +294,8 @@ export async function runRelayConnection({
     } finally {
         connectionController.abort();
         await commands.settle();
+        // The next connection presents what this one saved.
+        await rotationSaved.catch(() => undefined);
         relay.release(new Error("Relay connection released"));
     }
 }

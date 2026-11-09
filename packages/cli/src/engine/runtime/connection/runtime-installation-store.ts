@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { isIdentifier } from "@morty-build/client/protocol";
+import { isIdentifier, runtimeCredentialSuccessor } from "@morty-build/client/protocol";
 import { ensurePrivateDirectory } from "../../storage/files/local-files.ts";
 import {
     createInstallationFile,
@@ -19,6 +19,7 @@ import {
     type RuntimeConnectionInput,
     VerifiedRuntimeConnection,
 } from "./runtime-connection.ts";
+import type { HeldRuntimeCredentials, RuntimeCredentials } from "./runtime-credentials.ts";
 
 const CONNECTION_ID_PATTERN = /^mcn_[a-f0-9]{32}$/;
 const INSTALLATION_ID_PATTERN = /^min_[a-f0-9]{32}$/;
@@ -227,11 +228,14 @@ export class RuntimeInstallationStore {
     readonly installationId: string;
     readonly stateDirectory: InstallationDirectory;
     readonly pairingPath: string;
+    /** The pairing's relay credential as it rotated since pairing; only the running Runtime writes it. */
+    readonly #credentialPath: string;
 
     private constructor(installationId: string, stateDirectory: InstallationDirectory) {
         this.installationId = installationId;
         this.stateDirectory = stateDirectory;
         this.pairingPath = join(stateDirectory, "pairing.json");
+        this.#credentialPath = join(stateDirectory, "credential.json");
     }
 
     static readonly open = async (engineDataDir: string, signal: AbortSignal): Promise<RuntimeInstallationStore> => {
@@ -319,7 +323,10 @@ export class RuntimeInstallationStore {
             validateRuntimeCredential(input.runtimeCredential),
             validateIdentifier(input.runtimeId, "invalid_connection"),
         );
-        await this.changePairing(() => this.overwriteConnection(stored, signal));
+        await this.changePairing(async () => {
+            await this.#discardCredential();
+            await this.overwriteConnection(stored, signal);
+        });
         return stored;
     };
 
@@ -371,11 +378,112 @@ export class RuntimeInstallationStore {
         });
     };
 
+    /**
+     * The pairing's relay credential. The pairing keeps the credential issued at pairing; the rotations the Relay
+     * accepted since live in a file of their own that only the running Runtime writes, so changing the pairing's
+     * activation from another process never restores a retired credential.
+     */
+    readonly runtimeCredentials = (connectionId: string): RuntimeCredentials => {
+        const state = async (signal: AbortSignal): Promise<HeldRuntimeCredentials> =>
+            (await this.#readCredential(connectionId, signal)) ?? {
+                current: (await this.readConnection(connectionId, signal)).runtimeCredential,
+                successor: null,
+            };
+        return {
+            prepare: async (signal) => {
+                const saved = await state(signal);
+                if (saved.successor !== null) {
+                    return { current: saved.current, successor: saved.successor };
+                }
+                const successor = runtimeCredentialSuccessor(saved.current);
+                await this.#writeCredential(connectionId, { current: saved.current, successor }, signal);
+                return { current: saved.current, successor };
+            },
+            complete: async (rotation, signal) => {
+                const saved = await state(signal);
+                if (saved.current === rotation.successor) {
+                    return;
+                }
+                if (saved.current !== rotation.current || saved.successor !== rotation.successor) {
+                    throw new RuntimeInstallationStoreError(
+                        "credential_conflict",
+                        "The saved Runtime credential changed during its rotation",
+                    );
+                }
+                await this.#writeCredential(connectionId, { current: rotation.successor, successor: null }, signal);
+            },
+            held: async (signal) => await state(signal),
+        };
+    };
+
+    /** The rotated credential of the pairing `connectionId`, or null before its first rotation. */
+    readonly #readCredential = async (
+        connectionId: string,
+        signal: AbortSignal,
+    ): Promise<HeldRuntimeCredentials | null> => {
+        let record: unknown;
+        try {
+            record = await readJsonFile(this.#credentialPath, signal, "credential_not_found");
+        } catch (cause) {
+            if (cause instanceof RuntimeInstallationStoreError && cause.code === "credential_not_found") {
+                return null;
+            }
+            throw cause;
+        }
+        if (
+            !isRecord(record) ||
+            !hasExactKeys(record, ["connectionId", "current", "successor", "version"]) ||
+            record["version"] !== 1 ||
+            typeof record["connectionId"] !== "string" ||
+            typeof record["current"] !== "string" ||
+            (record["successor"] !== null && typeof record["successor"] !== "string")
+        ) {
+            throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
+        }
+        if (record["connectionId"] !== connectionId) {
+            throw new RuntimeInstallationStoreError(
+                "connection_not_found",
+                "The requested pairing is no longer selected",
+            );
+        }
+        return {
+            current: validateRuntimeCredential(record["current"]),
+            successor: record["successor"] === null ? null : validateRuntimeCredential(record["successor"]),
+        };
+    };
+
+    readonly #writeCredential = async (
+        connectionId: string,
+        credential: HeldRuntimeCredentials,
+        signal: AbortSignal,
+    ): Promise<void> =>
+        await writeJsonAtomically(
+            this.#credentialPath,
+            { connectionId, current: credential.current, successor: credential.successor, version: 1 },
+            signal,
+        );
+
+    /** Forgets a previous pairing's rotated credential; a new pairing starts from the credential issued with it. */
+    readonly #discardCredential = async (): Promise<void> => {
+        try {
+            await removeInstallationFile(this.#credentialPath);
+        } catch (cause) {
+            if (!isNodeError(cause, "ENOENT")) {
+                throw new RuntimeInstallationStoreError(
+                    "connection_unavailable",
+                    "The local Runtime state cannot be written",
+                    { cause },
+                );
+            }
+        }
+    };
+
     readonly removeConnection = async (connectionId: string, signal: AbortSignal): Promise<void> => {
         await this.changePairing(async () => {
             await this.readConnection(connectionId, signal);
             signal.throwIfAborted();
             await removeInstallationFile(this.pairingPath);
+            await this.#discardCredential();
         });
     };
 
