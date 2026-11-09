@@ -22,7 +22,7 @@ export async function registerRuntimeFixture(
             .values({
                 appId,
                 tenantId: `tenant_${projectId}`,
-                displayName: "Recording test App",
+                displayName: "Registered test App",
                 lifecycle: "active",
                 createdAt: registeredAt,
                 updatedAt: registeredAt,
@@ -33,7 +33,7 @@ export async function registerRuntimeFixture(
             .values({
                 projectId,
                 appId,
-                displayName: "Recording test Project",
+                displayName: "Registered test Project",
                 clientReference: projectId,
                 idempotencyKey: projectId,
                 requestDigest: projectId,
@@ -55,8 +55,8 @@ export async function registerRuntimeFixture(
                 .values({
                     runtimeId,
                     claimedAt: registeredAt,
-                    machineName: "Recording test Runtime",
-                    workspaceName: "Recording test workspace",
+                    machineName: "Registered test Runtime",
+                    workspaceName: "Registered test workspace",
                     agentsJson: "[]",
                 })
                 .onConflictDoNothing(),

@@ -98,7 +98,6 @@ import {
 import { SessionRuntimeError } from "../../entity/do/session.ts";
 import { logger } from "../../infra/logger.ts";
 import type { SessionStatusNotifications } from "../../infra/session-status-notifications.ts";
-import type { BestEffortRecording } from "./best-effort-recording.ts";
 import { SessionLiveEventRelay } from "./session-live-event-relay.ts";
 
 function sessionErrorCloseCode(error: SessionRuntimeError): 1008 | 1013 {
@@ -196,16 +195,15 @@ export class ChannelActor {
         readonly config: { readonly projectId: string; readonly runtimeId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
-            readonly recording: BestEffortRecording;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
         const { projectId, runtimeId } = cx.config;
-        const { peers, recording, notifications } = cx.gateways;
+        const { peers, notifications } = cx.gateways;
         this.#peers = peers;
         this.#projectId = projectId;
         this.#runtimeId = runtimeId;
-        this.#liveEvents = new SessionLiveEventRelay(projectId, runtimeId, peers, recording, notifications);
+        this.#liveEvents = new SessionLiveEventRelay(projectId, runtimeId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {

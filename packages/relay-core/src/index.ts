@@ -74,14 +74,6 @@ export type {
 } from "./infra/project-storage-directory.ts";
 export type * from "./infra/project-store.ts";
 export { instrumentD1Database, RequestAccessMetrics } from "./infra/request-access-metrics.ts";
-export {
-    DisabledSessionRecording,
-    type SessionRecording,
-    type SessionRecordingBatchResult,
-    type SessionRecordingDeliveryResult,
-    type SessionRecordingScope,
-    type SessionRecordingTarget,
-} from "./infra/session-recording.ts";
 export type { SessionStatusNotifications } from "./infra/session-status-notifications.ts";
 export { standardWebSocketHost, type WebSocketHost } from "./infra/websocket-host.ts";
 export { RuntimeDescriptor, RuntimeStatus } from "./service/channel/channel.ts";

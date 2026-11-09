@@ -96,7 +96,7 @@ test("Given a completed prompt, When a client retries it before and after a daem
                 // report that time as when the command ended. It is marked as the outcome the Runtime recorded.
                 const restatement = {
                     payload: original.event.payload,
-                    mortyMetadata: { recordedOutcome: true, restated: true },
+                    mortyMetadata: { restated: true },
                     recordedAt: original.event.recordedAt,
                 };
 

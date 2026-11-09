@@ -55,7 +55,6 @@ const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli");
 const relayCore = join(root, "packages/relay-core");
 const platform = join(root, "packages/relay");
-const recording = join(root, "packages/recording");
 const worker = join(root, "packages/worker");
 
 await writeMigrationModule(
@@ -77,16 +76,6 @@ await writeMigrationModule(
     join(platform, "src/generated/project-do-migrations.ts"),
     "projectDurableObjectMigrations",
     await sqlFiles(join(platform, "migrations/project-do")),
-);
-await writeMigrationModule(
-    join(recording, "src/generated/session-recording-do-migrations.ts"),
-    "sessionRecordingDurableObjectMigrations",
-    await sqlFiles(join(recording, "migrations/session-recording-do")),
-);
-await writeMigrationModule(
-    join(recording, "src/generated/recording-directory-do-migrations.ts"),
-    "recordingDirectoryDurableObjectMigrations",
-    await sqlFiles(join(recording, "migrations/recording-directory-do")),
 );
 await writeMigrationModule(
     join(worker, "src/generated/project-do-migrations.ts"),

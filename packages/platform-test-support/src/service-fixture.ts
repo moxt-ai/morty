@@ -6,7 +6,6 @@ import {
     platformApp,
     platformAppCredential,
     platformAppCredentialScope,
-    platformAppRecordingPolicy,
     platformTenant,
 } from "../../relay/src/schema/d1/index.ts";
 import { createRandomToken, hashSecret } from "../../relay-core/src/entity/pairing/pairing.ts";
@@ -93,11 +92,4 @@ export async function retireMortyService(database: D1Database, appId: string) {
             .where(eq(platformApp.appId, appId)),
         db.update(platformAppCredential).set({ revokedAt: now }).where(eq(platformAppCredential.appId, appId)),
     ]);
-}
-
-export async function setMortyRecording(database: D1Database, appId: string, mode: "enabled" | "disabled") {
-    await drizzle(database)
-        .insert(platformAppRecordingPolicy)
-        .values({ appId, mode, updatedAt: Date.now() })
-        .onConflictDoUpdate({ target: platformAppRecordingPolicy.appId, set: { mode, updatedAt: Date.now() } });
 }

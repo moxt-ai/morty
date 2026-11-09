@@ -342,7 +342,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         }
                         if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed") {
                             expect(event.payload.commandId).toBe(commandId);
-                            expect(event.mortyMetadata).toEqual({ recordedOutcome: true, restated: true });
+                            expect(event.mortyMetadata).toEqual({ restated: true });
                             restated = true;
                         }
                     }

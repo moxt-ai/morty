@@ -7,7 +7,6 @@ import {
     decodeSessionAccessCredential,
     decodeSessionEventEnvelope,
     decodeSessionPromptCommand,
-    decodeSessionRecordingHistory,
     encodeContentAvailableEvent,
     encodeContentChunkFrame,
     encodeContentReadyEvent,
@@ -33,54 +32,22 @@ import {
     RUNTIME_HEARTBEAT_MESSAGE,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import { DurableObjectSqlDatabase, RuntimeRelay, type SessionRecording } from "@morty-build/relay-core";
+import { DurableObjectSqlDatabase, RuntimeRelay } from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import {
     retireMortyService,
     seedMortyCredential,
     seedMortyService,
-    setMortyRecording,
 } from "../../platform-test-support/src/service-fixture.ts";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createPlatformDurableObjectContext } from "../src/durable-objects/platform-durable-object-context.ts";
 import { RuntimeRelay as PlatformRuntimeRelay } from "../src/durable-objects/runtime-relay.ts";
-import { platformProjectRecordingPolicy } from "../src/schema/d1/index.ts";
-import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 import {
     createPlatformGateways,
     PlatformAuthenticationConfiguration,
     type PlatformRelayBindings,
 } from "../src/worker.ts";
-import { registerRuntimeFixture } from "./registered-runtime.ts";
-
-class ControlledRecording implements SessionRecording {
-    readonly started = Promise.withResolvers<void>();
-    readonly release = Promise.withResolvers<void>();
-    readonly contents: string[] = [];
-    #first = true;
-
-    readonly deliverBatch: SessionRecording["deliverBatch"] = async (_target, envelope, signal) => {
-        const sessions = [...new Set(envelope.events.map((event) => event.sessionId))];
-        signal.throwIfAborted();
-        if (this.#first) {
-            this.#first = false;
-            this.started.resolve();
-            const cancelled = Promise.withResolvers<never>();
-            const cancel = () => cancelled.reject(signal.reason);
-            signal.addEventListener("abort", cancel, { once: true });
-            try {
-                await Promise.race([this.release.promise, cancelled.promise]);
-            } finally {
-                signal.removeEventListener("abort", cancel);
-            }
-            signal.throwIfAborted();
-            return sessions.map((sessionId) => ({ sessionId, kind: "failed", code: "write_failed" }));
-        }
-        this.contents.push(...envelope.events.map((event) => JSON.stringify(event)));
-        return sessions.map((sessionId) => ({ sessionId, kind: "recorded" }));
-    };
-}
 
 function liveEvent(sessionId: string, text: string): string {
     return encodeSessionEventEnvelope({
@@ -133,15 +100,6 @@ function bindings(): PlatformRelayBindings {
         RUNTIME_RELAY: env.RUNTIME_RELAY,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
-}
-
-/** The installed Recording provider scenarios use, matching the deployed Platform service binding. */
-function recordingBindings(): PlatformRelayBindings {
-    const providerId = env.RECORDING_PROVIDER_ID;
-    if (env.RECORDING === undefined || typeof providerId !== "string") {
-        throw new Error("Expected the Recording provider binding");
-    }
-    return { ...bindings(), RECORDING: env.RECORDING, RECORDING_PROVIDER_ID: providerId };
 }
 
 /** Derives the HMAC key a Session credential of `publicCredentialId` is signed with. */
@@ -282,50 +240,6 @@ afterAll(async () => {
 });
 
 describe.sequential("Platform Session-only boundary", () => {
-    it("Given no viewers are connected, When the daemon broadcasts and Recording first fails, Then later events are still recorded without redelivery", async () => {
-        const runtime = await connectRuntimeDaemon("unwatched-runtime");
-        try {
-            await runInDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), async (_instance, state) => {
-                const recording = new ControlledRecording();
-                const pending: Promise<void>[] = [];
-                const database = new DurableObjectSqlDatabase(state.storage);
-                const context = createPlatformDurableObjectContext(state, bindings(), { database });
-                const relay = new RuntimeRelay(
-                    createDurableObjectDependencies({
-                        doDatabase: database,
-                        storages: context.storages,
-                        gateways: { ...context.gateways, recording },
-                        utilities: {
-                            waitUntil: (operation) => {
-                                pending.push(operation);
-                            },
-                        },
-                    }),
-                );
-                const daemon = state.getWebSockets("daemon")[0];
-                if (daemon === undefined) {
-                    throw new Error("Expected a connected daemon");
-                }
-                const event = (text: string) => liveEvent(runtime.sessionId, text);
-                try {
-                    await relay.webSocketMessage(daemon, event("first"));
-                    await recording.started.promise;
-                    await relay.webSocketMessage(daemon, event("second"));
-                    recording.release.resolve();
-                    await Promise.all(pending);
-                    expect(recording.contents.map((payload) => JSON.parse(payload).payload.content.text)).toEqual([
-                        "second",
-                    ]);
-                } finally {
-                    recording.release.resolve();
-                    await Promise.all(pending);
-                }
-            });
-        } finally {
-            runtime.daemon.close(1000, "Test complete");
-        }
-    });
-
     it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Platform permits the request", async () => {
         const browserOrigin = "https://chat.test";
         const worker = createTestMortyPlatformApp(
@@ -836,53 +750,6 @@ describe.sequential("Platform Session-only boundary", () => {
                 ),
             ).toContain("local answer");
 
-            // Given Recording stalls then fails, subsequent live events still reach the viewer.
-            await runInDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), async (_instance, state) => {
-                const recording = new ControlledRecording();
-                const pending: Promise<void>[] = [];
-                const database = new DurableObjectSqlDatabase(state.storage);
-                const context = createPlatformDurableObjectContext(state, environment, { database });
-                const relay = new RuntimeRelay(
-                    createDurableObjectDependencies({
-                        doDatabase: database,
-                        storages: context.storages,
-                        gateways: { ...context.gateways, recording },
-                        utilities: {
-                            waitUntil: (operation) => {
-                                pending.push(operation);
-                            },
-                        },
-                    }),
-                );
-                const daemonSocket = state.getWebSockets("daemon")[0];
-                if (daemonSocket === undefined) {
-                    throw new Error("Expected a connected daemon");
-                }
-                const frame = (text: string) => liveEvent(sessionId, text);
-                try {
-                    await relay.webSocketMessage(daemonSocket, frame("recording is stalled"));
-                    await recording.started.promise;
-                    await relay.webSocketMessage(daemonSocket, frame("live output continues"));
-                    recording.release.resolve();
-                    await Promise.all(pending);
-                    expect(recording.contents.map((payload) => JSON.parse(payload).payload.content.text)).toEqual([
-                        "live output continues",
-                    ]);
-                } finally {
-                    recording.release.resolve();
-                    await Promise.all(pending);
-                }
-            });
-            expect(
-                JSON.stringify(
-                    decodeSessionEventEnvelope(await hostMessages.next()).events.map((event) => event.payload),
-                ),
-            ).toContain("recording is stalled");
-            expect(
-                JSON.stringify(
-                    decodeSessionEventEnvelope(await hostMessages.next()).events.map((event) => event.payload),
-                ),
-            ).toContain("live output continues");
             const browserAccess = await responseJson(
                 await worker.fetch(
                     new Request(
@@ -1433,177 +1300,6 @@ describe.sequential("Platform Session-only boundary", () => {
     });
 });
 
-describe.sequential("Platform Recording policy configuration", () => {
-    /** Creates an App and Project through the production dashboard boundary. */
-    async function createPolicyTarget(
-        worker: ReturnType<typeof createTestMortyPlatformApp>,
-        environment: PlatformRelayBindings,
-    ) {
-        const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
-        const appId = text(app, "appId");
-        const project = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/apps/${appId}/projects`, {
-                    body: JSON.stringify({
-                        displayName: "Recording enabled Project",
-                        idempotencyKey: `recording-enabled-${appId}`,
-                        locationHint: "apac",
-                    }),
-                    headers: credentialHeaders(app.defaultCredential.credential),
-                    method: "POST",
-                }),
-                environment,
-            ),
-            201,
-        );
-        return { appId, projectId: text(project, "projectId") };
-    }
-
-    async function recordThroughRelay(projectId: string, sessionId: string, textContent: string) {
-        await withDaemonRelay(projectId, async (send) => await send(sessionId, `event-${sessionId}`, "1", textContent));
-    }
-
-    /** Connects one daemon to one Relay instance and lets `run` send Session output through it. */
-    async function withDaemonRelay(
-        projectId: string,
-        run: (
-            send: (sessionId: string, eventId: string, position: string, textContent: string) => Promise<void>,
-        ) => Promise<void>,
-    ) {
-        await registerRuntimeFixture(projectId, projectId);
-        return await runInDurableObject(env.RUNTIME_RELAY.getByName(projectId), async (_instance, state) => {
-            const pending: Promise<void>[] = [];
-            const database = new DurableObjectSqlDatabase(state.storage);
-            const context = createPlatformDurableObjectContext(state, recordingBindings(), { database });
-            const relay = new RuntimeRelay(
-                createDurableObjectDependencies({
-                    doDatabase: database,
-                    storages: context.storages,
-                    gateways: context.gateways,
-                    utilities: {
-                        waitUntil: (operation) => {
-                            pending.push(operation);
-                        },
-                    },
-                }),
-            );
-            const response = await relay.fetch(
-                new Request(`https://runtime.internal/projects/${projectId}/daemon`, {
-                    headers: {
-                        Upgrade: "websocket",
-                        "x-morty-runtime-id": projectId,
-                        "x-morty-channel-id": projectId,
-                    },
-                }),
-            );
-            expect(response.status).toBe(101);
-            const client = response.webSocket;
-            const daemon = state.getWebSockets("daemon")[0];
-            if (client === null || daemon === undefined) {
-                throw new Error("Expected a connected daemon");
-            }
-            client.accept();
-            try {
-                await run(async (sessionId, eventId, position, textContent) => {
-                    await relay.webSocketMessage(
-                        daemon,
-                        encodeSessionEventEnvelope({
-                            kind: "session.event.v2",
-                            events: [
-                                {
-                                    eventId,
-                                    position,
-                                    recordedAt: "2026-09-18T00:00:00.000Z",
-                                    sessionGenerationId: "session-generation-1",
-                                    sessionId,
-                                    type: "acp",
-                                    payload: {
-                                        sessionUpdate: "agent_message_chunk",
-                                        content: { type: "text", text: textContent },
-                                    },
-                                },
-                            ],
-                        }),
-                    );
-                    await Promise.all(pending.splice(0));
-                });
-            } finally {
-                client.close(1000, "Test complete");
-                await Promise.allSettled(pending);
-            }
-        });
-    }
-
-    /** Reads durable history back through the Recording Worker's own HTTP boundary. */
-    async function readRecordedHistory(projectId: string, sessionId: string): Promise<Response> {
-        const providerId = env.RECORDING_PROVIDER_ID;
-        if (env.RECORDING === undefined || typeof providerId !== "string") {
-            throw new Error("Expected the Recording provider binding");
-        }
-        return await env.RECORDING.fetch(
-            new Request(
-                `https://recording.internal/v1/projects/${projectId}/runtimes/${projectId}/sessions/${sessionId}/events`,
-            ),
-        );
-    }
-
-    it.each(["enabled", "disabled"] as const)(
-        "Given a legacy %s Project override, When App recording is toggled, Then only the service setting governs recording",
-        async (legacyMode) => {
-            const worker = createTestMortyPlatformApp(
-                new PlatformAuthenticationConfiguration(),
-                createPlatformGateways,
-            );
-            const environment = recordingBindings();
-            const { appId, projectId } = await createPolicyTarget(worker, environment);
-            await platformDrizzle(environment.PLATFORM_DIRECTORY_DATABASE)
-                .insert(platformProjectRecordingPolicy)
-                .values({ projectId, mode: legacyMode, updatedAt: Date.now() });
-            await setMortyRecording(env.PLATFORM_DIRECTORY_DATABASE, appId, "enabled");
-            await recordThroughRelay(projectId, "enabled-session", "recorded answer");
-            const enabled = await readRecordedHistory(projectId, "enabled-session");
-            expect(enabled.status).toBe(200);
-            await enabled.body?.cancel();
-            await setMortyRecording(env.PLATFORM_DIRECTORY_DATABASE, appId, "disabled");
-            await recordThroughRelay(projectId, "disabled-session", "unrecorded answer");
-            const recorded = await readRecordedHistory(projectId, "disabled-session");
-            expect(recorded.status).toBe(404);
-            await recorded.body?.cancel();
-            const history = await readRecordedHistory(projectId, "enabled-session");
-            expect(history.status).toBe(200);
-            expect(decodeSessionRecordingHistory(await history.text())).toMatchObject({
-                events: [{ payload: { content: { text: "recorded answer" } } }],
-            });
-        },
-    );
-
-    it("Given a Runtime streaming into an enabled App, When the App disables Recording, Then output after the policy reuse window is not recorded", async () => {
-        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
-        const environment = recordingBindings();
-        const { appId, projectId } = await createPolicyTarget(worker, environment);
-        const policy = async (_path: string, mode: "disabled" | "enabled") =>
-            await setMortyRecording(env.PLATFORM_DIRECTORY_DATABASE, appId, mode);
-        await policy(`apps/${appId}`, "enabled");
-        const sessionId = "policy-change-session";
-
-        await withDaemonRelay(projectId, async (send) => {
-            await send(sessionId, "event-before-change", "1", "recorded while enabled");
-            await policy(`apps/${appId}`, "disabled");
-            // Deliveries reuse a policy they resolved moments ago instead of reading it for every batch.
-            await send(sessionId, "event-inside-window", "2", "reused enabled policy");
-            vi.setSystemTime(Date.now() + 5_000);
-            await send(sessionId, "event-after-window", "3", "not recorded");
-        });
-
-        const recorded = await readRecordedHistory(projectId, sessionId);
-        expect(recorded.status).toBe(200);
-        expect(decodeSessionRecordingHistory(await recorded.text()).events.map((event) => event.eventId)).toEqual([
-            "event-before-change",
-            "event-inside-window",
-        ]);
-    });
-});
-
 /**
  * Pairs a Runtime, connects its daemon with liveness, and grants Chat access to one Session.
  *
@@ -2001,7 +1697,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
 }
 
 it.each(["text", "binary"])(
-    "Given a connected Runtime, When revocation commits but disconnect delivery fails and a %s message arrives, Then later events reach neither viewers nor Recording and the daemon is closed",
+    "Given a connected Runtime, When revocation commits but disconnect delivery fails and a %s message arrives, Then later events reach no viewer and the daemon is closed",
     async (format) => {
         const runtime = await connectRuntimeDaemon(`revoked-stream-${format}`);
         const response = await runtime.subscribe();
@@ -2018,17 +1714,6 @@ it.each(["text", "binary"])(
         viewer.accept();
         const deliver = (message: string | Uint8Array) =>
             runInDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), async (_instance, state) => {
-                const recorded: string[] = [];
-                const recording: SessionRecording = {
-                    deliverBatch: async (_target, envelope, signal) => {
-                        signal.throwIfAborted();
-                        recorded.push(...envelope.events.map((event) => JSON.stringify(event)));
-                        return [...new Set(envelope.events.map((event) => event.sessionId))].map((sessionId) => ({
-                            sessionId,
-                            kind: "recorded",
-                        }));
-                    },
-                };
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectSqlDatabase(state.storage);
                 const context = createPlatformDurableObjectContext(state, bindings(), { database });
@@ -2036,7 +1721,7 @@ it.each(["text", "binary"])(
                     createDurableObjectDependencies({
                         doDatabase: database,
                         storages: context.storages,
-                        gateways: { ...context.gateways, recording },
+                        gateways: context.gateways,
                         utilities: {
                             waitUntil: (operation) => {
                                 pending.push(operation);
@@ -2053,10 +1738,9 @@ it.each(["text", "binary"])(
                     typeof message === "string" ? message : new Uint8Array(message).buffer,
                 );
                 await Promise.all(pending);
-                return recorded;
             });
         try {
-            expect(await deliver(liveEvent(runtime.sessionId, "before revocation"))).toHaveLength(1);
+            await deliver(liveEvent(runtime.sessionId, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), (_instance, state) => {
                 state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE ON runtime_connection_state
@@ -2072,17 +1756,15 @@ it.each(["text", "binary"])(
                 });
             }
             expect((await runtime.reconnect()).status).toBe(401);
-            expect(
-                await deliver(
-                    format === "text"
-                        ? liveEvent(runtime.sessionId, "after revocation")
-                        : encodeContentChunkFrame({
-                              bytes: new Uint8Array([1, 2]),
-                              requestId: "revoked-file",
-                              sequence: 0,
-                          }),
-                ),
-            ).toEqual([]);
+            await deliver(
+                format === "text"
+                    ? liveEvent(runtime.sessionId, "after revocation")
+                    : encodeContentChunkFrame({
+                          bytes: new Uint8Array([1, 2]),
+                          requestId: "revoked-file",
+                          sequence: 0,
+                      }),
+            );
             expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Runtime revoked" });
             expect(received).toHaveLength(1);
             expect((await runtime.revoke()).status).toBe(204);
@@ -3838,72 +3520,6 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
     } finally {
         runtime.daemon.close(1000, "Fork rejection scenario completed");
     }
-});
-
-// @no-uc: Bound a recovery delivery's external Session fanout so late terminal facts are not stranded behind one large write.
-it("Given a recovery frame spans 164 Sessions, When Recording has a bounded per-request fanout, Then every recovered failure is recorded", async () => {
-    const runtime = await connectRuntimeDaemon("bulk-recovery-recording");
-    const events = Array.from({ length: 164 }, (_, index) => ({
-        eventId: `recovered-${index}`,
-        position: "30000",
-        recordedAt: "2026-10-29T04:16:06.783Z",
-        sessionGenerationId: `restarted-${index}`,
-        sessionId: `recovered-session-${index}`,
-        type: "lifecycle-metadata" as const,
-        payload: {
-            kind: "prompt.failed" as const,
-            commandId: `recovered-command-${index}`,
-            attemptId: `attempt-${index}`,
-            code: "runtime_restarted",
-            message: "The Runtime restarted",
-        },
-    }));
-    const recorded = await runInDurableObject(
-        env.RUNTIME_RELAY.getByName(runtime.runtimeId),
-        async (_instance, state) => {
-            const persisted: string[] = [];
-            const recording: SessionRecording = {
-                deliverBatch: async (_target, envelope, signal) => {
-                    signal.throwIfAborted();
-                    const sessions = [...new Set(envelope.events.map((event) => event.sessionId))];
-                    // A stateful provider with a finite fanout budget models expensive per-Session storage requests.
-                    if (sessions.length > 32) {
-                        return sessions.map((sessionId) => ({ sessionId, kind: "failed", code: "write_failed" }));
-                    }
-                    persisted.push(...envelope.events.map((event) => event.eventId));
-                    return sessions.map((sessionId) => ({ sessionId, kind: "recorded" }));
-                },
-            };
-            const pending: Promise<void>[] = [];
-            const database = new DurableObjectSqlDatabase(state.storage);
-            const context = createPlatformDurableObjectContext(state, bindings(), { database });
-            const relay = new RuntimeRelay(
-                createDurableObjectDependencies({
-                    doDatabase: database,
-                    storages: context.storages,
-                    gateways: { ...context.gateways, recording },
-                    utilities: {
-                        waitUntil: (operation) => {
-                            pending.push(operation);
-                        },
-                    },
-                }),
-            );
-            const daemon = state.getWebSockets("daemon")[0];
-            if (daemon === undefined) {
-                throw new Error("Expected the Runtime connection");
-            }
-            await relay.webSocketMessage(daemon, encodeSessionEventEnvelope({ kind: "session.event.v2", events }));
-            // Completing a delivery can schedule another one through the same production waitUntil port.
-            for (let offset = 0; offset < pending.length; ) {
-                const batch = pending.slice(offset);
-                offset = pending.length;
-                await Promise.all(batch);
-            }
-            return persisted;
-        },
-    );
-    expect(recorded).toEqual(events.map((event) => event.eventId));
 });
 
 it("Given an anonymous browser knows a Runtime, When it declares a full-budget upload, Then it is rejected and an authorized browser can still upload", async () => {

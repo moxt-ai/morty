@@ -52,7 +52,6 @@ jobs:
       - run: pnpm test:client
       - run: pnpm test:platform
       - run: pnpm test:relay
-      - run: pnpm test:recording
       - run: pnpm test:worker
 
   runtime:

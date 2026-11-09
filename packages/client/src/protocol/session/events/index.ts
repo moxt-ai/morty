@@ -1,11 +1,8 @@
 import { z } from "zod";
 import { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
-import { boundedJsonSchema, toolCallLocationSchema } from "../../shared/tool-input.ts";
-
-export { boundedJsonSchema, toolCallLocationSchema } from "../../shared/tool-input.ts";
-
 import { identifierStringSchema as identifier } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
+import { boundedJsonSchema, toolCallLocationSchema } from "../../shared/tool-input.ts";
 import {
     sessionElicitationRequestedEventSchema,
     sessionElicitationResolvedEventSchema,
@@ -113,7 +110,7 @@ const embeddedResourceSchema = z
     })
     .readonly();
 
-export const contentBlockSchema = z.discriminatedUnion("type", [
+const contentBlockSchema = z.discriminatedUnion("type", [
     textContentSchema,
     imageContentSchema,
     audioContentSchema,
@@ -128,7 +125,7 @@ export type ExternalImageContentBlock = z.infer<typeof externalImageContentSchem
 export type ExternalAudioContentBlock = z.infer<typeof externalAudioContentSchema>;
 export type ExternalResourceContentBlock = z.infer<typeof externalResourceContentSchema>;
 
-export const toolCallContentSchema = z.discriminatedUnion("type", [
+const toolCallContentSchema = z.discriminatedUnion("type", [
     z.object({ content: contentBlockSchema, type: z.literal("content") }).readonly(),
     z
         .object({
@@ -140,7 +137,7 @@ export const toolCallContentSchema = z.discriminatedUnion("type", [
         .readonly(),
     z.object({ terminalId: shortString, type: z.literal("terminal") }).readonly(),
 ]);
-export const toolKindSchema = z.enum([
+const toolKindSchema = z.enum([
     "read",
     "edit",
     "delete",
@@ -152,7 +149,7 @@ export const toolKindSchema = z.enum([
     "switch_mode",
     "other",
 ]);
-export const toolStatusSchema = z.enum(["pending", "in_progress", "completed", "failed"]);
+const toolStatusSchema = z.enum(["pending", "in_progress", "completed", "failed"]);
 const backgroundTaskSchema = z
     .object({
         id: shortString,
@@ -494,14 +491,9 @@ const positionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
  * `restated` marks a lifecycle event that restates an outcome the Runtime already recorded for its command, answering a
  * retried request about that command or republishing it after a restart. It is not a new fact: it reaches clients and
  * the request it answers, but never status notifications.
- *
- * `recordedOutcome`, on a restated event, marks that it repeats the outcome the Runtime recorded at `recordedAt`, rather
- * than an acknowledgement composed when no record remains. Only such a restatement can settle, in Recording, a Turn
- * whose outcome Recording missed. Runtimes before it existed never send it.
  */
 const mortyMetadataFields = {
     omitted: z.literal(true).optional(),
-    recordedOutcome: z.literal(true).optional(),
     restated: z.literal(true).optional(),
 };
 const sharedSessionEventFields = {
@@ -528,7 +520,7 @@ const sessionEventSchema = z.discriminatedUnion("type", [
         .readonly(),
 ]);
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
-export const sessionLiveEventSchema = z.discriminatedUnion("type", [
+const sessionLiveEventSchema = z.discriminatedUnion("type", [
     z.object({ ...sessionLiveEventFields, payload: acpSessionUpdateSchema, type: z.literal("acp") }).readonly(),
     z
         .object({
@@ -582,7 +574,7 @@ const sessionWireEventSchema = z.union([
         .readonly(),
 ]);
 export type SessionWireEvent = z.infer<typeof sessionWireEventSchema>;
-export const sessionWireEnvelopeSchema = z
+const sessionWireEnvelopeSchema = z
     .object({
         kind: z.literal(SESSION_EVENT_KIND),
         events: z.array(sessionWireEventSchema).min(1).max(SESSION_EVENT_BATCH_MAX_SIZE).readonly(),
@@ -599,7 +591,7 @@ const sessionEventBatchSchema = z.array(sessionEventSchema).min(1).max(SESSION_E
 export type SessionEventBatch = z.infer<typeof sessionEventBatchSchema>;
 const sessionLiveEventBatchSchema = z.array(sessionLiveEventSchema).min(1).max(SESSION_EVENT_BATCH_MAX_SIZE).readonly();
 export type SessionLiveEventBatch = z.infer<typeof sessionLiveEventBatchSchema>;
-export const sessionEventEnvelopeSchema = z
+const sessionEventEnvelopeSchema = z
     .object({ events: sessionLiveEventBatchSchema, kind: z.literal(SESSION_EVENT_KIND) })
     .readonly();
 export type SessionEventEnvelope = z.infer<typeof sessionEventEnvelopeSchema>;

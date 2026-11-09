@@ -410,40 +410,6 @@ importers:
         specifier: ^8.21.3
         version: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  packages/recording:
-    dependencies:
-      '@morty-build/client':
-        specifier: workspace:*
-        version: link:../client
-      '@morty-build/relay-core':
-        specifier: workspace:*
-        version: link:../relay-core
-      '@noble/hashes':
-        specifier: 2.0.1
-        version: 2.0.1
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@5.20261028.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.4.1)
-      hono:
-        specifier: ^4.13.14
-        version: 4.13.14
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@cloudflare/vitest-plugin':
-        specifier: ^1.4.9
-        version: 1.4.9(@cloudflare/workers-types@5.20261028.1)(@types/node@24.13.6)(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vitest@4.1.12)
-      '@cloudflare/workers-types':
-        specifier: ^5.20261028.1
-        version: 5.20261028.1
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@types/node@24.13.5)(@vitest/coverage-istanbul@4.1.12)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6))(vite@8.3.5(@types/node@24.13.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.14)(yaml@2.9.1))
-      wrangler:
-        specifier: ^4.154.0
-        version: 4.154.0(@cloudflare/workers-types@5.20261028.1)(@types/node@24.13.6)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-
   packages/relay:
     dependencies:
       '@morty-build/relay-core':
@@ -468,9 +434,6 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:../client
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
       vitest:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@24.13.5)(@vitest/coverage-istanbul@4.1.12)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6))(vite@8.3.5(@types/node@24.13.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.14)(yaml@2.9.1))
@@ -1543,10 +1506,6 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
-
-  '@noble/hashes@2.0.1':
-    resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
-    engines: {node: '>= 20.19.0'}
 
   '@oxc-parser/binding-android-arm-eabi@0.155.0':
     resolution: {integrity: sha512-A6xv7hDtnTm+xlZ7utn6rRQpRMJHRhVr3gjRGqlx0RUX84mNk0pAsy6YN/wWhuOTkaZhRrrzaLxf0NfbH77j2w==}
@@ -6528,8 +6487,6 @@ snapshots:
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.3
     optional: true
-
-  '@noble/hashes@2.0.1': {}
 
   '@oxc-parser/binding-android-arm-eabi@0.155.0':
     optional: true

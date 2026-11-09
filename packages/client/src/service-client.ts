@@ -1568,8 +1568,8 @@ export class MortyInteractionResources {
         this.#projectId = projectId;
     }
 
-    // The Platform serves no interaction read routes: pending interactions are derived from the
-    // Session Recording lifecycle events. Only the response submission crosses the Platform API.
+    // The Platform serves no interaction read routes: pending interactions come from the Session's lifecycle events and
+    // its execution snapshot. Only the response submission crosses the Platform API.
     readonly respond = async (
         sessionId: string,
         interactionId: string,
