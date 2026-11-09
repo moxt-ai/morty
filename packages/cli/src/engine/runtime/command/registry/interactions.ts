@@ -1,6 +1,8 @@
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import {
     promptCompletion,
+    SESSION_ARCHIVE_KIND,
+    SESSION_ARCHIVED_KIND,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
     SESSION_CLOSE_KIND,
@@ -163,6 +165,23 @@ export const sessionCloseCommand: RuntimeCommand = {
             .closeSession(message.target, signal)
             .then(() => {
                 send(socket, { kind: SESSION_CLOSED_KIND, requestId: message.requestId, target: message.target });
+            })
+            .catch((error: unknown) => {
+                reportOperationFailure(socket, message.requestId, message.target, error);
+            });
+    },
+};
+
+export const sessionArchiveCommand: RuntimeCommand = {
+    kind: SESSION_ARCHIVE_KIND,
+    handle: ({ sessions, signal, socket }, message): void => {
+        if (message.kind !== SESSION_ARCHIVE_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void sessions
+            .archiveSession(message.target, signal)
+            .then(() => {
+                send(socket, { kind: SESSION_ARCHIVED_KIND, requestId: message.requestId, target: message.target });
             })
             .catch((error: unknown) => {
                 reportOperationFailure(socket, message.requestId, message.target, error);

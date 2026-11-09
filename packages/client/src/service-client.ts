@@ -8,6 +8,7 @@ import {
     decodeNativeSessionResult,
     decodePromptAttachment,
     decodeRuntimeDiagnosticsResult,
+    decodeSessionArchivedEvent,
     decodeSessionClosedEvent,
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
@@ -800,31 +801,33 @@ export class MortyRuntimeResources {
         );
 
     /**
-     * Reuse an operationId and its inputs after an ambiguous failure; an unknown result must not create another
-     * Session.
+     * Forks the native session in the directory its entry names. The Runtime keeps the fork's receipt under
+     * `operationId`: reuse the operationId and its inputs after an ambiguous failure, and the retry answers with the
+     * original fork instead of creating another Session.
      */
     readonly forkNativeSession = async (
         operationId: string,
         request: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => {
-        const receipt = await this.#executor.post(
-            projectPath(this.#computerId, `daemon/native-session-forks/${encodeURIComponent(operationId)}`),
-            request,
-            signal,
+        const result = decodeNativeSessionResult(
+            JSON.stringify(
+                await this.#executor.post(
+                    projectPath(this.#computerId, `daemon/native-session-forks/${encodeURIComponent(operationId)}`),
+                    request,
+                    signal,
+                ),
+            ),
         );
-        if (typeof receipt !== "object" || receipt === null || !("result" in receipt) || !("source" in receipt)) {
-            throw new MortyProtocolError("The service returned an invalid Fork receipt");
-        }
-        const result = decodeNativeSessionResult(JSON.stringify(receipt.result));
-        const source = decodeNativeSessionResult(JSON.stringify(receipt.source));
-        if (result.action !== "fork" || !sameNativeSession(result.ready.target, result.target)) {
+        if (
+            result.action !== "fork" ||
+            !sameNativeSession(result.ready.target, result.target) ||
+            result.target.harness !== request.harness ||
+            result.target.sessionId === request.sessionId
+        ) {
             throw new MortyProtocolError("The service returned an invalid native Fork");
         }
-        if (source.action !== "find" || source.entry.sessionId !== request.sessionId) {
-            throw new MortyProtocolError("The service returned an invalid Fork source");
-        }
-        return { result, entry: source.entry };
+        return result;
     };
 
     readonly querySessions = async (targets: readonly NativeSessionTarget[], signal: AbortSignal) =>
@@ -1029,6 +1032,21 @@ export class MortySessionResources {
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/close`),
+                    {},
+                    signal,
+                ),
+            ),
+        );
+
+    /**
+     * Removes the Session from the Sessions the Runtime holds, closing it first if it is open. The Agent's own history
+     * stays. Archiving a Session the Runtime does not hold succeeds, so a retry after an ambiguous failure is safe.
+     */
+    readonly archive = async (sessionTarget: NativeSessionTarget, signal: AbortSignal) =>
+        decodeSessionArchivedEvent(
+            JSON.stringify(
+                await this.#executor.post(
+                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/archive`),
                     {},
                     signal,
                 ),

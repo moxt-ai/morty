@@ -18,6 +18,8 @@ function sessionRuntimeErrorStatus(code: string): number {
         code === SESSION_CLOSED_ERROR_CODE ||
         code === "session_conflict" ||
         code === "idempotency_conflict" ||
+        // An operation the Runtime started but cannot tell the end of: repeating it cannot answer differently.
+        code === "session_creation_outcome_unknown" ||
         code === "command_result_expired" ||
         code === "turn_already_started" ||
         code === "session_configuration_conflict" ||

@@ -6,6 +6,7 @@ import {
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
     decodeRuntimePongEvent,
+    decodeSessionArchivedEvent,
     decodeSessionClosedEvent,
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
@@ -28,6 +29,7 @@ import {
     RUNTIME_HEARTBEAT_ACK_KIND,
     RUNTIME_LIVENESS_READY_KIND,
     RUNTIME_PING_KIND,
+    SESSION_ARCHIVE_KIND,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
     SESSION_CLOSE_KIND,
@@ -115,6 +117,10 @@ export const runtimeControlRegistry = {
         permission: ProjectPermission.SessionWrite,
         reply: directReply("session.closed", decodeSessionClosedEvent),
     },
+    "session.archive": {
+        permission: ProjectPermission.SessionWrite,
+        reply: directReply("session.archived", decodeSessionArchivedEvent),
+    },
     "session.cancel-before-start": {
         permission: ProjectPermission.SessionWrite,
         reply: directReply("session.turn.withdrawn", decodeSessionTurnWithdrawnEvent),
@@ -201,6 +207,7 @@ export function runtimeCommandPermission(message: ServiceToDaemonMessage): Proje
         case SESSION_CONFIG_READ_KIND:
         case SESSION_RENAME_KIND:
         case SESSION_CLOSE_KIND:
+        case SESSION_ARCHIVE_KIND:
         case SESSION_CANCEL_BEFORE_START_KIND:
         case SESSION_CANCEL_KIND:
         case SESSION_PROMPT_DISPOSITION_KIND:

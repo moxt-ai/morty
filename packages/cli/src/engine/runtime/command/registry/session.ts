@@ -386,7 +386,8 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                     );
                 } catch (cause) {
                     if (!signal.aborted) {
-                        await context.sessions.closeSession(target, signal);
+                        // A refused creation leaves no Session behind in the Sessions this Runtime holds.
+                        await context.sessions.archiveSession(target, signal);
                     }
                     throw cause;
                 }

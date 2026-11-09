@@ -31,6 +31,8 @@ import {
     type RuntimeDiagnosticsResult,
     type RuntimePingCommand,
     type RuntimePongEvent,
+    type SessionArchiveCommand,
+    type SessionArchivedEvent,
     type SessionCancelBeforeStartCommand,
     type SessionCancelCommand,
     type SessionCloseCommand,
@@ -90,6 +92,7 @@ export type RuntimeControlCommand =
     | SessionConfigReadCommand
     | SessionRenameCommand
     | SessionCloseCommand
+    | SessionArchiveCommand
     | SessionCancelBeforeStartCommand
     | SessionCancelCommand
     | SessionPromptDispositionCommand
@@ -111,6 +114,7 @@ export type RuntimeControlResult =
     | SessionConfigReadResult
     | SessionRenamedEvent
     | SessionClosedEvent
+    | SessionArchivedEvent
     | SessionPromptAcceptedEvent
     | SessionPromptSteeredEvent
     | SessionTurnStoppedEvent

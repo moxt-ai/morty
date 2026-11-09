@@ -27,7 +27,6 @@ type ConversationDirectoryState =
 type ArchiveOperation =
     | { readonly kind: "idle" }
     | { readonly kind: "archiving"; readonly sessionTarget: NativeSessionTarget }
-    | { readonly kind: "unconfirmed" }
     | { readonly kind: "failed"; readonly message: string; readonly sessionTarget: NativeSessionTarget };
 
 export interface ConversationDirectoryStore {
@@ -110,10 +109,10 @@ export const createConversationDirectoryStore = (
                     if (session === undefined) {
                         throw new CloudApiError("NOT_FOUND", "The Session was not found.");
                     }
-                    const result = await requests.archiveManagedSession(session.target, signal);
+                    // The Session leaves the list only once the Runtime no longer holds it.
+                    await requests.archiveManagedSession(session.target, signal);
                     signal.throwIfAborted();
-                    const archive: ArchiveOperation =
-                        result.close === "confirmed" ? { kind: "idle" } : { kind: "unconfirmed" };
+                    const archive: ArchiveOperation = { kind: "idle" };
                     set((current) => {
                         const state = current.state;
                         switch (state.kind) {

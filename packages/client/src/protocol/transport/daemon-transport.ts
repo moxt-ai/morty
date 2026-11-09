@@ -111,6 +111,8 @@ import {
     SESSION_PERMISSION_RESPOND_KIND,
 } from "../session/interactions/index.ts";
 import {
+    decodeSessionArchiveCommand,
+    decodeSessionArchivedEvent,
     decodeSessionCloseCommand,
     decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
@@ -128,6 +130,8 @@ import {
     decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
+    encodeSessionArchiveCommand,
+    encodeSessionArchivedEvent,
     encodeSessionCloseCommand,
     encodeSessionClosedEvent,
     encodeSessionCloseNoticeEvent,
@@ -145,6 +149,8 @@ import {
     encodeSessionStatusChangedEvent,
     encodeSessionsListedEvent,
     encodeSessionsQueriedEvent,
+    SESSION_ARCHIVE_KIND,
+    SESSION_ARCHIVED_KIND,
     SESSION_CLOSE_KIND,
     SESSION_CLOSE_NOTICE_KIND,
     SESSION_CLOSED_KIND,
@@ -289,6 +295,11 @@ const serviceToDaemonSignatures = {
         encodeSessionCloseCommand,
         decodeSessionCloseCommand,
     ),
+    [SESSION_ARCHIVE_KIND]: defineMessageSignature(
+        SESSION_ARCHIVE_KIND,
+        encodeSessionArchiveCommand,
+        decodeSessionArchiveCommand,
+    ),
     [NATIVE_SESSION_CANCEL_KIND]: defineMessageSignature(
         NATIVE_SESSION_CANCEL_KIND,
         encodeNativeSessionCancel,
@@ -426,6 +437,11 @@ const daemonToServiceSignatures = {
         SESSION_CLOSED_KIND,
         encodeSessionClosedEvent,
         decodeSessionClosedEvent,
+    ),
+    [SESSION_ARCHIVED_KIND]: defineMessageSignature(
+        SESSION_ARCHIVED_KIND,
+        encodeSessionArchivedEvent,
+        decodeSessionArchivedEvent,
     ),
     [SESSION_CLOSE_NOTICE_KIND]: defineMessageSignature(
         SESSION_CLOSE_NOTICE_KIND,
