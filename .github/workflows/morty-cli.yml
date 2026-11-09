@@ -58,9 +58,10 @@ jobs:
       contents: read
       actions: read
 
+  # A skipped pipeline would skip every later job by default, so each release
+  # job requires the success of the job it needs explicitly.
   deployment-preflight:
-    # The pipeline is skipped when the merge queue already accepted this archive.
-    if: ${{ !cancelled() && !failure() && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && needs.accepted.result == 'success' && (needs.pipeline.result == 'success' || (needs.pipeline.result == 'skipped' && needs.accepted.outputs.run-id != '')) && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     needs: [accepted, pipeline]
     runs-on: ubuntu-latest
     environment: morty-production
@@ -84,7 +85,7 @@ jobs:
           python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json --preflight-only
 
   publish:
-    if: github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: ${{ !cancelled() && needs.deployment-preflight.result == 'success' && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     needs: deployment-preflight
     runs-on: ubuntu-latest
     environment: morty-npm
@@ -110,6 +111,7 @@ jobs:
         run: node scripts/publish-release.mjs
 
   deploy:
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     needs: publish
     runs-on: ubuntu-latest
     environment: morty-production
@@ -149,6 +151,7 @@ jobs:
           retention-days: 90
 
   github-release:
+    if: ${{ !cancelled() && needs.deploy.result == 'success' }}
     needs: [accepted, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 10
