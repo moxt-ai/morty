@@ -1693,8 +1693,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /** Waits until the bound Machine's Runtime is online and offers the harness this run bound. */
-    async function waitForReadiness(context: Context, runtime: RuntimeSelection, harness: string) {
-        const harness = identifier(harness);
+    async function waitForReadiness(context: Context, runtime: RuntimeSelection, requestedHarness: string) {
+        const harness = identifier(requestedHarness);
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
