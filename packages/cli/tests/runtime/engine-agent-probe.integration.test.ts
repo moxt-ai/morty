@@ -310,9 +310,10 @@ test.for([
                 await request(
                     socket,
                     {
-                        kind: "session.prepare",
+                        kind: "session.create",
                         requestId: "prepare-after-output-drain",
-                        sessionId: "output-drain-session",
+                        operationId: crypto.randomUUID(),
+                        configurations: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         directoryId: "default",
@@ -323,7 +324,7 @@ test.for([
             ).toMatchObject({
                 kind: "session.ready",
                 requestId: "prepare-after-output-drain",
-                sessionId: "output-drain-session",
+                target: { harness: "codex", sessionId: expect.any(String) },
                 agentVersion: "codex-cli 0.154.0",
             });
         } finally {

@@ -3,6 +3,7 @@ import { DIRECTORY_IDENTIFIER as directoryIdentifier } from "../../shared/direct
 import { identifierStringSchema as identifier } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
 import { decodeKnownNativeSessionEvents, nativeSessionEventsSchema } from "../events/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_HISTORY_PAGE_LOAD_KIND = "session.live-history.v2.page.load";
 export const SESSION_HISTORY_PAGE_LOADED_KIND = "session.live-history.v2.page.loaded";
@@ -13,7 +14,7 @@ const pageRequestFields = {
     cursor: z.string().min(1).max(512).nullable(),
     eventLimit: z.number().int().min(1).max(10_000),
     requestId: identifier,
-    sessionId: identifier,
+    target: nativeSessionTargetSchema,
 };
 
 const sessionHistoryPageLoadSchema = z
@@ -34,7 +35,7 @@ const sessionPreviewHistoryPageLoadSchema = z
 const pageLoadedFields = {
     events: nativeSessionEventsSchema,
     requestId: identifier,
-    sessionId: identifier,
+    target: nativeSessionTargetSchema,
 };
 
 const sessionHistoryPageLoadedSchema = z
@@ -73,7 +74,7 @@ const sessionHistoryWirePageLoadedSchema = z
         events: wireNativeSessionEventsSchema,
         kind: z.literal(SESSION_HISTORY_PAGE_LOADED_KIND),
         requestId: identifier,
-        sessionId: identifier,
+        target: nativeSessionTargetSchema,
     })
     .passthrough()
     .readonly();
@@ -82,7 +83,7 @@ const sessionPreviewHistoryWirePageLoadedSchema = z
         events: wireNativeSessionEventsSchema,
         kind: z.literal(SESSION_PREVIEW_HISTORY_PAGE_LOADED_KIND),
         requestId: identifier,
-        sessionId: identifier,
+        target: nativeSessionTargetSchema,
     })
     .passthrough()
     .readonly();

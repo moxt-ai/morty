@@ -1,3 +1,5 @@
+import { NativeSessionMap, nativeSessionKey } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { LiveEventPositionTable } from "../../storage/session/live-event-position-table.ts";
 
 const INITIAL_POSITION = 10 ** 4;
@@ -9,32 +11,32 @@ interface PositionReservation {
 }
 
 export interface SessionLiveEventPosition {
-    readonly allocate: (sessionId: string) => number;
+    readonly allocate: (sessionTarget: NativeSessionTarget) => number;
 }
 
 export class SqliteSessionLiveEventPosition implements SessionLiveEventPosition {
     readonly #table: LiveEventPositionTable;
-    readonly #reservations = new Map<string, PositionReservation>();
+    readonly #reservations = new NativeSessionMap<PositionReservation>();
 
     constructor(table: LiveEventPositionTable) {
         this.#table = table;
     }
 
-    readonly allocate = (sessionId: string): number => {
-        const reservation = this.#reservations.get(sessionId) ?? this.#reserve(sessionId);
+    readonly allocate = (sessionTarget: NativeSessionTarget): number => {
+        const reservation = this.#reservations.get(sessionTarget) ?? this.#reserve(sessionTarget);
         if (reservation.next === reservation.end) {
-            this.#reservations.delete(sessionId);
+            this.#reservations.delete(sessionTarget);
         } else {
-            this.#reservations.set(sessionId, { next: reservation.next + 1, end: reservation.end });
+            this.#reservations.set(sessionTarget, { next: reservation.next + 1, end: reservation.end });
         }
         return reservation.next;
     };
 
     // Persist the high-water mark before emitting any position in the range. A crash skips the
     // unused suffix rather than reusing positions, without a synchronous transaction per chunk.
-    readonly #reserve = (sessionId: string): PositionReservation =>
+    readonly #reserve = (sessionTarget: NativeSessionTarget): PositionReservation =>
         this.#table.transaction(() => {
-            const persisted = this.#table.read(sessionId);
+            const persisted = this.#table.read(nativeSessionKey(sessionTarget));
             const allocatedPosition = persisted ?? INITIAL_POSITION - 1;
             if (allocatedPosition === Number.MAX_SAFE_INTEGER) {
                 throw new Error("The live Session event position allocation is exhausted");
@@ -42,9 +44,9 @@ export class SqliteSessionLiveEventPosition implements SessionLiveEventPosition 
             const next = allocatedPosition + 1;
             const end = next + Math.min(POSITION_RESERVATION_SIZE - 1, Number.MAX_SAFE_INTEGER - next);
             if (persisted === undefined) {
-                this.#table.insert(sessionId, end);
+                this.#table.insert(nativeSessionKey(sessionTarget), end);
             } else {
-                this.#table.update(sessionId, end);
+                this.#table.update(nativeSessionKey(sessionTarget), end);
             }
             return { next, end };
         });

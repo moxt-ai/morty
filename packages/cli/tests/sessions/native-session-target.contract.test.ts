@@ -1,0 +1,178 @@
+import { expect, it, vi } from "vitest";
+import { startTestPlatform } from "../support/platform.ts";
+
+it("Given two harnesses create the same native ID, When I create and restore each conversation, Then both native pairs remain independently usable", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
+    try {
+        await using platform = await startTestPlatform();
+        const signal = AbortSignal.timeout(30_000);
+        const project = await platform.service.createProject(
+            {
+                clientReference: crypto.randomUUID(),
+                displayName: "Native creation collision",
+                idempotencyKey: crypto.randomUUID(),
+                locationHint: "wnam",
+            },
+            signal,
+        );
+        const runtime = await platform.connectAgent(
+            project.computerId,
+            ["claude", "codex"].map((id) => ({
+                id,
+                label: id,
+                isolatedNativeStorage: true,
+                arguments: ["--persist-empty-sessions"],
+            })),
+        );
+        const targets: { readonly harness: string; readonly sessionId: string }[] = [];
+        for (const harness of ["claude", "codex"]) {
+            const ready = await runtime.client.sessions.create(
+                {
+                    agentId: harness,
+                    additionalDirectoryIds: [],
+                    configurations: [],
+                    directoryId: "default",
+                    computerId: runtime.computerId,
+                    operationId: crypto.randomUUID(),
+                },
+                signal,
+            );
+            expect(ready.agentId).toBe(harness);
+            targets.push(ready.target);
+        }
+        expect(targets[0]?.sessionId).toBe(targets[1]?.sessionId);
+        for (const target of targets) {
+            await expect(runtime.client.sessions.restore(target, signal)).resolves.toMatchObject({
+                entry: { agentId: target.harness, sessionId: target.sessionId },
+            });
+        }
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+it("Given a harness announces its title during creation, When the caller creates a Session and lists it, Then its native conversation retains that title without an intermediate Morty identity", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
+    try {
+        await using platform = await startTestPlatform();
+        const signal = AbortSignal.timeout(30_000);
+        const project = await platform.service.createProject(
+            {
+                clientReference: crypto.randomUUID(),
+                displayName: "Native creation metadata",
+                idempotencyKey: crypto.randomUUID(),
+                locationHint: "wnam",
+            },
+            signal,
+        );
+        const runtime = await platform.connectAgent(project.computerId, [
+            {
+                id: "claude",
+                label: "Controlled ACP",
+                arguments: ["--announce-title-while-creating"],
+            },
+        ]);
+        const ready = await runtime.client.sessions.create(
+            {
+                agentId: "claude",
+                additionalDirectoryIds: [],
+                configurations: [],
+                directoryId: "default",
+                computerId: runtime.computerId,
+                operationId: crypto.randomUUID(),
+            },
+            signal,
+        );
+        const entries = await runtime.client.runtimes.querySessions([ready.target], signal);
+        expect(entries).toMatchObject([
+            {
+                agentId: "claude",
+                target: ready.target,
+                title: "Harness-created conversation",
+            },
+        ]);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+it("Given two harnesses own the same native session ID, When a caller restores each harness/native pair, Then each restores only its selected harness and a different harness cannot select either", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
+    try {
+        await using platform = await startTestPlatform();
+        const signal = AbortSignal.timeout(30_000);
+        const project = await platform.service.createProject(
+            {
+                clientReference: crypto.randomUUID(),
+                displayName: "Harness-scoped native sessions",
+                idempotencyKey: crypto.randomUUID(),
+                locationHint: "wnam",
+            },
+            signal,
+        );
+        const sessionId = "same-native-session";
+        const runtime = await platform.connectAgent(
+            project.computerId,
+            [
+                { id: "claude", label: "Claude Code" },
+                { id: "codex", label: "Codex" },
+            ],
+            new Set([sessionId]),
+        );
+        const imported = new Map<string, string>();
+        for (const harness of ["claude", "codex"]) {
+            const workspace = { agentId: harness, directoryId: "default", additionalDirectoryIds: [] };
+            const listing = await runtime.client.runtimes.nativeSessions(
+                {
+                    ...workspace,
+                    action: "list",
+                    cursor: null,
+                    discoveryId: null,
+                },
+                signal,
+            );
+            if (listing.action !== "list") {
+                throw new Error("Expected native session discovery");
+            }
+            const entry = listing.entries.find((entry) => entry.sessionId === sessionId);
+            if (entry === undefined) {
+                throw new Error("Missing the harness-owned native session");
+            }
+            const opened = await runtime.client.runtimes.nativeSessions(
+                {
+                    ...workspace,
+                    action: "import",
+                    entryId: entry.entryId,
+                    discoveryId: listing.discoveryId,
+                },
+                signal,
+            );
+            if (opened.action !== "import") {
+                throw new Error("Expected native session import");
+            }
+            imported.set(harness, opened.ready.target.sessionId);
+        }
+        for (const harness of ["claude", "codex"]) {
+            const target = { harness, sessionId };
+            await expect(runtime.client.sessions.restore(target, signal)).resolves.toMatchObject({
+                target,
+                entry: { agentId: harness, sessionId },
+                ready: { agentId: harness, target: { harness, sessionId: imported.get(harness) } },
+            });
+        }
+        await expect(
+            runtime.client.sessions.restore(
+                {
+                    harness: "pi",
+                    sessionId,
+                },
+                signal,
+            ),
+        ).rejects.toMatchObject({ code: "session_not_found" });
+    } finally {
+        vi.useRealTimers();
+    }
+});

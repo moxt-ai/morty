@@ -6,13 +6,16 @@ import { DatabaseSync } from "node:sqlite";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-import { SESSION_CLOSED_ERROR_CODE, type SessionStatusChangedEvent } from "@morty-build/client/protocol";
+import {
+    type NativeSessionTarget,
+    SESSION_CLOSED_ERROR_CODE,
+    type SessionStatusChangedEvent,
+} from "@morty-build/client/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { openPreviewEventCache } from "../../src/engine/acp/adapter/preview-event-cache.ts";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { acpSessionStoreMigrations } from "../../src/engine/generated/acp-session-store-migrations.ts";
-import { AccumulatingOperationMetrics } from "../../src/engine/infra/operation-metrics.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { SqliteSessionLiveEventPosition } from "../../src/engine/session/history/live-event-positions.ts";
 import { CachedSessionEventStore } from "../../src/engine/session/history/session-event-store.ts";
@@ -38,6 +41,7 @@ import { UnretainedExternalContentStore } from "../support/unretained-external-c
 import { RecordingObserver } from "./acp-feature-fixture.ts";
 
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
+const recordedTarget = { harness: "codex", sessionId: "session-1" };
 
 function processExists(pid: number): boolean {
     if (process.platform === "linux") {
@@ -89,13 +93,18 @@ describe("ACP conversation sessions", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
-                new UnretainedExternalContentStore().put({ ...content, sessionId, signal }),
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
+                new UnretainedExternalContentStore().put({ ...content, target: sessionTarget, signal }),
             ),
             timer: systemTimer,
             maxProcesses: null,
+        });
+        const target = await manager.createNativeSession({
+            agent,
+            cwd: temporaryDirectory,
+            additionalDirectories: [],
+            signal: AbortSignal.timeout(10_000),
         });
         const prompt = (commandId: string) =>
             manager.runPrompt({
@@ -106,13 +115,13 @@ describe("ACP conversation sessions", () => {
                 images: [],
                 prompt: commandId,
                 resources: [],
-                sessionId: "late-cancel-conversation",
+                target,
                 signal: new AbortController().signal,
             });
 
         try {
             await expect(prompt("finished-command")).resolves.toMatchObject({ stopReason: "end_turn" });
-            await manager.cancelPrompt("late-cancel-conversation", "finished-command");
+            await manager.cancelPrompt(target, "finished-command");
 
             await expect(prompt("next-command")).resolves.toMatchObject({ stopReason: "end_turn" });
         } finally {
@@ -145,15 +154,14 @@ describe("ACP conversation sessions", () => {
             observer: new NullSessionObserver(),
             store,
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -164,6 +172,12 @@ describe("ACP conversation sessions", () => {
 
         try {
             vi.setSystemTime(new Date("2026-10-01T12:00:00.000Z"));
+            const target = await firstManager.createNativeSession({
+                agent,
+                cwd: process.cwd(),
+                additionalDirectories: [],
+                signal,
+            });
             await firstManager.runPrompt({
                 additionalDirectories: [],
                 agent,
@@ -172,10 +186,10 @@ describe("ACP conversation sessions", () => {
                 images: [],
                 prompt: "initial activity",
                 resources: [],
-                sessionId: "existing-conversation",
+                target,
                 signal,
             });
-            const initial = store.read("existing-conversation");
+            const initial = store.read(target);
             if (!(initial instanceof FoundStoredSession)) {
                 throw new Error("Expected the conversation to be stored");
             }
@@ -186,15 +200,14 @@ describe("ACP conversation sessions", () => {
                 observer: new NullSessionObserver(),
                 store,
                 adapters: acpAdapters,
-                sessionIdentity: "assigned",
                 onSessionStatusChanged: () => undefined,
-                contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+                contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                     new UnretainedExternalContentStore().put({
                         bytes: content.bytes,
                         kind: content.kind,
                         mediaType: content.mediaType,
                         name: content.name,
-                        sessionId,
+                        target: sessionTarget,
                         signal,
                     }),
                 ),
@@ -206,10 +219,10 @@ describe("ACP conversation sessions", () => {
                     additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
-                    sessionId: "existing-conversation",
+                    target,
                     signal,
                 });
-                const reopened = store.read("existing-conversation");
+                const reopened = store.read(target);
                 if (!(reopened instanceof FoundStoredSession)) {
                     throw new Error("Expected the reopened conversation to remain stored");
                 }
@@ -223,10 +236,10 @@ describe("ACP conversation sessions", () => {
                     images: [],
                     prompt: "new activity",
                     resources: [],
-                    sessionId: "existing-conversation",
+                    target,
                     signal,
                 });
-                const active = store.read("existing-conversation");
+                const active = store.read(target);
                 if (!(active instanceof FoundStoredSession)) {
                     throw new Error("Expected the active conversation to remain stored");
                 }
@@ -252,7 +265,7 @@ describe("ACP conversation sessions", () => {
         );
         try {
             const liveEvents = [
-                store.append("session-1", {
+                store.append(recordedTarget, {
                     payload: {
                         sessionUpdate: "tool_call",
                         title: "Run command",
@@ -262,7 +275,7 @@ describe("ACP conversation sessions", () => {
                 }),
             ];
             liveEvents.push(
-                store.append("session-1", {
+                store.append(recordedTarget, {
                     payload: {
                         rawOutput: { output: "first snapshot" },
                         sessionUpdate: "tool_call_update",
@@ -273,7 +286,7 @@ describe("ACP conversation sessions", () => {
                 }),
             );
             for (let remaining = 298; remaining > 0; remaining -= 1) {
-                store.append("session-1", {
+                store.append(recordedTarget, {
                     payload: {
                         content: { text: "history", type: "text" },
                         messageId: `message-${remaining}`,
@@ -285,7 +298,7 @@ describe("ACP conversation sessions", () => {
             await vi.runAllTimersAsync();
 
             liveEvents.push(
-                store.append("session-1", {
+                store.append(recordedTarget, {
                     payload: {
                         content: [{ content: { text: "final snapshot", type: "text" }, type: "content" }],
                         sessionUpdate: "tool_call_update",
@@ -296,7 +309,7 @@ describe("ACP conversation sessions", () => {
                 }),
             );
 
-            const page = store.page("session-1", 400, null);
+            const page = store.page(recordedTarget, 400, null);
             const toolEvents = page.events.filter(
                 (event) =>
                     event.type === "acp" &&
@@ -341,7 +354,7 @@ describe("ACP conversation sessions", () => {
             try {
                 for (let number = 1; number <= 3000; number += 1) {
                     if (number % 10 === 1) {
-                        store.append("session-1", {
+                        store.append(recordedTarget, {
                             payload: {
                                 sessionUpdate: "tool_call",
                                 title: "Run command",
@@ -349,7 +362,7 @@ describe("ACP conversation sessions", () => {
                             },
                             type: "acp",
                         });
-                        store.append("session-1", {
+                        store.append(recordedTarget, {
                             payload: {
                                 sessionUpdate: "tool_call_update",
                                 status: "completed",
@@ -358,7 +371,7 @@ describe("ACP conversation sessions", () => {
                             type: "acp",
                         });
                     } else {
-                        store.append("session-1", {
+                        store.append(recordedTarget, {
                             payload: {
                                 content: { text: "history", type: "text" },
                                 messageId: `message-${number}`,
@@ -370,9 +383,9 @@ describe("ACP conversation sessions", () => {
                 }
                 await vi.runAllTimersAsync();
 
-                expect(store.materializedEventCount("session-1")).toBeLessThanOrEqual(256);
+                expect(store.materializedEventCount(recordedTarget)).toBeLessThanOrEqual(256);
 
-                const page = store.page("session-1", 4000, null);
+                const page = store.page(recordedTarget, 4000, null);
                 const eventIds = page.events.map((event) => event.eventId);
                 expect(new Set(eventIds).size).toBe(page.events.length);
                 expect(page.events).toHaveLength(3000);
@@ -407,7 +420,7 @@ describe("ACP conversation sessions", () => {
         );
         try {
             for (let number = 1; number <= 2000; number += 1) {
-                first.append("session-1", {
+                first.append(recordedTarget, {
                     payload: {
                         messageId: `command-${number.toString()}`,
                         content: { text: "x".repeat(600), type: "text" },
@@ -428,7 +441,7 @@ describe("ACP conversation sessions", () => {
             new SqliteSessionLiveEventPosition(new LiveEventPositionTable(secondSessionDatabase)),
         );
         try {
-            second.append("session-1", {
+            second.append(recordedTarget, {
                 payload: { kind: "session.queue.changed" },
                 type: "lifecycle-metadata",
             });
@@ -462,12 +475,19 @@ describe("ACP conversation sessions", () => {
                 }) as const,
         );
         try {
-            store.materialize("conversation-a", sharedGeneration, history);
-            store.materialize("conversation-b", sharedGeneration, history);
+            store.materialize({ harness: "claude", sessionId: "same-native-session" }, sharedGeneration, history);
+            store.materialize({ harness: "codex", sessionId: "same-native-session" }, sharedGeneration, history);
             await vi.runAllTimersAsync();
 
             for (const conversation of ["conversation-a", "conversation-b"]) {
-                const page = store.page(conversation, 300, null);
+                const page = store.page(
+                    {
+                        harness: conversation === "conversation-a" ? "claude" : "codex",
+                        sessionId: "same-native-session",
+                    },
+                    300,
+                    null,
+                );
                 expect(page.events).toHaveLength(300);
                 expect(page.sessionGenerationId).toBe(sharedGeneration);
                 expect(page.events[0]).toMatchObject({ payload: { messageId: "command-1" } });
@@ -492,7 +512,7 @@ describe("ACP conversation sessions", () => {
         );
         try {
             for (let position = 1; position <= 300; position += 1) {
-                store.append("session-1", {
+                store.append(recordedTarget, {
                     payload: {
                         messageId: `command-${position.toString()}`,
                         content: { text: `prompt ${position.toString()}`, type: "text" },
@@ -503,7 +523,7 @@ describe("ACP conversation sessions", () => {
             }
             await vi.runAllTimersAsync();
 
-            const page = store.page("session-1", 200, null);
+            const page = store.page(recordedTarget, 200, null);
             expect(page.events).toHaveLength(200);
             expect(page.events[0]).toMatchObject({ payload: { messageId: "command-101" } });
             expect(page.events.at(-1)).toMatchObject({ payload: { messageId: "command-300" } });
@@ -526,7 +546,7 @@ describe("ACP conversation sessions", () => {
         );
         try {
             for (let eventNumber = 1; eventNumber <= 300; eventNumber += 1) {
-                store.append("session-1", {
+                store.append(recordedTarget, {
                     payload: {
                         messageId: `command-${eventNumber.toString()}`,
                         content: { text: `prompt ${eventNumber.toString()}`, type: "text" },
@@ -537,11 +557,11 @@ describe("ACP conversation sessions", () => {
             }
             await vi.runAllTimersAsync();
 
-            const newest = store.page("session-1", 150, null);
+            const newest = store.page(recordedTarget, 150, null);
             expect(newest.events[0]).toMatchObject({ payload: { messageId: "command-151" } });
             expect(newest.nextCursor).toBe(newest.events[0]?.eventId);
 
-            store.append("session-1", {
+            store.append(recordedTarget, {
                 payload: {
                     messageId: "command-301",
                     content: { text: "newer prompt", type: "text" },
@@ -550,7 +570,7 @@ describe("ACP conversation sessions", () => {
                 type: "acp",
             });
 
-            const older = store.page("session-1", 150, newest.nextCursor);
+            const older = store.page(recordedTarget, 150, newest.nextCursor);
             expect(older.events).toHaveLength(150);
             expect(older.events[0]).toMatchObject({ payload: { messageId: "command-1" } });
             expect(older.events.at(-1)).toMatchObject({ payload: { messageId: "command-150" } });
@@ -574,7 +594,7 @@ describe("ACP conversation sessions", () => {
         );
         let firstGeneration = "";
         try {
-            const requested = first.append("session-1", {
+            const requested = first.append(recordedTarget, {
                 payload: {
                     commandId: "command-1",
                     content: [{ text: "cached prompt", type: "text" }],
@@ -582,7 +602,7 @@ describe("ACP conversation sessions", () => {
                 },
                 type: "lifecycle-metadata",
             });
-            first.append("session-1", {
+            first.append(recordedTarget, {
                 payload: {
                     content: { text: "cached prompt", type: "text" },
                     messageId: requested.eventId,
@@ -590,7 +610,7 @@ describe("ACP conversation sessions", () => {
                 },
                 type: "acp",
             });
-            first.append("session-1", {
+            first.append(recordedTarget, {
                 payload: {
                     content: { text: "cached update", type: "text" },
                     messageId: "message-1",
@@ -598,7 +618,7 @@ describe("ACP conversation sessions", () => {
                 },
                 type: "acp",
             });
-            const page = first.page("session-1", 10, null);
+            const page = first.page(recordedTarget, 10, null);
             firstGeneration = page.sessionGenerationId;
             expect(
                 page.events.map(
@@ -606,7 +626,7 @@ describe("ACP conversation sessions", () => {
                         eventId: _eventId,
                         recordedAt: _recordedAt,
                         sessionGenerationId: _generation,
-                        sessionId: _sessionId,
+                        target: _target,
                         ...event
                     }) => event,
                 ),
@@ -647,7 +667,7 @@ describe("ACP conversation sessions", () => {
             new SqliteSessionLiveEventPosition(new LiveEventPositionTable(secondSessionDatabase)),
         );
         try {
-            const page = second.page("session-1", 10, null);
+            const page = second.page(recordedTarget, 10, null);
             expect(page.sessionGenerationId).not.toBe(firstGeneration);
             expect(page.events).toEqual([]);
         } finally {
@@ -688,7 +708,6 @@ describe("ACP conversation sessions", () => {
     it("Given a managed Claude Code conversation, When the Runtime restarts, Then its Session remains discoverable", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-session-store-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
-        const sessionId = `chat_${"a".repeat(64)}`;
         const agent = new AcpAgentDefinition(
             "claude",
             "Claude Code",
@@ -710,20 +729,25 @@ describe("ACP conversation sessions", () => {
             observer: new NullSessionObserver(),
             store: firstStore,
             adapters: acpAdapters,
-            sessionIdentity: "native",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
             timer: systemTimer,
             maxProcesses: null,
+        });
+        const sessionTarget = await firstRuntime.createNativeSession({
+            agent,
+            cwd: process.cwd(),
+            additionalDirectories: [],
+            signal,
         });
 
         try {
@@ -735,7 +759,7 @@ describe("ACP conversation sessions", () => {
                 images: [],
                 prompt: "Remember this conversation",
                 resources: [],
-                sessionId,
+                target: sessionTarget,
                 signal,
             });
         } finally {
@@ -748,15 +772,14 @@ describe("ACP conversation sessions", () => {
             observer: new NullSessionObserver(),
             store: restartedStore,
             adapters: acpAdapters,
-            sessionIdentity: "native",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -764,8 +787,8 @@ describe("ACP conversation sessions", () => {
             maxProcesses: null,
         });
         try {
-            expect(restartedRuntime.findSessions([sessionId])).toEqual([
-                expect.objectContaining({ agentId: "claude", prompted: true, sessionId }),
+            expect(restartedRuntime.findSessions([sessionTarget])).toEqual([
+                expect.objectContaining({ agentId: "claude", prompted: true, target: sessionTarget }),
             ]);
         } finally {
             await restartedRuntime.close();
@@ -806,15 +829,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 observer: new NullSessionObserver(),
                 store: new MemorySessionStore(),
                 adapters: acpAdapters,
-                sessionIdentity: "assigned",
                 onSessionStatusChanged: () => undefined,
-                contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+                contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                     new UnretainedExternalContentStore().put({
                         bytes: content.bytes,
                         kind: content.kind,
                         mediaType: content.mediaType,
                         name: content.name,
-                        sessionId,
+                        target: sessionTarget,
                         signal,
                     }),
                 ),
@@ -848,6 +870,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
             manager.setObserver(observer);
 
             try {
+                const target = await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                });
                 const hangingTurn = manager.runPrompt({
                     additionalDirectories: [],
                     agent,
@@ -856,7 +884,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     images: [],
                     prompt: "hold after first delta",
                     resources: [],
-                    sessionId: "pi-hanging-conversation",
+                    target,
                     signal: new AbortController().signal,
                 });
                 let settled = false;
@@ -879,7 +907,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 expect(settled).toBe(false);
                 expect(processExists(piPid)).toBe(true);
 
-                await manager.cancelPrompt("pi-hanging-conversation", "pi-hanging-command");
+                await manager.cancelPrompt(target, "pi-hanging-command");
 
                 await expect(hangingTurn).resolves.toEqual({ stopReason: "cancelled" });
                 expect(processExists(piPid)).toBe(true);
@@ -892,7 +920,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     images: [],
                     prompt: "continue in the retained process",
                     resources: [],
-                    sessionId: "pi-hanging-conversation",
+                    target,
                     signal: new AbortController().signal,
                 });
                 expect(observer.agentText()).toBe("Pi turn 2: continue in the retained process");
@@ -905,20 +933,19 @@ child.once("exit", (code) => process.exit(code ?? 84));
         },
     );
 
-    it("Given a prepared conversation has no turns, When its agent selection changes, Then the same Morty session is rebound before the first prompt", async () => {
+    it("Given a harness owns an empty conversation, When another harness is selected, Then the old pair cannot be rebound and the new harness creates its own conversation", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -957,32 +984,27 @@ child.once("exit", (code) => process.exit(code ?? 84));
         );
 
         try {
-            await manager.prepareSession({
+            const target = await manager.createNativeSession({
                 additionalDirectories: [],
                 agent: codex,
                 cwd: process.cwd(),
-                sessionId: "rebound-conversation",
                 signal: new AbortController().signal,
             });
-            const metrics = new AccumulatingOperationMetrics();
             await expect(
-                manager.prepareSession(
-                    {
-                        additionalDirectories: [],
-                        agent: claude,
-                        cwd: process.cwd(),
-                        sessionId: "rebound-conversation",
-                        signal: new AbortController().signal,
-                    },
-                    metrics,
-                ),
-            ).resolves.toMatchObject({ restored: false });
-            expect(metrics.snapshot()).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ name: "runtime-replacement-close" }),
-                    expect.objectContaining({ name: "session-new" }),
-                ]),
-            );
+                manager.prepareSession({
+                    additionalDirectories: [],
+                    agent: claude,
+                    cwd: process.cwd(),
+                    target,
+                    signal: new AbortController().signal,
+                }),
+            ).rejects.toMatchObject({ code: "session_identity_mismatch" });
+            const selected = await manager.createNativeSession({
+                agent: claude,
+                cwd: process.cwd(),
+                additionalDirectories: [],
+                signal: AbortSignal.timeout(10_000),
+            });
 
             const observer = new RecordingObserver();
             manager.setObserver(observer);
@@ -994,7 +1016,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 images: [],
                 prompt: "selected agent",
                 resources: [],
-                sessionId: "rebound-conversation",
+                target: selected,
                 signal: new AbortController().signal,
             });
             expect(observer.agentText()).toBe("Claude Code turn 1: selected agent");
@@ -1009,22 +1031,21 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: (event) => statuses.push(event),
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
             timer: systemTimer,
             maxProcesses: null,
         });
-        const preparation = {
+        const preparation = await manager.createSession({
             additionalDirectories: [],
             agent: new AcpAgentDefinition(
                 "codex",
@@ -1042,13 +1063,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     ),
             ),
             cwd: process.cwd(),
-            sessionId: "closed-conversation",
             signal: new AbortController().signal,
-        };
+        });
 
         try {
             await manager.prepareExecutionSession(preparation);
-            await manager.closeSession(preparation.sessionId, preparation.signal);
+            await manager.closeSession(preparation.target, preparation.signal);
 
             await expect(
                 manager.runPrompt({
@@ -1071,15 +1091,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1111,7 +1130,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 images: [],
                 prompt: "interleave untagged progress",
                 resources: [],
-                sessionId: "controlled-acp-interleaved-conversation",
+                target: await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
         } finally {
@@ -1160,15 +1184,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store,
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1192,6 +1215,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
             { MORTY_FAKE_ACP_STATE_DIRECTORY: temporaryDirectory },
         );
         const signal = new AbortController().signal;
+        const activeTarget = await manager.createNativeSession({
+            agent,
+            cwd: temporaryDirectory,
+            additionalDirectories: [],
+            signal,
+        });
         const activeTurn = manager.runPrompt({
             additionalDirectories: [],
             agent,
@@ -1200,7 +1229,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             images: [],
             prompt: "wait until cancelled",
             resources: [],
-            sessionId: "conversation-1",
+            target: activeTarget,
             signal,
         });
         const activityStarted = observer.waitForEvent(() =>
@@ -1208,45 +1237,57 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 ({ event }) => event.type === "acp" && event.payload.sessionUpdate === "agent_thought_chunk",
             ),
         );
-        const runTurn = async (sessionId: string): Promise<void> => {
+        const runTurn = async (): Promise<NativeSessionTarget> => {
+            const sessionTarget = await manager.createNativeSession({
+                agent,
+                cwd: temporaryDirectory,
+                additionalDirectories: [],
+                signal,
+            });
             await manager.runPrompt({
                 additionalDirectories: [],
                 agent,
-                commandId: `${sessionId}-turn`,
+                commandId: crypto.randomUUID(),
                 cwd: temporaryDirectory,
                 images: [],
                 prompt: "first",
                 resources: [],
-                sessionId,
+                target: sessionTarget,
                 signal,
             });
+            return sessionTarget;
         };
-        const writerName = (sessionId: string): string => {
-            const stored = store.read(sessionId);
+        const writerName = (sessionTarget: NativeSessionTarget): string => {
+            const stored = store.read(sessionTarget);
             if (!(stored instanceof FoundStoredSession)) {
-                throw new Error(`Expected ${sessionId} to have a persisted native session`);
+                throw new Error(`Expected ${sessionTarget} to have a persisted native session`);
             }
-            return `${encodeURIComponent(stored.session.nativeSessionId)}.writer`;
+            return `${encodeURIComponent(stored.session.sessionId)}.writer`;
         };
 
         try {
             await activityStarted;
+            const idleTargets: NativeSessionTarget[] = [];
             for (let index = 2; index <= 10; index += 1) {
-                await runTurn(`conversation-${index.toString()}`);
+                idleTargets.push(await runTurn());
             }
-            const activeWriter = writerName("conversation-1");
-            const oldestIdleWriter = writerName("conversation-2");
+            const activeWriter = writerName(activeTarget);
+            const oldest = idleTargets[0];
+            if (oldest === undefined) {
+                throw new Error("Expected the oldest idle conversation");
+            }
+            const oldestIdleWriter = writerName(oldest);
 
-            await runTurn("conversation-11");
+            await runTurn();
 
             const activeWriters = (await readdir(temporaryDirectory)).filter((name) => name.endsWith(".writer"));
             expect(activeWriters).toHaveLength(10);
             expect(activeWriters).toContain(activeWriter);
             expect(activeWriters).not.toContain(oldestIdleWriter);
-            await manager.cancelPrompt("conversation-1", "conversation-1-active");
+            await manager.cancelPrompt(activeTarget, "conversation-1-active");
             await expect(activeTurn).resolves.toEqual({ stopReason: "cancelled" });
         } finally {
-            await manager.cancelPrompt("conversation-1", "conversation-1-active");
+            await manager.cancelPrompt(activeTarget, "conversation-1-active");
             await activeTurn.catch(() => undefined);
             await manager.close();
             await rm(temporaryDirectory, { force: true, recursive: true });
@@ -1258,15 +1299,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1297,11 +1337,10 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             await expect(
-                manager.prepareSession({
+                manager.createNativeSession({
                     additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
-                    sessionId: "controlled-acp-wrong-session-notification",
                     signal: new AbortController().signal,
                 }),
             ).rejects.toMatchObject({ code: "invalid_agent_session" });
@@ -1315,15 +1354,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1348,11 +1386,10 @@ child.once("exit", (code) => process.exit(code ?? 84));
 
         try {
             await expect(
-                manager.prepareSession({
+                manager.createNativeSession({
                     additionalDirectories: [],
                     agent,
                     cwd: process.cwd(),
-                    sessionId: "authentication-required-session",
                     signal: new AbortController().signal,
                 }),
             ).rejects.toMatchObject({ code: "authentication_required" });
@@ -1366,15 +1403,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1407,7 +1443,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     images: [],
                     prompt: "fail with model unavailable",
                     resources: [],
-                    sessionId: "model-unavailable-session",
+                    target: await manager.createNativeSession({
+                        agent,
+                        cwd: process.cwd(),
+                        additionalDirectories: [],
+                        signal: AbortSignal.timeout(10_000),
+                    }),
                     signal: new AbortController().signal,
                 }),
             ).rejects.toMatchObject({
@@ -1424,15 +1465,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1465,7 +1505,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     images: [],
                     prompt: "fail with invalid prompt detail",
                     resources: [],
-                    sessionId: "invalid-prompt-session",
+                    target: await manager.createNativeSession({
+                        agent,
+                        cwd: process.cwd(),
+                        additionalDirectories: [],
+                        signal: AbortSignal.timeout(10_000),
+                    }),
                     signal: new AbortController().signal,
                 }),
             ).rejects.toMatchObject({
@@ -1484,15 +1529,14 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1548,6 +1592,12 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         let childPid = 0;
 
         try {
+            const target = await manager.createNativeSession({
+                agent,
+                cwd: temporaryDirectory,
+                additionalDirectories: [],
+                signal: AbortSignal.timeout(10_000),
+            });
             const cancelledTurn = manager.runPrompt({
                 additionalDirectories: [],
                 agent,
@@ -1556,14 +1606,14 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                 images: [],
                 prompt: "wait until cancelled",
                 resources: [],
-                sessionId: "cancelled-tree-conversation",
+                target,
                 signal: new AbortController().signal,
             });
             await observer.turnStarted();
             childPid = Number.parseInt(await readFile(childPidPath, "utf8"), 10);
             expect(Number.isSafeInteger(childPid)).toBe(true);
 
-            await manager.cancelPrompt("cancelled-tree-conversation", "command-cancelled-tree");
+            await manager.cancelPrompt(target, "command-cancelled-tree");
 
             await expect(cancelledTurn).resolves.toEqual({
                 stopReason: "cancelled",
@@ -1578,7 +1628,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                 images: [],
                 prompt: "continue",
                 resources: [],
-                sessionId: "cancelled-tree-conversation",
+                target,
                 signal: new AbortController().signal,
             });
             expect(observer.agentText()).toBe("Codex turn 2: continue");
@@ -1603,15 +1653,14 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1650,6 +1699,12 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         );
 
         try {
+            const target = await manager.createNativeSession({
+                agent: codex,
+                cwd: process.cwd(),
+                additionalDirectories: [],
+                signal: AbortSignal.timeout(10_000),
+            });
             await manager.runPrompt({
                 additionalDirectories: [],
                 agent: codex,
@@ -1658,7 +1713,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                 images: [],
                 prompt: "first",
                 resources: [],
-                sessionId: "locked-conversation",
+                target,
                 signal: new AbortController().signal,
             });
             await expect(
@@ -1670,10 +1725,10 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                     images: [],
                     prompt: "second",
                     resources: [],
-                    sessionId: "locked-conversation",
+                    target,
                     signal: new AbortController().signal,
                 }),
-            ).rejects.toThrow("agent or workspace cannot change");
+            ).rejects.toMatchObject({ code: "session_identity_mismatch" });
         } finally {
             await manager.close();
         }
@@ -1684,15 +1739,14 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -1716,11 +1770,10 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         );
         const signal = new AbortController().signal;
 
-        await manager.prepareSession({
+        const target = await manager.createNativeSession({
             additionalDirectories: [],
             agent,
             cwd: process.cwd(),
-            sessionId: "exited-conversation",
             signal,
         });
         await expect(
@@ -1731,7 +1784,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                 configId: "model",
                 cwd: process.cwd(),
                 requestId: "configure-exited-session",
-                sessionId: "exited-conversation",
+                target,
                 signal,
                 value: "test-large",
                 valueType: "select",

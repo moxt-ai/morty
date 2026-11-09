@@ -808,9 +808,7 @@ function MortySessionPaneBody({
     const timeline = sessionProjectionTimeline(model.projection);
     const rename = useStore(pane.rename);
     const titleEdit = sessionTitleEdit(composer.titleDraft, rename.rename);
-    const title = useStore(workspace.titles, (state) =>
-        sessionTitle(state.titles, pane.session.result.ready.sessionId),
-    );
+    const title = useStore(workspace.titles, (state) => sessionTitle(state.titles, pane.session.result.ready.target));
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionModel = useStore(pane.interactions);
     const settingsModel = useStore(pane.settings);

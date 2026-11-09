@@ -9,6 +9,7 @@ import {
     sessionPermissionRequestedEventSchema,
     sessionPermissionResolvedEventSchema,
 } from "../interactions/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 const MAX_EVENT_COUNT = 10_000;
 const MAX_COLLECTION_SIZE = 1_000;
@@ -501,7 +502,7 @@ const sharedSessionEventFields = {
     mortyMetadata: z.object(mortyMetadataFields).readonly().optional(),
     recordedAt: z.iso.datetime({ offset: true }),
     sessionGenerationId: identifier,
-    sessionId: identifier,
+    target: nativeSessionTargetSchema,
 };
 const sessionLiveEventFields = { ...sharedSessionEventFields, position: positionSchema };
 /**

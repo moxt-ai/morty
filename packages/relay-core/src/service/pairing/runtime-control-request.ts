@@ -39,6 +39,8 @@ import {
     type SessionConfigReadResult,
     type SessionConfigUpdatedEvent,
     type SessionConfigureCommand,
+    type SessionCreateCommand,
+    type SessionCreationReadCommand,
     type SessionElicitationRespondCommand,
     type SessionHistoryPageLoad,
     type SessionHistoryWirePageLoaded,
@@ -82,6 +84,8 @@ export type RuntimeControlCommand =
     | RuntimePingCommand
     | NativeSessionRequest
     | SessionPrepareCommand
+    | SessionCreateCommand
+    | SessionCreationReadCommand
     | SessionConfigureCommand
     | SessionConfigReadCommand
     | SessionRenameCommand
@@ -183,7 +187,7 @@ export async function requestRuntimeContentWrite(
                         encodeServiceToDaemonMessage({
                             kind: "content.commit",
                             requestId: command.requestId,
-                            sessionId: command.sessionId,
+                            target: command.target,
                         }),
                     );
                 } finally {
@@ -515,7 +519,7 @@ export async function requestRuntimeControl(
                         encodeServiceToDaemonMessage({
                             kind: "native.session.cancel",
                             requestId: command.requestId,
-                            sessionId: command.sessionId,
+                            discoveryId: command.discoveryId,
                         }),
                     );
                 }

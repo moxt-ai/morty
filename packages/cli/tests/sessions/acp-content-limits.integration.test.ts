@@ -18,15 +18,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -42,7 +41,12 @@ describe("acp content limits", () => {
                 images: [],
                 prompt: "generate inline image",
                 resources: [],
-                sessionId: "image-session",
+                target: await manager.createNativeSession({
+                    agent: fakeAgent(),
+                    cwd: process.cwd(),
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -75,15 +79,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -91,6 +94,12 @@ describe("acp content limits", () => {
             maxProcesses: null,
         });
         try {
+            const target = await manager.createNativeSession({
+                agent: fakeAgent(),
+                cwd: process.cwd(),
+                additionalDirectories: [],
+                signal: AbortSignal.timeout(10_000),
+            });
             for (const commandId of ["first-image-turn", "second-image-turn"]) {
                 await manager.runPrompt({
                     additionalDirectories: [],
@@ -100,7 +109,7 @@ describe("acp content limits", () => {
                     images: [],
                     prompt: "generate inline image with reused tool id",
                     resources: [],
-                    sessionId: "reused-image-session",
+                    target,
                     signal: new AbortController().signal,
                 });
             }
@@ -127,15 +136,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -151,7 +159,12 @@ describe("acp content limits", () => {
                 images: [],
                 prompt: "return oversized tool output",
                 resources: [],
-                sessionId: "oversized-tool-output-session",
+                target: await manager.createNativeSession({
+                    agent: fakeAgent(),
+                    cwd: process.cwd(),
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -170,15 +183,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -194,7 +206,12 @@ describe("acp content limits", () => {
                 images: [],
                 prompt: "stream oversized reasoning",
                 resources: [],
-                sessionId: "oversized-reasoning-session",
+                target: await manager.createNativeSession({
+                    agent: fakeAgent(),
+                    cwd: process.cwd(),
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
             const reasoning = observer
@@ -233,15 +250,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -257,7 +273,12 @@ describe("acp content limits", () => {
                 images: [],
                 prompt: "generate markdown image",
                 resources: [],
-                sessionId: "markdown-image-session",
+                target: await manager.createNativeSession({
+                    agent: fakeAgent(),
+                    cwd: directory,
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -278,15 +299,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -302,7 +322,12 @@ describe("acp content limits", () => {
                 images: [],
                 prompt: "generate markdown image",
                 resources: [],
-                sessionId: "codex-generated-image-session",
+                target: await manager.createNativeSession({
+                    agent: fakeAgent([], { FAKE_ACP_IMAGE_DIRECTORY: generatedImages }),
+                    cwd: workspace,
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -325,15 +350,14 @@ describe("acp content limits", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -349,7 +373,12 @@ describe("acp content limits", () => {
                 images: [],
                 prompt: "generate media artifacts",
                 resources: [],
-                sessionId: "media-session",
+                target: await manager.createNativeSession({
+                    agent: fakeAgent(),
+                    cwd: directory,
+                    additionalDirectories: [],
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 

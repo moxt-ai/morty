@@ -224,7 +224,7 @@ test("Given an old Claude transcript contains large attachments and ambiguous co
                 eventLimit: 50,
                 kind: "session.preview-history.page.load",
                 requestId: "claude-attachment-preview",
-                sessionId: nativeId,
+                target: { harness: "claude", sessionId: nativeId },
             }),
         );
         for (;;) {

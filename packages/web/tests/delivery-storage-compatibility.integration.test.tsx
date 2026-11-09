@@ -5,7 +5,7 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
-test("Given legacy drafts beside a versioned request journal, When the browser reloads, Then drafts survive and a completed request is never sent again", {
+test("Given a Machine-scoped draft beside retired scalar drafts and a completed request journal, When the browser reloads, Then only the current draft survives and the completed request is never sent again", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -25,8 +25,9 @@ test("Given legacy drafts beside a versioned request journal, When the browser r
         throw new Error("Expected the selected Session URL");
     }
     const { idempotencyKey, ...request } = JSON.parse(network.submissions.at(-1) ?? "{}");
-    // Independently retained storage contracts: released Web stored drafts as raw strings and ignored other keys.
-    // The additive journal is a frozen request, so neither reader may reinterpret it as a fresh draft.
+    await app.user.type(app.elementByTestId(dataTestId.messageComposer), "Current Machine draft");
+    // The authorized pre-launch reset retires scalar keys. Keep them as an independent old-storage fixture:
+    // they must neither replace this Machine's current draft nor replay an earlier completed request.
     window.sessionStorage.setItem(`morty:message-draft:session:v1:${encodeURIComponent(sessionId)}`, "Legacy draft");
     window.sessionStorage.setItem(
         `morty:unsent-message:session:v1:${encodeURIComponent(sessionId)}`,
@@ -44,13 +45,15 @@ test("Given legacy drafts beside a versioned request journal, When the browser r
         ).toBeTruthy();
         expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
         const element = restored.elementByTestId(dataTestId.messageComposer);
-        expect(element).toHaveProperty("value", "Legacy unsent message\n\nLegacy draft");
+        expect(element).toHaveProperty("value", "Current Machine draft");
         return element;
     });
     expect(network.submissions).toHaveLength(submissions);
     await restored.user.click(getByRole(document.body, "button", { name: "Send message" }));
     await restored.waitForView(() => {
-        expect(restored.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Legacy draft");
+        expect(restored.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
+            "Current Machine draft",
+        );
         expect(composer).toHaveProperty("value", "");
     });
     expect(network.submissions).toHaveLength(submissions + 1);

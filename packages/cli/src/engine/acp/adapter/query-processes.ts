@@ -19,7 +19,7 @@ import type { AcpSessionConnector } from "./session-events.ts";
 export class AgentQueryProcesses {
     readonly #eventPreviewsBySession = new Map<
         NativeSessionPreviewKey,
-        { readonly nativeSessionId: string; readonly store: MemorySessionEventStore }
+        { readonly sessionId: string; readonly store: MemorySessionEventStore }
     >();
     readonly #processesByAgent = new Map<
         AcpAgentDefinition,
@@ -95,10 +95,13 @@ export class AgentQueryProcesses {
         const scoped = { ...query, agent };
         let readers = this.#processesByAgent.get(agent);
         if (readers === undefined) {
-            readers = new RetainedAgentProcesses<AcpQuerySession, NativeSessionQueryKey>({
-                touch: this.#processes.touch,
-                changed: this.#processes.notifyChanged,
-            });
+            readers = new RetainedAgentProcesses<AcpQuerySession, NativeSessionQueryKey>(
+                {
+                    touch: this.#processes.touch,
+                    changed: this.#processes.notifyChanged,
+                },
+                (key) => key,
+            );
             this.#processesByAgent.set(agent, readers);
         }
         const current = readers;
@@ -123,23 +126,23 @@ export class AgentQueryProcesses {
     ): Promise<SessionEventPage> => {
         query.signal.throwIfAborted();
         const scoped = { ...query, agent: this.#agent };
-        const { nativeSessionId, eventLimit, cursor } = request;
-        const key = nativeSessionPreviewKey(nativeSessionQueryKey(scoped), nativeSessionId);
+        const { sessionId, eventLimit, cursor } = request;
+        const key = nativeSessionPreviewKey(nativeSessionQueryKey(scoped), sessionId);
         if (cursor !== null) {
             const preview = this.#eventPreviewsBySession.get(key);
-            if (preview === undefined || preview.nativeSessionId !== nativeSessionId) {
+            if (preview === undefined || preview.sessionId !== sessionId) {
                 throw new Error("The native event cursor is invalid");
             }
-            return preview.store.page(nativeSessionId, eventLimit, cursor);
+            return preview.store.page({ harness: scoped.agent.id, sessionId }, eventLimit, cursor);
         }
         const store = new MemorySessionEventStore();
         this.#eventPreviewsBySession.get(key)?.store.close();
-        this.#eventPreviewsBySession.set(key, { nativeSessionId, store });
+        this.#eventPreviewsBySession.set(key, { sessionId, store });
         try {
             return await this.#processes.runTransient(
                 query.signal,
                 () => AcpQuerySession.start(scoped, store, this.#connector),
-                (runtime) => runtime.previewEvents(nativeSessionId, eventLimit, query.signal),
+                (runtime) => runtime.previewEvents(sessionId, eventLimit, query.signal),
                 (runtime) => runtime.closeProcess(),
             );
         } catch (error) {

@@ -12,19 +12,21 @@ import {
     decodeSessionHistoryPageLoaded,
     decodeSessionInfoUpdatedEvent,
     decodeSessionPermissionRequestedEvent,
+    decodeSessionReadyEvent,
     decodeSessionRestoredEvent,
     decodeSessionStatusChangedEvent,
     decodeSessionsQueriedEvent,
     encodeNativeSessionRequest,
+    encodeSessionCreateCommand,
     encodeSessionElicitationRespondCommand,
     encodeSessionHistoryPageLoad,
     encodeSessionPermissionRespondCommand,
-    encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
     encodeSessionQueryCommand,
     encodeSessionRestoreCommand,
     MORTY_API_PREFIX,
     NATIVE_SESSION_RESULT_KIND,
+    type NativeSessionTarget,
     SESSION_ELICITATION_REQUESTED_KIND,
     SESSION_ELICITATION_RESOLVED_KIND,
     SESSION_EVENT_KIND,
@@ -90,7 +92,7 @@ class Messages {
     };
 }
 
-test("Given an Agent was inspected transiently, When its first Turn materializes and resolves interactions, Then readiness is recorded and resolved interactions do not appear in its snapshot", async () => {
+test("Given a newly created native Session, When its first Turn resolves interactions, Then readiness is recorded and resolved interactions do not appear in its snapshot", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-interaction-snapshot-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
@@ -137,20 +139,19 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
         const socket = await connected.promise;
         const messages = new Messages(socket);
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "interaction_snapshot";
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "inspect_request",
-                sessionId,
-                transient: true,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        await messages.nextKind(SESSION_READY_KIND);
+        const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         const submittedAt = Date.now();
         socket.send(
             encodeSessionPromptCommand({
@@ -163,12 +164,12 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "exercise ACP controls",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
             kind: SESSION_STATUS_CHANGED_KIND,
-            sessionId,
+            target: sessionTarget,
             status: { commandId: "interaction_turn", kind: "working" },
         });
         const snapshot = async (requestId: string) => {
@@ -181,8 +182,8 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                     directoryId: "default",
                     kind: "native.session.request",
                     requestId,
-                    sessionId,
-                    targetSessionId: sessionId,
+                    discoveryId: crypto.randomUUID(),
+                    target: sessionTarget,
                 }),
             );
             return decodeNativeSessionResult(await messages.nextKind(NATIVE_SESSION_RESULT_KIND));
@@ -192,7 +193,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
             if (information.updatedAt === "2026-09-04T00:01:00.000Z") {
                 expect(information).toEqual({
                     kind: SESSION_INFO_UPDATED_KIND,
-                    sessionId,
+                    target: sessionTarget,
                     title: "ACP feature session",
                     updatedAt: "2026-09-04T00:01:00.000Z",
                 });
@@ -225,7 +226,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                 requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         await messages.nextKind(SESSION_PERMISSION_RESOLVED_KIND);
@@ -248,7 +249,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                 interactionId: elicitation.interactionId,
                 kind: "session.elicitation.respond",
                 requestId: crypto.randomUUID(),
-                sessionId,
+                target: sessionTarget,
             }),
         );
         await messages.nextKind(SESSION_ELICITATION_RESOLVED_KIND);
@@ -259,7 +260,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
         await writeFile(join(stateDirectory, "agent", "resume-after-elicitation"), "");
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
             kind: SESSION_STATUS_CHANGED_KIND,
-            sessionId,
+            target: sessionTarget,
             status: { kind: "idle" },
         });
         await messages.nextKind("prompt.completed");
@@ -319,20 +320,19 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         const socket = await connected.promise;
         const messages = new Messages(socket);
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "announced_permission";
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "prepare_request",
-                sessionId,
-                transient: true,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        await messages.nextKind(SESSION_READY_KIND);
+        const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
                 additionalDirectoryIds: [],
@@ -344,7 +344,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "request permission for an announced tool call",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         const permission = decodeSessionPermissionRequestedEvent(
@@ -367,13 +367,13 @@ test("Given an Agent announced a tool call with its input, When it requests perm
                 requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         // The Agent finishes the Turn only after it receives the permission response.
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
             kind: SESSION_STATUS_CHANGED_KIND,
-            sessionId,
+            target: sessionTarget,
             status: { kind: "idle" },
         });
     } finally {
@@ -432,20 +432,19 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         const socket = await connected.promise;
         const messages = new Messages(socket);
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "null_input_permission";
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "prepare_request",
-                sessionId,
-                transient: true,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        await messages.nextKind(SESSION_READY_KIND);
+        const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
                 additionalDirectoryIds: [],
@@ -457,7 +456,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "request permission after a null rawInput update",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         const permission = decodeSessionPermissionRequestedEvent(
@@ -480,13 +479,13 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
                 requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         // The Agent finishes the Turn only after it receives the permission response.
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
             kind: SESSION_STATUS_CHANGED_KIND,
-            sessionId,
+            target: sessionTarget,
             status: { kind: "idle" },
         });
     } finally {
@@ -545,20 +544,19 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         const socket = await connected.promise;
         const messages = new Messages(socket);
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "orphan_update_permission";
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "prepare_request",
-                sessionId,
-                transient: true,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        await messages.nextKind(SESSION_READY_KIND);
+        const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
                 additionalDirectoryIds: [],
@@ -570,7 +568,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "request permission for an orphan update announcement",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         const permission = decodeSessionPermissionRequestedEvent(
@@ -593,13 +591,13 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
                 requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         // The Agent finishes the Turn only after it receives the permission response.
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
             kind: SESSION_STATUS_CHANGED_KIND,
-            sessionId,
+            target: sessionTarget,
             status: { kind: "idle" },
         });
     } finally {
@@ -658,25 +656,25 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
         const socket = await connected.promise;
         const messages = new Messages(socket);
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "prepared_session";
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "prepare_request",
-                sessionId,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        await messages.nextKind(SESSION_READY_KIND);
+        const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
 
         socket.send(
             encodeSessionQueryCommand({
                 kind: "session.query",
                 requestId: "query_request",
-                sessionIds: [sessionId],
+                targets: [sessionTarget],
             }),
         );
 
@@ -685,7 +683,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
                 {
                     agentId: "codex",
                     prompted: false,
-                    sessionId,
+                    target: sessionTarget,
                     status: { kind: "idle" },
                     title: "Untitled session",
                 },
@@ -749,23 +747,24 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
         return { cancellation, completion, socket: await connected.promise };
     };
     try {
-        const sessionId = "restored_session";
+        let sessionTarget: NativeSessionTarget;
         const initial = await startDaemon();
         try {
             const messages = new Messages(initial.socket);
             initial.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
             initial.socket.send(
-                encodeSessionPrepareCommand({
+                encodeSessionCreateCommand({
                     additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    kind: "session.prepare",
+                    kind: "session.create",
                     requestId: "prepare_request",
-                    sessionId,
+                    operationId: crypto.randomUUID(),
+                    configurations: [],
                 }),
             );
-            await messages.nextKind(SESSION_READY_KIND);
+            sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
             initial.socket.send(
                 encodeSessionPromptCommand({
                     additionalDirectoryIds: [],
@@ -777,7 +776,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Persist this Session",
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             await messages.nextKind("prompt.completed");
@@ -791,10 +790,21 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             const messages = new Messages(restored.socket);
             restored.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
             restored.socket.send(
+                encodeSessionQueryCommand({
+                    kind: "session.query",
+                    requestId: "identify_restore",
+                    targets: [sessionTarget],
+                }),
+            );
+            const [entry] = decodeSessionsQueriedEvent(await messages.nextKind("session.queried")).entries;
+            if (entry === undefined) {
+                throw new Error("Missing persisted native identity");
+            }
+            restored.socket.send(
                 encodeSessionRestoreCommand({
                     kind: "session.restore",
                     requestId: "restore_request",
-                    sessionId,
+                    target: { harness: entry.agentId, sessionId: entry.sessionId },
                 }),
             );
 
@@ -803,7 +813,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
                 entry: {
                     agentId: "codex",
                     prompted: true,
-                    sessionId,
+                    target: sessionTarget,
                     status: { kind: "idle" },
                     title: "Persist this Session",
                 },
@@ -813,7 +823,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
                     kind: SESSION_READY_KIND,
                     requestId: "restore_request",
                     restored: true,
-                    sessionId,
+                    target: sessionTarget,
                 },
                 requestId: "restore_request",
             });
@@ -826,7 +836,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
                     eventLimit: 200,
                     kind: "session.live-history.v2.page.load",
                     requestId: "history_request",
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             const history = decodeSessionHistoryPageLoaded(
@@ -914,7 +924,19 @@ test("Given queued prompts from the running Agent identity and another one, When
         const socket = await connected.promise;
         const messages = new Messages(socket);
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "queued_identity";
+        socket.send(
+            encodeSessionCreateCommand({
+                kind: "session.create",
+                requestId: crypto.randomUUID(),
+                operationId: crypto.randomUUID(),
+                agentId: "claude",
+                bindingId: config.bindingId,
+                directoryId: "default",
+                additionalDirectoryIds: [],
+                configurations: [],
+            }),
+        );
+        const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
                 additionalDirectoryIds: [],
@@ -926,7 +948,7 @@ test("Given queued prompts from the running Agent identity and another one, When
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "exercise ACP controls",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toMatchObject({
@@ -944,7 +966,7 @@ test("Given queued prompts from the running Agent identity and another one, When
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "queued for another agent",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         // The running identity queues a prompt with a file, which a client needs to restore it for editing.
@@ -967,7 +989,7 @@ test("Given queued prompts from the running Agent identity and another one, When
                 attachments: [report],
                 kind: "session.prompt",
                 prompt: "summarize the attached report",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         // The snapshot for the Claude identity must not report the Codex queued prompt.
@@ -980,8 +1002,8 @@ test("Given queued prompts from the running Agent identity and another one, When
                 directoryId: "default",
                 kind: "native.session.request",
                 requestId: "claude_snapshot",
-                sessionId,
-                targetSessionId: sessionId,
+                discoveryId: crypto.randomUUID(),
+                target: sessionTarget,
             }),
         );
         const result = decodeNativeSessionResult(await messages.nextKind(NATIVE_SESSION_RESULT_KIND));

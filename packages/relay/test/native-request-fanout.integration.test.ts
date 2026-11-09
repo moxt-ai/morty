@@ -62,7 +62,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
         const daemon = await connect("daemon");
         const viewer = await connect("host");
         expect(await viewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
-        const sessionViewer = await connect("host?sessionId=session-7");
+        const sessionViewer = await connect("host?harness=claude&sessionId=session-7");
         expect(await sessionViewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
         const queries = await Promise.all(
             Array.from({ length: 16 }, async (_, index) => {
@@ -83,7 +83,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
                             position: "1",
                             recordedAt: "2026-10-20T12:54:00.000Z",
                             sessionGenerationId: `generation-${index}`,
-                            sessionId: `session-${index}`,
+                            target: { harness: "claude", sessionId: `session-${index}` },
                             type: "acp",
                             payload: {
                                 sessionUpdate: "agent_message_chunk",
@@ -97,7 +97,9 @@ it("isolates native query replies from live fanout across hibernation and daemon
         for (let index = 0; index < 25; index += 1) {
             expect(await viewer.inbox.next()).toMatchObject({ kind: "session.event.v2" });
         }
-        expect(await sessionViewer.inbox.next()).toMatchObject({ events: [{ sessionId: "session-7" }] });
+        expect(await sessionViewer.inbox.next()).toMatchObject({
+            events: [{ target: { harness: "claude", sessionId: "session-7" } }],
+        });
         expect(sessionViewer.inbox.received.filter((message) => message["kind"] === "session.event.v2")).toHaveLength(
             1,
         );
@@ -108,12 +110,13 @@ it("isolates native query replies from live fanout across hibernation and daemon
         ).toEqual(Array(16).fill(0));
 
         for (const sessionId of ["session-8", "session-7"]) {
-            daemon.socket.send(JSON.stringify({ kind: "session.status.changed", sessionId, status: { kind: "idle" } }));
-            expect(await viewer.inbox.next()).toMatchObject({ kind: "session.status.changed", sessionId });
+            const target = { harness: "claude", sessionId: sessionId };
+            daemon.socket.send(JSON.stringify({ kind: "session.status.changed", target, status: { kind: "idle" } }));
+            expect(await viewer.inbox.next()).toMatchObject({ kind: "session.status.changed", target });
         }
         expect(await sessionViewer.inbox.next()).toMatchObject({
             kind: "session.status.changed",
-            sessionId: "session-7",
+            target: { harness: "claude", sessionId: "session-7" },
         });
 
         await evictDurableObject(relay, { webSockets: "hibernate" });
@@ -121,7 +124,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
             encodeSessionEventEnvelope({
                 kind: "session.event.v2",
                 events: ["session-7", "session-8"].map((sessionId) => ({
-                    sessionId,
+                    target: { harness: "claude", sessionId: sessionId },
                     eventId: `after-hibernation-${sessionId}`,
                     position: "2",
                     recordedAt: "2026-10-21T00:00:00.000Z",
@@ -135,16 +138,21 @@ it("isolates native query replies from live fanout across hibernation and daemon
             }),
         );
         expect(await viewer.inbox.next()).toMatchObject({
-            events: [{ sessionId: "session-7" }, { sessionId: "session-8" }],
+            events: [
+                { target: { harness: "claude", sessionId: "session-7" } },
+                { target: { harness: "claude", sessionId: "session-8" } },
+            ],
         });
-        expect(await sessionViewer.inbox.next()).toMatchObject({ events: [{ sessionId: "session-7" }] });
+        expect(await sessionViewer.inbox.next()).toMatchObject({
+            events: [{ target: { harness: "claude", sessionId: "session-7" } }],
+        });
         const reply = (requestId: string) =>
             encodeNativeSessionResult({
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId,
-                sessionId: "session-7",
-                targetSessionId: "session-7",
+                discoveryId: requestId,
+                target: { harness: "claude", sessionId: "session-7" },
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
@@ -161,20 +169,17 @@ it("isolates native query replies from live fanout across hibernation and daemon
             encodeSessionOperationFailedEvent({
                 kind: "session.operation.failed",
                 requestId: "query-8",
-                sessionId: "session-8",
+                target: { harness: "claude", sessionId: "session-8" },
                 code: "native_session_busy",
                 message: "Another native session operation is running",
             }),
         );
         expect(await viewer.inbox.next()).toMatchObject({ kind: "session.operation.failed", requestId: "query-8" });
-        await expect
-            .poll(() => queries[8]?.inbox.received.at(-1), { timeout: 1_000 })
-            .toMatchObject({
-                kind: "session.operation.failed",
-                requestId: "query-8",
-                code: "native_session_busy",
-            });
-        expect(await queries[8]?.inbox.next()).toMatchObject({ code: "native_session_busy" });
+        expect(await queries[8]?.inbox.next()).toMatchObject({
+            kind: "session.operation.failed",
+            requestId: "query-8",
+            code: "native_session_busy",
+        });
 
         queries[7]?.socket.close(1000, "Query complete");
         daemon.socket.send(reply("query-7"));

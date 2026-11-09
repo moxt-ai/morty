@@ -34,8 +34,8 @@ export const browserDiagnosticsSnapshot = (): BrowserDiagnosticsSnapshot => ({ e
 
 export interface DaemonDiagnosticsSource extends ServerNetworkOperations {
     readonly botId: string;
+    readonly harness: string | null;
     readonly sessionId: string | null;
-    readonly nativeSessionId: string | null;
     readonly context?: () => ChatDiagnostics;
     readonly read: (signal: AbortSignal) => Promise<RuntimeDiagnosticsResult>;
 }

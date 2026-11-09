@@ -80,7 +80,7 @@ export async function streamLocalFile(
     workingDirectory: string | null,
     externalContent: ExternalContentStore,
 ): Promise<void> {
-    const external = await externalContent.resolve(command.sessionId, command.path, signal);
+    const external = await externalContent.resolve(command.target, command.path, signal);
     const target = external?.path ?? (await resolveFile(command.path, workingDirectory, signal));
     if (target === null) {
         throw new Error("The local file is unavailable");
@@ -101,7 +101,7 @@ export async function streamLocalFile(
         modifiedAt: before.modifiedAt.toISOString(),
         name: external?.name ?? (basename(target) || "file"),
         requestId: command.requestId,
-        sessionId: command.sessionId,
+        target: command.target,
     });
     let sequence = 0;
     for await (const bytes of readFileChunks(target, CONTENT_CHUNK_MAX_BYTES, signal)) {
@@ -116,6 +116,6 @@ export async function streamLocalFile(
     send({
         kind: FILE_END_KIND,
         requestId: command.requestId,
-        sessionId: command.sessionId,
+        target: command.target,
     });
 }

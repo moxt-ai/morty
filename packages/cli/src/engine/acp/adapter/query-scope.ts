@@ -20,9 +20,6 @@ export function nativeSessionQueryKey(query: NativeSessionQuery): NativeSessionQ
     );
 }
 
-export function nativeSessionPreviewKey(
-    queryKey: NativeSessionQueryKey,
-    nativeSessionId: string,
-): NativeSessionPreviewKey {
-    return previewKeySchema.parse(JSON.stringify([queryKey, nativeSessionId]));
+export function nativeSessionPreviewKey(queryKey: NativeSessionQueryKey, sessionId: string): NativeSessionPreviewKey {
+    return previewKeySchema.parse(JSON.stringify([queryKey, sessionId]));
 }

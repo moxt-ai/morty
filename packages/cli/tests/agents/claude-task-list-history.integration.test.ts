@@ -68,7 +68,7 @@ test("Given native text and structured task snapshots with delimiter-heavy subje
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",
                 requestId: "task-list-history",
-                sessionId: nativeId,
+                target: { harness: "claude", sessionId: nativeId },
             }),
         );
         for (;;) {

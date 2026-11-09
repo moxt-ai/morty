@@ -53,7 +53,7 @@ test("Given the first agent lists saved sessions, When the user opens Open Sessi
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        nativeSessionIds: new Set(["first-session", "second-session"]),
+        sessionIds: new Set(["first-session", "second-session"]),
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -113,7 +113,7 @@ test("Given native sessions are available, When the user opens Open Session, The
     const longSessionTitle = `Native ${longSessionId}`;
     const app = await createTestApp({
         connectAgent: true,
-        nativeSessionIds: new Set(["session-one", longSessionId]),
+        sessionIds: new Set(["session-one", longSessionId]),
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -139,7 +139,7 @@ test("Given the phone sheet lists sessions, When the user taps one, Then the she
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        nativeSessionIds: new Set(["first-session", "second-session"]),
+        sessionIds: new Set(["first-session", "second-session"]),
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -171,7 +171,7 @@ test("Given the user previewed a session, When they close Open Session and open 
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        nativeSessionIds: new Set(["first-session", "second-session"]),
+        sessionIds: new Set(["first-session", "second-session"]),
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -201,7 +201,7 @@ test("Given the user previewed a session, When they close Open Session and open 
 test("Given native sessions were discovered before the Runtime disconnected, When a preview fails, Then Open Session shows one error with one bug report action", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["preview-error-session"]) });
+    const app = await createTestApp({ connectAgent: true, sessionIds: new Set(["preview-error-session"]) });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.getAttribute("data-connection-status") === "connected",
@@ -230,7 +230,7 @@ test("Given Open Session was opened while the Runtime was offline, When the Runt
     const clock = new TestClock("2026-10-24T08:00:00Z");
     const app = await createTestApp({
         connectAgent: true,
-        nativeSessionIds: new Set(["session-after-reconnect"]),
+        sessionIds: new Set(["session-after-reconnect"]),
         clock,
     });
     const daemon = app.daemon;

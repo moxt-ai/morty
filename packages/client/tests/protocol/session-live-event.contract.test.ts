@@ -17,7 +17,7 @@ const eventWithoutProvenance = {
     },
     recordedAt: "2026-10-14T00:00:00.000Z",
     sessionGenerationId: "generation-1",
-    sessionId: "session-1",
+    target: { harness: "claude", sessionId: "session-1" },
     type: "acp" as const,
 };
 const sharedEvent = eventWithoutProvenance;
@@ -28,7 +28,7 @@ describe("Session Event V2 contracts", () => {
         for (const events of [
             [],
             Array.from({ length: 1001 }, () => event),
-            [{ ...event, sessionId: "" }],
+            [{ ...event, target: { harness: "claude", sessionId: "" } }],
             [{ ...event, eventId: "" }],
             [{ ...event, sessionGenerationId: "" }],
             [{ ...event, position: "-1" }],

@@ -66,15 +66,14 @@ test.skipIf(process.platform === "win32")(
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -99,11 +98,13 @@ test.skipIf(process.platform === "win32")(
             if (agent === undefined) {
                 throw new Error("Real Codex was not discovered");
             }
-            const run = async (sessionId: string): Promise<string> => {
+            const options = { agent, cwd: directory, additionalDirectories: [], signal: AbortSignal.timeout(30_000) };
+            const sessionTarget = await manager.createNativeSession(options);
+            const run = async (): Promise<string> => {
                 observer.events.length = 0;
                 await manager.runPrompt({
                     agent,
-                    sessionId,
+                    target: sessionTarget,
                     cwd: directory,
                     additionalDirectories: [],
                     commandId: crypto.randomUUID(),
@@ -114,11 +115,11 @@ test.skipIf(process.platform === "win32")(
                 });
                 return observer.agentText();
             };
-            expect(await run("existing")).toContain("IDENTITY_REPLY");
+            expect(await run()).toContain("IDENTITY_REPLY");
             await unlink(link);
             await symlink(second, link);
-            expect(await run("existing")).toContain("IDENTITY_REPLY");
-            await expect(run("new")).rejects.toMatchObject({ code: "agent_runtime_changed" });
+            expect(await run()).toContain("IDENTITY_REPLY");
+            await expect(manager.createNativeSession(options)).rejects.toMatchObject({ code: "agent_runtime_changed" });
         } finally {
             await manager.close();
             await rm(directory, { recursive: true, force: true });

@@ -23,7 +23,7 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 const interruptedPrompt = "Begin work that will be interrupted by the runtime restart";
 
 async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Promise<void> {
-    const sessionId = await prepareNewRealSession(peer, agentId);
+    const sessionTarget = await prepareNewRealSession(peer, agentId);
     const identity = { agentId, bindingId: peer.bindingId, directoryId: "default", additionalDirectoryIds: [] };
     const prompt = "Remember this conversation across a daemon restart";
     const sendAndFinish = async (text: string): Promise<void> => {
@@ -33,7 +33,7 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
                 ...identity,
                 kind: "session.prompt",
                 commandId,
-                sessionId,
+                target: sessionTarget,
                 attachments: [],
                 prompt: text,
                 disposition: SessionPromptDisposition.Append,
@@ -66,7 +66,7 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
     await sendAndFinish(prompt);
     await peer.restart();
     const requestId = randomUUID();
-    peer.send(encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, sessionId }));
+    peer.send(encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, target: sessionTarget }));
     for (;;) {
         const message = await peer.nextMessage();
         const kind = decodeMessageKind(message);
@@ -86,7 +86,7 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
         encodeSessionHistoryPageLoad({
             kind: "session.live-history.v2.page.load",
             requestId: historyId,
-            sessionId,
+            target: sessionTarget,
             cursor: null,
             eventLimit: 50,
         }),
@@ -169,7 +169,7 @@ async function interruptedJourney(
 ): Promise<void> {
     let stage = "preparing the original session";
     try {
-        const sessionId = await prepareNewRealSession(peer, agentId);
+        const sessionTarget = await prepareNewRealSession(peer, agentId);
         const identity = { agentId, bindingId: peer.bindingId, directoryId: "default", additionalDirectoryIds: [] };
         const commandId = randomUUID();
         const sendPrompt = (id: string, prompt: string): void =>
@@ -178,7 +178,7 @@ async function interruptedJourney(
                     ...identity,
                     kind: "session.prompt",
                     commandId: id,
-                    sessionId,
+                    target: sessionTarget,
                     attachments: [],
                     prompt,
                     disposition: SessionPromptDisposition.Append,
@@ -205,7 +205,9 @@ async function interruptedJourney(
         }
         stage = "restoring the native session";
         const requestId = randomUUID();
-        peer.send(encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, sessionId }));
+        peer.send(
+            encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, target: sessionTarget }),
+        );
         for (;;) {
             const message = await peer.nextMessage();
             const kind = decodeMessageKind(message);
@@ -223,7 +225,7 @@ async function interruptedJourney(
             encodeSessionHistoryPageLoad({
                 kind: "session.live-history.v2.page.load",
                 requestId: historyId,
-                sessionId,
+                target: sessionTarget,
                 cursor: null,
                 eventLimit: 100,
             }),

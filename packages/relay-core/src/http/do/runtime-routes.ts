@@ -94,10 +94,12 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             if (nativeRequestId !== null && (nativeRequestId.length === 0 || nativeRequestId.length > 128)) {
                 return new Response("A bounded native request identifier is required", { status: 400 });
             }
-            const sessionFilter = url.searchParams.get("sessionId");
-            if (sessionFilter !== null && !isIdentifier(sessionFilter)) {
-                return new Response("A valid Session identifier is required", { status: 400 });
+            const harness = url.searchParams.get("harness");
+            const sessionId = url.searchParams.get("sessionId");
+            if ((harness !== null || sessionId !== null) && (!isIdentifier(harness) || !isIdentifier(sessionId))) {
+                return new Response("A valid harness and native Session are required", { status: 400 });
             }
+            const sessionFilter = harness !== null && sessionId !== null ? { harness, sessionId } : undefined;
             return admitted(
                 await runtime.acceptHost(
                     {
@@ -105,7 +107,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                         credential,
                         computerId,
                         ...(nativeRequestId === null ? {} : { nativeRequestId }),
-                        ...(sessionFilter === null ? {} : { sessionFilter }),
+                        ...(sessionFilter === undefined ? {} : { sessionFilter }),
                     },
                     request.signal,
                 ),

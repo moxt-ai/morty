@@ -17,15 +17,14 @@ export async function createControlledSession() {
         observer,
         store: new MemorySessionStore(),
         adapters: acpAdapters,
-        sessionIdentity: "assigned",
         onSessionStatusChanged: () => undefined,
-        contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+        contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,
                 kind: content.kind,
                 mediaType: content.mediaType,
                 name: content.name,
-                sessionId,
+                target: sessionTarget,
                 signal,
             }),
         ),
@@ -36,15 +35,19 @@ export async function createControlledSession() {
     try {
         const shared = join(directory, "shared");
         await mkdir(shared);
+        const options = {
+            additionalDirectories: [shared],
+            agent: fakeAgent([], { MORTY_FAKE_ACP_STATE_DIRECTORY: directory }),
+            cwd: directory,
+            signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(10_000)]),
+        };
+        const target = await manager.createNativeSession(options);
         return {
             manager,
             observer,
             request: {
-                additionalDirectories: [shared],
-                agent: fakeAgent([], { MORTY_FAKE_ACP_STATE_DIRECTORY: directory }),
-                cwd: directory,
-                sessionId: "controls-session",
-                signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(10_000)]),
+                ...options,
+                target,
             },
             [Symbol.asyncDispose]: async () => {
                 cancellation.abort();
@@ -96,14 +99,14 @@ export async function completeAcpControls(session: Awaited<ReturnType<typeof cre
         interactionId: permission.interactionId,
         optionId: "allow-once",
         outcome: "selected",
-        sessionId: session.request.sessionId,
+        target: session.request.target,
     });
     const elicitation = await Promise.race([session.observer.elicitationArrived.promise, finishedBeforeInteraction]);
     await session.manager.respondElicitation({
         action: "accept",
         content: JSON.stringify({ branch: "main" }),
         interactionId: elicitation.interactionId,
-        sessionId: session.request.sessionId,
+        target: session.request.target,
     });
     return { permission, elicitation, completed: await running, text: session.observer.agentText() };
 }

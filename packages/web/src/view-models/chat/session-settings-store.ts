@@ -1,4 +1,5 @@
 import { MortyApiError, type SessionConfigOption } from "@morty-build/client";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -64,7 +65,7 @@ export interface SessionSettingsStore {
 /** The Session's settings on this page and the change the user asked of them, whichever pane shows them. */
 export function createSessionSettingsStore(options: {
     readonly botId: string;
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
     readonly connection: SessionOperationConnection;
 }) {
     return createStore<SessionSettingsStore>()((set, get) => {
@@ -76,7 +77,8 @@ export function createSessionSettingsStore(options: {
             get().readInBackground(
                 (readSignal) =>
                     options.connection.send(
-                        (client, requestSignal) => client.sessions.readConfiguration(options.sessionId, requestSignal),
+                        (client, requestSignal) =>
+                            client.sessions.readConfiguration(options.sessionTarget, requestSignal),
                         readSignal,
                     ),
                 signal,
@@ -140,7 +142,7 @@ export function createSessionSettingsStore(options: {
                     await options.connection.send(
                         async (client, requestSignal) => {
                             return await client.sessions.updateConfiguration(
-                                options.sessionId,
+                                options.sessionTarget,
                                 {
                                     ...binding,
                                     booleanValue,

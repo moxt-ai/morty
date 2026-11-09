@@ -6,6 +6,7 @@ import {
     decodeSessionLiveEvent,
     encodeSessionHistoryPageLoad,
     encodeSessionPromptCommand,
+    type NativeSessionTarget,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
@@ -13,7 +14,11 @@ import { ClaudeCodeAgentSpecification } from "../../src/engine/agent/specificati
 import { PiAgentSpecification } from "../../src/engine/agent/specification/vendors/pi-agent.ts";
 import { ClaudeFixture } from "../support/agents/claude.ts";
 import { PiFixture } from "../support/agents/pi.ts";
-import { type RealDaemonPeer, withRealDaemon } from "../support/agents/real-daemon.ts";
+import {
+    type DaemonConnectionPeer,
+    importRealSession,
+    withRealDaemonConnection,
+} from "../support/agents/real-daemon.ts";
 import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
@@ -74,9 +79,8 @@ async function continueInTerminal(
 }
 
 async function promptFromMorty(
-    peer: RealDaemonPeer,
-    agentId: string,
-    sessionId: string,
+    peer: DaemonConnectionPeer,
+    sessionTarget: NativeSessionTarget,
     prompt: string,
 ): Promise<void> {
     const commandId = randomUUID();
@@ -84,8 +88,8 @@ async function promptFromMorty(
         encodeSessionPromptCommand({
             kind: "session.prompt",
             commandId,
-            sessionId,
-            agentId,
+            target: sessionTarget,
+            agentId: sessionTarget.harness,
             bindingId: peer.bindingId,
             directoryId: "default",
             additionalDirectoryIds: [],
@@ -112,13 +116,13 @@ async function promptFromMorty(
     }
 }
 
-async function historyInMorty(peer: RealDaemonPeer, sessionId: string): Promise<string> {
+async function historyInMorty(peer: DaemonConnectionPeer, sessionTarget: NativeSessionTarget): Promise<string> {
     const requestId = randomUUID();
     peer.send(
         encodeSessionHistoryPageLoad({
             kind: "session.live-history.v2.page.load",
             requestId,
-            sessionId,
+            target: sessionTarget,
             cursor: null,
             eventLimit: 200,
         }),
@@ -151,7 +155,7 @@ test.each(["claude", "pi"] as const)(
         const sentWith = (marker: string): readonly string[] =>
             conversations.filter((conversation) => conversation.includes(marker));
 
-        await withRealDaemon(specification, agent.environment, async (peer) => {
+        await withRealDaemonConnection(specification, agent.environment, async (peer) => {
             const terminal = async (prompt: string, first = false): Promise<void> =>
                 await continueInTerminal(
                     agent.executable,
@@ -162,13 +166,14 @@ test.each(["claude", "pi"] as const)(
                 );
 
             await terminal("TERMINAL_ONE reply without tools", true);
-            await promptFromMorty(peer, agentId, sessionId, "MORTY_TWO reply without tools");
+            const sessionTarget = await importRealSession(peer, agentId, sessionId);
+            await promptFromMorty(peer, sessionTarget, "MORTY_TWO reply without tools");
             await terminal("TERMINAL_THREE reply without tools");
             expect(sentWith("TERMINAL_THREE").some((conversation) => conversation.includes("MORTY_TWO"))).toBe(true);
 
             // Morty's idle process loaded the conversation before the terminal continued it.
-            expect(await historyInMorty(peer, sessionId)).toContain("TERMINAL_THREE");
-            await promptFromMorty(peer, agentId, sessionId, "MORTY_FOUR reply without tools");
+            expect(await historyInMorty(peer, sessionTarget)).toContain("TERMINAL_THREE");
+            await promptFromMorty(peer, sessionTarget, "MORTY_FOUR reply without tools");
             expect(sentWith("MORTY_FOUR").some((conversation) => conversation.includes("TERMINAL_THREE"))).toBe(true);
 
             await terminal("TERMINAL_FIVE reply without tools");

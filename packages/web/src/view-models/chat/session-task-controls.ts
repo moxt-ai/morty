@@ -1,3 +1,4 @@
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
@@ -44,7 +45,7 @@ export function stopFailure(tasks: Pick<SessionTaskControlsStore, "feedback">): 
 
 export const createSessionTaskControlsStore = (options: {
     readonly clock: Clock;
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
     readonly connection: SessionOperationConnection;
 }) =>
     createStore<SessionTaskControlsStore>()((set, get) => ({
@@ -76,7 +77,7 @@ export const createSessionTaskControlsStore = (options: {
             set({ feedback: { kind: "none" }, stopRequest: request });
             try {
                 await options.connection.send(async (client, requestSignal) => {
-                    await client.turns.cancel(options.sessionId, running.turnId, requestSignal);
+                    await client.turns.cancel(options.sessionTarget, running.turnId, requestSignal);
                 }, signal);
             } catch (cause) {
                 if (signal.aborted && parent.aborted) {

@@ -26,6 +26,7 @@ import {
     type NativeSessionEvents,
     type NativeSessionRequest,
     type NativeSessionResult,
+    type NativeSessionTarget,
     type PromptAttachment,
     type RuntimeDiagnosticsResult,
     type SessionConfigureCommand,
@@ -34,7 +35,6 @@ import {
     SessionPromptDisposition,
     type WorkspaceEntriesEvent,
 } from "@morty-build/client/protocol";
-
 import {
     MortyApiError,
     MortyCancellationError,
@@ -44,6 +44,8 @@ import {
     MortyTimeoutError,
     MortyValidationError,
 } from "./errors.ts";
+import { sameNativeSession } from "./native-session.ts";
+import { nativeSessionTargetSchema } from "./protocol/session/shared/native-session-target.ts";
 import { MortyPublicRequestExecutor } from "./public-request.ts";
 import {
     type CreateMortySessionRequest,
@@ -155,7 +157,7 @@ function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBin
 
 export interface ForkMortyNativeSessionRequest {
     readonly agentId: string;
-    readonly nativeSessionId: string;
+    readonly sessionId: string;
     readonly directoryId: string;
     readonly additionalDirectoryIds: readonly string[];
 }
@@ -290,11 +292,19 @@ function projectPath(computerId: string, resourcePath: string): string {
     return `v1/computers/${encodeURIComponent(computerId)}/${resourcePath}`;
 }
 
-function sessionPath(computerId: string, sessionId: string, resourcePath: string): string {
-    if (!isIdentifier(sessionId)) {
+function nativeSessionRoute(target: NativeSessionTarget): string {
+    const parsed = nativeSessionTargetSchema.safeParse(target);
+    if (!parsed.success) {
+        throw new MortyValidationError("The harness and native Session identity are invalid", { cause: parsed.error });
+    }
+    return `harnesses/${encodeURIComponent(parsed.data.harness)}/sessions/${encodeURIComponent(parsed.data.sessionId)}`;
+}
+
+function sessionPath(computerId: string, target: NativeSessionTarget, resourcePath: string): string {
+    if (!nativeSessionTargetSchema.safeParse(target).success) {
         throw new MortyValidationError("The Morty Session identifier is invalid");
     }
-    return projectPath(computerId, `sessions/${encodeURIComponent(sessionId)}/${resourcePath}`);
+    return projectPath(computerId, `${nativeSessionRoute(target)}/${resourcePath}`);
 }
 
 function requestUrl(endpoint: URL, path: string): URL {
@@ -926,11 +936,11 @@ export class MortyRuntimeResources {
         request:
             | (Omit<
                   Extract<NativeSessionRequest, { readonly action: "list" }>,
-                  "kind" | "requestId" | "sessionId" | "bindingId"
+                  "kind" | "requestId" | "discoveryId" | "bindingId"
               > & { readonly discoveryId: string | null })
             | (Omit<
                   Extract<NativeSessionRequest, { readonly action: "import" | "fork" }>,
-                  "kind" | "requestId" | "sessionId" | "targetSessionId" | "bindingId" | "action"
+                  "kind" | "requestId" | "discoveryId" | "bindingId" | "action"
               > & { readonly action: "import"; readonly discoveryId: string }),
         signal: AbortSignal,
     ) =>
@@ -959,23 +969,19 @@ export class MortyRuntimeResources {
         }
         const result = decodeNativeSessionResult(JSON.stringify(receipt.result));
         const source = decodeNativeSessionResult(JSON.stringify(receipt.source));
-        if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
+        if (result.action !== "fork" || !sameNativeSession(result.ready.target, result.target)) {
             throw new MortyProtocolError("The service returned an invalid native Fork");
         }
-        if (source.action !== "find" || source.entry.nativeSessionId !== request.nativeSessionId) {
+        if (source.action !== "find" || source.entry.sessionId !== request.sessionId) {
             throw new MortyProtocolError("The service returned an invalid Fork source");
         }
         return { result, entry: source.entry };
     };
 
-    readonly querySessions = async (sessionIds: readonly string[], signal: AbortSignal) =>
+    readonly querySessions = async (targets: readonly NativeSessionTarget[], signal: AbortSignal) =>
         decodeSessionsQueriedEvent(
             JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/sessions/query`),
-                    { sessionIds },
-                    signal,
-                ),
+                await this.#executor.post(projectPath(this.#computerId, `daemon/sessions/query`), { targets }, signal),
             ),
         ).entries;
 
@@ -990,10 +996,10 @@ export class MortyRuntimeResources {
         ).entries;
     };
 
-    readonly findNativeSessionByNativeSessionId = async (
+    readonly findNativeSessionBySessionId = async (
         request: Omit<
             Extract<NativeSessionRequest, { readonly action: "find" }>,
-            "kind" | "requestId" | "sessionId" | "bindingId" | "action"
+            "kind" | "requestId" | "discoveryId" | "bindingId" | "action"
         >,
         signal: AbortSignal,
     ) => {
@@ -1096,14 +1102,24 @@ export class MortySessionResources {
             ),
         );
 
+    readonly readCreation = async (operationId: string, signal: AbortSignal) =>
+        decodeSessionReadyEvent(
+            JSON.stringify(
+                await this.#executor.get(
+                    projectPath(this.#computerId, `daemon/session-creations/${encodeURIComponent(operationId)}`),
+                    signal,
+                ),
+            ),
+        );
+
     /**
      * Has the Platform issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
      * revocation, it is never covered by that revocation.
      */
-    readonly createAccess = async (sessionId: string, expiresInSeconds: number, signal: AbortSignal) =>
+    readonly createAccess = async (sessionTarget: NativeSessionTarget, expiresInSeconds: number, signal: AbortSignal) =>
         new MortySessionAccess(
             await this.#executor.post(
-                sessionPath(this.#computerId, sessionId, "access-credentials"),
+                sessionPath(this.#computerId, sessionTarget, "access-credentials"),
                 { expiresInSeconds },
                 signal,
             ),
@@ -1119,7 +1135,7 @@ export class MortySessionResources {
         );
 
     readonly load = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         request: {
             readonly additionalDirectoryIds: readonly string[];
             readonly agentId: string;
@@ -1130,29 +1146,50 @@ export class MortySessionResources {
         decodeSessionReadyEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/load`),
+                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/load`),
                     request,
                     signal,
                 ),
             ),
         );
 
-    readonly restore = async (sessionId: string, signal: AbortSignal) =>
-        decodeSessionRestoredEvent(
+    readonly restore = async (target: NativeSessionTarget, signal: AbortSignal) => {
+        const parsed = nativeSessionTargetSchema.safeParse(target);
+        if (!parsed.success) {
+            throw new MortyValidationError("The harness and native Session identity are invalid", {
+                cause: parsed.error,
+            });
+        }
+        const restored = decodeSessionRestoredEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/restore`),
+                    projectPath(
+                        this.#computerId,
+                        `daemon/harnesses/${encodeURIComponent(parsed.data.harness)}/sessions/${encodeURIComponent(parsed.data.sessionId)}/restore`,
+                    ),
                     {},
                     signal,
                 ),
             ),
         );
+        if (
+            restored.target.harness !== parsed.data.harness ||
+            restored.target.sessionId !== parsed.data.sessionId ||
+            restored.entry.agentId !== parsed.data.harness ||
+            restored.entry.sessionId !== parsed.data.sessionId ||
+            restored.ready.agentId !== parsed.data.harness ||
+            !sameNativeSession(restored.entry.target, restored.ready.target)
+        ) {
+            throw new MortyProtocolError("The Runtime restored a different harness or native Session");
+        }
+        return restored;
+    };
 
-    readonly close = async (sessionId: string, signal: AbortSignal) =>
+    readonly close = async (sessionTarget: NativeSessionTarget, signal: AbortSignal) =>
         decodeSessionClosedEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/close`),
+                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/close`),
                     {},
                     signal,
                 ),
@@ -1163,11 +1200,15 @@ export class MortySessionResources {
         ...operation:
             | readonly [
                   computerId: string,
-                  sessionId: string,
+                  sessionTarget: NativeSessionTarget,
                   request: UpdateMortySessionConfigurationRequest,
                   signal: AbortSignal,
               ]
-            | readonly [sessionId: string, request: UpdateMortySessionConfigurationRequest, signal: AbortSignal]
+            | readonly [
+                  sessionTarget: NativeSessionTarget,
+                  request: UpdateMortySessionConfigurationRequest,
+                  signal: AbortSignal,
+              ]
     ) => {
         const result =
             operation.length === 3
@@ -1177,10 +1218,7 @@ export class MortySessionResources {
                       operation[2],
                   )
                 : await this.#executor.post(
-                      projectPath(
-                          this.#computerId,
-                          `daemon/sessions/${encodeURIComponent(operation[1])}/configuration`,
-                      ),
+                      projectPath(this.#computerId, `daemon/${nativeSessionRoute(operation[1])}/configuration`),
                       operation[2],
                       operation[3],
                   );
@@ -1189,17 +1227,14 @@ export class MortySessionResources {
 
     readonly readConfiguration = async (
         ...operation:
-            | readonly [sessionId: string, signal: AbortSignal]
-            | readonly [computerId: string, sessionId: string, signal: AbortSignal]
+            | readonly [sessionTarget: NativeSessionTarget, signal: AbortSignal]
+            | readonly [computerId: string, sessionTarget: NativeSessionTarget, signal: AbortSignal]
     ) => {
         const result =
             operation.length === 2
                 ? await this.#executor.get(sessionPath(this.#computerId, operation[0], "configuration"), operation[1])
                 : await this.#executor.get(
-                      projectPath(
-                          this.#computerId,
-                          `daemon/sessions/${encodeURIComponent(operation[1])}/configuration`,
-                      ),
+                      projectPath(this.#computerId, `daemon/${nativeSessionRoute(operation[1])}/configuration`),
                       operation[2],
                   );
         return decodeSessionConfigReadResult(JSON.stringify(result));
@@ -1207,8 +1242,8 @@ export class MortySessionResources {
 
     readonly rename = async (
         ...operation:
-            | readonly [computerId: string, sessionId: string, title: string, signal: AbortSignal]
-            | readonly [sessionId: string, title: string, signal: AbortSignal]
+            | readonly [computerId: string, sessionTarget: NativeSessionTarget, title: string, signal: AbortSignal]
+            | readonly [sessionTarget: NativeSessionTarget, title: string, signal: AbortSignal]
     ) => {
         const result =
             operation.length === 3
@@ -1218,7 +1253,7 @@ export class MortySessionResources {
                       operation[2],
                   )
                 : await this.#executor.post(
-                      projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(operation[1])}/rename`),
+                      projectPath(this.#computerId, `daemon/${nativeSessionRoute(operation[1])}/rename`),
                       { title: operation[2] },
                       operation[3],
                   );
@@ -1226,7 +1261,7 @@ export class MortySessionResources {
     };
 
     readonly uploadContent = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         input: {
             readonly bytes: Uint8Array;
             readonly contentKey: string;
@@ -1246,7 +1281,7 @@ export class MortySessionResources {
         const query = new URLSearchParams({ uri: input.uri });
         return decodePromptAttachment(
             await this.#executor.putContent(
-                `${sessionPath(this.#computerId, sessionId, `content/${input.contentKey}`)}?${query.toString()}`,
+                `${sessionPath(this.#computerId, sessionTarget, `content/${input.contentKey}`)}?${query.toString()}`,
                 input.bytes,
                 { contentKind: input.kind, mediaType: input.mediaType, name: input.name },
                 signal,
@@ -1255,7 +1290,7 @@ export class MortySessionResources {
     };
 
     readonly readFile = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         path: string,
         signal: AbortSignal,
         maximumBytes = 32 * 1024 * 1024,
@@ -1273,28 +1308,28 @@ export class MortySessionResources {
         }
         const query = new URLSearchParams({ maxBytes: maximumBytes.toString(), path });
         return await this.#executor.getFile(
-            `${sessionPath(this.#computerId, sessionId, "files/content")}?${query.toString()}`,
+            `${sessionPath(this.#computerId, sessionTarget, "files/content")}?${query.toString()}`,
             maximumBytes,
             signal,
         );
     };
 
     readonly readExternalContent = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         content: MortyExternalContentBlock,
         signal: AbortSignal,
         maximumBytes = content.byteLength,
     ): ReturnType<MortySessionResources["readFile"]> =>
-        await this.readFile(sessionId, externalContentPath(content), signal, maximumBytes);
+        await this.readFile(sessionTarget, externalContentPath(content), signal, maximumBytes);
 
     readonly previewRuntimeNativeEvents = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         identity: MortySessionBinding,
         page: NativeEventPageRequest,
         signal: AbortSignal,
     ): Promise<NativeSessionEvents> => {
         const result = await this.#executor.post(
-            projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/native-events-preview`),
+            projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/native-events-preview`),
             {
                 ...identity,
                 cursor: page.cursor,
@@ -1306,14 +1341,14 @@ export class MortySessionResources {
     };
 
     readonly previewSessionNativeEvents = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         identity: MortySessionBinding,
         page: NativeEventPageRequest,
         signal: AbortSignal,
     ): Promise<NativeSessionEvents> => {
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            sessionPath(this.#computerId, sessionId, "native-events-preview"),
+            sessionPath(this.#computerId, sessionTarget, "native-events-preview"),
         );
         setSessionBindingQuery(path.searchParams, identity);
         path.searchParams.set("eventLimit", page.eventLimit.toString());
@@ -1331,7 +1366,7 @@ export class MortySessionResources {
      * started command ended when none runs. A missing Session has no interaction snapshot.
      */
     readonly readSessionExecution = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         identity: MortySessionBinding,
         signal: AbortSignal,
         commandId?: string,
@@ -1343,7 +1378,7 @@ export class MortySessionResources {
     > => {
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            sessionPath(this.#computerId, sessionId, "active-turn"),
+            sessionPath(this.#computerId, sessionTarget, "active-turn"),
         );
         setSessionBindingQuery(path.searchParams, identity);
         if (commandId !== undefined) {
@@ -1352,7 +1387,7 @@ export class MortySessionResources {
         const result = decodeNativeSessionResult(
             JSON.stringify(await this.#executor.get(`${path.pathname.slice(1)}${path.search}`, signal)),
         );
-        if (result.action !== "active-turn" || result.targetSessionId !== sessionId) {
+        if (result.action !== "active-turn" || !sameNativeSession(result.target, sessionTarget)) {
             throw new MortyProtocolError("The service returned an invalid active Turn");
         }
         return {
@@ -1367,20 +1402,20 @@ export class MortySessionResources {
     };
 
     readonly readRuntimeSessionExecution = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         identity: MortySessionBinding,
         signal: AbortSignal,
     ): Promise<Pick<Extract<NativeSessionResult, { readonly action: "active-turn" }>, "turn" | "queued">> => {
         const result = decodeNativeSessionResult(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/active-turn`),
+                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/active-turn`),
                     identity,
                     signal,
                 ),
             ),
         );
-        if (result.action !== "active-turn" || result.targetSessionId !== sessionId) {
+        if (result.action !== "active-turn" || !sameNativeSession(result.target, sessionTarget)) {
             throw new MortyProtocolError("The service returned an invalid active Turn");
         }
         return { turn: result.turn, queued: result.queued };
@@ -1397,12 +1432,12 @@ export class MortyTurnResources {
     }
 
     readonly submit = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         request: SubmitMortyTurnRequest,
         signal: AbortSignal,
     ): Promise<MortyTurn> => {
         const turn = decodeMortyTurn(
-            await this.#executor.post(sessionPath(this.#computerId, sessionId, "turns"), request, signal),
+            await this.#executor.post(sessionPath(this.#computerId, sessionTarget, "turns"), request, signal),
         );
         if (turn === null) {
             throw new MortyProtocolError("The service returned an invalid Turn");
@@ -1411,12 +1446,12 @@ export class MortyTurnResources {
     };
 
     readonly submitToRuntime = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         request: SubmitMortyTurnRequest,
         signal: AbortSignal,
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.post(
-            projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/turns`),
+            projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/turns`),
             {
                 ...request,
                 disposition: request.disposition ?? SessionPromptDisposition.Append,
@@ -1434,10 +1469,14 @@ export class MortyTurnResources {
         return { turnId };
     };
 
-    readonly cancel = async (sessionId: string, turnId: string, signal: AbortSignal): Promise<MortyTurnCancellation> =>
+    readonly cancel = async (
+        sessionTarget: NativeSessionTarget,
+        turnId: string,
+        signal: AbortSignal,
+    ): Promise<MortyTurnCancellation> =>
         decodeTurnCancellation(
             await this.#executor.post(
-                sessionPath(this.#computerId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel`),
+                sessionPath(this.#computerId, sessionTarget, `turns/${encodeURIComponent(turnId)}/cancel`),
                 {},
                 signal,
             ),
@@ -1445,9 +1484,13 @@ export class MortyTurnResources {
         );
 
     /** Withdraws a queued prompt only when the Runtime confirms it did not execute. */
-    readonly cancelQueued = async (sessionId: string, turnId: string, signal: AbortSignal): Promise<void> => {
+    readonly cancelQueued = async (
+        sessionTarget: NativeSessionTarget,
+        turnId: string,
+        signal: AbortSignal,
+    ): Promise<void> => {
         const result = await this.#executor.post(
-            sessionPath(this.#computerId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel-before-start`),
+            sessionPath(this.#computerId, sessionTarget, `turns/${encodeURIComponent(turnId)}/cancel-before-start`),
             {},
             signal,
         );
@@ -1457,12 +1500,12 @@ export class MortyTurnResources {
     };
 
     readonly steer = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         turnId: string,
         signal: AbortSignal,
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.put(
-            sessionPath(this.#computerId, sessionId, `turns/${encodeURIComponent(turnId)}/disposition`),
+            sessionPath(this.#computerId, sessionTarget, `turns/${encodeURIComponent(turnId)}/disposition`),
             { disposition: SessionPromptDisposition.Steer },
             signal,
         );
@@ -1485,13 +1528,13 @@ export class MortyInteractionResources {
     // The Platform serves no interaction read routes: pending interactions come from the Session's lifecycle events and
     // its execution snapshot. Only the response submission crosses the Platform API.
     readonly respond = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         interactionId: string,
         request: MortyInteractionResponseRequest,
         signal: AbortSignal,
     ): Promise<void> => {
         const result = await this.#executor.post(
-            sessionPath(this.#computerId, sessionId, `interactions/${encodeURIComponent(interactionId)}/responses`),
+            sessionPath(this.#computerId, sessionTarget, `interactions/${encodeURIComponent(interactionId)}/responses`),
             request,
             signal,
         );
@@ -1669,13 +1712,13 @@ export class MortyEventResources {
     }
 
     readonly subscribeLive = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         observer: MortySessionEventObserver,
         signal: AbortSignal,
     ): Promise<MortyLiveEventSubscription> => {
         const subscription = new MortyLiveEventSubscription(
             this.#executor,
-            sessionPath(this.#computerId, sessionId, "events-v2"),
+            sessionPath(this.#computerId, sessionTarget, "events-v2"),
             observer,
             signal,
             this.#maximumReconnectAttempts,
@@ -1687,13 +1730,13 @@ export class MortyEventResources {
     };
 
     readonly list = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         page: MortyPageRequest,
         signal: AbortSignal,
     ): Promise<SessionEventLogPage> => {
         const path = requestUrl(
             new URL("https://morty.invalid/"),
-            sessionPath(this.#computerId, sessionId, "events-v2"),
+            sessionPath(this.#computerId, sessionTarget, "events-v2"),
         );
         path.searchParams.set("limit", page.limit.toString());
         if (page.cursor.length > 0) {

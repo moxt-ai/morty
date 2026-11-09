@@ -1,4 +1,10 @@
-import type { NativeSessionResult, SessionLiveEvent, SessionPromptCommand } from "@morty-build/client/protocol";
+import { NativeSessionMap } from "@morty-build/client/native-session";
+import type {
+    NativeSessionResult,
+    NativeSessionTarget,
+    SessionLiveEvent,
+    SessionPromptCommand,
+} from "@morty-build/client/protocol";
 import type { ActiveRuntimeTurn, PromptDispatch, RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
 import { RuntimeTurnActivity } from "./runtime-turn-activity.ts";
@@ -8,7 +14,7 @@ type QueuedTurnSnapshot = Extract<NativeSessionResult, { readonly action: "activ
 
 /** Runtime-owned index over per-session execution state; owns no session state itself. */
 export class SessionTurns {
-    readonly #bySessionId = new Map<string, SessionExecutionState>();
+    readonly #bySessionTarget = new NativeSessionMap<SessionExecutionState>();
     readonly #operations: ExecutionReceipts;
     readonly #activity: RuntimeTurnActivity;
 
@@ -19,32 +25,32 @@ export class SessionTurns {
 
     readonly acceptsPrompts = (): boolean => this.#activity.acceptsPrompts();
 
-    readonly session = (sessionId: string): SessionExecutionState => {
-        let session = this.#bySessionId.get(sessionId);
+    readonly session = (sessionTarget: NativeSessionTarget): SessionExecutionState => {
+        let session = this.#bySessionTarget.get(sessionTarget);
         if (session === undefined) {
-            session = new SessionExecutionState(sessionId, this.#operations);
-            this.#bySessionId.set(sessionId, session);
+            session = new SessionExecutionState(sessionTarget, this.#operations);
+            this.#bySessionTarget.set(sessionTarget, session);
         }
         return session;
     };
 
-    readonly get = (commandId: string, sessionId: string): ActiveRuntimeTurn | undefined =>
-        this.#bySessionId.get(sessionId)?.get(commandId);
+    readonly get = (commandId: string, sessionTarget: NativeSessionTarget): ActiveRuntimeTurn | undefined =>
+        this.#bySessionTarget.get(sessionTarget)?.get(commandId);
 
     readonly start = (command: SessionPromptCommand, attemptId: string): ActiveRuntimeTurn => {
-        const turn = this.session(command.sessionId).start(command, attemptId);
+        const turn = this.session(command.target).start(command, attemptId);
         this.#activity.start(turn);
         return turn;
     };
 
     readonly finish = (turn: ActiveRuntimeTurn): void => {
-        this.#bySessionId.get(turn.command.sessionId)?.finish(turn);
+        this.#bySessionTarget.get(turn.command.target)?.finish(turn);
         this.sweep();
         this.#activity.finish(turn);
     };
 
     readonly recordEvent = (event: RecordedSessionEvent): RecordedSessionEvent =>
-        "sessionId" in event ? (this.#bySessionId.get(event.sessionId)?.recordEvent(event) ?? event) : event;
+        "target" in event ? (this.#bySessionTarget.get(event.target)?.recordEvent(event) ?? event) : event;
 
     readonly recordSessionEvent = (event: SessionLiveEvent): void => {
         if (
@@ -60,7 +66,7 @@ export class SessionTurns {
 
     /** Resolve identities first, then read every execution projection in one synchronous step. */
     readonly executionSnapshot = async <T>(
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         matches: (command: SessionPromptCommand) => Promise<boolean>,
         read: (snapshot: {
             readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>;
@@ -71,7 +77,7 @@ export class SessionTurns {
         const matched = new Map<ActiveRuntimeTurn, boolean>();
         for (;;) {
             signal.throwIfAborted();
-            const current = this.#bySessionId.get(sessionId)?.turns() ?? [];
+            const current = this.#bySessionTarget.get(sessionTarget)?.turns() ?? [];
             const unresolved = current.filter((turn) => !matched.has(turn));
             if (unresolved.length > 0) {
                 for (const turn of unresolved) {
@@ -87,7 +93,7 @@ export class SessionTurns {
                 .filter(
                     (candidate) =>
                         candidate.isQueued() &&
-                        !this.#operations.isTerminalExecution(candidate.command.commandId, sessionId),
+                        !this.#operations.isTerminalExecution(candidate.command.commandId, sessionTarget),
                 )
                 .map((candidate) => ({
                     commandId: candidate.command.commandId,
@@ -103,18 +109,18 @@ export class SessionTurns {
         turn: ActiveRuntimeTurn,
         waitSignal: AbortSignal,
         onQueued: () => void,
-    ): Promise<PromptDispatch> => this.session(turn.command.sessionId).admitAndWait(turn, waitSignal, onQueued);
+    ): Promise<PromptDispatch> => this.session(turn.command.target).admitAndWait(turn, waitSignal, onQueued);
 
     /** Discards empty session states so the index does not grow unboundedly. */
     readonly sweep = (): void => {
-        for (const [sessionId, session] of this.#bySessionId) {
+        for (const [sessionTarget, session] of this.#bySessionTarget) {
             if (session.isEmpty()) {
-                this.#bySessionId.delete(sessionId);
+                this.#bySessionTarget.delete(sessionTarget);
             }
         }
     };
 
     readonly close = async (): Promise<void> => {
-        await Promise.all([...this.#bySessionId.values()].map((session) => session.close()));
+        await Promise.all([...this.#bySessionTarget.values()].map((session) => session.close()));
     };
 }

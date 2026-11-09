@@ -5,16 +5,18 @@ import {
     type NativeSessionCommand,
     type NativeSessionEntry,
     type NativeSessionResult,
+    type NativeSessionTarget,
     type SessionMetadata,
     type SessionReadyEvent,
     type WorkspaceEntry,
 } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { NativeSessionInfo } from "../../acp/protocol/native-session.ts";
-import { nativeSessionIdSchema } from "../../acp/protocol/native-session.ts";
-import type { ResolveAgent, SessionPrepareOptions } from "../api/session-api.ts";
+import { sessionIdSchema } from "../../acp/protocol/native-session.ts";
+import type { ResolveAgent, SessionCreationOptions, SessionPrepareOptions } from "../api/session-api.ts";
 import { RuntimeOperations } from "../manager/operation-drain.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
+import type { SessionCreations } from "../record/session-creations.ts";
 import type { StoredSession } from "../record/session-store.ts";
 import { LocalAuthorizationError } from "../workspace/local-authorization-error.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
@@ -22,7 +24,7 @@ import { nativeSessionQuery } from "./native-query.ts";
 
 interface ListedTarget {
     readonly scope: string;
-    readonly nativeSessionId: string;
+    readonly sessionId: string;
     readonly cwd: string;
     readonly additionalDirectories: readonly string[];
 }
@@ -72,6 +74,7 @@ export class NativeSessionService {
     readonly #resolveAgent: ResolveAgent;
     readonly #directories: WorkspaceDirectoryService;
     readonly #sessions: SessionManager;
+    readonly #creations: SessionCreations;
     readonly #activeTurn: (
         command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>,
         options: SessionPrepareOptions,
@@ -87,6 +90,7 @@ export class NativeSessionService {
         resolveAgent: ResolveAgent,
         directories: WorkspaceDirectoryService,
         sessions: SessionManager,
+        creations: SessionCreations,
         activeTurn: (
             command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>,
             options: SessionPrepareOptions,
@@ -101,6 +105,7 @@ export class NativeSessionService {
         this.#resolveAgent = resolveAgent;
         this.#directories = directories;
         this.#sessions = sessions;
+        this.#creations = creations;
         this.#activeTurn = activeTurn;
     }
 
@@ -111,17 +116,17 @@ export class NativeSessionService {
     readonly close = (): Promise<void> => this.#operations.close(async () => undefined);
 
     readonly readSessionHistory = async (
-        options: SessionPrepareOptions,
-        nativeSessionId: string,
+        options: SessionCreationOptions,
+        sessionId: string,
         eventLimit: number,
         cursor: string | null,
     ) =>
         this.#operations.run(options, (scoped) =>
-            this.#sessions.withNativeSessionOperation(scoped, nativeSessionId, (target) =>
+            this.#sessions.withNativeSessionOperation(scoped, sessionId, (target) =>
                 target.adapter.readSessionHistory({
                     query: nativeSessionQuery(target),
                     request: {
-                        nativeSessionId,
+                        sessionId,
                         eventLimit,
                         cursor,
                     },
@@ -138,22 +143,28 @@ export class NativeSessionService {
             signal,
         );
         signal.throwIfAborted();
-        const options: SessionPrepareOptions = {
+        const options: SessionCreationOptions = {
             additionalDirectories,
             ...(await this.#resolveAgent(command.agentId, signal)),
             cwd,
-            sessionId: command.sessionId,
             signal,
         };
         if (command.action === "active-turn") {
-            nativeSessionIdSchema.parse(command.targetSessionId);
+            sessionIdSchema.parse(command.target.sessionId);
+            if (command.target.harness !== command.agentId) {
+                throw new AcpExecutionError(
+                    "The native Session belongs to a different harness",
+                    {},
+                    "session_identity_mismatch",
+                );
+            }
             return {
                 action: "active-turn",
                 kind: "native.session.result",
                 requestId: command.requestId,
-                sessionId: command.sessionId,
-                targetSessionId: command.targetSessionId,
-                ...(await this.#activeTurn(command, options)),
+                discoveryId: command.discoveryId,
+                target: command.target,
+                ...(await this.#activeTurn(command, { ...options, target: command.target })),
                 queuedCancellation: "before-start",
             };
         }
@@ -165,7 +176,7 @@ export class NativeSessionService {
                 "native_session_unsupported",
             );
         }
-        const entryScope = JSON.stringify([command.agentId, command.bindingId, command.sessionId]);
+        const entryScope = JSON.stringify([command.agentId, command.bindingId, command.discoveryId]);
         const cursorScope = JSON.stringify([entryScope, cwd]);
         const register = async (info: NativeSessionInfo): Promise<NativeSessionEntry | null> => {
             const authorized = await this.authorizeEntry(command, options, info);
@@ -178,17 +189,13 @@ export class NativeSessionService {
             }
             this.#entries.set(entryId, {
                 scope: entryScope,
-                nativeSessionId: info.sessionId,
+                sessionId: info.sessionId,
                 cwd: authorized.cwd,
                 additionalDirectories: authorized.additionalDirectories,
             });
             return {
                 entryId,
-                mortySessionIds: this.#sessions
-                    .findLinkedSessions(command.agentId, info.sessionId)
-                    .filter((session) => session.prompted && session.cwd === authorized.cwd)
-                    .map((session) => decodeIdentifier(session.sessionId)),
-                nativeSessionId: decodeIdentifier(info.sessionId),
+                sessionId: decodeIdentifier(info.sessionId),
                 title: info.title ?? "Untitled session",
                 directoryId: authorized.directoryId,
                 directoryLabel: authorized.directoryLabel,
@@ -199,8 +206,8 @@ export class NativeSessionService {
         const envelope = {
             kind: "native.session.result",
             requestId: command.requestId,
-            sessionId: command.sessionId,
-        } satisfies Pick<NativeSessionResult, "kind" | "requestId" | "sessionId">;
+            discoveryId: command.discoveryId,
+        } satisfies Pick<NativeSessionResult, "kind" | "requestId" | "discoveryId">;
         if (command.action === "list") {
             let cursor: string | null = null;
             if (command.cursor !== null) {
@@ -251,7 +258,7 @@ export class NativeSessionService {
         if (command.action === "find") {
             const found = await options.adapter.findSession({
                 query: nativeSessionQuery(options),
-                nativeSessionId: command.nativeSessionId,
+                sessionId: command.sessionId,
                 budget: {
                     maximumPages: 500,
                     maximumEntries: 500,
@@ -302,41 +309,57 @@ export class NativeSessionService {
             action === "fork"
                 ? nextForkTitle(sourceTitle, this.#sessions.listSessions(Number.MAX_SAFE_INTEGER))
                 : sourceTitle;
-        const opened = await this.#sessions.openNativeSession(
-            {
-                ...options,
-                cwd: target.cwd,
-                sessionId: command.targetSessionId,
-                additionalDirectories: target.additionalDirectories,
-            },
-            action === "fork"
-                ? { kind: "fork", nativeSessionId: target.info.sessionId, title }
-                : { kind: "import", nativeSessionId: target.info.sessionId, title },
-            this.#resolveAgent,
-        );
-        signal.throwIfAborted();
-        const ready: SessionReadyEvent = {
-            additionalDirectories: target.additionalEntries,
-            agentId: command.agentId,
-            agentName: opened.prepared.agentName,
-            agentVersion: opened.prepared.agentVersion,
-            capabilities: opened.prepared.capabilities,
-            commands: opened.prepared.commands,
-            configOptions: opened.prepared.configOptions,
-            configurationRevision: opened.prepared.configurationRevision,
-            directoryId: target.directoryId,
-            directoryLabel: target.directoryLabel,
-            kind: "session.ready",
-            requestId: command.requestId,
-            restored: true,
-            sessionId: opened.sessionId,
+        const open = async (): Promise<SessionReadyEvent> => {
+            const opened = await this.#sessions.openNativeSession(
+                {
+                    ...options,
+                    cwd: target.cwd,
+                    additionalDirectories: target.additionalDirectories,
+                },
+                action === "fork"
+                    ? { kind: "fork", sessionId: target.info.sessionId, title }
+                    : { kind: "import", sessionId: target.info.sessionId, title },
+                this.#resolveAgent,
+            );
+            signal.throwIfAborted();
+            return {
+                additionalDirectories: target.additionalEntries,
+                agentId: command.agentId,
+                agentName: opened.prepared.agentName,
+                agentVersion: opened.prepared.agentVersion,
+                capabilities: opened.prepared.capabilities,
+                commands: opened.prepared.commands,
+                configOptions: opened.prepared.configOptions,
+                configurationRevision: opened.prepared.configurationRevision,
+                directoryId: target.directoryId,
+                directoryLabel: target.directoryLabel,
+                kind: "session.ready",
+                requestId: command.requestId,
+                restored: true,
+                target: opened.target,
+            };
         };
+        const ready =
+            action === "fork"
+                ? await this.#creations.run(
+                      command.requestId,
+                      {
+                          action,
+                          harness: command.agentId,
+                          sessionId: target.info.sessionId,
+                          cwd: target.cwd,
+                          additionalDirectories: target.additionalDirectories,
+                      },
+                      signal,
+                      open,
+                  )
+                : await open();
         return {
             ...envelope,
             action,
             ready,
-            targetSessionId: command.targetSessionId,
-            title,
+            target: ready.target,
+            title: this.#sessions.findSessions([ready.target])[0]?.title ?? title,
         };
     };
 
@@ -346,11 +369,11 @@ export class NativeSessionService {
     };
 
     readonly querySessions = async (
-        sessionIds: readonly string[],
+        targets: readonly NativeSessionTarget[],
         signal: AbortSignal,
     ): Promise<readonly SessionMetadata[]> => {
         signal.throwIfAborted();
-        return this.describeSessions(this.#sessions.findSessions(sessionIds));
+        return this.describeSessions(this.#sessions.findSessions(targets));
     };
 
     private readonly describeSessions = (sessions: readonly StoredSession[]): readonly SessionMetadata[] => {
@@ -370,7 +393,8 @@ export class NativeSessionService {
                 directoryLabel: directory.label,
                 prompted: session.prompted,
                 sessionId: session.sessionId,
-                status: this.#sessions.sessionStatus(session.sessionId),
+                target: session.target,
+                status: this.#sessions.sessionStatus(session.target),
                 title: session.title || "Untitled session",
                 updatedAt: session.updatedAt,
             });
@@ -380,7 +404,7 @@ export class NativeSessionService {
 
     private readonly authorizeEntry = async (
         command: NativeSessionCommand,
-        options: SessionPrepareOptions,
+        options: SessionCreationOptions,
         info: NativeSessionInfo,
     ): Promise<AuthorizedNativeSession | null> => {
         try {
@@ -419,13 +443,13 @@ export class NativeSessionService {
 
     private readonly resolveTarget = async (
         command: NativeSessionCommand,
-        options: SessionPrepareOptions,
+        options: SessionCreationOptions,
         selected: ListedTarget,
     ): Promise<AuthorizedNativeSession> => {
         const info = await options.adapter
             .findSession({
                 query: nativeSessionQuery(options),
-                nativeSessionId: selected.nativeSessionId,
+                sessionId: selected.sessionId,
                 budget: {
                     maximumPages: 100,
                     maximumEntries: null,

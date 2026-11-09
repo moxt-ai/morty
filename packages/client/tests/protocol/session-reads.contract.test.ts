@@ -14,7 +14,7 @@ describe("Session config read contracts", () => {
         const command = {
             kind: SESSION_CONFIG_READ_KIND,
             requestId: "request-config-1",
-            sessionId: "session-1",
+            target: { harness: "claude", sessionId: "session-1" },
         } as const;
         const encoded = encodeServiceToDaemonMessage(command);
         expect(decodeServiceToDaemonMessage(encoded)).toEqual(command);
@@ -40,7 +40,7 @@ describe("Session config read contracts", () => {
             configurationRevision: "revision-1",
             kind: SESSION_CONFIG_READ_RESULT_KIND,
             requestId: "request-config-1",
-            sessionId: "session-1",
+            target: { harness: "claude", sessionId: "session-1" },
         } as const;
         expect(decodeDaemonToServiceMessage(encodeDaemonToServiceMessage(result))).toEqual(result);
     });
@@ -54,8 +54,8 @@ describe("Session execution read contracts", () => {
         queuedCancellation: "before-start",
         interactionState: null,
         requestId: "request-execution-1",
-        sessionId: "session-1",
-        targetSessionId: "session-1",
+        discoveryId: "discovery-1",
+        target: { harness: "claude", sessionId: "session-1" },
         turn: null,
     } as const;
 

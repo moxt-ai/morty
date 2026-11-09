@@ -2,6 +2,7 @@ import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import type {
     AgentSettingsDiscoverCommand,
     AgentSettingsDiscoveredEvent,
+    NativeSessionTarget,
     WorkspaceEntriesEvent,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
@@ -40,7 +41,7 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
     ) => Promise<AgentSettingsDiscoveredEvent>;
     readonly openPublicSessionEvents: (
         scope: Scope,
-        sessionId: string,
+        target: NativeSessionTarget,
         credential: {
             readonly credentialId: string;
             readonly signingKeyId: string;
@@ -62,10 +63,10 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
     };
-    const connect = async (requestId: string, sessionId: string, signal: AbortSignal) => {
+    const connect = async (requestId: string, target: NativeSessionTarget | undefined, signal: AbortSignal) => {
         signal.throwIfAborted();
         await cx.services.runtime.expireSilentDaemons();
-        return cx.gateways.requests.open(requestId, sessionId, async (socket, message) => {
+        return cx.gateways.requests.open(requestId, target, async (socket, message) => {
             if (!signal.aborted) {
                 await cx.services.runtime.receiveOperation(new ComputerScope(computerId), socket, message, signal);
                 return;
@@ -101,8 +102,8 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         signal,
     ) => {
         checkTarget(scope.computerId);
-        const sessionId = "sessionId" in command ? command.sessionId : "";
-        const socket = await connect(runtimeControlRequestId(command), sessionId, signal);
+        const target = "target" in command ? command.target : undefined;
+        const socket = await connect(runtimeControlRequestId(command), target, signal);
         return await requestRuntimeControl(socket, command, signal);
     };
     return {
@@ -112,13 +113,17 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         },
         requestWorkspace: async (scope, command, signal) => {
             checkTarget(scope.computerId);
-            return await requestRuntimeWorkspace(await connect(command.requestId, "", signal), command, signal);
+            return await requestRuntimeWorkspace(await connect(command.requestId, undefined, signal), command, signal);
         },
         requestAgentSettings: async (scope, command, signal) => {
             checkTarget(scope.computerId);
-            return await requestRuntimeAgentSettings(await connect(command.requestId, "", signal), command, signal);
+            return await requestRuntimeAgentSettings(
+                await connect(command.requestId, undefined, signal),
+                command,
+                signal,
+            );
         },
-        openPublicSessionEvents: async (scope, sessionId, credential, signal) => {
+        openPublicSessionEvents: async (scope, sessionTarget, credential, signal) => {
             checkTarget(scope.computerId);
             signal.throwIfAborted();
             await cx.services.runtime.expireSilentDaemons();
@@ -129,7 +134,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
             return cx.gateways.peers.accept({
                 role: "viewer",
                 computerId,
-                sessionFilter: sessionId,
+                sessionFilter: sessionTarget,
                 expiresAt: credential.expiresAt,
                 credential: {
                     credentialId: credential.credentialId,
@@ -141,7 +146,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         requestComputerScopeControl,
         readProjectSessionFile: async (scope, command, signal) => {
             checkTarget(scope.computerId);
-            const socket = await connect(command.requestId, command.sessionId, signal);
+            const socket = await connect(command.requestId, command.target, signal);
             try {
                 const stream = await requestRuntimeFile(socket, command, signal);
                 cx.utilities.waitUntil(stream.finished);
@@ -153,7 +158,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         },
         writeProjectSessionContent: async (scope, command, body, signal) => {
             checkTarget(scope.computerId);
-            const socket = await connect(command.requestId, command.sessionId, signal);
+            const socket = await connect(command.requestId, command.target, signal);
             try {
                 return await requestRuntimeContentWrite(socket, command, body, signal);
             } catch (cause) {

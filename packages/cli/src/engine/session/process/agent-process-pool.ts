@@ -244,4 +244,10 @@ export class AgentProcessPool {
             await this.retire(runtime, () => close(runtime));
         }
     };
+
+    /** The caller must retain the opened native Session or retire it before returning. */
+    readonly startUnretained = async <P extends AgentProcess>(
+        signal: AbortSignal,
+        start: () => Promise<P>,
+    ): Promise<P> => await this.#start(signal, start, null);
 }

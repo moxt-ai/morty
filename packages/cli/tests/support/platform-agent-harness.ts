@@ -36,7 +36,7 @@ function fakeAgentHarnessCatalog(definitions: readonly FakeAgentHarnessDefinitio
 export async function createFakeAgentHarnessRuntime(options: {
     readonly credential: string;
     readonly harnesses?: readonly FakeAgentHarnessDefinition[];
-    readonly nativeSessionIds?: ReadonlySet<string>;
+    readonly sessionIds?: ReadonlySet<string>;
     readonly origin: string;
     readonly relayOrigin?: string;
     readonly runtimeOptions?: RunRuntimeOptions;
@@ -53,7 +53,7 @@ export async function createFakeAgentHarnessRuntime(options: {
     try {
         await Promise.all([mkdir(workspace), mkdir(harnessState)]);
         await Promise.all(
-            [...(options.nativeSessionIds ?? [])].map(async (sessionId) =>
+            [...(options.sessionIds ?? [])].map(async (sessionId) =>
                 writeFile(
                     join(harnessState, `${encodeURIComponent(sessionId)}.json`),
                     JSON.stringify({

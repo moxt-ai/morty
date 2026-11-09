@@ -6,7 +6,7 @@ import { decodeMessageKind, decodeRuntimeDiagnosticsResult } from "@morty-build/
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
-import { withControlledDaemon, withRealDaemon } from "../support/agents/real-daemon.ts";
+import { withControlledDaemonConnection } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
 // @no-uc: Technical regression; process lifecycle logs must reach Runtime bug reports.
@@ -14,7 +14,7 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
     const directory = await mkdtemp(join(tmpdir(), "morty-lifecycle-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
-        await withRealDaemon(
+        await withControlledDaemonConnection(
             new ControlledAcpAgentSpecification(),
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent-state"),
@@ -76,7 +76,7 @@ test("Given a discovered executable with a known version, When diagnostics are r
     const directory = await mkdtemp(join(tmpdir(), "morty-inventory-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
-        await withControlledDaemon(
+        await withControlledDaemonConnection(
             new ControlledAcpAgentSpecification(),
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent-state"),

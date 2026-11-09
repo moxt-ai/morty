@@ -17,7 +17,7 @@ import {
     decodeSessionReadyEvent,
     encodeAgentSettingsDiscoverCommand,
     encodeNativeSessionCommand,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     encodeSessionPreviewHistoryPageLoad,
     MORTY_API_PREFIX,
     NATIVE_SESSION_REQUEST_KIND,
@@ -348,14 +348,15 @@ test.for([
             const frames = new ClientFrames(await socketReady.promise);
             sendText(
                 await socketReady.promise,
-                encodeSessionPrepareCommand({
+                encodeSessionCreateCommand({
                     additionalDirectoryIds: [],
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    kind: "session.prepare",
+                    kind: "session.create",
                     requestId: "prepare-before-agent-upgrade",
-                    sessionId: "conversation-before-upgrade",
+                    operationId: crypto.randomUUID(),
+                    configurations: [],
                 }),
             );
             expect(await nextCommandOutcome(frames, "prepare-before-agent-upgrade")).toMatchObject({
@@ -372,7 +373,7 @@ test.for([
                         directoryId: "default",
                         kind: NATIVE_SESSION_REQUEST_KIND,
                         requestId: "browse-before-agent-upgrade",
-                        sessionId: "native-browser",
+                        discoveryId: "native-browser",
                         action: "list",
                         cursor: null,
                     }),
@@ -383,20 +384,20 @@ test.for([
                 });
             }
             const prepareRequestId = "prepare-after-agent-upgrade";
-            const upgradedSessionId = "draft-agent-upgrade-new-conversation";
             await unlink(link);
             await symlink(secondLauncher, link);
 
             sendText(
                 await socketReady.promise,
-                encodeSessionPrepareCommand({
+                encodeSessionCreateCommand({
                     additionalDirectoryIds: [],
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    kind: "session.prepare",
+                    kind: "session.create",
                     requestId: prepareRequestId,
-                    sessionId: upgradedSessionId,
+                    operationId: crypto.randomUUID(),
+                    configurations: [],
                 }),
             );
             const prepared = await nextCommandOutcome(frames, prepareRequestId);
@@ -405,7 +406,7 @@ test.for([
             );
             expect(prepared).toMatchObject({
                 kind: "session.ready",
-                ready: { agentVersion: "1.1.0", sessionId: upgradedSessionId },
+                ready: { agentVersion: "1.1.0", target: { harness: agentId, sessionId: expect.any(String) } },
             });
 
             const settingsRequestId = "settings-after-agent-upgrade";
@@ -432,7 +433,7 @@ test.for([
                     directoryId: "default",
                     kind: NATIVE_SESSION_REQUEST_KIND,
                     requestId: "browse-after-agent-upgrade",
-                    sessionId: "native-browser",
+                    discoveryId: "native-browser",
                     action: "list",
                     cursor: null,
                 }),
@@ -452,7 +453,7 @@ test.for([
                         directoryId: "default",
                         kind: "session.preview-history.page.load",
                         requestId: "preview-after-agent-upgrade",
-                        sessionId: "saved-thread",
+                        target: { harness: agentId, sessionId: "saved-thread" },
                         eventLimit: 100,
                         cursor: null,
                     }),

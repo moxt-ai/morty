@@ -6,6 +6,7 @@ import {
     type MortyTransportSessionEvent,
     WsTransport,
 } from "@morty-build/client";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeAgentSettingsDiscoveredEvent,
     decodeMessageKind,
@@ -19,6 +20,7 @@ import {
     type Identifier,
     isDirectoryIdentifier,
     isIdentifier,
+    type NativeSessionTarget,
     SESSION_CLOSE_NOTICE_KIND,
     type SessionCloseNoticeEvent,
     type SessionConfigOption,
@@ -32,11 +34,12 @@ import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-ca
 import { CloudApiError, ManagementApi, runtimeBindingUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
+const nativeSessionTargetSchema = v.pipe(v.strictObject({ harness: identifier, sessionId: identifier }), v.readonly());
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
         computerId: identifier,
-        sessionId: identifier,
+        target: nativeSessionTargetSchema,
         credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         ready: v.unknown(),
@@ -62,7 +65,6 @@ const managedSessionStatusSchema = v.variant("kind", [
 const managedSessionSchema = v.pipe(
     v.object({
         createdAt: v.pipe(v.string(), v.isoTimestamp()),
-        id: identifier,
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
@@ -71,6 +73,7 @@ const managedSessionSchema = v.pipe(
         computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
+        target: nativeSessionTargetSchema,
         status: managedSessionStatusSchema,
         userId: identifier,
     }),
@@ -81,7 +84,9 @@ export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
 const managedSessionStatusesFollowingSchema = v.object({
     sessions: v.literal("owned"),
-    statuses: v.array(v.pipe(v.object({ sessionId: identifier, status: managedSessionStatusSchema }), v.readonly())),
+    statuses: v.array(
+        v.pipe(v.object({ target: nativeSessionTargetSchema, status: managedSessionStatusSchema }), v.readonly()),
+    ),
 });
 /** Current statuses precede changes for every owned Session, including Sessions created after subscription. */
 export type ManagedSessionEvent =
@@ -89,7 +94,7 @@ export type ManagedSessionEvent =
           readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
           readonly sessions: "owned";
           readonly statuses: readonly {
-              readonly sessionId: string;
+              readonly target: NativeSessionTarget;
               readonly status: ManagedChatSession["status"];
           }[];
       }
@@ -143,16 +148,14 @@ export type ConversationActiveTurn =
     | { readonly kind: "idle" }
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string };
 const sessionAccessSchema = v.object({
-    sessionId: identifier,
+    target: nativeSessionTargetSchema,
     computerId: identifier,
     credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });
 const localSessionEntrySchema = v.object({
-    entryId: identifier,
-    mortySessionIds: v.array(identifier),
-    nativeSessionId: identifier,
+    sessionId: identifier,
     title: v.string(),
     directoryId: v.string(),
     directoryLabel: v.string(),
@@ -326,11 +329,8 @@ export class BotChatApi {
     readonly close = (): void => {
         this.#sessionTransport.close();
     };
-    readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
-        v.parse(
-            accessSchema,
-            await this.#request(botId, "access", { conversationId: v.parse(identifier, conversationId) }, parent),
-        );
+    readonly access = async (botId: string, parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
+        v.parse(accessSchema, await this.#request(botId, "access", v.parse(nativeSessionTargetSchema, target), parent));
     readonly daemonDiagnostics = async (botId: string, signal: AbortSignal) =>
         decodeRuntimeDiagnosticsResult(
             JSON.stringify(await this.#request(botId, "daemon-diagnostics", undefined, signal)),
@@ -368,13 +368,11 @@ export class BotChatApi {
             action: "conversation" as const,
             access,
             activeTurn,
-            targetSessionId: access.sessionId,
+            target: access.target,
             ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
         },
         entry: {
-            entryId: access.sessionId,
-            mortySessionIds: [access.sessionId],
-            nativeSessionId: access.sessionId,
+            sessionId: access.target.sessionId,
             title,
             directoryId: access.workspaceRef,
             directoryLabel,
@@ -422,23 +420,18 @@ export class BotChatApi {
             },
         );
     };
-    readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal) =>
+    readonly archiveManagedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) =>
         v.parse(
             v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),
-            await this.#request(
-                botId,
-                "managed-session/archive",
-                { sessionId: v.parse(identifier, sessionId) },
-                signal,
-            ),
+            await this.#request(botId, "managed-session/archive", v.parse(nativeSessionTargetSchema, target), signal),
         );
-    readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
+    readonly managedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) => {
         const stored = v.parse(
             managedSdkSessionSchema,
-            await this.#request(botId, "managed-session", { sessionId }, signal),
+            await this.#request(botId, "managed-session", v.parse(nativeSessionTargetSchema, target), signal),
         );
         const ready = decodeSessionReadyEvent(JSON.stringify(stored.ready));
-        if (ready.sessionId !== sessionId) {
+        if (ready.agentId !== target.harness || stored.entry.sessionId !== target.sessionId) {
             throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
         }
         return {
@@ -446,7 +439,7 @@ export class BotChatApi {
             entry: stored.entry,
             result: {
                 action: "managed" as const,
-                targetSessionId: sessionId,
+                target: ready.target,
                 ready,
             },
         };
@@ -595,7 +588,7 @@ export class BotChatApi {
             readonly agentId: string;
             readonly directoryId: string;
             readonly additionalDirectoryIds: readonly string[];
-            readonly nativeSessionId: string;
+            readonly sessionId: string;
         },
         signal: AbortSignal,
     ) => {
@@ -612,7 +605,7 @@ export class BotChatApi {
 
     readonly connectSession = async (
         botId: string,
-        sessionId: string,
+        target: NativeSessionTarget,
         signal: AbortSignal,
         initialAccess?: ChatAccess,
     ): Promise<MortyClient> => {
@@ -624,7 +617,7 @@ export class BotChatApi {
                         await this.#request(
                             botId,
                             "session-access",
-                            { sessionId: v.parse(identifier, sessionId) },
+                            v.parse(nativeSessionTargetSchema, target),
                             parent,
                         ),
                     );
@@ -640,7 +633,7 @@ export class BotChatApi {
         let access = initialAccess ?? (await readAccess(signal));
         const endpoint = sessionEndpoint(access.endpoint);
         const computerId = access.computerId;
-        if (access.sessionId !== sessionId) {
+        if (!sameNativeSession(access.target, target)) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
         return new MortyClient({
@@ -657,7 +650,7 @@ export class BotChatApi {
                     if (
                         sessionEndpoint(access.endpoint) !== endpoint ||
                         access.computerId !== computerId ||
-                        access.sessionId !== sessionId
+                        !sameNativeSession(access.target, target)
                     ) {
                         throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
                     }

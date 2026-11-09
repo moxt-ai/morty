@@ -30,7 +30,7 @@ export async function createTestRuntime(
             // Match Web/Worker fixtures: the daemon records the submitted
             // prompt, so this controlled Agent does not echo it again.
             echoUserMessage: true,
-            nativeSessionIds: new Set(["setup-reconnect-session"]),
+            sessionIds: new Set(["setup-reconnect-session"]),
         },
         machineName,
     );

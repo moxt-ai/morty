@@ -13,7 +13,7 @@ test("Given a Fork completes before Morty loses its response, When the user retr
         const app = await createTestApp({
             environment,
             connectAgent: true,
-            nativeSessionIds: new Set(["fork-recovery-source"]),
+            sessionIds: new Set(["fork-recovery-source"]),
         });
         application = app;
         await app.queryElementByTestId(

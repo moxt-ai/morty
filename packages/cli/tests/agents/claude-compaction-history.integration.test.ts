@@ -140,7 +140,7 @@ test.each(["auto", "multiple", "preservedSegment", "preservedMessages", "missing
                         eventLimit: 200,
                         kind: "session.preview-history.page.load",
                         requestId: "compaction-history",
-                        sessionId: nativeId,
+                        target: { harness: "claude", sessionId: nativeId },
                     }),
                 );
                 for (;;) {

@@ -12,13 +12,13 @@ function historyAdapter(agent: AcpAgentDefinition) {
     const content = new UnretainedExternalContentStore();
     const adapter = new CodexAdapter(agent, {
         processes,
-        contentExternalizer: new AcpContentExternalizer((sessionId, value, signal) =>
+        contentExternalizer: new AcpContentExternalizer((sessionTarget, value, signal) =>
             content.put({
                 bytes: value.bytes,
                 kind: value.kind,
                 mediaType: value.mediaType,
                 name: value.name,
-                sessionId,
+                target: sessionTarget,
                 signal,
             }),
         ),
@@ -27,13 +27,13 @@ function historyAdapter(agent: AcpAgentDefinition) {
 }
 
 /** Exercises the production preview boundary against a controlled app-server executable. */
-export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string, nativeSessionId: string) {
+export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string, sessionId: string) {
     const { adapter, processes } = historyAdapter(agent);
     try {
         return await adapter.readSessionHistory({
             query: { agent, cwd, additionalDirectories: [], signal: AbortSignal.timeout(30_000) },
             request: {
-                nativeSessionId,
+                sessionId,
                 eventLimit: 500,
                 cursor: null,
             },
@@ -45,9 +45,10 @@ export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string
 }
 
 /** Reads through the normal ACP session/load lifecycle for parity assertions. */
-export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, nativeSessionId: string) {
+export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, sessionId: string) {
     const { adapter, processes } = historyAdapter(agent);
     const events = new MemorySessionEventStore();
+    const sessionTarget = { harness: agent.id, sessionId };
     try {
         const signal = AbortSignal.timeout(30_000);
         await validateAgentRuntime(agent, signal);
@@ -57,8 +58,8 @@ export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, n
         const params: AdapterSessionCreateParams = {
             scope: { agent, cwd, additionalDirectories: [] },
             signal,
-            onSessionEvent: async (_nativeSessionId, event) => {
-                events.append("opened", { type: "acp", payload: event.payload });
+            onSessionEvent: async (_sessionId, event) => {
+                events.append(sessionTarget, { type: "acp", payload: event.payload });
             },
             interactions: {
                 onPermission: rejectInteraction,
@@ -67,15 +68,15 @@ export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, n
             },
         };
         try {
-            events.reset("opened");
-            await adapter.openSessionWithReplay({ ...params, nativeSessionId });
+            events.reset(sessionTarget);
+            await adapter.openSessionWithReplay({ ...params, sessionId });
             signal.throwIfAborted();
-            return events.page("opened", 500, null);
+            return events.page(sessionTarget, 500, null);
         } finally {
             await adapter.releaseSession({
                 cwd,
                 additionalDirectories: [],
-                nativeSessionId,
+                sessionId,
                 signal: AbortSignal.timeout(30_000),
             });
         }

@@ -51,15 +51,14 @@ async function run(
         observer,
         store: new MemorySessionStore(),
         adapters: acpAdapters,
-        sessionIdentity: "assigned",
         onSessionStatusChanged: () => undefined,
-        contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+        contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,
                 kind: content.kind,
                 mediaType: content.mediaType,
                 name: content.name,
-                sessionId,
+                target: sessionTarget,
                 signal,
             }),
         ),
@@ -74,7 +73,12 @@ async function run(
             cwd: process.cwd(),
             images: [],
             resources: [],
-            sessionId: "usage-session",
+            target: await manager.createNativeSession({
+                agent: usageAgent(response, context),
+                cwd: process.cwd(),
+                additionalDirectories: [],
+                signal: AbortSignal.timeout(10_000),
+            }),
             prompt: "Complete this turn",
             signal: AbortSignal.timeout(10_000),
         });

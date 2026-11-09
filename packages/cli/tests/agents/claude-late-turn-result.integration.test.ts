@@ -138,7 +138,7 @@ test("Given Claude's Stop hook outlasts the result watchdog, When I send the nex
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
             let answers = "";

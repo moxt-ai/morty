@@ -54,8 +54,8 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         const botId = identity.bot.botId;
         const transport = new WebSocketApiTransport(origin, clock);
         transport.open();
-        const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
-            const runtime = await cloud.connectAgent(identity.computerId, agents, nativeSessionIds);
+        const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
+            const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
                 computerId: runtime.computerId,
                 agentRef: agents[0]?.id ?? "codex",
@@ -68,19 +68,22 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 continueReply: runtime.continueReply,
                 /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
-                    await runtime.client.sessions.close(sessionId, new AbortController().signal);
+                    await runtime.client.sessions.close(
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        new AbortController().signal,
+                    );
                 },
                 /** Applies another client's explicit model edit through the public Platform contract. */
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
                     const snapshot = await runtime.client.sessions.readConfiguration(
                         runtime.computerId,
-                        sessionId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         signal,
                     );
                     await runtime.client.sessions.updateConfiguration(
                         runtime.computerId,
-                        sessionId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         {
                             additionalDirectoryIds: [],
                             agentId: agents[0]?.id ?? "codex",
@@ -97,7 +100,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
-                        sessionId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         {
                             additionalDirectoryIds: [],
                             agentId: agents[0]?.id ?? "codex",
@@ -125,7 +128,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
                         runtime.computerId,
-                        sessionId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         title,
                         new AbortController().signal,
                     );
@@ -153,10 +156,10 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
             executionNetwork: cloud.executionNetwork,
             connectAgent: async (
                 agent: ControlledAgent = { id: "claude", label: "Codex" },
-                nativeSessionIds?: ReadonlySet<string>,
-            ) => await connect([agent], nativeSessionIds),
-            connectAgents: async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) =>
-                await connect(agents, nativeSessionIds),
+                sessionIds?: ReadonlySet<string>,
+            ) => await connect([agent], sessionIds),
+            connectAgents: async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) =>
+                await connect(agents, sessionIds),
             connectRuntime: async () => {
                 const runtime = await cloud.connectAgent(identity.computerId);
                 return { failure: runtime.failure, computerId: runtime.computerId };

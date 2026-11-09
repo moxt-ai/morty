@@ -1,9 +1,14 @@
 import { runCleanup } from "../../../util/run-cleanup.ts";
 import type { AcpAgentDefinition } from "../../agent/agent-definition.ts";
 import type { Adapter, AdapterDependencies, NativeSessionQuery } from "../../native-history/preview-contract.ts";
-import { nativeSessionIdSchema } from "../../protocol/native-session.ts";
+import { sessionIdSchema } from "../../protocol/native-session.ts";
 import { AcpExecutionConnections } from "../execution-connections.ts";
-import { createdNativeSessionId, normalizeOpenedSession, sessionWorkspace } from "../lifecycle-output.ts";
+import {
+    createdSessionId,
+    normalizeOpenedSession,
+    sessionCreationResponse,
+    sessionWorkspace,
+} from "../lifecycle-output.ts";
 import { findNativeSession } from "../native-session-lookup.ts";
 import { AgentQueryProcesses } from "../query-processes.ts";
 import { AcpSessionConnector } from "../session-events.ts";
@@ -28,16 +33,19 @@ export class ClaudeAdapter implements Adapter {
     readonly createSession: Adapter["createSession"] = (params) =>
         this.#executionConnections.withConnection(params, async (execution, signal) => {
             const { connection } = execution;
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(methods.agent.session.new, sessionWorkspace(params.scope), {
-                    cancellationSignal: signal,
-                }),
-                "ACP agent exited while starting a session",
+            const response: unknown = await sessionCreationResponse(
+                connection.race(
+                    connection.connection.agent.request(methods.agent.session.new, sessionWorkspace(params.scope), {
+                        cancellationSignal: signal,
+                    }),
+                    "ACP agent exited while starting a session",
+                    signal,
+                ),
                 signal,
             );
-            const nativeSessionId = createdNativeSessionId(response);
-            this.#executionConnections.bind(execution, nativeSessionId);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            const sessionId = createdSessionId(response);
+            this.#executionConnections.bind(execution, sessionId);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly forkSession: Adapter["forkSession"] = (params) =>
         this.#executionConnections.withConnection(params, async (execution, signal) => {
@@ -47,49 +55,49 @@ export class ClaudeAdapter implements Adapter {
                     methods.agent.session.fork,
                     {
                         ...sessionWorkspace(params.scope),
-                        sessionId: nativeSessionIdSchema.parse(params.sourceNativeSessionId),
+                        sessionId: sessionIdSchema.parse(params.sourceSessionId),
                     },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited while forking a session",
                 signal,
             );
-            const nativeSessionId = createdNativeSessionId(response);
-            this.#executionConnections.bind(execution, nativeSessionId);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            const sessionId = createdSessionId(response);
+            this.#executionConnections.bind(execution, sessionId);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly openSession: Adapter["openSession"] = (params) =>
         this.#executionConnections.withConnection(params, async (execution, signal) => {
             const { connection } = execution;
-            const nativeSessionId = nativeSessionIdSchema.parse(params.nativeSessionId);
-            this.#executionConnections.bind(execution, nativeSessionId);
+            const sessionId = sessionIdSchema.parse(params.sessionId);
+            this.#executionConnections.bind(execution, sessionId);
             const response: unknown = await connection.race(
                 connection.connection.agent.request(
                     methods.agent.session.resume,
-                    { ...sessionWorkspace(params.scope), sessionId: nativeSessionId },
+                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited while resuming a session",
                 signal,
             );
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) =>
         this.#executionConnections.withConnection(params, async (execution, signal) => {
             const { connection } = execution;
-            const nativeSessionId = nativeSessionIdSchema.parse(params.nativeSessionId);
-            this.#executionConnections.bind(execution, nativeSessionId);
+            const sessionId = sessionIdSchema.parse(params.sessionId);
+            this.#executionConnections.bind(execution, sessionId);
             const response: unknown = await connection.race(
                 connection.connection.agent.request(
                     methods.agent.session.load,
-                    { ...sessionWorkspace(params.scope), sessionId: nativeSessionId },
+                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited while loading a session",
                 signal,
             );
             await connection.race(connection.events.drained(), "ACP agent exited while loading a session", signal);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly cancel: Adapter["cancel"] = (...args) => this.#executionConnections.cancel(...args);
     readonly closeSession: Adapter["closeSession"] = (...args) => this.#executionConnections.closeSession(...args);
@@ -103,8 +111,8 @@ export class ClaudeAdapter implements Adapter {
         this.#executionConnections.configureSession(...args);
     readonly listSessions: Adapter["listSessions"] = async ({ query, cursor }) =>
         await this.#queryProcesses.listNativeSessions(query, cursor);
-    readonly findSession: Adapter["findSession"] = ({ query, nativeSessionId, budget }) =>
-        findNativeSession(this.listSessions, query, nativeSessionId, budget);
+    readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
+        findNativeSession(this.listSessions, query, sessionId, budget);
     readonly readSessionHistory: Adapter["readSessionHistory"] = async ({ query, request }) =>
         await this.#queryProcesses.previewSessionEvents(query, request);
     readonly close = async (): Promise<void> =>

@@ -39,7 +39,7 @@ export async function startTestPlatform(
             connectAgent: async (
                 computerId: string,
                 agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],
-                nativeSessionIds?: ReadonlySet<string>,
+                sessionIds?: ReadonlySet<string>,
             ) => {
                 const runtime = await createControlledAgentRuntime({
                     credential,
@@ -56,7 +56,7 @@ export async function startTestPlatform(
                         ...(agents[0]?.beforeConfigurationApplied === undefined
                             ? {}
                             : { beforeConfigurationApplied: agents[0].beforeConfigurationApplied }),
-                        ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
+                        ...(sessionIds === undefined ? {} : { sessionIds }),
                     },
                     origin: bindings.origin,
                     computerId,

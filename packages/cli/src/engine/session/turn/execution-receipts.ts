@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     type CommandDelivery,
     decodeKnownSessionEventPayload,
     isPromptTerminal,
     type LastTurnOutcome,
     type LifecycleMetadata,
+    type NativeSessionTarget,
     promptCompletion,
     type SessionEventPayload,
     type SessionLiveEvent,
@@ -37,11 +39,11 @@ export type RuntimeExecutionReceipt =
 export type RecoveredOutcome =
     | {
           readonly kind: "recorded";
-          readonly sessionId: string;
+          readonly target: NativeSessionTarget;
           readonly event: SessionEventPayload;
           readonly recordedAt: string;
       }
-    | { readonly kind: "restated"; readonly sessionId: string; readonly outcome: RestatedOutcome };
+    | { readonly kind: "restated"; readonly target: NativeSessionTarget; readonly outcome: RestatedOutcome };
 
 /**
  * An outcome the ledger already holds, restated for clients that missed it. It keeps the time it was recorded, which
@@ -120,11 +122,11 @@ type CommandStanding =
     // The command was cancelled before it started, and its outcome is no longer kept.
     | { readonly kind: "cancelled" };
 
-function commandStanding(command: LedgerCommand | undefined, sessionId: string): CommandStanding {
+function commandStanding(command: LedgerCommand | undefined, sessionTarget: NativeSessionTarget): CommandStanding {
     if (command === undefined) {
         return { kind: "unseen" };
     }
-    if (command.sessionId !== sessionId) {
+    if (!sameNativeSession(command.target, sessionTarget)) {
         return { kind: "foreign" };
     }
     const fate = command.fate;
@@ -193,8 +195,8 @@ export class ExecutionReceipts {
         const command = this.#ledger.read(commandId);
         return command === undefined ? undefined : this.#withShutdownSettlement(command);
     };
-    readonly #standing = (commandId: string, sessionId: string): CommandStanding =>
-        commandStanding(this.#read(commandId), sessionId);
+    readonly #standing = (commandId: string, sessionTarget: NativeSessionTarget): CommandStanding =>
+        commandStanding(this.#read(commandId), sessionTarget);
     /** The outcome clients read for a settled command: what this process recorded, else the ledger's form. */
     readonly #outcome = ({ commandId, fate }: LedgerCommand): string | undefined => {
         if (isUnsettled(fate) || fate.outcome === null) {
@@ -264,18 +266,26 @@ export class ExecutionReceipts {
             signal.addEventListener("abort", aborted, { once: true });
         });
     /** Where the command stands now, or its next transition: `started` once it started, `settled` once it has ended. */
-    readonly progress = async (commandId: string, sessionId: string, signal: AbortSignal): Promise<CommandProgress> => {
-        if (this.isTerminalExecution(commandId, sessionId)) {
+    readonly progress = async (
+        commandId: string,
+        sessionTarget: NativeSessionTarget,
+        signal: AbortSignal,
+    ): Promise<CommandProgress> => {
+        if (this.isTerminalExecution(commandId, sessionTarget)) {
             return "settled";
         }
-        if (this.hasStarted(commandId, sessionId)) {
+        if (this.hasStarted(commandId, sessionTarget)) {
             return "started";
         }
         return await this.#transition(commandId, () => true, signal);
     };
     /** Resolves once the command has ended. */
-    readonly settlement = async (commandId: string, sessionId: string, signal: AbortSignal): Promise<void> => {
-        if (!this.isTerminalExecution(commandId, sessionId)) {
+    readonly settlement = async (
+        commandId: string,
+        sessionTarget: NativeSessionTarget,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        if (!this.isTerminalExecution(commandId, sessionTarget)) {
             await this.#transition(commandId, (progress) => progress === "settled", signal);
         }
     };
@@ -287,8 +297,8 @@ export class ExecutionReceipts {
         return outcome === undefined ? undefined : storedOutcome(outcome);
     };
     /** The command's delivery as the ledger knows it; another Session's command reads as unknown. */
-    readonly delivery = (commandId: string, sessionId: string): CommandDelivery => {
-        const standing = this.#standing(commandId, sessionId);
+    readonly delivery = (commandId: string, sessionTarget: NativeSessionTarget): CommandDelivery => {
+        const standing = this.#standing(commandId, sessionTarget);
         switch (standing.kind) {
             case "unseen":
             case "foreign":
@@ -326,9 +336,9 @@ export class ExecutionReceipts {
      * joined the turn it steered, which reports for both; a steer not known to have joined (it failed, or a restart
      * interrupted it) keeps its own outcome. Undefined while the latest turn runs or its outcome is no longer kept.
      */
-    readonly lastTurn = (sessionId: string): LastTurnOutcome | undefined => {
+    readonly lastTurn = (sessionTarget: NativeSessionTarget): LastTurnOutcome | undefined => {
         let last: { readonly commandId: string; readonly outcome: SessionEventPayload | undefined } | undefined;
-        for (const stored of this.#ledger.session(sessionId)) {
+        for (const stored of this.#ledger.session(sessionTarget)) {
             const command = this.#withShutdownSettlement(stored);
             const outcome = this.outcome(command.commandId);
             const payload = outcome?.type === "lifecycle-metadata" ? outcome.payload : undefined;
@@ -357,13 +367,17 @@ export class ExecutionReceipts {
         }
     };
     /** When the Session's running command started. */
-    readonly startedAt = (commandId: string, sessionId: string): string | undefined => {
+    readonly startedAt = (commandId: string, sessionTarget: NativeSessionTarget): string | undefined => {
         const command = this.#read(commandId);
-        return command?.sessionId === sessionId && command.fate.kind === "started" ? command.fate.startedAt : undefined;
+        return command !== undefined &&
+            sameNativeSession(command.target, sessionTarget) &&
+            command.fate.kind === "started"
+            ? command.fate.startedAt
+            : undefined;
     };
     /** The Session's settled turns, in admission order, whose outcomes the ledger keeps with their user message. */
-    readonly settledTurns = (sessionId: string): readonly SettledTurn[] =>
-        this.#ledger.session(sessionId).flatMap((command): SettledTurn[] => {
+    readonly settledTurns = (sessionTarget: NativeSessionTarget): readonly SettledTurn[] =>
+        this.#ledger.session(sessionTarget).flatMap((command): SettledTurn[] => {
             const outcome = this.restatedOutcome(command.commandId);
             const event = outcome?.event;
             if (
@@ -385,8 +399,8 @@ export class ExecutionReceipts {
             ];
         });
     /** A command that started stays started after its outcome is no longer kept. */
-    readonly hasStarted = (commandId: string, sessionId: string): boolean => {
-        const standing = this.#standing(commandId, sessionId);
+    readonly hasStarted = (commandId: string, sessionTarget: NativeSessionTarget): boolean => {
+        const standing = this.#standing(commandId, sessionTarget);
         switch (standing.kind) {
             case "unseen":
             case "foreign":
@@ -408,9 +422,9 @@ export class ExecutionReceipts {
      */
     readonly recordCancellationBeforeAdmission = (
         commandId: string,
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
     ): CancellationBeforeAdmission => {
-        const standing = this.#standing(commandId, sessionId);
+        const standing = this.#standing(commandId, sessionTarget);
         switch (standing.kind) {
             case "foreign":
                 return { kind: "unavailable" };
@@ -435,10 +449,10 @@ export class ExecutionReceipts {
         const outcome = cancelledBeforeStartOutcome(commandId);
         // The identifier belongs to the cancellation, so a later prompt conflicts rather than executing.
         const commandHash = createHash("sha256")
-            .update(JSON.stringify({ commandId, kind: "session.cancel-before-start", sessionId }))
+            .update(JSON.stringify({ commandId, kind: "session.cancel-before-start", sessionTarget }))
             .digest("hex");
         for (const dropped of this.#ledger.admitCancelled(
-            { attemptId: randomUUID(), commandHash, commandId, sessionId },
+            { attemptId: randomUUID(), commandHash, commandId, target: sessionTarget },
             JSON.stringify({ ...outcome, recordedAt: new Date().toISOString() }),
         )) {
             this.#agentOutcomes.delete(dropped);
@@ -489,7 +503,7 @@ export class ExecutionReceipts {
                 // The previous process recorded this outcome; publishing it again restates that fact.
                 const restated = fate.outcome === null ? undefined : storedOutcome(fate.outcome);
                 if (restated !== undefined) {
-                    recovered.push({ kind: "restated", sessionId: command.sessionId, outcome: restated });
+                    recovered.push({ kind: "restated", target: command.target, outcome: restated });
                 }
                 continue;
             }
@@ -512,7 +526,7 @@ export class ExecutionReceipts {
                           },
             };
             const recordedAt = new Date().toISOString();
-            recovered.push({ kind: "recorded", sessionId: command.sessionId, event, recordedAt });
+            recovered.push({ kind: "recorded", target: command.target, event, recordedAt });
             this.#settle(command.commandId, fate, JSON.stringify({ ...event, recordedAt }));
         }
         return recovered;
@@ -524,12 +538,12 @@ export class ExecutionReceipts {
      */
     readonly claimExecution = (
         commandId: string,
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         commandJson: string,
         admits: () => boolean,
     ): RuntimeExecutionReceipt => {
         const commandHash = createHash("sha256").update(commandJson).digest("hex");
-        const standing = this.#standing(commandId, sessionId);
+        const standing = this.#standing(commandId, sessionTarget);
         switch (standing.kind) {
             case "foreign":
             case "cancelled":
@@ -557,20 +571,22 @@ export class ExecutionReceipts {
             return { kind: "refused" };
         }
         const attemptId = randomUUID();
-        this.#ledger.admit({ attemptId, commandHash, commandId, sessionId });
+        this.#ledger.admit({ attemptId, commandHash, commandId, target: sessionTarget });
         this.#publishCount();
         return { attemptId, commandId, kind: "accepted" };
     };
 
     /** Only commands without a terminal result can still be cancelled. */
-    readonly findUnsettledAttemptId = (commandId: string, sessionId: string): string | null => {
+    readonly findUnsettledAttemptId = (commandId: string, sessionTarget: NativeSessionTarget): string | null => {
         const command = this.#read(commandId);
-        return command?.sessionId === sessionId && isUnsettled(command.fate) ? command.attemptId : null;
+        return command !== undefined && sameNativeSession(command.target, sessionTarget) && isUnsettled(command.fate)
+            ? command.attemptId
+            : null;
     };
 
-    readonly isTerminalExecution = (commandId: string, sessionId: string): boolean => {
+    readonly isTerminalExecution = (commandId: string, sessionTarget: NativeSessionTarget): boolean => {
         const command = this.#read(commandId);
-        return command?.sessionId === sessionId && !isUnsettled(command.fate);
+        return command !== undefined && sameNativeSession(command.target, sessionTarget) && !isUnsettled(command.fate);
     };
 
     readonly close = (): void => {

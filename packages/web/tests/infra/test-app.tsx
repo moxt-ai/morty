@@ -72,7 +72,7 @@ export async function createTestApp(
         readonly setupHandoff?: SetupHandoff;
         readonly agent?: ControlledAgent;
         readonly agents?: readonly ControlledAgent[];
-        readonly nativeSessionIds?: ReadonlySet<string>;
+        readonly sessionIds?: ReadonlySet<string>;
         readonly page?:
             | {
                   readonly kind: "continue";
@@ -87,7 +87,7 @@ export async function createTestApp(
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
             | { readonly kind: "component-library"; readonly entryId: string }
             | { readonly kind: "reload" }
-            | { readonly kind: "managed-session"; readonly sessionId: string }
+            | { readonly kind: "managed-session"; readonly harness: string; readonly sessionId: string }
             | { readonly kind: "morty" };
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
@@ -98,8 +98,8 @@ export async function createTestApp(
     const daemon =
         options.connectAgent === true
             ? options.agents === undefined
-                ? await current.connectAgent(options.agent, options.nativeSessionIds)
-                : await current.connectAgents(options.agents, options.nativeSessionIds)
+                ? await current.connectAgent(options.agent, options.sessionIds)
+                : await current.connectAgents(options.agents, options.sessionIds)
             : null;
     const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "morty" };
@@ -131,6 +131,7 @@ export async function createTestApp(
     } else if (options.application === undefined) {
         const destination = new URL("/chat", current.origin);
         if (page.kind === "managed-session") {
+            destination.searchParams.set("harness", page.harness);
             destination.searchParams.set("sessionId", page.sessionId);
         }
         // Sign in through the production flow: the URL carries the identity

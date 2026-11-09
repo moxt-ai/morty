@@ -6,10 +6,10 @@ const path = z
     .max(2_048)
     .refine((value) => !value.includes("\0"));
 const title = z.string().transform((value) => value.slice(0, 500));
-export const nativeSessionIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/);
+export const sessionIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/);
 const nativeSessionInfoSchema = z
     .object({
-        sessionId: nativeSessionIdSchema,
+        sessionId: sessionIdSchema,
         cwd: path,
         additionalDirectories: z.array(path).max(16).default([]).readonly(),
         title: title.nullish(),
@@ -26,5 +26,5 @@ export const nativeSessionPageSchema = z
 export type NativeSessionPage = z.infer<typeof nativeSessionPageSchema>;
 
 export type NativeSessionOrigin =
-    | { readonly kind: "import"; readonly nativeSessionId: string; readonly title: string }
-    | { readonly kind: "fork"; readonly nativeSessionId: string; readonly title: string };
+    | { readonly kind: "import"; readonly sessionId: string; readonly title: string }
+    | { readonly kind: "fork"; readonly sessionId: string; readonly title: string };

@@ -51,6 +51,7 @@ test.each(["owned", "borrowed"])(
                       })
                     : null;
             try {
+                let sessionTarget = peer.target;
                 if (native !== null) {
                     await native.initialize(peer.signal);
                     const { thread } = threadStartResponseSchema.parse(
@@ -96,7 +97,7 @@ test.each(["owned", "borrowed"])(
                         bindingId: peer.bindingId,
                         directoryId: "default",
                         kind: "native.session.request",
-                        sessionId: peer.sessionId,
+                        discoveryId: randomUUID(),
                     } as const;
                     const findId = randomUUID();
                     peer.send(
@@ -104,7 +105,7 @@ test.each(["owned", "borrowed"])(
                             ...identity,
                             requestId: findId,
                             action: "find",
-                            nativeSessionId: thread.id,
+                            sessionId: thread.id,
                         }),
                     );
                     const found = await nativeResult(peer, findId);
@@ -118,17 +119,20 @@ test.each(["owned", "borrowed"])(
                             requestId: importId,
                             action: "import",
                             entryId: found.entry.entryId,
-                            targetSessionId: peer.sessionId,
                         }),
                     );
-                    expect((await nativeResult(peer, importId)).action).toBe("import");
+                    const imported = await nativeResult(peer, importId);
+                    if (imported.action !== "import") {
+                        throw new Error("Expected native import");
+                    }
+                    sessionTarget = imported.target;
                 }
                 const commandId = randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: peer.sessionId,
+                        target: sessionTarget,
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -163,7 +167,7 @@ test.each(["owned", "borrowed"])(
                     encodeSessionHistoryPageLoad({
                         kind: "session.live-history.v2.page.load",
                         requestId: randomUUID(),
-                        sessionId: peer.sessionId,
+                        target: sessionTarget,
                         cursor: null,
                         eventLimit: 100,
                     }),

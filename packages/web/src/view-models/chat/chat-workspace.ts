@@ -1,3 +1,5 @@
+import { NativeSessionMap, sameNativeSession } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type {
@@ -17,7 +19,7 @@ import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { connectionPresentation } from "./connection-presentation.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState } from "./conversation-selection-machine.ts";
-import { selectedConversationId } from "./conversation-selection-machine.ts";
+import { selectedConversationTarget } from "./conversation-selection-machine.ts";
 import { type ConversationStatusStoreApi, createConversationStatusStore } from "./conversation-status-store.ts";
 import { createDeviceAccessStore, type DeviceAccessStore } from "./device-access-store.ts";
 import { createDraftControlsStore, type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
@@ -102,12 +104,14 @@ function historyNavigation(onDraft: () => void) {
         showDraft: () => {
             onDraft();
             replace((url) => {
+                url.searchParams.delete("harness");
                 url.searchParams.delete("sessionId");
             });
         },
-        showManaged: (id: string) =>
+        showManaged: (target: NativeSessionTarget) =>
             replace((url) => {
-                url.searchParams.set("sessionId", id);
+                url.searchParams.set("harness", target.harness);
+                url.searchParams.set("sessionId", target.sessionId);
             }),
     };
 }
@@ -149,10 +153,10 @@ export function createChatWorkspace(options: {
 }): ChatWorkspace {
     const botId = options.botId;
     const requests = options.requests;
-    let rememberedSessionId: string | null = null;
+    let rememberedSessionTarget: NativeSessionTarget | null = null;
     let initialVisitPending = true;
     const recordHome = () => {
-        rememberedSessionId = null;
+        rememberedSessionTarget = null;
         if (options.rememberedIdentity !== undefined) {
             rememberComputerVisit(options.rememberedIdentity, options.clock.now(), { kind: "home" });
         }
@@ -200,12 +204,14 @@ export function createChatWorkspace(options: {
         onRuntimeReplaced: () => {
             // A Session belongs to the Runtime that held it, so the page starts over on the Machine's new conversation.
             const url = new URL(window.location.href);
+            url.searchParams.delete("harness");
             url.searchParams.delete("sessionId");
             window.history.replaceState(window.history.state, "", url);
             options.onRuntimeReplaced();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
-        onFirstMessage: (sessionId, message) => sessionState(sessionId).delivery.getState().awaitConnection(message),
+        onFirstMessage: (sessionTarget, message) =>
+            sessionState(sessionTarget).delivery.getState().awaitConnection(message),
         onSelectionReady: (selection) => {
             runtimeRecovery.working();
             replacePane(selection);
@@ -231,11 +237,12 @@ export function createChatWorkspace(options: {
         },
         options.clock,
         titles,
-        (sessionId) => {
+        (sessionTarget) => {
             // Closing changes directory membership. Replace any read started before that change in the same
             // lifecycle that owns refreshes, so its delayed answer cannot put the closed Session back.
             startDirectoryLoad();
-            if (selectedConversationId(home.getState().selection) !== sessionId) {
+            const selected = selectedConversationTarget(home.getState().selection);
+            if (selected === null || !sameNativeSession(selected, sessionTarget)) {
                 return;
             }
             home.getState().newConversation();
@@ -244,12 +251,12 @@ export function createChatWorkspace(options: {
     const statuses = createConversationStatusStore(
         requests,
         () => {
-            const selected = selectedConversationId(home.getState().selection);
-            return selected.length > 0 ? selected : null;
+            const selected = selectedConversationTarget(home.getState().selection);
+            return selected;
         },
-        (sessionId, reason) => {
+        (sessionTarget, reason) => {
             // Only the open pane has something to tell its user; the other Sessions reopen when selected.
-            if (paneEntry?.session.result.ready.sessionId === sessionId) {
+            if (paneEntry !== null && sameNativeSession(paneEntry.session.result.ready.target, sessionTarget)) {
                 paneEntry.model.store.getState().sessionClosed(reason);
             }
         },
@@ -278,7 +285,10 @@ export function createChatWorkspace(options: {
                 return options.createTransfer(terms, signal);
             },
             onOpenSession: (session) => {
-                home.getState().openManaged(session.result.ready.sessionId);
+                home.getState().openManaged({
+                    harness: session.result.ready.agentId,
+                    sessionId: session.entry.sessionId,
+                });
             },
             onOpenedSession: () => startDirectoryLoad(),
         }),
@@ -410,19 +420,19 @@ export function createChatWorkspace(options: {
     // the workspace tears it down.
     let paneEntry: ChatWorkspacePaneEntry | null = null;
     // What the page holds for each Session, independently of pane and connection replacements.
-    const sessionStates = new Map<string, SessionPageState>();
-    const sessionState = (sessionId: string): SessionPageState => {
-        const existing = sessionStates.get(sessionId);
+    const sessionStates = new NativeSessionMap<SessionPageState>();
+    const sessionState = (sessionTarget: NativeSessionTarget): SessionPageState => {
+        const existing = sessionStates.get(sessionTarget);
         if (existing !== undefined) {
             return existing;
         }
         const state = createSessionPageState({
             botId,
-            sessionId,
+            sessionTarget,
             clock: options.clock,
             lifetime: operationsLifetime.signal,
         });
-        sessionStates.set(sessionId, state);
+        sessionStates.set(sessionTarget, state);
         return state;
     };
     const replacePane = (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>): void => {
@@ -435,19 +445,26 @@ export function createChatWorkspace(options: {
         // projection with its older-history pagination instead of whatever
         // the previous pane accumulated.
         paneEntry?.model.stop();
-        const sessionId = selection.session.result.ready.sessionId;
-        if (options.rememberedIdentity !== undefined && rememberedSessionId !== sessionId) {
+        const sessionTarget = selection.session.result.ready.target;
+        if (
+            options.rememberedIdentity !== undefined &&
+            (rememberedSessionTarget === null || !sameNativeSession(rememberedSessionTarget, sessionTarget))
+        ) {
             rememberComputerVisit(
                 options.rememberedIdentity,
                 options.clock.now(),
-                { kind: "session", sessionId },
+                {
+                    kind: "session",
+                    harness: selection.session.result.ready.agentId,
+                    sessionId: selection.session.entry.sessionId,
+                },
                 selection.session.result.ready.directoryLabel,
             );
-            rememberedSessionId = sessionId;
+            rememberedSessionTarget = sessionTarget;
         }
-        const sessionPage = sessionState(sessionId);
+        const sessionPage = sessionState(sessionTarget);
         // Only the draft page that followed its first message here hands over the draft written meanwhile.
-        const handoff = home.getState().takeNextDraft(sessionId);
+        const handoff = home.getState().takeNextDraft(sessionTarget);
         if (handoff !== null) {
             sessionPage.composer.getState().adoptHandoff(handoff.draft, handoff.attachments);
         }
@@ -458,7 +475,7 @@ export function createChatWorkspace(options: {
             attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
-            onReleased: (activity) => statuses.getState().paneReleased(sessionId, activity),
+            onReleased: (activity) => statuses.getState().paneReleased(sessionTarget, activity),
             titles,
             connectionAvailable: (connection) => connectionPresentation(home.getState(), connection).available,
             onConnected: () => runtimeRecovery.working(),
@@ -507,7 +524,11 @@ export function createChatWorkspace(options: {
                 const selection = home.getState().selection;
                 const destination =
                     selection.kind === "ready"
-                        ? { kind: "session" as const, sessionId: selection.session.result.ready.sessionId }
+                        ? {
+                              kind: "session" as const,
+                              harness: selection.session.result.ready.agentId,
+                              sessionId: selection.session.entry.sessionId,
+                          }
                         : selection.kind === "draft"
                           ? { kind: "home" as const }
                           : undefined;

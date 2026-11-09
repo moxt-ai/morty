@@ -320,6 +320,8 @@ export type {
     SessionClosedEvent,
     SessionCloseNoticeEvent,
     SessionCommandsUpdatedEvent,
+    SessionCreateCommand,
+    SessionCreationReadCommand,
     SessionInfoUpdatedEvent,
     SessionListCommand,
     SessionMetadata,
@@ -340,6 +342,8 @@ export {
     decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionCommandsUpdatedEvent,
+    decodeSessionCreateCommand,
+    decodeSessionCreationReadCommand,
     decodeSessionInfoUpdatedEvent,
     decodeSessionListCommand,
     decodeSessionOperationFailedEvent,
@@ -356,6 +360,8 @@ export {
     encodeSessionClosedEvent,
     encodeSessionCloseNoticeEvent,
     encodeSessionCommandsUpdatedEvent,
+    encodeSessionCreateCommand,
+    encodeSessionCreationReadCommand,
     encodeSessionInfoUpdatedEvent,
     encodeSessionListCommand,
     encodeSessionOperationFailedEvent,
@@ -373,6 +379,8 @@ export {
     SESSION_CLOSED_ERROR_CODE,
     SESSION_CLOSED_KIND,
     SESSION_COMMANDS_UPDATED_KIND,
+    SESSION_CREATE_KIND,
+    SESSION_CREATION_READ_KIND,
     SESSION_INFO_UPDATED_KIND,
     SESSION_LIST_KIND,
     SESSION_LISTED_KIND,
@@ -496,6 +504,11 @@ export type {
     WorkspaceEntry,
 } from "./session/shared/index.ts";
 export { decodeSessionCapabilities } from "./session/shared/index.ts";
+export {
+    decodeNativeSessionTarget,
+    type NativeSessionTarget,
+    readNativeSessionTarget,
+} from "./session/shared/native-session-target.ts";
 
 export type {
     Turn,

@@ -33,6 +33,8 @@ import {
     SESSION_CLOSE_KIND,
     SESSION_CONFIG_READ_KIND,
     SESSION_CONFIGURE_KIND,
+    SESSION_CREATE_KIND,
+    SESSION_CREATION_READ_KIND,
     SESSION_ELICITATION_RESPOND_KIND,
     SESSION_HISTORY_PAGE_LOAD_KIND,
     SESSION_LIST_KIND,
@@ -87,6 +89,14 @@ export const runtimeControlRegistry = {
     },
     "session.prepare": {
         permission: ProjectPermission.SessionWrite,
+        reply: directReply("session.ready", decodeSessionReadyEvent),
+    },
+    "session.create": {
+        permission: ProjectPermission.SessionWrite,
+        reply: directReply("session.ready", decodeSessionReadyEvent),
+    },
+    "session.creation.read": {
+        permission: ProjectPermission.RuntimeRead,
         reply: directReply("session.ready", decodeSessionReadyEvent),
     },
     "session.configure": {
@@ -185,6 +195,8 @@ export function runtimeCommandPermission(message: ServiceToDaemonMessage): Proje
         case RUNTIME_PING_KIND:
         case NATIVE_SESSION_REQUEST_KIND:
         case SESSION_PREPARE_KIND:
+        case SESSION_CREATE_KIND:
+        case SESSION_CREATION_READ_KIND:
         case SESSION_CONFIGURE_KIND:
         case SESSION_CONFIG_READ_KIND:
         case SESSION_RENAME_KIND:

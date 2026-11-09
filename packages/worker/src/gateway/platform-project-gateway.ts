@@ -1,3 +1,4 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     MortyApiError,
     MortyAppCredentialProvider,
@@ -6,7 +7,11 @@ import {
     MortyPlatformAppClient,
     MortyTimeoutError,
 } from "@morty-build/client/platform";
-import { decodeRuntimeDiagnosticsResult, type SessionReadyEvent } from "@morty-build/client/protocol";
+import {
+    decodeRuntimeDiagnosticsResult,
+    type NativeSessionTarget,
+    type SessionReadyEvent,
+} from "@morty-build/client/protocol";
 import { MortyClient, MortyRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
@@ -42,13 +47,17 @@ function runtimeSetupMessage(code: string): string {
 
 /** A Chat Session as the Runtime hosts it: which Runtime, Agent and directory serve it. */
 type ChatSessionTarget = {
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
     readonly computerId: string;
     readonly agentRef: string;
     readonly workspaceRef: string;
 };
 
-export type NewChatSessionInput = ChatSessionTarget & {
+export type NewChatSessionInput = {
+    readonly computerId: string;
+    readonly agentRef: string;
+    readonly workspaceRef: string;
+    readonly operationId: string;
     readonly configurations: readonly {
         readonly booleanValue: boolean;
         readonly configId: string;
@@ -351,32 +360,47 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    /**
-     * Creates a new Session with its settings applied by the Runtime's create operation. A refusal (4xx) means the
-     * Runtime created nothing; any other failure leaves it unknown whether the Session exists. Creating the same Session
-     * again converges on it.
-     */
+    /** Creates a harness-owned Session with its settings applied; retries retain the same operation identity. */
     readonly createChatSession = async (computerId: string, input: NewChatSessionInput, signal: AbortSignal) =>
         await this.#withProject(
             computerId,
             signal,
-            async (client) =>
-                this.#expectSession(
-                    await client.sessions.create(
-                        {
-                            additionalDirectoryIds: [],
-                            agentId: input.agentRef,
-                            configurations: input.configurations,
-                            directoryId: input.workspaceRef,
-                            computerId: input.computerId,
-                            sessionId: input.sessionId,
-                        },
-                        signal,
-                    ),
-                    input.sessionId,
-                ),
+            async (client) => {
+                const ready = await client.sessions.create(
+                    {
+                        additionalDirectoryIds: [],
+                        agentId: input.agentRef,
+                        configurations: input.configurations,
+                        directoryId: input.workspaceRef,
+                        computerId: input.computerId,
+                        operationId: input.operationId,
+                    },
+                    signal,
+                );
+                if (ready.agentId !== input.agentRef || ready.directoryId !== input.workspaceRef) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Morty returned an unexpected Session binding.",
+                        502,
+                    );
+                }
+                return ready;
+            },
             120000,
         );
+
+    /** Reads a committed creation receipt without repeating any harness operation. */
+    readonly readChatSessionCreation = async (computerId: string, operationId: string, signal: AbortSignal) =>
+        await this.#withProject(computerId, signal, async (client) => {
+            try {
+                return await client.sessions.readCreation(operationId, signal);
+            } catch (cause) {
+                if (cause instanceof MortyApiError && cause.code === "session_creation_unavailable") {
+                    return null;
+                }
+                throw cause;
+            }
+        });
 
     /** Grants access to a Session the Runtime has just created and reported ready. */
     readonly createdChatSessionAccess = async (
@@ -407,7 +431,7 @@ export class PlatformProjectGateway {
             async (client) => {
                 const ready = this.#expectSession(
                     await client.sessions.load(
-                        input.sessionId,
+                        input.target,
                         {
                             additionalDirectoryIds: input.additionalDirectoryIds,
                             agentId: input.agentRef,
@@ -415,15 +439,15 @@ export class PlatformProjectGateway {
                         },
                         signal,
                     ),
-                    input.sessionId,
+                    input.target,
                 );
                 return await this.#sessionAccess(client, computerId, input, ready, credentialLifetimeSeconds, signal);
             },
             120000,
         );
 
-    readonly #expectSession = (ready: SessionReadyEvent, sessionId: string): SessionReadyEvent => {
-        if (ready.sessionId !== sessionId) {
+    readonly #expectSession = (ready: SessionReadyEvent, target: NativeSessionTarget): SessionReadyEvent => {
+        if (!sameNativeSession(ready.target, target)) {
             throw new PlatformProjectError("PLATFORM_INVALID_RESPONSE", "Morty returned an unexpected Session.", 502);
         }
         return ready;
@@ -437,11 +461,15 @@ export class PlatformProjectGateway {
         credentialLifetimeSeconds: number,
         signal: AbortSignal,
     ) => {
-        const access = await client.sessions.createAccess(session.sessionId, credentialLifetimeSeconds, signal);
+        const access = await client.sessions.createAccess(
+            session.target,
+            credentialLifetimeSeconds,
+            signal,
+        );
         return {
             endpoint: this.configuration().origin,
             computerId,
-            sessionId: session.sessionId,
+            target: session.target,
             credential: access.credential,
             expiresAt: access.expiresAt,
             ready,
@@ -450,34 +478,37 @@ export class PlatformProjectGateway {
         };
     };
 
-    readonly queryChatSessions = async (computerId: string, sessionIds: readonly string[], signal: AbortSignal) =>
+    readonly queryChatSessions = async (
+        computerId: string,
+        targets: readonly NativeSessionTarget[],
+        signal: AbortSignal,
+    ) =>
         await this.#withProject(
             computerId,
             signal,
-            async (client) => await client.runtimes.querySessions(sessionIds, signal),
+            async (client) => await client.runtimes.querySessions(targets, signal),
             120000,
         );
 
     readonly readChatSession = async (
         computerId: string,
         _selection: { readonly computerId: string },
-        sessionId: string,
+        target: NativeSessionTarget,
         signal: AbortSignal,
     ) =>
         await this.#withProject(
             computerId,
             signal,
             async (client) => {
-                const restored = await client.sessions.restore(sessionId, signal);
+                const restored = await client.sessions.restore(target, signal);
                 const session = restored.entry;
                 const ready = restored.ready;
                 return {
                     agentRef: session.agentId,
                     ready,
                     entry: {
-                        entryId: session.sessionId,
-                        mortySessionIds: [session.sessionId],
-                        nativeSessionId: session.sessionId,
+                        target: session.target,
+                        sessionId: session.sessionId,
                         title: session.title,
                         directoryId: ready.directoryId,
                         directoryLabel: ready.directoryLabel,
@@ -489,19 +520,23 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly closeChatSession = async (computerId: string, sessionId: string, signal: AbortSignal): Promise<void> =>
+    readonly closeChatSession = async (
+        computerId: string,
+        target: NativeSessionTarget,
+        signal: AbortSignal,
+    ): Promise<void> =>
         await this.#withProject(computerId, signal, async (client) => {
-            await client.sessions.close(sessionId, signal);
+            await client.sessions.close(target, signal);
         });
 
     readonly nativeSessionAccess = async (
         computerId: string,
-        sessionId: string,
+        target: NativeSessionTarget,
         credentialLifetimeSeconds: number,
         signal: AbortSignal,
     ) =>
         await this.#withProject(computerId, signal, async (client) => {
-            const access = await client.sessions.createAccess(sessionId, credentialLifetimeSeconds, signal);
+            const access = await client.sessions.createAccess(target, credentialLifetimeSeconds, signal);
             return { ...access, endpoint: this.configuration().origin };
         });
 
@@ -541,7 +576,7 @@ export class PlatformProjectGateway {
 
     readonly previewRuntimeNativeEvents = async (
         computerId: string,
-        sessionId: string,
+        target: NativeSessionTarget,
         identity: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[1],
         page: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[2],
         signal: AbortSignal,
@@ -549,19 +584,19 @@ export class PlatformProjectGateway {
         await this.#withProject(
             computerId,
             signal,
-            async (client) => await client.sessions.previewRuntimeNativeEvents(sessionId, identity, page, signal),
+            async (client) => await client.sessions.previewRuntimeNativeEvents(target, identity, page, signal),
             120000,
         );
 
-    readonly findNativeSessionByNativeSessionId = async (
+    readonly findNativeSessionBySessionId = async (
         computerId: string,
-        request: Parameters<MortyClient["runtimes"]["findNativeSessionByNativeSessionId"]>[0],
+        request: Parameters<MortyClient["runtimes"]["findNativeSessionBySessionId"]>[0],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
             computerId,
             signal,
-            async (client) => await client.runtimes.findNativeSessionByNativeSessionId(request, signal),
+            async (client) => await client.runtimes.findNativeSessionBySessionId(request, signal),
             120000,
         );
 

@@ -114,7 +114,7 @@ it("Given Codex streams detailed reasoning and a summary, When Morty forwards th
 it("Given saved Codex history contains commentary and detailed reasoning, When Morty previews it, Then commentary stays assistant output and detailed reasoning becomes Thinking", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-codex-history-summary-"));
     const executable = join(directory, "codex.mjs");
-    const nativeSessionId = "native-codex";
+    const sessionId = "native-codex";
     await writeFile(
         executable,
         `#!${process.execPath}
@@ -141,7 +141,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const request = JSON.parse(line);
     if (request.id === undefined) return;
     const result = request.method === "thread/read"
-        ? { thread: { cwd: process.cwd(), id: ${JSON.stringify(nativeSessionId)} } }
+        ? { thread: { cwd: process.cwd(), id: ${JSON.stringify(sessionId)} } }
         : request.method === "thread/turns/list"
           ? history
           : {};
@@ -161,7 +161,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
             ),
     );
     try {
-        const page = await previewCodexHistory(agent, directory, nativeSessionId);
+        const page = await previewCodexHistory(agent, directory, sessionId);
         const updates = page.events.flatMap((event) => (event.type === "acp" ? [event.payload] : []));
         expect(
             updates.filter((update) => update.sessionUpdate === "agent_message_chunk").map((update) => update.content),

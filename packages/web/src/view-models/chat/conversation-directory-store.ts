@@ -1,3 +1,5 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
 import { CloudApiError, isRuntimeConnectionFailure } from "@/services/management/management-api";
@@ -24,9 +26,9 @@ type ConversationDirectoryState =
 
 type ArchiveOperation =
     | { readonly kind: "idle" }
-    | { readonly kind: "archiving"; readonly sessionId: string }
+    | { readonly kind: "archiving"; readonly sessionTarget: NativeSessionTarget }
     | { readonly kind: "unconfirmed" }
-    | { readonly kind: "failed"; readonly message: string; readonly sessionId: string };
+    | { readonly kind: "failed"; readonly message: string; readonly sessionTarget: NativeSessionTarget };
 
 export interface ConversationDirectoryStore {
     readonly state: ConversationDirectoryState;
@@ -34,7 +36,7 @@ export interface ConversationDirectoryStore {
     /** The local calendar day observed from the external clock; groups remain derived from it and the sessions. */
     readonly calendarDay: number;
     readonly followCalendar: (signal: AbortSignal) => Promise<void>;
-    readonly archiveSession: (sessionId: string, signal: AbortSignal) => Promise<void>;
+    readonly archiveSession: (sessionTarget: NativeSessionTarget, signal: AbortSignal) => Promise<void>;
     readonly load: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -47,7 +49,7 @@ export function conversationDirectorySessions(
         case "ready":
         case "refreshing":
         case "stale":
-            return state.sessions.map((session) => ({ ...session, title: sessionTitle(titles, session.id) }));
+            return state.sessions.map((session) => ({ ...session, title: sessionTitle(titles, session.target) }));
         case "loading":
         case "setup-required":
         case "failed":
@@ -62,7 +64,7 @@ export const createConversationDirectoryStore = (
     onLoaded: (sessions: readonly ManagedChatSession[]) => void,
     clock: Clock,
     titles: SessionTitlesStore,
-    onArchived: (sessionId: string) => void,
+    onArchived: (sessionTarget: NativeSessionTarget) => void,
 ) =>
     createStore<ConversationDirectoryStore>()((set, get) => {
         let calendarOperation: AbortController | null = null;
@@ -98,10 +100,18 @@ export const createConversationDirectoryStore = (
                     }
                 }
             },
-            archiveSession: async (sessionId, signal) => {
-                set({ archive: { kind: "archiving", sessionId } });
+            archiveSession: async (sessionTarget, signal) => {
+                set({ archive: { kind: "archiving", sessionTarget } });
                 try {
-                    const result = await requests.archiveManagedSession(botId, sessionId, signal);
+                    const state = get().state;
+                    const session =
+                        "sessions" in state
+                            ? state.sessions.find((session) => sameNativeSession(session.target, sessionTarget))
+                            : undefined;
+                    if (session === undefined) {
+                        throw new CloudApiError("NOT_FOUND", "The Session was not found.");
+                    }
+                    const result = await requests.archiveManagedSession(botId, session.target, signal);
                     signal.throwIfAborted();
                     const archive: ArchiveOperation =
                         result.close === "confirmed" ? { kind: "idle" } : { kind: "unconfirmed" };
@@ -113,7 +123,9 @@ export const createConversationDirectoryStore = (
                                     archive,
                                     state: {
                                         kind: "ready",
-                                        sessions: state.sessions.filter((session) => session.id !== sessionId),
+                                        sessions: state.sessions.filter(
+                                            (session) => !sameNativeSession(session.target, sessionTarget),
+                                        ),
                                     },
                                 };
                             case "refreshing":
@@ -121,7 +133,9 @@ export const createConversationDirectoryStore = (
                                     archive,
                                     state: {
                                         kind: "refreshing",
-                                        sessions: state.sessions.filter((session) => session.id !== sessionId),
+                                        sessions: state.sessions.filter(
+                                            (session) => !sameNativeSession(session.target, sessionTarget),
+                                        ),
                                     },
                                 };
                             case "stale":
@@ -131,7 +145,9 @@ export const createConversationDirectoryStore = (
                                         kind: "stale",
                                         failure: state.failure,
                                         message: state.message,
-                                        sessions: state.sessions.filter((session) => session.id !== sessionId),
+                                        sessions: state.sessions.filter(
+                                            (session) => !sameNativeSession(session.target, sessionTarget),
+                                        ),
                                     },
                                 };
                             case "loading":
@@ -140,13 +156,13 @@ export const createConversationDirectoryStore = (
                                 return { archive, state };
                         }
                     });
-                    onArchived(sessionId);
+                    onArchived(sessionTarget);
                 } catch (cause) {
                     if (!signal.aborted) {
                         set({
                             archive: {
                                 kind: "failed",
-                                sessionId,
+                                sessionTarget,
                                 message: formatError(cause, "The session could not be archived."),
                             },
                         });

@@ -33,7 +33,7 @@ test.each([
         const directory = await mkdtemp(join(tmpdir(), "morty-history-backpressure-"));
         const executable = join(directory, "controlled-acp");
         const stateDirectory = join(directory, "state");
-        const nativeSessionId = "large-native-history";
+        const sessionId = "large-native-history";
         const count = scenario.count;
         const image = Buffer.concat([
             Buffer.from(
@@ -56,7 +56,7 @@ if (process.argv.includes("--version")) {
             { mode: 0o700 },
         );
         await writeFile(
-            join(stateDirectory, `${nativeSessionId}.json`),
+            join(stateDirectory, `${sessionId}.json`),
             JSON.stringify({
                 fastMode: false,
                 history: Array.from({ length: count }, (_, index) => ({
@@ -89,7 +89,7 @@ if (process.argv.includes("--version")) {
                             eventLimit: 10000,
                             kind: "session.preview-history.page.load",
                             requestId: "large-history-preview",
-                            sessionId: nativeSessionId,
+                            target: { harness: "claude", sessionId },
                         }),
                     );
                     for (;;) {
