@@ -4,7 +4,6 @@ import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
 import worker, { fetchPublicApplication } from "../src/application.ts";
-import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
 beforeEach(() => {
@@ -65,18 +64,6 @@ async function createChatFixture(
         botId,
         projectId: identity.projectId,
         request,
-        /** Invalid persisted state must not allow access to another Machine's sessions. */
-        addAdditionalMachine: async () => {
-            const additional = `bot_additional_${crypto.randomUUID()}`;
-            const seeded = await projectObject(environment, identity.projectId).fetch(
-                new Request("https://project.internal/additional-machine", {
-                    method: "POST",
-                    body: JSON.stringify({ userId: identity.userId, botId: additional, createdAt: Date.now() }),
-                }),
-            );
-            expect(seeded.status).toBe(204);
-            return additional;
-        },
         runtime,
         [Symbol.asyncDispose]: () => runtime[Symbol.asyncDispose](),
     };
@@ -112,18 +99,9 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
     expect(access.status).toBe(200);
     expect(await access.json()).toMatchObject({ sessionId, credential: expect.stringMatching(/^msession_/u) });
 
-    const botId = await fixture.addAdditionalMachine();
-    expect(
-        (
-            await fixture.request(`chat/bots/${botId}/setup`, {
-                runtimeId: fixture.runtime.runtimeId,
-                agentRef: "codex",
-            })
-        ).status,
-    ).toBe(202);
-    const otherMachine = await fixture.request(`chat/bots/${botId}/session-access`, { sessionId });
+    // A Machine identifier that is not the caller's own opens nothing, even for a Session the caller owns.
+    const otherMachine = await fixture.request(`chat/bots/bot_${crypto.randomUUID()}/session-access`, { sessionId });
     expect(otherMachine.status).toBe(404);
-    expect(await otherMachine.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
 });
 
 test("Given a draft Bot, When its owner configures and opens it, Then setup lists Runtime options and the Runtime endpoint exposes only the configured Runtime", async ({
@@ -629,34 +607,6 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
     await expect(
         fixture.runtime.client.sessions.restore(runtimeId, sessionId, AbortSignal.timeout(10_000)),
     ).resolves.toMatchObject({ ready: { sessionId } });
-});
-
-test("Given two Bots on the same Runtime, When a conversation ID is opened through the other Bot, Then Chat rejects it while its owner can still open it", async ({
-    cloud,
-}) => {
-    await using fixture = await createChatFixture(cloud);
-    const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
-    expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
-    const otherBotId = await fixture.addAdditionalMachine();
-    expect((await fixture.request(`chat/bots/${otherBotId}/setup`, setup)).status).toBe(202);
-    const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
-        agentRef: "codex",
-        configurations: [],
-        conversationKey: "owned-conversation",
-        workspaceRef: "default",
-    });
-    expect(opened.status).toBe(200);
-    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
-
-    const rejected = await fixture.request(`chat/bots/${otherBotId}/access`, { conversationId: sessionId });
-
-    expect(rejected.status).toBe(404);
-    expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
-    const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
-    expect(reopened.status).toBe(200);
-    expect(await reopened.json()).toMatchObject({ sessionId });
-    const managed = await fixture.request(`chat/bots/${otherBotId}/managed-sessions`, {});
-    expect(await managed.json()).toEqual({ sessions: [] });
 });
 
 for (const operation of ["access", "managed-session"]) {

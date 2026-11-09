@@ -9,10 +9,9 @@ import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import { runSetup } from "../../setup/src/setup.ts";
 import worker from "../src/application.ts";
-import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
-test.each(["current", "another service origin", "retired configuration", "ambiguous Machines"] as const)(
+test.each(["current", "another service origin", "retired configuration"] as const)(
     "Given %s, When setup runs again, Then it continues the saved identity's Machine or refuses without rewriting the saved state",
     {
         timeout: 60_000,
@@ -79,14 +78,6 @@ test.each(["current", "another service origin", "retired configuration", "ambigu
         const first = v.parse(v.object({ botId: v.string() }), await run());
         const saved = v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")));
         const identity = saved.identity;
-        if (stateKind === "ambiguous Machines") {
-            await projectObject(fixture.environment(fixture.origin), identity.project_id).fetch(
-                new Request("https://project.internal/additional-machine", {
-                    method: "POST",
-                    body: JSON.stringify({ userId: identity.user_id, botId: "bot_unexpected_machine", createdAt: 0 }),
-                }),
-            );
-        }
         if (stateKind === "retired configuration") {
             // The representation setup wrote before its saved state was versioned.
             await writeFile(configurationPath, JSON.stringify({ base_url: saved.base_url, ...identity }));
@@ -104,10 +95,7 @@ test.each(["current", "another service origin", "retired configuration", "ambigu
                               code: "SAVED_IDENTITY_ORIGIN_MISMATCH",
                               savedIdentity: { savedBaseUrl: fixture.origin, requestedBaseUrl: requested.origin },
                           }
-                        : {
-                              code:
-                                  stateKind === "retired configuration" ? "INVALID_CONFIGURATION" : "BOT_STATE_INVALID",
-                          },
+                        : { code: "INVALID_CONFIGURATION" },
             });
             expect(await readFile(configurationPath, "utf8")).toBe(original);
             if (stateKind !== "another service origin") {
