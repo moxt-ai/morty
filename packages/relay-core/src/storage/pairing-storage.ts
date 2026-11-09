@@ -18,24 +18,22 @@ export class PairingStorage {
     }
 
     readonly readHost = async (
-        channelId: string,
+        computerId: string,
         tokenHash: string,
         signal: AbortSignal,
     ): Promise<AuthorizedChannelRow | null> => {
         const database = relayDrizzle(this.#database, signal);
         const rows = await database
             .select({
-                channel_id: pairedDaemon.channelId,
-                pairing_id: pairedDaemon.pairingId,
-                project_id: pairedDaemon.computerId,
+                computer_id: pairedDaemon.computerId,
                 credential_id: channelHostCredential.credentialId,
                 authority: channelHostCredential.authority,
             })
             .from(channelHostCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelHostCredential.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelHostCredential.computerId))
             .where(
                 and(
-                    eq(channelHostCredential.channelId, channelId),
+                    eq(channelHostCredential.computerId, computerId),
                     eq(channelHostCredential.tokenHash, tokenHash),
                     hostCredentialValid(database),
                 ),
@@ -58,7 +56,7 @@ export class PairingStorage {
     /** Records a single-use access grant; false when it was not recorded. */
     readonly createGrant = async (
         grantId: string,
-        channelId: string,
+        computerId: string,
         secretHash: string,
         credentialId: string,
         now: number,
@@ -67,7 +65,7 @@ export class PairingStorage {
     ): Promise<boolean> => {
         const created = await relayDrizzle(this.#database, signal)
             .insert(channelAccessGrant)
-            .values({ grantId, channelId, secretHash, createdByCredentialId: credentialId, createdAt: now, expiresAt })
+            .values({ grantId, computerId, secretHash, createdByCredentialId: credentialId, createdAt: now, expiresAt })
             .returning({ grantId: channelAccessGrant.grantId });
         return created.length === 1;
     };
@@ -97,7 +95,7 @@ export class PairingStorage {
         return created.length === 1;
     };
 
-    readonly listLinked = async (channelId: string, signal: AbortSignal): Promise<readonly LinkedDeviceRow[]> => {
+    readonly listLinked = async (computerId: string, signal: AbortSignal): Promise<readonly LinkedDeviceRow[]> => {
         const database = relayDrizzle(this.#database, signal);
         return await database
             .select({
@@ -108,7 +106,7 @@ export class PairingStorage {
             .from(channelHostCredential)
             .where(
                 and(
-                    eq(channelHostCredential.channelId, channelId),
+                    eq(channelHostCredential.computerId, computerId),
                     eq(channelHostCredential.authority, "linked"),
                     hostCredentialValid(database),
                 ),
@@ -117,7 +115,7 @@ export class PairingStorage {
     };
 
     readonly redeemGrant = (
-        channelId: string,
+        computerId: string,
         grantId: string,
         secretHash: string,
         credentialId: string,
@@ -126,7 +124,7 @@ export class PairingStorage {
         signal: AbortSignal,
     ) => {
         const database = relayDrizzle(this.#database, signal);
-        const grant = and(eq(channelAccessGrant.grantId, grantId), eq(channelAccessGrant.channelId, channelId));
+        const grant = and(eq(channelAccessGrant.grantId, grantId), eq(channelAccessGrant.computerId, computerId));
         const redemption = database
             .update(channelAccessGrant)
             .set({ redeemedAt: now, redeemedCredentialId: credentialId })
@@ -138,11 +136,11 @@ export class PairingStorage {
                     gt(channelAccessGrant.expiresAt, now),
                     exists(
                         database
-                            .select({ pairingId: pairedDaemon.pairingId })
+                            .select({ computerId: pairedDaemon.computerId })
                             .from(pairedDaemon)
                             .where(
                                 and(
-                                    eq(pairedDaemon.channelId, channelAccessGrant.channelId),
+                                    eq(pairedDaemon.computerId, channelAccessGrant.computerId),
                                     isNull(pairedDaemon.revokedAt),
                                 ),
                             ),
@@ -153,7 +151,7 @@ export class PairingStorage {
             database
                 .select({
                     credentialId: sql<string>`${credentialId}`.as("credential_id"),
-                    channelId: channelAccessGrant.channelId,
+                    computerId: channelAccessGrant.computerId,
                     tokenHash: sql<string>`${hostHash}`.as("token_hash"),
                     authority: sql<"linked">`'linked'`.as("authority"),
                     createdAt: sql<number>`${now}`.as("created_at"),
@@ -180,7 +178,7 @@ export class PairingStorage {
         );
     };
 
-    readonly readGrant = async (channelId: string, grantId: string, secretHash: string, signal: AbortSignal) => {
+    readonly readGrant = async (computerId: string, grantId: string, secretHash: string, signal: AbortSignal) => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({
                 expires_at: channelAccessGrant.expiresAt,
@@ -188,11 +186,11 @@ export class PairingStorage {
                 runtime_revoked_at: pairedDaemon.revokedAt,
             })
             .from(channelAccessGrant)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelAccessGrant.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelAccessGrant.computerId))
             .where(
                 and(
                     eq(channelAccessGrant.grantId, grantId),
-                    eq(channelAccessGrant.channelId, channelId),
+                    eq(channelAccessGrant.computerId, computerId),
                     eq(channelAccessGrant.secretHash, secretHash),
                 ),
             )
@@ -202,7 +200,7 @@ export class PairingStorage {
 
     /** Revokes an active linked device; false when no active linked device matched. */
     readonly revokeLinked = async (
-        channelId: string,
+        computerId: string,
         credentialId: string,
         now: number,
         signal: AbortSignal,
@@ -213,7 +211,7 @@ export class PairingStorage {
             .where(
                 and(
                     eq(channelHostCredential.credentialId, credentialId),
-                    eq(channelHostCredential.channelId, channelId),
+                    eq(channelHostCredential.computerId, computerId),
                     eq(channelHostCredential.authority, "linked"),
                     isNull(channelHostCredential.revokedAt),
                 ),
@@ -223,14 +221,14 @@ export class PairingStorage {
     };
 
     /** Whether the linked device exists, revoked or not. */
-    readonly hasLinked = async (channelId: string, credentialId: string, signal: AbortSignal): Promise<boolean> => {
+    readonly hasLinked = async (computerId: string, credentialId: string, signal: AbortSignal): Promise<boolean> => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({ credentialId: channelHostCredential.credentialId })
             .from(channelHostCredential)
             .where(
                 and(
                     eq(channelHostCredential.credentialId, credentialId),
-                    eq(channelHostCredential.channelId, channelId),
+                    eq(channelHostCredential.computerId, computerId),
                     eq(channelHostCredential.authority, "linked"),
                 ),
             )

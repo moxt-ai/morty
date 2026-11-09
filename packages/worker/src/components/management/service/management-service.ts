@@ -85,7 +85,7 @@ export class ManagementService {
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { botId: bot.botId, pairingId: bot.configuration?.pairingId ?? null };
+        return { botId: bot.botId, computerId: bot.configuration?.computerId ?? null };
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {
@@ -121,9 +121,9 @@ export class ManagementService {
         return pairing;
     };
 
-    readonly readRuntimePairing = async (userId: string, pairingId: string, signal: AbortSignal) => {
+    readonly readRuntimePairing = async (userId: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        return await this.#platform.readPairing(project.computerId, pairingId, signal);
+        return await this.#platform.readPairing(project.computerId, signal);
     };
 
     /**

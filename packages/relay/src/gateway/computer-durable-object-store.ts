@@ -84,12 +84,8 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
         }
     };
 
-    readonly authenticateHost: PlatformProjectStore["authenticateHost"] = (channelId, tokenHash, now, signal) =>
-        this.call(
-            "authenticateHost",
-            (stub, computerId) => stub.authenticateHost(computerId, channelId, tokenHash, now),
-            signal,
-        );
+    readonly authenticateHost: PlatformProjectStore["authenticateHost"] = (computerId, tokenHash, now, signal) =>
+        this.call("authenticateHost", (stub) => stub.authenticateHost(computerId, tokenHash, now), signal);
 
     readonly isHostCredentialActive: PlatformProjectStore["isHostCredentialActive"] = (identity, signal) =>
         this.call(
@@ -98,15 +94,11 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly listLinkedDevices: PlatformProjectStore["listLinkedDevices"] = (channelId, signal) =>
-        this.call("listLinkedDevices", (stub, computerId) => stub.listLinkedDevices(computerId, channelId), signal);
+    readonly listLinkedDevices: PlatformProjectStore["listLinkedDevices"] = (computerId, signal) =>
+        this.call("listLinkedDevices", (stub) => stub.listLinkedDevices(computerId), signal);
 
-    readonly revokeLinkedDevice: PlatformProjectStore["revokeLinkedDevice"] = (channelId, credentialId, now, signal) =>
-        this.call(
-            "revokeLinkedDevice",
-            (stub, computerId) => stub.revokeLinkedDevice(computerId, channelId, credentialId, now),
-            signal,
-        );
+    readonly revokeLinkedDevice: PlatformProjectStore["revokeLinkedDevice"] = (computerId, credentialId, now, signal) =>
+        this.call("revokeLinkedDevice", (stub) => stub.revokeLinkedDevice(computerId, credentialId, now), signal);
 
     readonly createAccessGrant: PlatformProjectStore["createAccessGrant"] = (value, signal) =>
         this.call("createAccessGrant", (stub, computerId) => stub.createAccessGrant(computerId, value), signal);
@@ -132,24 +124,20 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly updateAgentCatalog: PlatformProjectStore["updateAgentCatalog"] = (channelId, tokenHash, agents, signal) =>
-        this.call(
-            "updateAgentCatalog",
-            (stub, computerId) => stub.updateAgentCatalog(computerId, channelId, tokenHash, agents),
-            signal,
-        );
+    readonly updateAgentCatalog: PlatformProjectStore["updateAgentCatalog"] = (computerId, tokenHash, agents, signal) =>
+        this.call("updateAgentCatalog", (stub) => stub.updateAgentCatalog(computerId, tokenHash, agents), signal);
 
-    readonly isRuntimeActive: PlatformProjectStore["isRuntimeActive"] = (pairingId, signal) =>
-        this.call("isRuntimeActive", (stub, computerId) => stub.isRuntimeActive(computerId, pairingId), signal);
+    readonly isRuntimeActive: PlatformProjectStore["isRuntimeActive"] = (computerId, signal) =>
+        this.call("isRuntimeActive", (stub) => stub.isRuntimeActive(computerId), signal);
 
-    readonly readRuntime: PlatformProjectStore["readRuntime"] = (pairingId, signal) =>
-        this.call("readRuntime", (stub, computerId) => stub.readRuntime(computerId, pairingId), signal);
+    readonly readRuntime: PlatformProjectStore["readRuntime"] = (computerId, signal) =>
+        this.call("readRuntime", (stub) => stub.readRuntime(computerId), signal);
 
     readonly listRuntimes: PlatformProjectStore["listRuntimes"] = (signal) =>
         this.call("listRuntimes", (stub, computerId) => stub.listRuntimes(computerId), signal);
 
-    readonly readChannel: PlatformProjectStore["readChannel"] = (channelId, signal) =>
-        this.call("readChannel", (stub, computerId) => stub.readChannel(computerId, channelId), signal);
+    readonly readChannel: PlatformProjectStore["readChannel"] = (computerId, signal) =>
+        this.call("readChannel", (stub) => stub.readChannel(computerId), signal);
 
     readonly requestRuntimePairing: PlatformProjectStore["requestRuntimePairing"] = (value, signal) =>
         this.call(
@@ -159,8 +147,8 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly readRuntimePairing: PlatformProjectStore["readRuntimePairing"] = (pairingId, signal) =>
-        this.call("readRuntimePairing", (stub, computerId) => stub.readRuntimePairing(computerId, pairingId), signal);
+    readonly readRuntimePairing: PlatformProjectStore["readRuntimePairing"] = (computerId, signal) =>
+        this.call("readRuntimePairing", (stub) => stub.readRuntimePairing(computerId), signal);
 
     readonly readPairingCode: PlatformProjectStore["readPairingCode"] = (codeHash, signal) =>
         this.call("readPairingCode", (stub, computerId) => stub.readPairingCode(computerId, codeHash), signal);
@@ -184,6 +172,9 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             (stub, computerId) => stub.rotateRuntimeCredential(computerId, presentedHash, successorHash),
             signal,
         );
+
+    readonly lastDaemonRevocation: PlatformProjectStore["lastDaemonRevocation"] = (signal) =>
+        this.call("lastDaemonRevocation", (stub, computerId) => stub.lastDaemonRevocation(computerId), signal);
 
     readonly recordAudit: PlatformProjectStore["recordAudit"] = (audit, signal) =>
         this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);

@@ -185,7 +185,7 @@ export async function withRealDaemon(
                       return createRuntimeConfig(
                           {
                               credentials: memoryRuntimeCredentials("r".repeat(43)),
-                              channelId: "real-agent",
+                              computerId: "real-agent",
                               defaultWorkspace: workspace,
                               relayUrl,
                           },
@@ -202,9 +202,8 @@ export async function withRealDaemon(
             const installation = await openMortyInstallation(signal, cliEnvironment);
             await installation.saveConnection(
                 {
-                    channelId: "real-agent",
+                    computerId: "real-agent",
                     defaultWorkspace: workspace,
-                    pairingId: "pairing_real",
                     relayOrigin: new URL(`http://127.0.0.1:${port(relay)}`),
                     runtimeCredential: "r".repeat(43),
                 },

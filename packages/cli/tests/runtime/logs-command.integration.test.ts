@@ -57,7 +57,7 @@ describe("Morty logs command", () => {
             'Morty worker lifecycle {"kind":"worker_exited","pid":4242,"exitCode":137,"signal":"SIGKILL","stderr":"/home/user/secret-path boom"}',
         ]);
         await writeInstallationLog(stateDirectory, "daemon.log", [
-            'Morty relay diagnostic {"event":"relay_connection_opened","channelId":"channel-1"}',
+            'Morty relay diagnostic {"event":"relay_connection_opened","computerId":"channel-1"}',
         ]);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateDirectory };
 

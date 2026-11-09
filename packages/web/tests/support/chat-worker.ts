@@ -57,7 +57,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.computerId, agents, nativeSessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
-                pairingId: runtime.pairingId,
+                computerId: runtime.computerId,
                 agentRef: agents[0]?.id ?? "codex",
             });
             if (setup.status !== 202) {
@@ -68,18 +68,18 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 continueReply: runtime.continueReply,
                 /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
-                    await runtime.client.sessions.close(runtime.pairingId, sessionId, new AbortController().signal);
+                    await runtime.client.sessions.close(sessionId, new AbortController().signal);
                 },
                 /** Applies another client's explicit model edit through the public Platform contract. */
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
                     const snapshot = await runtime.client.sessions.readConfiguration(
-                        runtime.pairingId,
+                        runtime.computerId,
                         sessionId,
                         signal,
                     );
                     await runtime.client.sessions.updateConfiguration(
-                        runtime.pairingId,
+                        runtime.computerId,
                         sessionId,
                         {
                             additionalDirectoryIds: [],
@@ -97,7 +97,6 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
-                        runtime.pairingId,
                         sessionId,
                         {
                             additionalDirectoryIds: [],
@@ -125,7 +124,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Renames a Session through the Platform, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
-                        runtime.pairingId,
+                        runtime.computerId,
                         sessionId,
                         title,
                         new AbortController().signal,
@@ -136,13 +135,10 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Revokes the Runtime through the Platform, as the Relay does when its credential was reused. */
                 revoke: async (): Promise<void> => {
                     const response = await cloud.platformRequest(
-                        new Request(
-                            `https://platform.test/morty/api/v1/computers/${identity.computerId}/pairings/${runtime.pairingId}`,
-                            {
-                                method: "DELETE",
-                                headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
-                            },
-                        ),
+                        new Request(`https://platform.test/morty/api/v1/computers/${identity.computerId}/pairing`, {
+                            method: "DELETE",
+                            headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
+                        }),
                     );
                     if (response.status !== 204) {
                         throw new Error(`Could not revoke the test Runtime: ${response.status}`);
@@ -163,7 +159,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 await connect(agents, nativeSessionIds),
             connectRuntime: async () => {
                 const runtime = await cloud.connectAgent(identity.computerId);
-                return { failure: runtime.failure, pairingId: runtime.pairingId };
+                return { failure: runtime.failure, computerId: runtime.computerId };
             },
             createTransferUrl: async () => {
                 const response = await request(`computers/${identity.computerId}/identity/transfers`, {});

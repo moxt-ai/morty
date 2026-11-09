@@ -553,12 +553,12 @@ for (const [failure, scenario] of starterFailures) {
                     await request(`computers/${identity.computerId}/management/bot`),
                 );
                 await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
-                    pairingId: runtime.pairingId,
+                    computerId: runtime.computerId,
                     agentRef: "codex",
                 });
                 await runtime.disconnect();
                 const connection = {
-                    pairing_id: runtime.pairingId,
+                    computer_id: runtime.computerId,
                     connection_id: "managed-test-connection",
                 };
                 await writeFile(join(state, "config.json"), savedSetupState(fixture.origin, identity), {

@@ -13,8 +13,7 @@ import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{
     connection_id: string;
-    pairing_id: string;
-    channel_id: string;
+    computer_id: string;
     credential: string;
     origin: string;
 }>;
@@ -90,9 +89,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify(
-                    Array.from(this.#saved.values(), ({ connection_id, pairing_id }) => ({
+                    Array.from(this.#saved.values(), ({ connection_id, computer_id }) => ({
                         connection_id,
-                        pairing_id,
+                        computer_id,
                     })),
                 ),
             );
@@ -142,7 +141,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
         const origin = option("--url");
         const daemon = createMortyFakeDaemon(this.#options);
-        const claim = await jsonRequest(origin, `/morty/api/v1/pairings/${option("--pairing")}/redeem`, {
+        const claim = await jsonRequest(origin, `/morty/api/v1/pairings/${option("--computer")}/redeem`, {
             body: {
                 agents: daemon.catalog,
                 machineName: this.#machineName,
@@ -152,9 +151,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
             signal,
         });
         const connection: Connection = {
-            channel_id: text(claim["channelId"], "Channel ID"),
+            computer_id: text(claim["computerId"], "Channel ID"),
             connection_id: crypto.randomUUID(),
-            pairing_id: text(claim["pairingId"], "Runtime ID"),
             credential: text(claim["runtimeCredential"], "Runtime credential"),
             origin,
         };
@@ -266,7 +264,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const daemon = await connectControlledAgentRuntime({
             behavior: this.#options,
             connection: {
-                channelId: connection.channel_id,
+                computerId: connection.computer_id,
                 origin: connection.origin,
                 credentials: this.#savedCredentials(connection.connection_id),
             },

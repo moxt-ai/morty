@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
-const [state, channelId, relay, runtimeCredential, control, sourceRoot] = process.argv.slice(2);
+const [state, computerId, relay, runtimeCredential, control, sourceRoot] = process.argv.slice(2);
 const { AcpAgentDefinition } = await import(
     pathToFileURL(join(sourceRoot, "packages/cli/src/engine/acp/agent/agent-definition.ts"))
 );
@@ -40,7 +40,7 @@ const agent = new AcpAgentDefinition(
 );
 const config = createRuntimeConfig(
     {
-        channelId,
+        computerId,
         defaultWorkspace: join(state, "workspace"),
         relayUrl: new URL(relay),
         credentials: memoryRuntimeCredentials(runtimeCredential),

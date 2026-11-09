@@ -52,13 +52,11 @@ describe("Runtime diagnostics SDK", () => {
         });
         const signal = new AbortController().signal;
         try {
-            expect(await client.runtimes.readDiagnostics("runtime-1", signal)).toEqual(report);
+            expect(await client.runtimes.readDiagnostics(signal)).toEqual(report);
         } finally {
             client.close();
         }
-        expect(received).toEqual([
-            { method: "GET", path: "/morty/api/v1/computers/project-1/pairings/runtime-1/diagnostics" },
-        ]);
+        expect(received).toEqual([{ method: "GET", path: "/morty/api/v1/computers/project-1/daemon/diagnostics" }]);
     });
 
     // @no-uc: Technical regression; an unvalidated identifier must be rejected before any request path is built.
@@ -83,9 +81,7 @@ describe("Runtime diagnostics SDK", () => {
         });
         const signal = new AbortController().signal;
         try {
-            await expect(client.runtimes.readDiagnostics("runtime 1/../etc", signal)).rejects.toBeInstanceOf(
-                MortyValidationError,
-            );
+            await expect(client.runtimes.readDiagnostics(signal)).rejects.toBeInstanceOf(MortyValidationError);
         } finally {
             client.close();
         }

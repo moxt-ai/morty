@@ -30,7 +30,6 @@ function encodeToken(bytes: Uint8Array): string {
 export async function deriveRuntimeDaemonToken(
     pairingCode: string,
     computerId: string,
-    pairingId: string,
     pollTokenHash: string,
 ): Promise<string> {
     // Keep this derivation stable across deployments. The stored poll verifier
@@ -39,7 +38,7 @@ export async function deriveRuntimeDaemonToken(
     const bytes = await deriveSecret(
         pollTokenHash,
         computerId,
-        `${pairingId}\u0000${normalizePairingCode(pairingCode)}`,
+        `${computerId}\u0000${normalizePairingCode(pairingCode)}`,
         "runtime-daemon-token-v1",
     );
     return `${computerId}_${encodeToken(bytes)}`;

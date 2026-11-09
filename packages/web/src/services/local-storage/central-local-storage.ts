@@ -159,9 +159,9 @@ export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
 const directoryIdSchema = v.custom<string>(isDirectoryIdentifier, "Invalid directory identifier");
 const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_WORKSPACE_PATH_LENGTH));
 
-export const lastCwdEntry = (botId: string, pairingId: string, agentRef: string): LocalStorageEntry<string> =>
+export const lastCwdEntry = (botId: string, computerId: string, agentRef: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:last-cwd:", botId, pairingId, agentRef),
+        key: scopedKey("morty:last-cwd:", botId, computerId, agentRef),
         schema: directoryIdSchema,
     });
 

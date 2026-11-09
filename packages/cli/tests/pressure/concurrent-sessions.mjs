@@ -239,7 +239,7 @@ async function exercise(count) {
         );
         const base = `/v1/computers/${project.computerId}`;
         const pairing = await api(`${base}/pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
-        const claimed = await api(`/v1/pairings/${pairing.pairingId}/redeem`, "POST", {
+        const claimed = await api(`/v1/pairings/${pairing.computerId}/redeem`, "POST", {
             pairingCode: pairing.pairingCode,
             agents: [],
             machineName: "Isolated pressure test",
@@ -250,7 +250,7 @@ async function exercise(count) {
         const connectionStates = [];
         child = fork(
             join(here, "runtime-process.mjs"),
-            [state, pairing.channelId, relay.href, claimed.runtimeCredential, controlPath, repository],
+            [state, pairing.computerId, relay.href, claimed.runtimeCredential, controlPath, repository],
             {
                 env: { PATH: process.env.PATH, HOME: join(state, "home") },
                 stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -277,7 +277,7 @@ async function exercise(count) {
         });
         stage("connecting Runtime");
         await check(() => connectionStates.includes("online"), "Runtime online");
-        const hostUrl = new URL(`${origin}/morty/api${base}/pairings/${claimed.pairingId}/host`);
+        const hostUrl = new URL(`${origin}/morty/api${base}/daemon/host`);
         hostUrl.protocol = "ws:";
         host = new WebSocket(hostUrl, { headers: { authorization: `Bearer ${credential}` } });
         const live = new Map();

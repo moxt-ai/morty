@@ -27,12 +27,11 @@ const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const INSTALLATION_POINTER_KEYS: readonly string[] = ["installationId", "version"];
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
-    "channelId",
+    "computerId",
     "connectionId",
     "defaultWorkspace",
     "installationId",
     "kind",
-    "pairingId",
     "relayOrigin",
     "runtimeCredential",
     "version",
@@ -136,20 +135,18 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
-    const channelId = value["channelId"];
     const connectionId = value["connectionId"];
     const defaultWorkspace = value["defaultWorkspace"];
     const storedInstallationId = value["installationId"];
-    const pairingId = value["pairingId"];
+    const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];
     const runtimeCredential = value["runtimeCredential"];
     if (
         (activation !== "active" && activation !== "stopped") ||
-        typeof channelId !== "string" ||
+        typeof computerId !== "string" ||
         typeof connectionId !== "string" ||
         typeof defaultWorkspace !== "string" ||
         typeof storedInstallationId !== "string" ||
-        typeof pairingId !== "string" ||
         typeof relayOrigin !== "string" ||
         typeof runtimeCredential !== "string"
     ) {
@@ -159,9 +156,8 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         activation,
         validateInstallationId(storedInstallationId),
         validateConnectionId(connectionId),
-        validateIdentifier(channelId, "invalid_connection"),
+        validateIdentifier(computerId, "invalid_connection"),
         defaultWorkspace,
-        validateIdentifier(pairingId, "invalid_connection"),
         parseRelayOrigin(relayOrigin),
         validateRuntimeCredential(runtimeCredential),
     );
@@ -312,9 +308,8 @@ export class RuntimeInstallationStore {
             "active",
             this.installationId,
             connectionId(),
-            validateIdentifier(input.channelId, "invalid_connection"),
+            validateIdentifier(input.computerId, "invalid_connection"),
             input.defaultWorkspace,
-            validateIdentifier(input.pairingId, "invalid_pairing_id"),
             parseRelayOrigin(input.relayOrigin.toString()),
             validateRuntimeCredential(input.runtimeCredential),
         );
@@ -342,12 +337,12 @@ export class RuntimeInstallationStore {
     };
 
     readonly readConnectionForPairing = async (
-        pairingId: string,
+        computerId: string,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection | null> => {
-        const normalizedPairingId = validateIdentifier(pairingId, "invalid_pairing_id");
+        const normalizedComputerId = validateIdentifier(computerId, "invalid_computer_id");
         const connections = await this.listConnections(signal);
-        return connections.find((connection) => connection.pairingId === normalizedPairingId) ?? null;
+        return connections.find((connection) => connection.computerId === normalizedComputerId) ?? null;
     };
 
     readonly setConnectionActivation = async (
@@ -361,9 +356,8 @@ export class RuntimeInstallationStore {
                 activation,
                 connection.installationId,
                 connection.connectionId,
-                connection.channelId,
+                connection.computerId,
                 connection.defaultWorkspace,
-                connection.pairingId,
                 connection.relayOrigin,
                 connection.runtimeCredential,
             );
@@ -489,12 +483,11 @@ export class RuntimeInstallationStore {
             this.pairingPath,
             {
                 activation: connection.activation,
-                channelId: connection.channelId,
+                computerId: connection.computerId,
                 connectionId: connection.connectionId,
                 defaultWorkspace: connection.defaultWorkspace,
                 installationId: connection.installationId,
                 kind: connection.kind,
-                pairingId: connection.pairingId,
                 relayOrigin: connection.relayOrigin.toString(),
                 runtimeCredential: connection.runtimeCredential,
                 version: 7,

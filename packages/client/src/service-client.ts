@@ -773,46 +773,46 @@ export class MortyChannelResources {
         this.#executor = executor;
     }
 
-    readonly createAccessGrant = async (channelId: string, signal: AbortSignal): Promise<MortyChannelAccessGrant> => {
-        if (!isIdentifier(channelId)) {
+    readonly createAccessGrant = async (computerId: string, signal: AbortSignal): Promise<MortyChannelAccessGrant> => {
+        if (!isIdentifier(computerId)) {
             throw new MortyValidationError("The channel identifier is invalid");
         }
         return decodeMortyChannelAccessGrant(
-            await this.#executor.post(`channels/${encodeURIComponent(channelId)}/access-grants`, {}, signal),
+            await this.#executor.post(`channels/${encodeURIComponent(computerId)}/access-grants`, {}, signal),
         );
     };
 
     readonly listLinkedDevices = async (
-        channelId: string,
+        computerId: string,
         signal: AbortSignal,
     ): Promise<readonly MortyLinkedChannelDevice[]> => {
-        if (!isIdentifier(channelId)) {
+        if (!isIdentifier(computerId)) {
             throw new MortyValidationError("The channel identifier is invalid");
         }
         return decodeMortyLinkedChannelDeviceList(
-            await this.#executor.get(`channels/${encodeURIComponent(channelId)}/linked-devices`, signal),
+            await this.#executor.get(`channels/${encodeURIComponent(computerId)}/linked-devices`, signal),
         );
     };
 
-    readonly read = async (channelId: string, signal: AbortSignal): Promise<MortyChannelDescriptor> => {
-        if (!isIdentifier(channelId)) {
+    readonly read = async (computerId: string, signal: AbortSignal): Promise<MortyChannelDescriptor> => {
+        if (!isIdentifier(computerId)) {
             throw new MortyValidationError("The channel identifier is invalid");
         }
         return decodeMortyChannelDescriptor(
-            await this.#executor.get(`channels/${encodeURIComponent(channelId)}`, signal),
+            await this.#executor.get(`channels/${encodeURIComponent(computerId)}`, signal),
         );
     };
 
     readonly revokeLinkedDevice = async (
-        channelId: string,
+        computerId: string,
         credentialId: string,
         signal: AbortSignal,
     ): Promise<void> => {
-        if (!isIdentifier(channelId) || !isIdentifier(credentialId)) {
+        if (!isIdentifier(computerId) || !isIdentifier(credentialId)) {
             throw new MortyValidationError("The linked channel device identifier is invalid");
         }
         await this.#executor.deleteEmpty(
-            `channels/${encodeURIComponent(channelId)}/linked-devices/${encodeURIComponent(credentialId)}`,
+            `channels/${encodeURIComponent(computerId)}/linked-devices/${encodeURIComponent(credentialId)}`,
             signal,
         );
     };
@@ -833,22 +833,22 @@ export class MortyChannelAccessClient {
     }
 
     readonly redeem = async (
-        channelId: string,
+        computerId: string,
         grantId: string,
         grantSecret: string,
         signal: AbortSignal,
     ): Promise<MortyRedeemedChannelCredential> => {
-        if (!isIdentifier(channelId) || !isIdentifier(grantId) || !/^[a-zA-Z0-9_-]{32,256}$/.test(grantSecret)) {
+        if (!isIdentifier(computerId) || !isIdentifier(grantId) || !/^[a-zA-Z0-9_-]{32,256}$/.test(grantSecret)) {
             throw new MortyValidationError("The channel access grant is invalid");
         }
         const credential = decodeMortyRedeemedChannelCredential(
             await this.#requests.post(
-                `channels/${encodeURIComponent(channelId)}/access-grants/${encodeURIComponent(grantId)}/redeem`,
+                `channels/${encodeURIComponent(computerId)}/access-grants/${encodeURIComponent(grantId)}/redeem`,
                 { grantSecret },
                 signal,
             ),
         );
-        if (credential.channelId !== channelId) {
+        if (credential.computerId !== computerId) {
             throw new MortyProtocolError("The service returned a credential for another channel");
         }
         return credential;
@@ -867,13 +867,9 @@ export class MortyRuntimeResources {
     readonly list = async (signal: AbortSignal): Promise<readonly MortyRuntimeDescriptor[]> =>
         decodeMortyRuntimeList(await this.#executor.get(projectPath(this.#computerId, "runtimes"), signal));
 
-    readonly getAgents = async (pairingId: string, signal: AbortSignal) =>
-        decodeRuntimeDescriptor(
-            await this.#executor.get(
-                projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/agents`),
-                signal,
-            ),
-        ).agents;
+    readonly getAgents = async (signal: AbortSignal) =>
+        decodeRuntimeDescriptor(await this.#executor.get(projectPath(this.#computerId, `daemon/agents`), signal))
+            .agents;
 
     /**
      * Read the Runtime's own bounded local diagnostic log through the Relay, for a
@@ -882,44 +878,27 @@ export class MortyRuntimeResources {
      * stay on that machine. Requires the Runtime to be online: an offline Runtime
      * has no log reader to answer, so this reports `runtime_unavailable`.
      */
-    readonly readDiagnostics = async (pairingId: string, signal: AbortSignal): Promise<RuntimeDiagnosticsResult> => {
-        if (!isIdentifier(pairingId)) {
-            throw new MortyValidationError("The Runtime identifier is invalid");
-        }
+    readonly readDiagnostics = async (signal: AbortSignal): Promise<RuntimeDiagnosticsResult> => {
         return decodeRuntimeDiagnosticsResult(
-            JSON.stringify(
-                await this.#executor.get(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/diagnostics`),
-                    signal,
-                ),
-            ),
+            JSON.stringify(await this.#executor.get(projectPath(this.#computerId, `daemon/diagnostics`), signal)),
         );
     };
 
-    readonly listWorkspace = async (
-        pairingId: string,
-        directoryId: string,
-        signal: AbortSignal,
-    ): Promise<WorkspaceEntriesEvent> =>
+    readonly listWorkspace = async (directoryId: string, signal: AbortSignal): Promise<WorkspaceEntriesEvent> =>
         decodeWorkspaceEntriesEvent(
             JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/workspace`),
-                    { directoryId },
-                    signal,
-                ),
+                await this.#executor.post(projectPath(this.#computerId, `daemon/workspace`), { directoryId }, signal),
             ),
         );
 
     readonly describeWorkspace = async (
-        pairingId: string,
         directoryId: string,
         signal: AbortSignal,
     ): Promise<Pick<WorkspaceEntriesEvent, "directoryId" | "directoryLabel">> => {
         const listing = decodeWorkspaceEntriesEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/workspace`),
+                    projectPath(this.#computerId, `daemon/workspace`),
                     { directoryId, view: "metadata" },
                     signal,
                 ),
@@ -929,7 +908,6 @@ export class MortyRuntimeResources {
     };
 
     readonly discoverAgentSettings = async (
-        pairingId: string,
         agentId: string,
         request: DiscoverMortyAgentSettingsRequest,
         signal: AbortSignal,
@@ -937,10 +915,7 @@ export class MortyRuntimeResources {
         decodeAgentSettingsDiscoveredEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(
-                        this.#computerId,
-                        `pairings/${encodeURIComponent(pairingId)}/agents/${encodeURIComponent(agentId)}/settings`,
-                    ),
+                    projectPath(this.#computerId, `daemon/agents/${encodeURIComponent(agentId)}/settings`),
                     request,
                     signal,
                 ),
@@ -948,7 +923,6 @@ export class MortyRuntimeResources {
         );
 
     readonly nativeSessions = async (
-        pairingId: string,
         request:
             | (Omit<
                   Extract<NativeSessionRequest, { readonly action: "list" }>,
@@ -962,11 +936,7 @@ export class MortyRuntimeResources {
     ) =>
         decodeNativeSessionResult(
             JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/native-sessions`),
-                    request,
-                    signal,
-                ),
+                await this.#executor.post(projectPath(this.#computerId, `daemon/native-sessions`), request, signal),
             ),
         );
 
@@ -975,16 +945,12 @@ export class MortyRuntimeResources {
      * Session.
      */
     readonly forkNativeSession = async (
-        pairingId: string,
         operationId: string,
         request: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => {
         const receipt = await this.#executor.post(
-            projectPath(
-                this.#computerId,
-                `pairings/${encodeURIComponent(pairingId)}/native-session-forks/${encodeURIComponent(operationId)}`,
-            ),
+            projectPath(this.#computerId, `daemon/native-session-forks/${encodeURIComponent(operationId)}`),
             request,
             signal,
         );
@@ -1002,25 +968,22 @@ export class MortyRuntimeResources {
         return { result, entry: source.entry };
     };
 
-    readonly querySessions = async (pairingId: string, sessionIds: readonly string[], signal: AbortSignal) =>
+    readonly querySessions = async (sessionIds: readonly string[], signal: AbortSignal) =>
         decodeSessionsQueriedEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/sessions/query`),
+                    projectPath(this.#computerId, `daemon/sessions/query`),
                     { sessionIds },
                     signal,
                 ),
             ),
         ).entries;
 
-    readonly listSessions = async (pairingId: string, limit: number, signal: AbortSignal) => {
+    readonly listSessions = async (limit: number, signal: AbortSignal) => {
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
             throw new MortyValidationError("The Runtime Session list limit is invalid");
         }
-        const path = requestUrl(
-            new URL("https://morty.invalid/"),
-            projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/sessions`),
-        );
+        const path = requestUrl(new URL("https://morty.invalid/"), projectPath(this.#computerId, `daemon/sessions`));
         path.searchParams.set("limit", limit.toString());
         return decodeSessionsListedEvent(
             JSON.stringify(await this.#executor.get(`${path.pathname.slice(1)}${path.search}`, signal)),
@@ -1028,7 +991,6 @@ export class MortyRuntimeResources {
     };
 
     readonly findNativeSessionByNativeSessionId = async (
-        pairingId: string,
         request: Omit<
             Extract<NativeSessionRequest, { readonly action: "find" }>,
             "kind" | "requestId" | "sessionId" | "bindingId" | "action"
@@ -1038,7 +1000,7 @@ export class MortyRuntimeResources {
         const result = decodeNativeSessionResult(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}/native-sessions`),
+                    projectPath(this.#computerId, `daemon/native-sessions`),
                     { ...request, action: "find" },
                     signal,
                 ),
@@ -1050,14 +1012,8 @@ export class MortyRuntimeResources {
         return result;
     };
 
-    readonly revoke = async (pairingId: string, signal: AbortSignal): Promise<void> => {
-        if (!isIdentifier(pairingId)) {
-            throw new MortyValidationError("The Runtime identifier is invalid");
-        }
-        await this.#executor.deleteEmpty(
-            projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}`),
-            signal,
-        );
+    readonly revoke = async (signal: AbortSignal): Promise<void> => {
+        await this.#executor.deleteEmpty(projectPath(this.#computerId, "pairing"), signal);
     };
 }
 
@@ -1071,24 +1027,15 @@ export class MortyRuntimePairingResources {
     }
 
     readonly create = async (request: MortyRuntimePairingRequest, signal: AbortSignal): Promise<MortyRuntimePairing> =>
-        decodeMortyRuntimePairing(
-            await this.#executor.post(projectPath(this.#computerId, "pairings"), request, signal),
-        );
+        decodeMortyRuntimePairing(await this.#executor.post(projectPath(this.#computerId, "pairing"), request, signal));
 
-    readonly read = async (pairingId: string, signal: AbortSignal): Promise<MortyRuntimePairingStatus> => {
-        if (!isIdentifier(pairingId)) {
-            throw new MortyValidationError("The Runtime pairing identifier is invalid");
-        }
+    readonly read = async (signal: AbortSignal): Promise<MortyRuntimePairingStatus> => {
         return decodeMortyRuntimePairingStatus(
-            await this.#executor.get(
-                projectPath(this.#computerId, `pairings/${encodeURIComponent(pairingId)}`),
-                signal,
-            ),
+            await this.#executor.get(projectPath(this.#computerId, "pairing"), signal),
         );
     };
 
     readonly waitUntilPaired = async (
-        pairingId: string,
         options: MortyRuntimePairingWaitOptions,
         signal: AbortSignal,
     ): Promise<MortyPairedRuntimePairingStatus> => {
@@ -1097,7 +1044,7 @@ export class MortyRuntimePairingResources {
             if (signal.aborted) {
                 throw new MortyCancellationError({ cause: signal.reason });
             }
-            const status = await this.read(pairingId, signal);
+            const status = await this.read(signal);
             if (status instanceof MortyPairedRuntimePairingStatus) {
                 return status;
             }
@@ -1145,11 +1092,7 @@ export class MortySessionResources {
     readonly create = async (request: CreateMortySessionRequest, signal: AbortSignal) =>
         decodeSessionReadyEvent(
             JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `pairings/${encodeURIComponent(request.pairingId)}/sessions`),
-                    request,
-                    signal,
-                ),
+                await this.#executor.post(projectPath(this.#computerId, `daemon/sessions`), request, signal),
             ),
         );
 
@@ -1157,16 +1100,11 @@ export class MortySessionResources {
      * Has the Platform issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
      * revocation, it is never covered by that revocation.
      */
-    readonly createAccess = async (
-        pairingId: string,
-        sessionId: string,
-        expiresInSeconds: number,
-        signal: AbortSignal,
-    ) =>
+    readonly createAccess = async (sessionId: string, expiresInSeconds: number, signal: AbortSignal) =>
         new MortySessionAccess(
             await this.#executor.post(
                 sessionPath(this.#computerId, sessionId, "access-credentials"),
-                { expiresInSeconds, pairingId },
+                { expiresInSeconds },
                 signal,
             ),
         );
@@ -1181,7 +1119,6 @@ export class MortySessionResources {
         );
 
     readonly load = async (
-        pairingId: string,
         sessionId: string,
         request: {
             readonly additionalDirectoryIds: readonly string[];
@@ -1193,38 +1130,29 @@ export class MortySessionResources {
         decodeSessionReadyEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(
-                        this.#computerId,
-                        `pairings/${encodeURIComponent(pairingId)}/sessions/${encodeURIComponent(sessionId)}/load`,
-                    ),
+                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/load`),
                     request,
                     signal,
                 ),
             ),
         );
 
-    readonly restore = async (pairingId: string, sessionId: string, signal: AbortSignal) =>
+    readonly restore = async (sessionId: string, signal: AbortSignal) =>
         decodeSessionRestoredEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(
-                        this.#computerId,
-                        `pairings/${encodeURIComponent(pairingId)}/sessions/${encodeURIComponent(sessionId)}/restore`,
-                    ),
+                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/restore`),
                     {},
                     signal,
                 ),
             ),
         );
 
-    readonly close = async (pairingId: string, sessionId: string, signal: AbortSignal) =>
+    readonly close = async (sessionId: string, signal: AbortSignal) =>
         decodeSessionClosedEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(
-                        this.#computerId,
-                        `pairings/${encodeURIComponent(pairingId)}/sessions/${encodeURIComponent(sessionId)}/close`,
-                    ),
+                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/close`),
                     {},
                     signal,
                 ),
@@ -1234,7 +1162,7 @@ export class MortySessionResources {
     readonly updateConfiguration = async (
         ...operation:
             | readonly [
-                  pairingId: string,
+                  computerId: string,
                   sessionId: string,
                   request: UpdateMortySessionConfigurationRequest,
                   signal: AbortSignal,
@@ -1251,7 +1179,7 @@ export class MortySessionResources {
                 : await this.#executor.post(
                       projectPath(
                           this.#computerId,
-                          `pairings/${encodeURIComponent(operation[0])}/sessions/${encodeURIComponent(operation[1])}/configuration`,
+                          `daemon/sessions/${encodeURIComponent(operation[1])}/configuration`,
                       ),
                       operation[2],
                       operation[3],
@@ -1262,7 +1190,7 @@ export class MortySessionResources {
     readonly readConfiguration = async (
         ...operation:
             | readonly [sessionId: string, signal: AbortSignal]
-            | readonly [pairingId: string, sessionId: string, signal: AbortSignal]
+            | readonly [computerId: string, sessionId: string, signal: AbortSignal]
     ) => {
         const result =
             operation.length === 2
@@ -1270,7 +1198,7 @@ export class MortySessionResources {
                 : await this.#executor.get(
                       projectPath(
                           this.#computerId,
-                          `pairings/${encodeURIComponent(operation[0])}/sessions/${encodeURIComponent(operation[1])}/configuration`,
+                          `daemon/sessions/${encodeURIComponent(operation[1])}/configuration`,
                       ),
                       operation[2],
                   );
@@ -1279,7 +1207,7 @@ export class MortySessionResources {
 
     readonly rename = async (
         ...operation:
-            | readonly [pairingId: string, sessionId: string, title: string, signal: AbortSignal]
+            | readonly [computerId: string, sessionId: string, title: string, signal: AbortSignal]
             | readonly [sessionId: string, title: string, signal: AbortSignal]
     ) => {
         const result =
@@ -1290,10 +1218,7 @@ export class MortySessionResources {
                       operation[2],
                   )
                 : await this.#executor.post(
-                      projectPath(
-                          this.#computerId,
-                          `pairings/${encodeURIComponent(operation[0])}/sessions/${encodeURIComponent(operation[1])}/rename`,
-                      ),
+                      projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(operation[1])}/rename`),
                       { title: operation[2] },
                       operation[3],
                   );
@@ -1363,17 +1288,13 @@ export class MortySessionResources {
         await this.readFile(sessionId, externalContentPath(content), signal, maximumBytes);
 
     readonly previewRuntimeNativeEvents = async (
-        pairingId: string,
         sessionId: string,
         identity: MortySessionBinding,
         page: NativeEventPageRequest,
         signal: AbortSignal,
     ): Promise<NativeSessionEvents> => {
         const result = await this.#executor.post(
-            projectPath(
-                this.#computerId,
-                `pairings/${encodeURIComponent(pairingId)}/sessions/${encodeURIComponent(sessionId)}/native-events-preview`,
-            ),
+            projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/native-events-preview`),
             {
                 ...identity,
                 cursor: page.cursor,
@@ -1446,7 +1367,6 @@ export class MortySessionResources {
     };
 
     readonly readRuntimeSessionExecution = async (
-        pairingId: string,
         sessionId: string,
         identity: MortySessionBinding,
         signal: AbortSignal,
@@ -1454,10 +1374,7 @@ export class MortySessionResources {
         const result = decodeNativeSessionResult(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(
-                        this.#computerId,
-                        `pairings/${encodeURIComponent(pairingId)}/sessions/${encodeURIComponent(sessionId)}/active-turn`,
-                    ),
+                    projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/active-turn`),
                     identity,
                     signal,
                 ),
@@ -1494,16 +1411,12 @@ export class MortyTurnResources {
     };
 
     readonly submitToRuntime = async (
-        pairingId: string,
         sessionId: string,
         request: SubmitMortyTurnRequest,
         signal: AbortSignal,
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.post(
-            projectPath(
-                this.#computerId,
-                `pairings/${encodeURIComponent(pairingId)}/sessions/${encodeURIComponent(sessionId)}/turns`,
-            ),
+            projectPath(this.#computerId, `daemon/sessions/${encodeURIComponent(sessionId)}/turns`),
             {
                 ...request,
                 disposition: request.disposition ?? SessionPromptDisposition.Append,

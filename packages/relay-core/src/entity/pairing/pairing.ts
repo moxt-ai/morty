@@ -24,34 +24,22 @@ export interface AgentDescriptor {
 }
 
 export class CreatedRuntimePairing {
-    readonly channelId: string;
     readonly expiresAt: string;
     readonly pairingCode: string;
-    readonly pairingId: string;
     readonly pollToken: string;
     readonly computerId: string;
 
-    constructor(
-        channelId: string,
-        expiresAt: string,
-        pairingCode: string,
-        pairingId: string,
-        pollToken: string,
-        computerId: string,
-    ) {
-        this.channelId = channelId;
+    constructor(expiresAt: string, pairingCode: string, pollToken: string, computerId: string) {
+        this.computerId = computerId;
         this.expiresAt = expiresAt;
         this.pairingCode = pairingCode;
-        this.pairingId = pairingId;
         this.pollToken = pollToken;
-        this.computerId = computerId;
     }
 }
 
 export interface ClaimedPairing {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly daemonToken: string;
-    readonly pairingId: string;
 }
 
 export interface CreatedChannelAccessGrant {
@@ -61,7 +49,6 @@ export interface CreatedChannelAccessGrant {
 }
 
 export interface RedeemedChannelAccessGrant {
-    readonly channelId: string;
     readonly hostToken: string;
     readonly computerId: string;
 }
@@ -80,23 +67,19 @@ export class LinkedChannelDevice {
 
 export class VerifiedChannelAccess {
     readonly agents: readonly AgentDescriptor[];
-    readonly channelId: string;
     readonly computerId: string;
-    readonly pairingId: string;
 
-    constructor(channelId: string, pairingId: string, computerId: string, agents: readonly AgentDescriptor[]) {
+    constructor(computerId: string, agents: readonly AgentDescriptor[]) {
         this.agents = agents;
-        this.channelId = channelId;
         this.computerId = computerId;
-        this.pairingId = pairingId;
     }
 }
 
 export class ChannelHostCredential extends VerifiedChannelAccess {
     readonly credentialId: string;
 
-    constructor(channelId: string, pairingId: string, computerId: string, credentialId: string) {
-        super(channelId, pairingId, computerId, []);
+    constructor(computerId: string, credentialId: string) {
+        super(computerId, []);
         this.credentialId = credentialId;
     }
 }
@@ -109,8 +92,8 @@ export class ChannelHostCredential extends VerifiedChannelAccess {
 export class ProjectCredentialHostAccess extends VerifiedChannelAccess {
     readonly credentialId: string;
 
-    constructor(channelId: string, pairingId: string, computerId: string, credentialId: string) {
-        super(channelId, pairingId, computerId, []);
+    constructor(computerId: string, credentialId: string) {
+        super(computerId, []);
         this.credentialId = credentialId;
     }
 }
@@ -124,29 +107,18 @@ export type HostCredential =
 
 export class ChannelDescriptor {
     readonly agents: readonly AgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
     readonly computerId: string;
-    readonly pairingId: string;
     readonly workspaceName: string;
 
-    constructor(
-        agents: readonly AgentDescriptor[],
-        channelId: string,
-        machineName: string,
-        workspaceName: string,
-        computerId: string,
-        pairingId: string,
-    ) {
+    constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
         this.agents = agents.map((agent) => ({
             ...agent,
             agentSettingsDiscovery: true,
             sessionTurnConfiguration: true,
         }));
-        this.channelId = channelId;
-        this.machineName = machineName;
         this.computerId = computerId;
-        this.pairingId = pairingId;
+        this.machineName = machineName;
         this.workspaceName = workspaceName;
     }
 }
@@ -192,27 +164,16 @@ export class ExpiredPairingStatus extends PairingStatus {
 
 export class PairedPairingStatus extends PairingStatus {
     readonly agents: readonly AgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
     readonly computerId: string;
-    readonly pairingId: string;
     readonly status = PairingLifecycle.Paired;
     readonly workspaceName: string;
 
-    constructor(
-        agents: readonly AgentDescriptor[],
-        channelId: string,
-        machineName: string,
-        workspaceName: string,
-        computerId: string,
-        pairingId: string,
-    ) {
+    constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
         super();
         this.agents = agents;
-        this.channelId = channelId;
-        this.machineName = machineName;
         this.computerId = computerId;
-        this.pairingId = pairingId;
+        this.machineName = machineName;
         this.workspaceName = workspaceName;
     }
 }

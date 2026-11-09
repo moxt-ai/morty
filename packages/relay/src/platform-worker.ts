@@ -78,7 +78,6 @@ export interface ComputerPlatformRelayBindings extends PlatformRelayBindings, Co
 export interface RuntimeExecutionBindings extends PlatformRelayBindings {
     readonly MORTY_RUNTIME_EXECUTION: {
         readonly computerId: string;
-        readonly pairingId: string;
         readonly operations: LocalSessionOperations;
     };
 }
@@ -114,7 +113,6 @@ function authorizedSessionControl(
         await access.authorize(permission, context.req.raw.signal);
         return await sessionOperations(context).requestComputerScopeControl(
             scope,
-            access.pairingId,
             command,
             context.req.raw.signal,
         );
@@ -282,13 +280,11 @@ export function createPlatformApplication(
             const input = v.parse(
                 v.strictObject({
                     expiresInSeconds: v.pipe(v.number(), v.safeInteger(), v.minValue(60), v.maxValue(900)),
-                    pairingId: sessionIdentifier,
                 }),
                 body,
             );
             const access = await context.var.sessionAccess.issue(
                 context.var.sessionAccessTarget,
-                input.pairingId,
                 credential,
                 input.expiresInSeconds,
                 context.req.raw.signal,
@@ -322,7 +318,6 @@ export function createPlatformApplication(
                 issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
                 kind: "expiring",
                 computerId: target.computerId,
-                pairingId: target.pairingId,
             });
         })
         .get("/:sessionId/native-events-preview", sessionAccessTargetMiddleware, async (context) => {
@@ -469,7 +464,6 @@ export function createPlatformApplication(
             );
             return await sessionOperations(context).readProjectSessionFile(
                 new ComputerScope(access.computerId),
-                access.pairingId,
                 decodeFileReadCommand(
                     JSON.stringify({ kind: "file.read", maxBytes, path, requestId: crypto.randomUUID(), sessionId }),
                 ),
@@ -509,7 +503,6 @@ export function createPlatformApplication(
             name = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
             const available = await sessionOperations(context).writeProjectSessionContent(
                 new ComputerScope(access.computerId),
-                access.pairingId,
                 decodeContentWriteCommand(
                     JSON.stringify({
                         byteLength,
@@ -666,7 +659,6 @@ export function createPlatformApplication(
             }
             return await sessionOperations(context).openPublicSessionEvents(
                 new ComputerScope(target.computerId),
-                target.pairingId,
                 context.req.param("sessionId"),
                 {
                     credentialId: target.credentialId,
@@ -690,15 +682,14 @@ export function createPlatformApplication(
             throw new Error("Session access is revoked only in the Project's ComputerRelay");
         }
         const computerId = validateIdentifier(context.req.param("computerId") ?? "", "project_id");
-        const store = context.env.MORTY_COMPUTER_STORE;
+        const _store = context.env.MORTY_COMPUTER_STORE;
         const channel = gateways(context.env).channel;
         const revoked = await context.var.sessionAccess.revoke(
             computerId,
             credential,
             {
-                pairingIds: async (signal) => (await store.listRuntimes(signal)).map((runtime) => runtime.pairing_id),
-                disconnect: (pairingId, revokedThrough, signal) =>
-                    channel.disconnectSessionViewers(computerId, pairingId, revokedThrough, signal),
+                disconnect: (computerId, revokedThrough, signal) =>
+                    channel.disconnectSessionViewers(computerId, revokedThrough, signal),
             },
             context.req.raw.signal,
         );

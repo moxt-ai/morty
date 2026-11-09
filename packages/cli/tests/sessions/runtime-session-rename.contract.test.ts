@@ -22,13 +22,12 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
-                pairingId: runtime.pairingId,
+                computerId: runtime.computerId,
                 sessionId,
             },
             cancellation.signal,
         );
         await runtime.client.turns.submitToRuntime(
-            runtime.pairingId,
             sessionId,
             {
                 additionalDirectoryIds: [],
@@ -43,7 +42,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
 
         await expect(
             runtime.client.sessions.rename(
-                runtime.pairingId,
+                runtime.computerId,
                 sessionId,
                 "Renamed by the developer",
                 cancellation.signal,
@@ -56,9 +55,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             }),
         );
 
-        await expect(
-            runtime.client.runtimes.listSessions(runtime.pairingId, 100, cancellation.signal),
-        ).resolves.toEqual([
+        await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
             expect.objectContaining({
                 agentId: "claude",
                 prompted: true,
@@ -71,7 +68,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         // The controlled Agent harness received the rename: its own native
         // Session listing reports the new title instead of the first prompt.
         const discovery = await runtime.client.runtimes.nativeSessions(
-            runtime.pairingId,
             {
                 action: "list",
                 additionalDirectoryIds: [],

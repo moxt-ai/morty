@@ -137,7 +137,7 @@ async function provisionProject() {
 async function pairRuntime() {
     const { computerId, appCredential } = await provisionProject();
     const pairing = await api(
-        `/v1/computers/${computerId}/pairings`,
+        `/v1/computers/${computerId}/pairing`,
         {
             method: "POST",
             headers: { authorization: `Bearer ${appCredential}` },
@@ -146,7 +146,7 @@ async function pairRuntime() {
         201,
     );
     const claimed = await api(
-        `/v1/pairings/${text(pairing, "pairingId")}/redeem`,
+        `/v1/pairings/${text(pairing, "computerId")}/redeem`,
         {
             method: "POST",
             body: JSON.stringify({
@@ -161,16 +161,12 @@ async function pairRuntime() {
     return { computerId, pairing, claimed };
 }
 
-let loggingRuntime:
-    | Promise<{ readonly computerId: string; readonly pairingId: string; readonly channelId: string }>
-    | undefined;
+let loggingRuntime: Promise<{ readonly computerId: string }> | undefined;
 
 /** Internal Runtime Relay scenarios enter after public pairing registered the Runtime in an active Project. */
 function registeredLoggingRuntime() {
-    loggingRuntime ??= pairRuntime().then(({ computerId, pairing, claimed }) => ({
+    loggingRuntime ??= pairRuntime().then(({ computerId }) => ({
         computerId,
-        pairingId: text(claimed, "pairingId"),
-        channelId: text(pairing, "channelId"),
     }));
     return loggingRuntime;
 }
@@ -235,7 +231,7 @@ it.each(["primitive", "object", "circular", "deep", "long", "secrets", "getter"]
 
 // @no-uc: Technical regression; a failing DO hop must identify its target rather than only its caller.
 it("identifies the failing Runtime Durable Object through the public pairing and connect APIs", async () => {
-    const { computerId, pairing, claimed } = await pairRuntime();
+    const { computerId, claimed } = await pairRuntime();
     const start = logs.length;
     const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/runtimes/connect", {
         headers: {
@@ -255,8 +251,6 @@ it("identifies the failing Runtime Durable Object through the public pairing and
         expect.objectContaining({
             event: "runtime_relay_request_failed",
             durableObjectId: expect.any(String),
-            pairingId: text(claimed, "pairingId"),
-            channelId: text(pairing, "channelId"),
             computerId,
             path: `/computers/${computerId}/daemon`,
             cfRay: "runtime-failure-ray",
@@ -326,12 +320,11 @@ it("identifies a Project database overload through the public project creation A
 
 // @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.
 it("keeps ordinary Host closes quiet after the real platform close callback completes", async () => {
-    const { computerId, pairingId, channelId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingRuntime();
     const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
         headers: {
             Upgrade: "websocket",
-            "x-morty-pairing-id": pairingId,
-            "x-morty-channel-id": channelId,
+            "x-morty-computer-id": computerId,
             "x-morty-host-credential-id": "ctl_HOST_CREDENTIAL_CANARY",
             "x-morty-host-credential-kind": "channel",
         },
@@ -364,13 +357,12 @@ it("keeps ordinary Host closes quiet after the real platform close callback comp
 });
 
 async function daemon() {
-    const { computerId, pairingId, channelId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingRuntime();
     const start = logs.length;
     const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
         headers: {
             Upgrade: "websocket",
-            "x-morty-pairing-id": pairingId,
-            "x-morty-channel-id": channelId,
+            "x-morty-computer-id": computerId,
         },
     });
     expect(response.status).toBe(101);
@@ -398,7 +390,7 @@ async function daemon() {
 
 // @no-uc: Technical regression; real close callbacks must retain peer diagnostics while detach and reconnect still work.
 it("records overload close details and connection epochs without logging healthy heartbeats", async () => {
-    const { computerId, pairingId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingRuntime();
     const socket = await daemon();
     try {
         const start = logs.length;
@@ -418,7 +410,6 @@ it("records overload close details and connection epochs without logging healthy
             closeReason: "Service overloaded; retry later.",
             wasClean: true,
             role: "daemon",
-            pairingId,
             computerId,
             durableObjectId: expect.any(String),
             connectionId: expect.any(String),
@@ -429,7 +420,7 @@ it("records overload close details and connection epochs without logging healthy
                 event: "runtime_websocket_accepted",
                 connectionEpoch: 1,
                 connectionId: closed?.["connectionId"],
-                pairingId,
+                computerId,
             }),
         );
         const next = await daemon();
@@ -446,7 +437,7 @@ it("records overload close details and connection epochs without logging healthy
 
 // @no-uc: Technical regression; platform-supplied errors must survive the exported hibernatable WebSocket callback.
 it("retains a platform WebSocket error and connection identity before closing the socket", async () => {
-    const { computerId, pairingId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingRuntime();
     const socket = await daemon();
     try {
         const closed = new Promise<number>((resolve) =>
@@ -468,7 +459,7 @@ it("retains a platform WebSocket error and connection identity before closing th
                 event: "runtime_websocket_error",
                 role: "daemon",
                 connectionEpoch: expect.any(Number),
-                pairingId,
+                computerId,
                 durableObjectId: expect.any(String),
                 err: expect.objectContaining({
                     message: "Runtime relay request failed",

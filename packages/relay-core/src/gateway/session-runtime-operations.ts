@@ -6,19 +6,16 @@ import type { RuntimeControlCommand, RuntimeControlResult } from "../service/pai
 export interface SessionRuntimeOperations {
     readonly requestComputerScopeControl: (
         scope: ComputerScope,
-        pairingId: string,
         command: RuntimeControlCommand,
         signal: AbortSignal,
     ) => Promise<RuntimeControlResult>;
     readonly readProjectSessionFile: (
         scope: ComputerScope,
-        pairingId: string,
         command: FileReadCommand,
         signal: AbortSignal,
     ) => Promise<Response>;
     readonly writeProjectSessionContent: (
         scope: ComputerScope,
-        pairingId: string,
         command: ContentWriteCommand,
         body: ReadableStream<Uint8Array>,
         signal: AbortSignal,

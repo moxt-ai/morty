@@ -74,12 +74,11 @@ async function openSessionView(slug: string) {
             })
         ).json(),
     );
-    const pairingId = `viewer-check-runtime-${slug}`;
     const sessionId = "viewer-check-session";
-    await registerRuntimeFixture(computerId, pairingId);
+    await registerRuntimeFixture(computerId);
     const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
         `https://runtime.internal/computers/${computerId}/daemon`,
-        { headers: { Upgrade: "websocket", "x-morty-channel-id": pairingId, "x-morty-pairing-id": pairingId } },
+        { headers: { Upgrade: "websocket" } },
     );
     expect(daemonResponse.status).toBe(101);
     const daemon = daemonResponse.webSocket;
@@ -94,7 +93,7 @@ async function openSessionView(slug: string) {
         new Request(`${origin}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`, {
             method: "POST",
             headers: { authorization: `Bearer ${defaultCredential.credential}`, "content-type": "application/json" },
-            body: JSON.stringify({ expiresInSeconds: 900, pairingId }),
+            body: JSON.stringify({ expiresInSeconds: 900 }),
         }),
         env,
     );
@@ -115,7 +114,7 @@ async function openSessionView(slug: string) {
     const viewInbox = new Inbox(view);
     view.accept();
 
-    return { daemon, dashboard, defaultCredential, computerId, pairingId, sessionId, viewInbox };
+    return { daemon, dashboard, defaultCredential, computerId, sessionId, viewInbox };
 }
 
 const liveEvent = (sessionId: string, eventId: string) => ({

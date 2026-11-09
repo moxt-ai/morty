@@ -33,29 +33,27 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             runtime.revokeSessionViewers(new ComputerScope(c.req.param("computerId")), revokedThrough);
             return new Response(null, { status: 204 });
         }
-        const channelId = request.headers.get("x-morty-channel-id");
-        const pairingId = request.headers.get("x-morty-pairing-id");
         const computerId = c.req.param("computerId");
-        if (channelId === null || pairingId === null || computerId === null) {
+        if (!computerId) {
             return unauthorized("Verified channel access is required");
         }
         const scope = new ComputerScope(computerId);
         const url = new URL(request.url);
         const credentialId = request.headers.get("x-morty-host-credential-id");
         if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
-            await runtime.revokeRuntime(channelId, pairingId, scope, request.signal);
+            await runtime.revokeRuntime(scope, request.signal);
             return new Response(null, { status: 204 });
         }
         if (request.method === "DELETE" && url.pathname.endsWith("/host-credentials/revoke")) {
             if (credentialId === null) {
                 return unauthorized("Verified host credential access is required");
             }
-            runtime.revokeHost(channelId, credentialId, pairingId, scope);
+            runtime.revokeHost(credentialId, scope);
             return new Response(null, { status: 204 });
         }
         if (request.method === "GET" && url.pathname.endsWith("/runtime-status")) {
             await runtime.expireSilentDaemons();
-            return Response.json({ online: runtime.isOnline(pairingId) });
+            return Response.json({ online: runtime.isOnline(computerId) });
         }
         const revoked = () =>
             Response.json(
@@ -67,7 +65,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return new Response("WebSocket upgrade required", { status: 426 });
         }
         if (url.pathname.endsWith("/daemon")) {
-            const result = await runtime.acceptDaemon(pairingId, scope, request.signal);
+            const result = await runtime.acceptDaemon(scope, request.signal);
             switch (result.kind) {
                 case "accepted":
                     return result.response;
@@ -77,7 +75,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                     return Response.json(
                         {
                             error: {
-                                code: "pairing_identity_conflict",
+                                code: "computer_identity_conflict",
                                 message: "The Channel is already assigned to another Runtime",
                             },
                         },
@@ -104,9 +102,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                 await runtime.acceptHost(
                     {
                         role: "host",
-                        channelId,
                         credential,
-                        pairingId,
                         computerId,
                         ...(nativeRequestId === null ? {} : { nativeRequestId }),
                         ...(sessionFilter === null ? {} : { sessionFilter }),
@@ -116,9 +112,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             );
         }
         if (url.pathname.endsWith("/live-history")) {
-            return admitted(
-                await runtime.acceptHost({ role: "relay", channelId, pairingId, computerId }, request.signal),
-            );
+            return admitted(await runtime.acceptHost({ role: "relay", computerId }, request.signal));
         }
         return new Response(null, { status: 404 });
     });

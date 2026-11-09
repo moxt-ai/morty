@@ -41,13 +41,13 @@ export function forgetRecentCwdPreference(botId: string, directoryId: string): r
     return recent;
 }
 
-export function readLastCwdPreference(botId: string, pairingId: string, agentRef: string): string | null {
-    return centralLocalStorage.read(lastCwdEntry(botId, pairingId, agentRef));
+export function readLastCwdPreference(botId: string, computerId: string, agentRef: string): string | null {
+    return centralLocalStorage.read(lastCwdEntry(botId, computerId, agentRef));
 }
 
-export function saveLastCwdPreference(botId: string, pairingId: string, agentRef: string, directoryId: string): void {
+export function saveLastCwdPreference(botId: string, computerId: string, agentRef: string, directoryId: string): void {
     if (!isDirectoryIdentifier(directoryId)) {
         return;
     }
-    centralLocalStorage.write(lastCwdEntry(botId, pairingId, agentRef), directoryId);
+    centralLocalStorage.write(lastCwdEntry(botId, computerId, agentRef), directoryId);
 }

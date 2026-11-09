@@ -11,7 +11,6 @@ const sessionClaims = btoa(
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
         computerId: "project-1",
-        pairingId: "runtime-1",
         sessionId: "session-1",
     }),
 )
@@ -23,7 +22,7 @@ const sessionCredential = `msession_${"a".repeat(22)}_${sessionClaims}_${"A".rep
 function runtimeRequest(address: string, init?: RequestInit): Request {
     const url = new URL(address);
     if (!url.pathname.startsWith("/morty/api/v1/computers/")) {
-        url.pathname = `/morty/api/v1/computers/project-1/pairings/runtime-1${url.pathname}`;
+        url.pathname = `/morty/api/v1/computers/project-1/daemon${url.pathname}`;
     } else {
         url.pathname = url.pathname.replace("/computers/project/", "/computers/project-1/");
     }
@@ -169,7 +168,7 @@ it("Given a browser bound to one computer, When it opens another Session or addr
         expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/project-1/transport");
         await expect(
             transport.fetch(
-                runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-2/pairings/runtime-2/agents"),
+                runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-2/daemon/agents"),
             ),
         ).rejects.toThrow("cannot connect to multiple computers");
         expect((await transport.fetch(runtimeRequest("https://relay.example.test/after-rejection"))).status).toBe(204);

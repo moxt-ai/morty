@@ -21,10 +21,8 @@ import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../
 
 const origin = `https://platform.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
-    channelId: v.string(),
     expiresAt: v.string(),
     pairingCode: v.string(),
-    pairingId: v.string(),
     pollToken: v.string(),
     computerId: v.string(),
 });
@@ -97,32 +95,42 @@ async function project(_name = "Runtime pairing") {
         });
     };
     const create = async (idempotencyKey: string) =>
-        request(`/v1/computers/${computerId}/pairings`, "POST", { idempotencyKey });
+        request(`/v1/computers/${computerId}/pairing`, "POST", { idempotencyKey });
     return {
         computerId,
         credentialId: defaultCredential.credentialId,
+        issueSession: () =>
+            request(`/v1/computers/${computerId}/sessions/revoke-test/access-credentials`, "POST", {
+                expiresInSeconds: 900,
+            }),
+        checkSession: (token: string) =>
+            request(
+                `/v1/computers/${computerId}/sessions/revoke-test/live-event-subscription-target`,
+                "GET",
+                undefined,
+                token,
+            ),
         create,
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
-        status: async (pairing: Pairing) => request(`/v1/computers/${computerId}/pairings/${pairing.pairingId}`),
+        status: async (_pairing: Pairing) => request(`/v1/computers/${computerId}/pairing`),
         claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", machineName = "Runtime machine") =>
-            request(endpoint === "claim" ? "/pairings/claim" : `/v1/pairings/${pairing.pairingId}/redeem`, "POST", {
+            request(endpoint === "claim" ? "/pairings/claim" : `/v1/pairings/${pairing.computerId}/redeem`, "POST", {
                 pairingCode: pairing.pairingCode,
                 machineName,
                 workspaceName: "Runtime workspace",
                 agents: [],
             }),
-        revoke: async (pairing: Pairing) =>
-            request(`/v1/computers/${computerId}/pairings/${pairing.pairingId}`, "DELETE"),
+        revoke: async (_pairing: Pairing) => request(`/v1/computers/${computerId}/pairing`, "DELETE"),
         list: async () => request(`/v1/computers/${computerId}/runtimes`),
         publish: async (pairing: Pairing, token: string) =>
-            request(`/channels/${pairing.channelId}/catalog`, "PUT", { agents: [] }, token),
+            request(`/channels/${pairing.computerId}/catalog`, "PUT", { agents: [] }, token),
         readChannel: async (pairing: Pairing, token: string) =>
-            request(`/channels/${pairing.channelId}`, "GET", undefined, token),
+            request(`/channels/${pairing.computerId}`, "GET", undefined, token),
         createGrant: async (pairing: Pairing, token: string) =>
-            request(`/channels/${pairing.channelId}/access-grants`, "POST", undefined, token),
+            request(`/channels/${pairing.computerId}/access-grants`, "POST", undefined, token),
         redeemGrant: async (pairing: Pairing, grantId: string, grantSecret: string) =>
-            request(`/channels/${pairing.channelId}/access-grants/${grantId}/redeem`, "POST", { grantSecret }),
+            request(`/channels/${pairing.computerId}/access-grants/${grantId}/redeem`, "POST", { grantSecret }),
         storage: async <T>(operation: (storage: DurableObjectStorage) => Promise<T> | T): Promise<T> =>
             runInDurableObject(stub, async (_instance, state) => operation(state.storage)),
         restart: async () => evictDurableObject(stub),
@@ -156,7 +164,7 @@ it("Given pending reservations at capacity, When their deadline passes without e
     expect(await responseJson(await app.status(first), 200)).toEqual({ status: "expired" });
     expect(await responseJson(await app.claim(first), 400)).toMatchObject({ error: { code: "invalid_pairing_code" } });
     expect(await app.pair("replacement")).toMatchObject({ computerId: app.computerId });
-    expect(await app.pair("reservation-0")).toEqual(first);
+    expect((await app.create("reservation-0")).status).toBe(429);
 });
 
 it("Given simultaneous retries of one creation, When they commit, Then they share one reservation and occupy the single daemon slot", async () => {
@@ -178,7 +186,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     const claimed = await app.storage(async (storage) =>
         new RuntimeDirectoryStorage(app.computerId, new DurableObjectDatabaseAdapter(storage)).claim(
             {
-                pairingId: pairing.pairingId,
+                computerId: pairing.computerId,
                 codeHash,
                 daemonHash: await hashPairingCredential("delayed-runtime-credential"),
                 now: claimTime,
@@ -191,7 +199,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
         ),
     );
     expect(claimed).toBe(false);
-    expect(await responseJson(await app.status(pairing), 200)).toEqual({ status: "expired" });
+    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
     expect(await responseJson(await app.list(), 200)).toEqual({ runtimes: [] });
 });
 
@@ -224,19 +232,18 @@ it.each(["redeem"] as const)(
         vi.setSystemTime(new Date(Date.now() + 20_000));
         const response = await responseJson(await app.claim(pairing, endpoint, "Retry machine"), 200);
         // A retry returns the exact current redemption contract.
-        const identity = { channelId: v.string(), pairingId: v.string() };
+        const identity = { computerId: v.string() };
         const credential = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/));
         const runtimeCredential = v.parse(
             v.strictObject({ ...identity, runtimeCredential: credential }),
             response,
         ).runtimeCredential;
         expect(response).toMatchObject({
-            channelId: pairing.channelId,
-            pairingId: pairing.pairingId,
+            computerId: pairing.computerId,
         });
         expect((await app.publish(pairing, runtimeCredential)).status).toBe(204);
         expect(await responseJson(await app.list(), 200)).toMatchObject({
-            runtimes: [{ pairingId: pairing.pairingId, machineName: "Runtime machine" }],
+            runtimes: [{ computerId: pairing.computerId, machineName: "Runtime machine" }],
         });
         expect(
             await app.storage((storage) =>
@@ -287,7 +294,7 @@ async function pairedChannelWithLegacyOwner() {
             .insert(channelHostCredential)
             .values({
                 credentialId: "legacy-owner",
-                channelId: pairing.channelId,
+                computerId: pairing.computerId,
                 tokenHash: await hashPairingCredential(hostToken),
                 authority: "owner",
                 createdAt: Date.now(),
@@ -316,7 +323,7 @@ it("Given channel credentials and an unused access link, When their Runtime is r
         throw new Error("Expected both redemption responses");
     }
     const linked = v.parse(
-        v.strictObject({ hostToken: v.string(), channelId: v.string(), computerId: v.string() }),
+        v.strictObject({ hostToken: v.string(), computerId: v.string() }),
         await responseJson(redeemed, 200),
     );
     expect(await responseJson(repeated, 409)).toMatchObject({ error: { code: "access_grant_redeemed" } });
@@ -405,7 +412,7 @@ it("Given a pending pairing, When claims arrive concurrently, Then they return t
     });
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "paired", agents: [] });
     expect((await app.publish(pairing, runtimeCredential)).status).toBe(204);
-    expect(await responseJson(await app.list(), 200)).toMatchObject({ runtimes: [{ pairingId: pairing.pairingId }] });
+    expect(await responseJson(await app.list(), 200)).toMatchObject({ runtimes: [{ computerId: pairing.computerId }] });
     expect((await app.revoke(pairing)).status).toBe(204);
     const revoked = await responseJson(await app.status(pairing), 200);
     expect(revoked).toEqual({ status: "revoked", revokedAt: new Date().toISOString() });
@@ -438,7 +445,7 @@ it("Given separate Projects, When they use the same pairing idempotency key, The
     const second = await project("Another Runtime pairing App");
     const left = await first.pair("same-key");
     const right = await second.pair("same-key");
-    expect(left.pairingId).not.toBe(right.pairingId);
+    expect(left.computerId).not.toBe(right.computerId);
     expect(await first.pair("same-key")).toEqual(left);
     expect(await second.pair("same-key")).toEqual(right);
 });
@@ -471,14 +478,21 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
 it("revoking a pairing invalidates its daemon credential after the same computer pairs again", async () => {
     const app = await project();
     const original = await app.pair("original");
-    const credential = v.object({ pairingId: v.string(), runtimeCredential: v.string() });
+    const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });
     const old = v.parse(credential, await responseJson(await app.claim(original), 200));
-    expect(old.pairingId).toBe(original.pairingId);
+    expect(old.computerId).toBe(original.computerId);
+    const { credential: sessionToken } = v.parse(
+        v.object({ credential: v.string() }),
+        await responseJson(await app.issueSession(), 201),
+    );
+    expect((await app.checkSession(sessionToken)).status).toBe(200);
     expect((await app.revoke(original)).status).toBe(204);
     const replacement = await app.pair("replacement");
     const current = v.parse(credential, await responseJson(await app.claim(replacement), 200));
-    expect(current.pairingId).toBe(replacement.pairingId);
-    expect(current.pairingId).not.toBe(old.pairingId);
+    expect(current.computerId).toBe(replacement.computerId);
+    expect(current.computerId).toBe(old.computerId);
+    expect(current.runtimeCredential).not.toBe(old.runtimeCredential);
+    expect((await app.checkSession(sessionToken)).status).toBe(401);
     expect((await app.publish(original, old.runtimeCredential)).status).toBe(401);
     expect((await app.publish(replacement, old.runtimeCredential)).status).toBe(401);
     expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
@@ -498,7 +512,7 @@ it.each(["", "morty-pairing-v1\0"])(
             database.orm
                 .update(runtimeDaemonCredential)
                 .set({ tokenHash: await hashSecret(`${retiredDomain}${old.runtimeCredential}`) })
-                .where(eq(runtimeDaemonCredential.pairingId, oldPairing.pairingId))
+                .where(eq(runtimeDaemonCredential.computerId, oldPairing.computerId))
                 .run();
         });
         expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);

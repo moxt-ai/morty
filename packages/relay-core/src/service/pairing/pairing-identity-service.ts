@@ -1,14 +1,14 @@
 import { RuntimeAccessContext } from "../../entity/authentication/project-authentication.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../entity/pairing/pairing.ts";
-import type { PairingIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
+import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { PairingScopeRow } from "../../entity/pairing/pairing-records.ts";
 import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
 import type { ProjectStore, ProjectStoreResolver } from "../../infra/project-store.ts";
 import { DatabaseError } from "../../infra/sql-database.ts";
 
 /** A credential that matches nothing, including one stored for a Project that is no longer served. */
-function unmatchedCredential(credential: PairingIdentityCredential): PairingDirectoryError {
+function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
     const code =
         credential.kind === "pairing"
             ? "pairing_not_found"
@@ -24,7 +24,7 @@ function unmatchedCredential(credential: PairingIdentityCredential): PairingDire
  * Finds the Project a credential belongs to by asking the Project stores this execution can search, then confirms
  * that the Relay still serves that Project from the store that matched.
  */
-export class PairingIdentityService {
+export class ComputerIdentityService {
     readonly #sources: readonly ProjectStore[];
     readonly #stores: ProjectStoreResolver;
     readonly #projects: ProjectStorageDirectory;
@@ -38,7 +38,7 @@ export class PairingIdentityService {
         source === this.#stores.resolve(project.storagePlacement);
 
     readonly authenticateProject = async (
-        credential: PairingIdentityCredential,
+        credential: ComputerIdentityCredential,
         signal: AbortSignal,
     ): Promise<ProjectStorageContext> => {
         const identity = await this.authenticate(credential, signal);
@@ -94,9 +94,7 @@ export class PairingIdentityService {
             if (matches.length !== 1 || match === undefined) {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
             }
-            const computerId = validateIdentifier(match.row.project_id, "project_id");
-            const pairingId = validateIdentifier(match.row.pairing_id, "pairing_id");
-            const channelId = validateIdentifier(match.row.channel_id, "channel_id");
+            const computerId = validateIdentifier(match.row.computer_id, "computer_id");
             const project = await this.#projects.resolve(computerId, signal);
             signal.throwIfAborted();
             if (project === null) {
@@ -107,12 +105,7 @@ export class PairingIdentityService {
             }
             return {
                 kind: match.kind,
-                access: new RuntimeAccessContext(
-                    new ComputerScope(computerId),
-                    pairingId,
-                    channelId,
-                    `daemon:${channelId}`,
-                ),
+                access: new RuntimeAccessContext(new ComputerScope(computerId), `daemon:${computerId}`),
             };
         } catch (cause) {
             signal.throwIfAborted();
@@ -128,7 +121,7 @@ export class PairingIdentityService {
         }
     };
 
-    private readonly authenticate = async (credential: PairingIdentityCredential, signal: AbortSignal) => {
+    private readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
             const matches: { readonly computerId: string; readonly source: ProjectStore }[] = [];
@@ -152,7 +145,7 @@ export class PairingIdentityService {
                             throw new PairingDirectoryError("credential_expired", "The browser credential expired");
                         }
                     }
-                    matches.push({ computerId: validateIdentifier(row.project_id, "project_id"), source });
+                    matches.push({ computerId: validateIdentifier(row.computer_id, "computer_id"), source });
                 }
             }
             const match = matches[0];

@@ -17,37 +17,37 @@ export class ChannelService {
         this.#channelGateway = channelGateway;
     }
     readonly updateAgentCatalog = (
-        channelId: string,
+        computerId: string,
         token: string,
         successor: string | null,
         agents: readonly AgentDescriptor[],
         signal: AbortSignal,
-    ) => this.#pairings.updateAgentCatalog(channelId, token, successor, agents, signal);
+    ) => this.#pairings.updateAgentCatalog(computerId, token, successor, agents, signal);
 
-    readonly createAccessGrant = (channelId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.createChannelAccessGrant(channelId, token, signal);
+    readonly createAccessGrant = (computerId: string, token: string, signal: AbortSignal) =>
+        this.#pairings.createChannelAccessGrant(computerId, token, signal);
 
-    readonly redeemAccessGrant = (channelId: string, grantId: string, grantSecret: string, signal: AbortSignal) =>
-        this.#pairings.redeemChannelAccessGrant(channelId, grantId, grantSecret, signal);
+    readonly redeemAccessGrant = (computerId: string, grantId: string, grantSecret: string, signal: AbortSignal) =>
+        this.#pairings.redeemChannelAccessGrant(computerId, grantId, grantSecret, signal);
 
-    readonly listLinkedDevices = (channelId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.listLinkedChannelDevices(channelId, token, signal);
+    readonly listLinkedDevices = (computerId: string, token: string, signal: AbortSignal) =>
+        this.#pairings.listLinkedChannelDevices(computerId, token, signal);
 
     readonly revokeLinkedDevice = async (
-        channelId: string,
+        computerId: string,
         credentialId: string,
         token: string,
         signal: AbortSignal,
     ): Promise<void> => {
-        const credential = await this.#pairings.revokeLinkedChannelDevice(channelId, credentialId, token, signal);
+        const credential = await this.#pairings.revokeLinkedChannelDevice(computerId, credentialId, token, signal);
         await this.#channelGateway.disconnectHost(credential, signal);
     };
 
-    readonly readChannel = (channelId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.readChannel(channelId, token, signal);
+    readonly readChannel = (computerId: string, token: string, signal: AbortSignal) =>
+        this.#pairings.readChannel(computerId, token, signal);
 
-    readonly authorizeHost = (channelId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.authorizeHost(channelId, token, signal);
+    readonly authorizeHost = (computerId: string, token: string, signal: AbortSignal) =>
+        this.#pairings.authorizeHost(computerId, token, signal);
 
     /**
      * Authorizes a daemon connection, rotating its credential. A reused credential ends the Runtime's access first; a
@@ -71,7 +71,6 @@ export class ChannelService {
             {
                 event: "runtime_credential_reused",
                 computerId: rotation.access.computerId,
-                pairingId: rotation.access.pairingId,
             },
             "A retired Runtime credential was presented; the Runtime was revoked",
         );

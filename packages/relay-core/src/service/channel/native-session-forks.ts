@@ -64,7 +64,6 @@ export class NativeSessionForks {
 
     async #recover(
         scope: ComputerScope,
-        pairingId: string,
         input: ForkMortyNativeSessionRequest,
         attemptJson: string,
         request: SessionRuntimeOperations["requestComputerScopeControl"],
@@ -92,7 +91,7 @@ export class NativeSessionForks {
                 }),
             );
             // Restore only an existing committed Session. Unlike prepare, this cannot create a missing target.
-            const restored = await request(scope, pairingId, restore, signal);
+            const restored = await request(scope, restore, signal);
             if (
                 restored.kind !== "session.restored" ||
                 restored.entry.sessionId !== restore.sessionId ||
@@ -126,7 +125,6 @@ export class NativeSessionForks {
     /** Whether a Runtime that has finished handling a Fork command holds no Session for its target. */
     async #targetAbsent(
         scope: ComputerScope,
-        pairingId: string,
         targetSessionId: string,
         request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
@@ -134,7 +132,6 @@ export class NativeSessionForks {
         try {
             const queried = await request(
                 scope,
-                pairingId,
                 decodeSessionQueryCommand(
                     JSON.stringify({
                         kind: "session.query",
@@ -156,7 +153,6 @@ export class NativeSessionForks {
 
     readonly fork = async (
         scope: ComputerScope,
-        pairingId: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
         request: SessionRuntimeOperations["requestComputerScopeControl"],
@@ -193,7 +189,6 @@ export class NativeSessionForks {
                 if (prior !== undefined) {
                     const receipt = await this.#recover(
                         scope,
-                        pairingId,
                         input,
                         prior.attemptJson ?? "null",
                         request,
@@ -205,7 +200,6 @@ export class NativeSessionForks {
                 // Resolve and authorize the native identity before recording any possible side effect.
                 const found = await request(
                     scope,
-                    pairingId,
                     decodeNativeSessionRequest(
                         JSON.stringify({
                             ...input,
@@ -259,7 +253,7 @@ export class NativeSessionForks {
                 );
                 try {
                     const result = forkResult(
-                        JSON.stringify(await request(scope, pairingId, command, controller.signal)),
+                        JSON.stringify(await request(scope, command, controller.signal)),
                     );
                     if (result.targetSessionId !== command.targetSessionId || result.ready.agentId !== input.agentId) {
                         throw new PairingDirectoryError(
@@ -277,7 +271,6 @@ export class NativeSessionForks {
                         cause instanceof RuntimeOperationFailedError &&
                         (await this.#targetAbsent(
                             scope,
-                            pairingId,
                             command.targetSessionId,
                             request,
                             controller.signal,

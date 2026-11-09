@@ -30,20 +30,16 @@ const runtime = {
             label: "Codex",
         },
     ],
-    channelId: "channel-1",
     machineName: "MacBook",
     online: true,
     computerId: "project-1",
-    pairingId: "runtime-1",
     workspaceName: "contract",
 };
 
 const pairedStatus = {
     agents: [],
-    channelId: "channel-1",
     machineName: "MacBook",
     computerId: "project-1",
-    pairingId: "runtime-1",
     status: "paired",
     workspaceName: "contract",
 };

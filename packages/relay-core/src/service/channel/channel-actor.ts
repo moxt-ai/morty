@@ -178,7 +178,6 @@ export class ChannelActor {
                 event: "relay_message_skipped",
                 reason,
                 skippedCount: this.#skippedCount,
-                pairingId: this.#pairingId,
                 computerId: this.#computerId,
             },
             "Relay skipped unsupported input",
@@ -188,22 +187,20 @@ export class ChannelActor {
     };
     readonly #peers: ChannelPeers;
     readonly #computerId: string;
-    readonly #pairingId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
-        readonly config: { readonly computerId: string; readonly pairingId: string };
+        readonly config: { readonly computerId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
-        const { computerId, pairingId } = cx.config;
+        const { computerId } = cx.config;
         const { peers, notifications } = cx.gateways;
         this.#peers = peers;
         this.#computerId = computerId;
-        this.#pairingId = pairingId;
-        this.#liveEvents = new SessionLiveEventRelay(computerId, pairingId, peers, notifications);
+        this.#liveEvents = new SessionLiveEventRelay(computerId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {
@@ -218,7 +215,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online: this.hasOnlineDaemon(),
-                pairingId: this.#pairingId,
+                computerId: this.#computerId,
             }),
         );
         return Promise.resolve();
@@ -817,7 +814,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online,
-                pairingId: this.#pairingId,
+                computerId: this.#computerId,
             }),
         );
     };

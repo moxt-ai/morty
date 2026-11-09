@@ -319,7 +319,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         fixture.environment(),
     );
     expect(served.status).toBe(200);
-    const bot = v.parse(v.object({ botId: v.string(), pairingId: v.null() }), await served.json());
+    const bot = v.parse(v.object({ botId: v.string(), computerId: v.null() }), await served.json());
     const persisted = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bots/${bot.botId}`, {
             headers: { authorization: `Bearer ${identity.token}` },

@@ -106,9 +106,9 @@ function createRuntimeRelayDependencies(cx: {
     const services = {
         credentials,
         connections: new RuntimeConnectionService(new RuntimeConnectionStorage(cx.database)),
-        channel: (pairingId: string, scope: ComputerScope) =>
+        channel: (scope: ComputerScope) =>
             new ChannelActor({
-                config: { computerId: scope.computerId, pairingId },
+                config: { computerId: scope.computerId },
                 gateways: {
                     peers: cx.gateways.peers,
                     ...(cx.gateways.notifications === undefined ? {} : { notifications: cx.gateways.notifications }),

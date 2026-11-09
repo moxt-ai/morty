@@ -49,9 +49,8 @@ describe("daemon environment proxy", () => {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
-                    channelId: "proxy-channel",
+                    computerId: "proxy-channel",
                     runtimeCredential: "a".repeat(32),
-                    pairingId: "proxy-runtime",
                 }),
             );
         });
@@ -177,13 +176,13 @@ describe("daemon environment proxy", () => {
                 {
                     defaultWorkspace: process.cwd(),
                     pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
-                    pairingId: "proxy-pairing",
+                    computerId: "proxy-pairing",
                     relayOrigin: `http://127.0.0.1:${pairingPort}`,
                 },
                 AbortSignal.timeout(2_000),
             );
             expect(
-                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).pairingId,
+                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).computerId,
             ).toBe("proxy-runtime");
 
             const relayPort = port(relayServer);

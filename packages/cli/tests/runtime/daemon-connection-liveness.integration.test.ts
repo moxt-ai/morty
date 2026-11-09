@@ -314,7 +314,7 @@ describe("daemon relay connection liveness", () => {
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "heartbeat-channel",
+                computerId: "heartbeat-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/heartbeat-channel/daemon`,
                 ),
@@ -457,7 +457,7 @@ describe("daemon relay connection liveness", () => {
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "runtime-revoked-channel",
+                computerId: "runtime-revoked-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/runtime-revoked-channel/daemon`,
                 ),
@@ -611,7 +611,7 @@ describe("daemon relay connection liveness", () => {
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "liveness-channel",
+                computerId: "liveness-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/liveness-channel/daemon`,
                 ),
@@ -768,7 +768,7 @@ describe("daemon relay connection liveness", () => {
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "unsupported-channel",
+                computerId: "unsupported-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/unsupported-channel/daemon`,
                 ),
@@ -990,7 +990,7 @@ describe("daemon relay connection liveness", () => {
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "reconciliation-channel",
+                computerId: "reconciliation-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/reconciliation-channel/daemon`,
                 ),

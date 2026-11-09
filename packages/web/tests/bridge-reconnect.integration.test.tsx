@@ -125,13 +125,13 @@ test("Given an unbound Machine was read, When pairing completes before the bindi
             { headers: { authorization: `Bearer ${token}` }, signal },
         );
     const unbound = await app.transport.fetch(binding());
-    expect(await unbound.json()).toMatchObject({ pairingId: null });
+    expect(await unbound.json()).toMatchObject({ computerId: null });
 
     await app.connectAgent();
     await app.transport.waitForChange(binding());
 
     const bound = await app.transport.fetch(binding());
-    expect(await bound.json()).not.toMatchObject({ pairingId: null });
+    expect(await bound.json()).not.toMatchObject({ computerId: null });
 });
 
 test("Given an unpaired Machine, When pairing finishes while the bridge is down, Then the recovered draft can send its first message", {

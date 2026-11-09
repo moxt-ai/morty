@@ -12,11 +12,11 @@ export function hostCredentialValid(database: RelayDrizzleDatabase): SQL | undef
         isNull(channelHostCredential.revokedAt),
         exists(
             database
-                .select({ pairingId: pairedDaemon.pairingId })
+                .select({ computerId: pairedDaemon.computerId })
                 .from(pairedDaemon)
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
+                .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
                 .where(
-                    and(eq(pairedDaemon.channelId, channelHostCredential.channelId), isNull(pairedDaemon.revokedAt)),
+                    and(eq(pairedDaemon.computerId, channelHostCredential.computerId), isNull(pairedDaemon.revokedAt)),
                 ),
         ),
     );

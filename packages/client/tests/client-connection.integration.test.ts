@@ -73,7 +73,7 @@ describe("browser relay connection", () => {
                 encodeRuntimeStatusEvent({
                     kind: RUNTIME_STATUS_KIND,
                     online: true,
-                    pairingId: "runtime-1",
+                    computerId: "runtime-1",
                 }),
             );
         });

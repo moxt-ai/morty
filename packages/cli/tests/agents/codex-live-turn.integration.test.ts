@@ -117,7 +117,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "real-codex",
+            computerId: "real-codex",
             defaultWorkspace: workspace,
             relayUrl,
         },

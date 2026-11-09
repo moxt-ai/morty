@@ -48,7 +48,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
         expect(
             (
                 await request(`${chat}/setup`, owner.token, {
-                    pairingId: runtime.pairingId,
+                    computerId: runtime.computerId,
                     agentRef: "configuration-test",
                 })
             ).status,

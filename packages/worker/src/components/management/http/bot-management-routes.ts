@@ -8,7 +8,7 @@ export function createBotManagementRoutes() {
         .get("/bot", authenticatedSession, async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
             const bot = await context.env.services.management.userBot(context.get("session").userId, signal);
-            return json({ botId: bot.botId, pairingId: bot.pairingId });
+            return json({ botId: bot.botId, computerId: bot.computerId });
         })
         .get("/bots/:botId", authenticatedSession, async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);

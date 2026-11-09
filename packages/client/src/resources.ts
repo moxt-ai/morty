@@ -109,7 +109,7 @@ export interface CreateMortySessionRequest {
     readonly agentId: string;
     readonly configurations: readonly SessionConfigurationSelection[];
     readonly directoryId: string;
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly sessionId: string;
 }
 
@@ -250,14 +250,12 @@ export function decodeMortyLinkedChannelDeviceList(value: unknown): readonly Mor
 }
 
 export class MortyRedeemedChannelCredential {
-    readonly channelId: string;
     readonly hostToken: string;
     readonly computerId: string;
 
-    constructor(channelId: string, hostToken: string, computerId: string) {
-        this.channelId = channelId;
-        this.hostToken = hostToken;
+    constructor(hostToken: string, computerId: string) {
         this.computerId = computerId;
+        this.hostToken = hostToken;
     }
 }
 
@@ -267,11 +265,7 @@ export function decodeMortyRedeemedChannelCredential(value: unknown): MortyRedee
     if (!/^[a-zA-Z0-9_-]{32,256}$/.test(hostToken)) {
         throw invalidResponse("The service returned an invalid channel credential");
     }
-    return new MortyRedeemedChannelCredential(
-        identifierField(credential, "channelId"),
-        hostToken,
-        identifierField(credential, "computerId"),
-    );
+    return new MortyRedeemedChannelCredential(hostToken, identifierField(credential, "computerId"));
 }
 
 export class MortyAgentDescriptor {
@@ -326,53 +320,41 @@ function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
 
 export class MortyRuntimeDescriptor {
     readonly agents: readonly MortyAgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
     readonly online: boolean;
     readonly computerId: string;
-    readonly pairingId: string;
     readonly workspaceName: string;
 
     constructor(
         agents: readonly MortyAgentDescriptor[],
-        channelId: string,
         machineName: string,
         online: boolean,
         computerId: string,
-        pairingId: string,
         workspaceName: string,
     ) {
         this.agents = agents;
-        this.channelId = channelId;
+        this.computerId = computerId;
         this.machineName = machineName;
         this.online = online;
-        this.computerId = computerId;
-        this.pairingId = pairingId;
         this.workspaceName = workspaceName;
     }
 }
 
 export class MortyChannelDescriptor {
     readonly agents: readonly MortyAgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
     readonly computerId: string;
-    readonly pairingId: string;
     readonly workspaceName: string;
 
     constructor(
         agents: readonly MortyAgentDescriptor[],
-        channelId: string,
         machineName: string,
         computerId: string,
-        pairingId: string,
         workspaceName: string,
     ) {
         this.agents = agents;
-        this.channelId = channelId;
-        this.machineName = machineName;
         this.computerId = computerId;
-        this.pairingId = pairingId;
+        this.machineName = machineName;
         this.workspaceName = workspaceName;
     }
 }
@@ -381,10 +363,8 @@ export function decodeMortyChannelDescriptor(value: unknown): MortyChannelDescri
     const channel = record(value, "channel descriptor");
     return new MortyChannelDescriptor(
         arrayField(channel, "agents", 100).map(decodeAgentDescriptor),
-        identifierField(channel, "channelId"),
         stringField(channel, "machineName", 255),
         identifierField(channel, "computerId"),
-        identifierField(channel, "pairingId"),
         stringField(channel, "workspaceName", 255),
     );
 }
@@ -393,11 +373,9 @@ export function decodeRuntimeDescriptor(value: unknown): MortyRuntimeDescriptor 
     const runtime = record(value, "Runtime descriptor");
     return new MortyRuntimeDescriptor(
         arrayField(runtime, "agents", 100).map(decodeAgentDescriptor),
-        identifierField(runtime, "channelId"),
         stringField(runtime, "machineName", 255),
         booleanField(runtime, "online"),
         identifierField(runtime, "computerId"),
-        identifierField(runtime, "pairingId"),
         stringField(runtime, "workspaceName", 255),
     );
 }
@@ -408,27 +386,16 @@ export function decodeMortyRuntimeList(value: unknown): readonly MortyRuntimeDes
 }
 
 export class MortyRuntimePairing {
-    readonly channelId: string;
     readonly expiresAt: string;
     readonly pairingCode: string;
-    readonly pairingId: string;
     readonly pollToken: string;
     readonly computerId: string;
 
-    constructor(
-        channelId: string,
-        expiresAt: string,
-        pairingCode: string,
-        pairingId: string,
-        pollToken: string,
-        computerId: string,
-    ) {
-        this.channelId = channelId;
+    constructor(expiresAt: string, pairingCode: string, pollToken: string, computerId: string) {
+        this.computerId = computerId;
         this.expiresAt = expiresAt;
         this.pairingCode = pairingCode;
-        this.pairingId = pairingId;
         this.pollToken = pollToken;
-        this.computerId = computerId;
     }
 }
 
@@ -463,10 +430,8 @@ export function decodeMortyRuntimePairing(value: unknown): MortyRuntimePairing {
         throw invalidResponse("The service returned invalid Runtime pairing credentials");
     }
     return new MortyRuntimePairing(
-        identifierField(pairing, "channelId"),
         validateTimestamp(stringField(pairing, "expiresAt", 128), "expiresAt"),
         pairingCode,
-        identifierField(pairing, "pairingId"),
         pollToken,
         identifierField(pairing, "computerId"),
     );
@@ -499,27 +464,21 @@ export class MortyExpiredRuntimePairingStatus extends MortyRuntimePairingStatus 
 
 export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
     readonly agents: readonly MortyAgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
     readonly computerId: string;
-    readonly pairingId: string;
     readonly status = MortyRuntimePairingLifecycle.Paired;
     readonly workspaceName: string;
 
     constructor(
         agents: readonly MortyAgentDescriptor[],
-        channelId: string,
         machineName: string,
         computerId: string,
-        pairingId: string,
         workspaceName: string,
     ) {
         super();
         this.agents = agents;
-        this.channelId = channelId;
-        this.machineName = machineName;
         this.computerId = computerId;
-        this.pairingId = pairingId;
+        this.machineName = machineName;
         this.workspaceName = workspaceName;
     }
 }
@@ -553,10 +512,8 @@ export function decodeMortyRuntimePairingStatus(value: unknown): MortyRuntimePai
     if (lifecycle === MortyRuntimePairingLifecycle.Paired) {
         return new MortyPairedRuntimePairingStatus(
             arrayField(status, "agents", 100).map(decodeAgentDescriptor),
-            identifierField(status, "channelId"),
             stringField(status, "machineName", 255),
             identifierField(status, "computerId"),
-            identifierField(status, "pairingId"),
             stringField(status, "workspaceName", 255),
         );
     }

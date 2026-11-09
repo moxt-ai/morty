@@ -90,7 +90,7 @@ type NewChatInput = {
 };
 type OpenChatInput = { readonly conversationId: string } | NewChatInput;
 type ConfigureBotInput = {
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly agentRef: string;
 };
 type ManagedSessionArchival = { readonly close: "confirmed" | "unconfirmed" };
@@ -179,22 +179,22 @@ export class ChatService {
     };
 
     readonly runtimeConfiguration = async (scope: ChatScope) => {
-        const runtime = await this.localRuntime(scope);
+        await this.localRuntime(scope);
         return {
-            runtime: await this.#platform.getChatRuntimeAgents(scope.computerId, runtime.pairingId, scope.signal),
+            runtime: await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal),
         };
     };
 
     readonly daemonDiagnostics = async (scope: ChatScope) => {
-        const runtime = await this.localRuntime(scope);
-        return await this.#platform.readRuntimeDiagnostics(scope.computerId, runtime.pairingId, scope.signal);
+        const _runtime = await this.localRuntime(scope);
+        return await this.#platform.readRuntimeDiagnostics(scope.computerId, scope.signal);
     };
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
-        const runtime = await this.localRuntime(scope);
+        const _runtime = await this.localRuntime(scope);
         const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
             this.#platform.measureRelayLatency(scope.computerId, scope.signal),
-            this.#platform.measureRuntimeLatency(scope.computerId, runtime.pairingId, scope.signal),
+            this.#platform.measureRuntimeLatency(scope.computerId, scope.signal),
         ]);
         return {
             relayOrigin: this.#platform.configuration().origin,
@@ -205,7 +205,7 @@ export class ChatService {
 
     readonly setupRuntimes = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
-        if (bot.configuration !== null && !(await this.#runtimeRevoked(scope, bot.configuration.pairingId))) {
+        if (bot.configuration !== null && !(await this.#runtimeRevoked(scope))) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine already has a configured Runtime.", 409);
         }
         return { runtimes: await this.#platform.chatRuntimes(scope.computerId, scope.signal) };
@@ -216,12 +216,7 @@ export class ChatService {
         if (bot.configuration === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        const listing = await this.#platform.listChatDirectory(
-            scope.computerId,
-            bot.configuration.pairingId,
-            directoryId,
-            scope.signal,
-        );
+        const listing = await this.#platform.listChatDirectory(scope.computerId, directoryId, scope.signal);
         return listing;
     };
 
@@ -233,9 +228,9 @@ export class ChatService {
         return bot;
     };
 
-    readonly #runtimeRevoked = async (scope: ChatScope, pairingId: string): Promise<boolean> => {
+    readonly #runtimeRevoked = async (scope: ChatScope): Promise<boolean> => {
         try {
-            await this.#platform.getChatRuntimeAgents(scope.computerId, pairingId, scope.signal);
+            await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
             return false;
         } catch (cause) {
             if (cause instanceof PlatformProjectError && cause.code === "RUNTIME_REVOKED") {
@@ -281,18 +276,18 @@ export class ChatService {
         return this.#sessionOperations.run(sessionId, signal, operation);
     };
 
-    readonly #nativeSessionRuntime = async (scope: ChatScope, requestedPairingId: string) => {
+    readonly #nativeSessionRuntime = async (scope: ChatScope, requestedComputerId: string) => {
         const runtime = await this.localRuntime(scope);
         // The client names the Runtime its native-session identity came from. Discovery and entry identifiers belong to
         // that Runtime and must not be silently redirected to another one.
-        if (requestedPairingId !== runtime.pairingId) {
+        if (requestedComputerId !== runtime.computerId) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine is bound to a different Runtime.", 409);
         }
         return runtime;
     };
 
-    readonly #requireRuntimeAgent = async (scope: ChatScope, pairingId: string, agentRef: string) => {
-        const runtime = await this.#platform.getChatRuntimeAgents(scope.computerId, pairingId, scope.signal);
+    readonly #requireRuntimeAgent = async (scope: ChatScope, agentRef: string) => {
+        const runtime = await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
         if (!runtime.agents.some((agent) => agent.agentRef === agentRef)) {
             throw new PlatformProjectError(
                 "AGENT_UNAVAILABLE",
@@ -303,14 +298,13 @@ export class ChatService {
     };
 
     readonly managedSessions = async (scope: ChatScope) => {
-        const runtime = await this.localRuntime(scope);
+        const _runtime = await this.localRuntime(scope);
         const owned = await this.#chatSessions.list(scope.computerId, scope.userId, scope.botId, scope.signal);
         if (owned.length === 0) {
             return { sessions: [] };
         }
         const metadata = await this.#platform.queryChatSessions(
             scope.computerId,
-            runtime.pairingId,
             owned.map((session) => session.id),
             scope.signal,
         );
@@ -350,9 +344,9 @@ export class ChatService {
         publish: (event: ManagedSessionEvent) => Promise<void>,
         signal: AbortSignal,
     ): Promise<void> => {
-        const runtime = await this.localRuntime(scope);
+        const _runtime = await this.localRuntime(scope);
         scope.signal.throwIfAborted();
-        const socket = await this.#platform.openChatRuntimeHost(scope.computerId, runtime.pairingId, signal);
+        const socket = await this.#platform.openChatRuntimeHost(scope.computerId, signal);
         // The authorization deadline bounds opening the stream, not the reads made while it runs.
         const following: ChatScope = { ...scope, signal };
         await new Promise<void>((_resolve, reject) => {
@@ -471,10 +465,10 @@ export class ChatService {
         if (bot?.configuration === null || bot === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        await this.#requireRuntimeAgent(scope, bot.configuration.pairingId, draft.agentRef);
+        await this.#requireRuntimeAgent(scope, draft.agentRef);
         const discovered = await this.#platform.discoverChatAgentSettings(
             scope.computerId,
-            { pairingId: bot.configuration.pairingId, ...draft },
+            { computerId: bot.configuration.computerId, ...draft },
             scope.signal,
         );
         return { settings: discovered };
@@ -485,12 +479,12 @@ export class ChatService {
         if (bot.configuration === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
         }
-        const pairingId = bot.configuration.pairingId;
+        const computerId = bot.configuration.computerId;
         const access =
             "conversationKey" in input
-                ? await this.#openNewChat(scope, pairingId, input)
+                ? await this.#openNewChat(scope, input)
                 : await this.#withOwnedManagedSession(scope, input.conversationId, notInRecentSessions, (session) =>
-                      this.#reopenManagedSession(session, pairingId),
+                      this.#reopenManagedSession(session, computerId),
                   );
         return access;
     };
@@ -501,11 +495,11 @@ export class ChatService {
      * attempt cannot revoke that ownership: an earlier attempt may already have created the Session. The directory
      * lists only Sessions the Runtime reports, so a retained owner never invents a Session.
      */
-    readonly #openNewChat = async (scope: ChatScope, pairingId: string, input: NewChatInput) => {
-        await this.#requireRuntimeAgent(scope, pairingId, input.agentRef);
+    readonly #openNewChat = async (scope: ChatScope, input: NewChatInput) => {
+        await this.#requireRuntimeAgent(scope, input.agentRef);
         const session = {
             sessionId: await chatSessionId(scope.botId, input.conversationKey),
-            pairingId,
+            computerId: scope.computerId,
             agentRef: input.agentRef,
             workspaceRef: input.workspaceRef,
         };
@@ -533,10 +527,10 @@ export class ChatService {
         );
     };
 
-    readonly #reopenManagedSession = async ({ scope, sessionId }: OwnedManagedSession, pairingId: string) => {
-        const metadata = (
-            await this.#platform.queryChatSessions(scope.computerId, pairingId, [sessionId], scope.signal)
-        ).find((session) => session.sessionId === sessionId);
+    readonly #reopenManagedSession = async ({ scope, sessionId }: OwnedManagedSession, computerId: string) => {
+        const metadata = (await this.#platform.queryChatSessions(scope.computerId, [sessionId], scope.signal)).find(
+            (session) => session.sessionId === sessionId,
+        );
         if (metadata === undefined) {
             throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
@@ -544,7 +538,7 @@ export class ChatService {
             scope.computerId,
             {
                 sessionId,
-                pairingId,
+                computerId,
                 agentRef: metadata.agentId,
                 workspaceRef: metadata.directoryId,
                 additionalDirectoryIds: metadata.additionalDirectories.map((directory) => directory.directoryId),
@@ -559,10 +553,9 @@ export class ChatService {
         if (session === null) {
             throw new PlatformProjectError("NOT_FOUND", "The session was not found.", 404);
         }
-        const runtime = await this.localRuntime(scope);
+        const _runtime = await this.localRuntime(scope);
         return await this.#platform.nativeSessionAccess(
             scope.computerId,
-            runtime.pairingId,
             session.sessionId,
             sessionCredentialLifetime(RENEWED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
@@ -584,15 +577,10 @@ export class ChatService {
             sessionId,
             () => ({ close: "unconfirmed" }),
             async (session) => {
-                const runtime = await this.localRuntime(scope);
+                const _runtime = await this.localRuntime(scope);
                 let close: ManagedSessionArchival["close"] = "unconfirmed";
                 try {
-                    await this.#platform.closeChatSession(
-                        scope.computerId,
-                        runtime.pairingId,
-                        session.sessionId,
-                        scope.signal,
-                    );
+                    await this.#platform.closeChatSession(scope.computerId, session.sessionId, scope.signal);
                     close = "confirmed";
                 } catch {
                     scope.signal.throwIfAborted();
@@ -609,9 +597,9 @@ export class ChatService {
             },
         );
 
-    readonly nativeSessions = async (scope: ChatScope, requestedPairingId: string, input: NativeListInput) => {
-        const runtime = await this.#nativeSessionRuntime(scope, requestedPairingId);
-        const result = await this.#platform.nativeSessions(scope.computerId, runtime.pairingId, input, scope.signal);
+    readonly nativeSessions = async (scope: ChatScope, requestedComputerId: string, input: NativeListInput) => {
+        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
+        const result = await this.#platform.nativeSessions(scope.computerId, input, scope.signal);
         if (result.action !== "list") {
             throw new PlatformProjectError(
                 "PLATFORM_INVALID_RESPONSE",
@@ -628,18 +616,13 @@ export class ChatService {
         const runtime =
             bot.configuration === null
                 ? undefined
-                : await this.#platform.getChatRuntimeAgents(
-                      scope.computerId,
-                      bot.configuration.pairingId,
-                      scope.signal,
-                  );
+                : await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
         const agent = runtime?.agents.find((item) => item.agentRef === harness);
         if (runtime === undefined || agent === undefined) {
             throw new PlatformProjectError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
         }
         const found = await this.#platform.findNativeSessionByNativeSessionId(
             scope.computerId,
-            runtime.pairingId,
             {
                 agentId: agent.agentRef,
                 directoryId: "default",
@@ -651,7 +634,6 @@ export class ChatService {
         const entry = found.entry;
         const result = await this.#platform.nativeSessions(
             scope.computerId,
-            runtime.pairingId,
             {
                 action: "import",
                 discoveryId: found.sessionId,
@@ -676,11 +658,14 @@ export class ChatService {
         return stored;
     };
 
-    readonly previewNativeSession = async (scope: ChatScope, requestedPairingId: string, input: NativePreviewInput) => {
-        const runtime = await this.#nativeSessionRuntime(scope, requestedPairingId);
+    readonly previewNativeSession = async (
+        scope: ChatScope,
+        requestedComputerId: string,
+        input: NativePreviewInput,
+    ) => {
+        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
         const events = await this.#platform.previewRuntimeNativeEvents(
             scope.computerId,
-            runtime.pairingId,
             input.nativeSessionId,
             {
                 additionalDirectoryIds: input.additionalDirectoryIds,
@@ -695,14 +680,13 @@ export class ChatService {
 
     readonly importNativeSession = async (
         scope: ChatScope,
-        requestedPairingId: string,
+        requestedComputerId: string,
         entryId: string,
         input: NativeEntryInput,
     ) => {
-        const runtime = await this.#nativeSessionRuntime(scope, requestedPairingId);
+        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
         const result = await this.#platform.nativeSessions(
             scope.computerId,
-            runtime.pairingId,
             { ...input, entryId, action: "import" },
             scope.signal,
         );
@@ -725,16 +709,15 @@ export class ChatService {
 
     readonly recoverableNativeFork = async (
         scope: ChatScope,
-        requestedPairingId: string,
+        requestedComputerId: string,
         operationId: string,
         input: NativePreviewInput,
     ) => {
-        const runtime = await this.#nativeSessionRuntime(scope, requestedPairingId);
+        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
         // Operation identity belongs to this user and Machine, even when they share a Platform Project.
         const scopedOperationId = await chatSessionId(scope.botId, `${scope.userId}\u0000fork\u0000${operationId}`);
         const receipt = await this.#platform.forkNativeSession(
             scope.computerId,
-            runtime.pairingId,
             scopedOperationId,
             input,
             scope.signal,
@@ -753,17 +736,17 @@ export class ChatService {
         const current = await this.#bot(scope);
         // A Machine keeps its Runtime until that Runtime is revoked; setup then pairs the Machine with another.
         const replaced =
-            current.configuration === null || current.configuration.pairingId === input.pairingId
+            current.configuration === null || current.configuration.computerId === input.computerId
                 ? null
-                : current.configuration.pairingId;
-        if (replaced !== null && !(await this.#runtimeRevoked(scope, replaced))) {
+                : current.configuration.computerId;
+        if (replaced !== null && !(await this.#runtimeRevoked(scope))) {
             throw new PlatformProjectError(
                 "BOT_RUNTIME_FIXED",
                 "Create a new Machine to pair a different Runtime.",
                 409,
             );
         }
-        await this.#requireRuntimeAgent(scope, input.pairingId, input.agentRef);
+        await this.#requireRuntimeAgent(scope, input.agentRef);
         await this.#platform.discoverChatAgentSettings(
             scope.computerId,
             { ...input, workspaceRef: "default" },
@@ -772,7 +755,7 @@ export class ChatService {
         const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,
-            { pairingId: decodeIdentifier(input.pairingId) },
+            { computerId: decodeIdentifier(input.computerId) },
             replaced,
             Date.now(),
             scope.signal,

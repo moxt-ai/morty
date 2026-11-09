@@ -17,7 +17,7 @@ export const RUNTIME_HEARTBEAT_ACK_MESSAGE = `{"kind":"${RUNTIME_HEARTBEAT_ACK_K
 export interface RuntimeStatusEvent {
     readonly kind: typeof RUNTIME_STATUS_KIND;
     readonly online: boolean;
-    readonly pairingId: string;
+    readonly computerId: string;
 }
 
 export interface RuntimeLivenessReadyEvent {
@@ -49,7 +49,7 @@ export function decodeRuntimeStatusEvent(encoded: string): RuntimeStatusEvent {
     return {
         kind: RUNTIME_STATUS_KIND,
         online: readBoolean(value, "online"),
-        pairingId: readIdentifier(value, "pairingId"),
+        computerId: readIdentifier(value, "computerId"),
     };
 }
 

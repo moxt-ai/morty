@@ -30,10 +30,9 @@ export interface PairingOperations {
     ) => Promise<
         { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
     >;
-    readonly authorizeHost: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
+    readonly authorizeHost: (computerId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
     readonly authorizePairedHost: (
         computerId: string,
-        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<ProjectCredentialHostAccess>;
@@ -45,13 +44,12 @@ export interface PairingOperations {
     ) => Promise<ProjectAccessContext>;
     readonly authorizePairing: (
         computerId: string,
-        pairingId: string,
         token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
     readonly createChannelAccessGrant: (
-        channelId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<CreatedChannelAccessGrant>;
@@ -71,7 +69,7 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<CreatedRuntimePairing>;
     readonly listLinkedChannelDevices: (
-        channelId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<readonly LinkedChannelDevice[]>;
@@ -81,18 +79,12 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<readonly ChannelDescriptor[]>;
     /** Whether the Project's Runtime was revoked; false for one the Project never had. */
-    readonly isProjectRuntimeRevoked: (
-        computerId: string,
-        pairingId: string,
-        token: string,
-        signal: AbortSignal,
-    ) => Promise<boolean>;
-    readonly readChannel: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelDescriptor>;
+    readonly isProjectRuntimeRevoked: (computerId: string, token: string, signal: AbortSignal) => Promise<boolean>;
+    readonly readChannel: (computerId: string, token: string, signal: AbortSignal) => Promise<ChannelDescriptor>;
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that
     // order. Passing the deadline never expires an already registered Runtime.
     readonly readProjectRuntimePairing: (
         computerId: string,
-        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<PairingStatus>;
@@ -100,7 +92,7 @@ export interface PairingOperations {
     // registration, credential, and audit commit together. Concurrent/repeated
     // claims fail; a lost successful response cannot replay the daemon secret.
     readonly redeemRuntimePairing: (
-        pairingId: string,
+        computerId: string,
         pairingCode: string,
         machineName: string,
         workspaceName: string,
@@ -108,13 +100,13 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<ClaimedPairing>;
     readonly redeemChannelAccessGrant: (
-        channelId: string,
+        computerId: string,
         grantId: string,
         grantSecret: string,
         signal: AbortSignal,
     ) => Promise<RedeemedChannelAccessGrant>;
     readonly revokeLinkedChannelDevice: (
-        channelId: string,
+        computerId: string,
         credentialId: string,
         token: string,
         signal: AbortSignal,
@@ -130,7 +122,6 @@ export interface PairingOperations {
     // is safe; an unclaimed identity can also be cancelled through this command.
     readonly revokeProjectRuntime: (
         computerId: string,
-        pairingId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<RevokedProjectRuntime>;
@@ -139,7 +130,7 @@ export interface PairingOperations {
      * while it saves a rotation its connection just made, the Relay already holds the successor as current.
      */
     readonly updateAgentCatalog: (
-        channelId: string,
+        computerId: string,
         token: string,
         successor: string | null,
         agents: readonly AgentDescriptor[],

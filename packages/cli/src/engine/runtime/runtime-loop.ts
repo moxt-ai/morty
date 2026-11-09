@@ -16,7 +16,7 @@ import { runRuntime } from "./run.ts";
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 
 export interface MortyRuntimeConnection {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly relayUrl: string;
     /** The embedding host keeps the credential, which rotates on every connection, where it outlives this process. */
@@ -113,12 +113,12 @@ export async function prepareProvidedRuntime({
                 signal: refreshSignal,
                 specifications,
             },
-            connection.channelId,
+            connection.computerId,
         );
     const inventory = await discover(signal);
     const config: RuntimeConfig = createRuntimeConfig(
         {
-            channelId: connection.channelId,
+            computerId: connection.computerId,
             defaultWorkspace,
             relayUrl,
             credentials: connection.credentials,

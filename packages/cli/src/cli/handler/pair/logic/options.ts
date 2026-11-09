@@ -80,7 +80,7 @@ export function pairArguments(options: PairOptions): readonly string[] {
         options.url,
         "--code",
         options.code,
-        ...(options.pairing === undefined ? [] : ["--pairing", options.pairing]),
+        ...(options.pairing === undefined ? [] : ["--computer", options.pairing]),
         ...(options.workspace === undefined ? [] : ["--workspace", options.workspace]),
     ];
 }

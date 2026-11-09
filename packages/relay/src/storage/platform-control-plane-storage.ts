@@ -129,7 +129,9 @@ export class PlatformControlPlaneStorage {
                     .limit(1),
             signal,
         );
-        return rows[0]?.revokedAt ?? null;
+        const sessionCutoff = rows[0]?.revokedAt ?? null;
+        const daemonCutoff = await this.#projects.forProject(computerId).lastDaemonRevocation(signal);
+        return sessionCutoff === null ? daemonCutoff : Math.max(sessionCutoff, daemonCutoff ?? 0);
     };
 
     /** The authoritative grant list is owned by the credential in D1. */

@@ -74,8 +74,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
             })
         ).json(),
     );
-    const pairingId = "repro8-runtime";
-    await registerRuntimeFixture(computerId, pairingId);
+    await registerRuntimeFixture(computerId);
 
     // The authenticated daemon, through the verified Worker -> Durable Object boundary.
     const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
@@ -83,8 +82,6 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
         {
             headers: {
                 Upgrade: "websocket",
-                "x-morty-channel-id": pairingId,
-                "x-morty-pairing-id": pairingId,
             },
         },
     );
@@ -99,17 +96,16 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
 
     // A credential in the URL is refused: URLs reach logs and traces that request headers do not.
     const inUrl = await worker.fetch(
-        new Request(
-            `${origin}/v1/computers/${computerId}/pairings/${pairingId}/host?token=${defaultCredential.credential}`,
-            { headers: { Upgrade: "websocket" } },
-        ),
+        new Request(`${origin}/v1/computers/${computerId}/daemon/host?token=${defaultCredential.credential}`, {
+            headers: { Upgrade: "websocket" },
+        }),
         env,
     );
     expect(inUrl.status).toBe(401);
 
     // The App's host, through the public route with its AppCredential.
     const opened = await worker.fetch(
-        new Request(`${origin}/v1/computers/${computerId}/pairings/${pairingId}/host`, {
+        new Request(`${origin}/v1/computers/${computerId}/daemon/host`, {
             headers: { authorization: `Bearer ${defaultCredential.credential}`, Upgrade: "websocket" },
         }),
         env,

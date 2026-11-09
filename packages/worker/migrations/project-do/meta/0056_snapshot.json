@@ -1,7 +1,7 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "d95c19fa-ef5a-4508-a323-78e1a04e420d",
+    "id": "ed978b73-3ab6-4b12-b9c2-cdb4bbc7faba",
     "prevId": "7e352ac0-a715-4251-b13d-4f7324494410",
     "tables": {
         "anonymous_credential": {
@@ -348,8 +348,8 @@
                     "notNull": true,
                     "autoincrement": false
                 },
-                "pairing_id": {
-                    "name": "pairing_id",
+                "computer_id": {
+                    "name": "computer_id",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": false,
@@ -389,7 +389,7 @@
         "schemas": {},
         "tables": {},
         "columns": {
-            "\"managed_bot\".\"runtime_id\"": "\"managed_bot\".\"pairing_id\""
+            "\"managed_bot\".\"runtime_id\"": "\"managed_bot\".\"computer_id\""
         }
     },
     "internal": {

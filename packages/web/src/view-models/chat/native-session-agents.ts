@@ -7,8 +7,8 @@ import {
 
 export type NativeSessionAgent = ChatAgentSelection & { readonly installed: boolean; readonly value: string };
 
-export function harnessValue(pairingId: string, agentRef: string): string {
-    return `${pairingId}:${agentRef}`;
+export function harnessValue(computerId: string, agentRef: string): string {
+    return `${computerId}:${agentRef}`;
 }
 
 const PI_AGENT_REF: Identifier = decodeIdentifier("pi");
@@ -19,7 +19,7 @@ export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSes
     const installed = connected.map((agent) => ({
         ...agent,
         installed: true as const,
-        value: harnessValue(agent.pairingId, agent.agentRef),
+        value: harnessValue(agent.computerId, agent.agentRef),
     }));
     if (connected.length === 0 || connected.some((agent) => agent.agentRef === PI_AGENT_REF)) {
         return installed;
@@ -31,12 +31,12 @@ export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSes
     return [
         ...installed,
         {
-            pairingId: anchor.pairingId,
+            computerId: anchor.computerId,
             machineName: anchor.machineName,
             agentRef: PI_AGENT_REF,
             label: "Pi",
             installed: false,
-            value: harnessValue(anchor.pairingId, PI_AGENT_REF),
+            value: harnessValue(anchor.computerId, PI_AGENT_REF),
         },
     ];
 }
@@ -73,7 +73,7 @@ export function sessionHarnessSelection(runtime: ChatRuntime | null, agentRef: s
         installed: false,
         label: agentRef,
         tabLabel: agentRef,
-        value: harnessValue(runtime?.pairingId ?? "", agentRef),
+        value: harnessValue(runtime?.computerId ?? "", agentRef),
     };
     return { options: [...options, fallback], value: fallback.value };
 }

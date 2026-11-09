@@ -12,12 +12,12 @@ const pairingInput = v.strictObject({ idempotencyKey: platformIdentifier });
 
 export function createRuntimePairingRoutes() {
     return new Hono<ManagementHttpEnvironment>()
-        .use("/pairings/*", async (context, next) => {
+        .use("/pairing", async (context, next) => {
             context.header("Cache-Control", "no-store");
             await next();
         })
         .post(
-            "/pairings",
+            "/pairing",
             bodyLimit({
                 maxSize: 4096,
                 onError: () => {
@@ -39,10 +39,9 @@ export function createRuntimePairingRoutes() {
                 return json(pairing, 201);
             },
         )
-        .get("/pairings/:pairingId", authenticatedSession, async (context) => {
+        .get("/pairing", authenticatedSession, async (context) => {
             const session = context.get("session");
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
-            const pairingId = v.parse(platformIdentifier, context.req.param("pairingId"));
-            return json(await context.env.services.management.readRuntimePairing(session.userId, pairingId, signal));
+            return json(await context.env.services.management.readRuntimePairing(session.userId, signal));
         });
 }

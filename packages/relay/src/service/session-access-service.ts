@@ -1,4 +1,4 @@
-import { decodeSessionAccessCredential, isIdentifier, ProtocolMessageError } from "@morty-build/client/protocol";
+import { decodeSessionAccessCredential, ProtocolMessageError } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
@@ -16,7 +16,6 @@ export interface SessionAccess {
     readonly issuedAtEpochMilliseconds: number;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
-    readonly pairingId: string;
     readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
 }
 
@@ -27,8 +26,7 @@ export interface SessionAccess {
  */
 /** The live Session views a Project's Runtimes hold, which a revocation of Session access must also end. */
 export interface SessionViewers {
-    readonly pairingIds: (signal: AbortSignal) => Promise<readonly string[]>;
-    readonly disconnect: (pairingId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
+    readonly disconnect: (computerId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
 }
 
 async function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {
@@ -67,7 +65,6 @@ export class SessionAccessService {
 
     readonly issue = async (
         target: SessionAccessTarget,
-        pairingId: string,
         appCredential: string,
         expiresInSeconds: number,
         signal: AbortSignal,
@@ -80,9 +77,6 @@ export class SessionAccessService {
     }> => {
         if (target.kind !== "session") {
             throw new ProjectAuthenticationError("project_permission_denied", "A selected Session is required");
-        }
-        if (!isIdentifier(pairingId)) {
-            throw new ProjectAuthenticationError("invalid_request", "The Runtime identifier is invalid");
         }
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
@@ -108,7 +102,6 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
             purpose: "session-access",
-            pairingId,
             sessionId: target.sessionId,
         });
         return {
@@ -132,9 +125,7 @@ export class SessionAccessService {
         signal: AbortSignal,
     ): Promise<{ readonly revokedThrough: string }> => {
         const revokedThrough = await this.#control.revokeSessionAccess(computerId, appCredential, signal);
-        for (const pairingId of await viewers.pairingIds(signal)) {
-            await viewers.disconnect(pairingId, revokedThrough, signal);
-        }
+        await viewers.disconnect(computerId, revokedThrough, signal);
         return { revokedThrough: new Date(revokedThrough).toISOString() };
     };
 
@@ -213,7 +204,6 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
-            pairingId: claims.pairingId,
             authorize: async (permission, authorizationSignal) => {
                 await this.#control.authorizeSessionCredentialRecord(
                     computerId,

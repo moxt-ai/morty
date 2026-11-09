@@ -39,10 +39,8 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     .post("/computers/:computerId/management/computer/replacement", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/computers/:computerId/management/pairings", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/computers/:computerId/management/pairings/:pairingId", (context) =>
-        cloudRoutes.fetch(context.req.raw, context.env),
-    )
+    .post("/computers/:computerId/management/pairing", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/computers/:computerId/management/pairing", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/computers/:computerId/identity/transfers", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/computers/:computerId/identity/devices", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/computers/:computerId/identity/revoke-all-access", (context) =>

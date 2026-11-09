@@ -458,7 +458,7 @@ await import(${JSON.stringify(agentPeer)});
         ...createControlledRuntimeConfig(
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
-                channelId: "environment",
+                computerId: "environment",
                 defaultWorkspace: workspace,
                 relayUrl: new URL(`ws://127.0.0.1:${address.port}/morty/api/v1/runtimes/connect`),
             },

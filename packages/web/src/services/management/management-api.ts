@@ -16,10 +16,10 @@ const projectSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedProject = v.InferOutput<typeof projectSchema>;
-const runtimeBindingSchema = v.object({ botId: identifier, pairingId: v.nullable(identifier) });
+const runtimeBindingSchema = v.object({ botId: identifier, computerId: v.nullable(identifier) });
 
 /** Whether the Worker binds the Machine to a Runtime. The Worker's record is the only source of this fact. */
-export type RuntimeBinding = { readonly kind: "unbound" } | { readonly kind: "bound"; readonly pairingId: Identifier };
+export type RuntimeBinding = { readonly kind: "unbound" } | { readonly kind: "bound"; readonly computerId: Identifier };
 
 /** The Machine's Runtime binding resource, read by setup and the page and watched through the Chat bridge. */
 export function runtimeBindingUrl(origin: string, computerId: string, botId: string): URL {
@@ -83,7 +83,7 @@ export class ManagementApi {
         if (binding.botId !== requestedBotId) {
             throw new CloudApiError("INVALID_RESPONSE", "Chat management returned another Machine.");
         }
-        return binding.pairingId === null ? { kind: "unbound" } : { kind: "bound", pairingId: binding.pairingId };
+        return binding.computerId === null ? { kind: "unbound" } : { kind: "bound", computerId: binding.computerId };
     };
 
     readonly #request = async (

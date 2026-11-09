@@ -31,12 +31,10 @@ const attachmentSchema = v.union([
         // Every view receives events; the attachment keeps the format earlier Relay versions read.
         eventFormat: v.literal("events"),
         computerId: v.string(),
-        pairingId: v.string(),
         sessionFilter: v.string(),
     }),
     v.object({
         role: v.literal("host"),
-        channelId: v.string(),
         credentialId: v.string(),
         // Attachments written before credential kinds name only stored Channel host credentials.
         credentialKind: v.optional(v.picklist(["channel", "project"]), "channel"),
@@ -47,7 +45,6 @@ const attachmentSchema = v.union([
                 v.check((value: string) => isIdentifier(value)),
             ),
         ),
-        pairingId: v.string(),
         computerId: v.string(),
         historyRequest: v.optional(historyRequestSchema),
         pendingAgentSettingsDiscoveries: v.optional(v.array(pendingAgentSettingsDiscoverySchema), []),
@@ -55,15 +52,12 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("relay"),
         historyRequest: v.optional(historyRequestSchema),
-        channelId: v.string(),
-        pairingId: v.string(),
         computerId: v.string(),
     }),
     v.object({
         role: v.picklist(["daemon", "replaced-daemon"]),
         connectionEpoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
         connectionId: v.pipe(v.string(), v.minLength(1)),
-        pairingId: v.string(),
         computerId: v.string(),
     }),
 ]);
@@ -84,13 +78,11 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         if (attachment.role === "host") {
             return {
-                channelId: attachment.channelId,
                 credential: { kind: attachment.credentialKind, credentialId: attachment.credentialId },
                 ...(attachment.nativeRequestId === undefined ? {} : { nativeRequestId: attachment.nativeRequestId }),
                 ...(attachment.sessionFilter === undefined ? {} : { sessionFilter: attachment.sessionFilter }),
                 computerId: attachment.computerId,
                 role: attachment.role,
-                pairingId: attachment.pairingId,
             };
         }
         if (attachment.role === "viewer") {
@@ -108,7 +100,6 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 expiresAt: attachment.expiresAt,
                 computerId: attachment.computerId,
                 role: attachment.role,
-                pairingId: attachment.pairingId,
                 sessionFilter: attachment.sessionFilter,
             };
         }
@@ -118,7 +109,6 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 connectionId: attachment.connectionId,
                 computerId: attachment.computerId,
                 role: attachment.role,
-                pairingId: attachment.pairingId,
             };
         }
         return attachment;

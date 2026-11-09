@@ -75,7 +75,7 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
         environment,
     );
     expect(bindingResponse.status).toBe(200);
-    expect(await bindingResponse.json()).toMatchObject({ botId: replacement.bot.botId, pairingId: null });
+    expect(await bindingResponse.json()).toMatchObject({ botId: replacement.bot.botId, computerId: null });
 });
 
 test("Given a revoked successor local credential, When the previous Machine retries replacement, Then it cannot reactivate that credential", async () => {

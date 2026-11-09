@@ -1,4 +1,4 @@
-import { and, count, eq, exists, gt, inArray, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
+import { and, count, eq, exists, gt, inArray, isNotNull, isNull, lte, notExists, or, sql } from "drizzle-orm";
 import { MAX_DAEMONS_PER_COMPUTER } from "../entity/pairing/pairing.ts";
 import type {
     PairingChannelRow,
@@ -11,6 +11,8 @@ import type {
 import { type RelayDrizzleDatabase, relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
+    channelAccessGrant,
+    channelHostCredential,
     pairedDaemon,
     runtimeDaemonCredential,
     runtimeDaemonRetiredCredential,
@@ -20,9 +22,7 @@ import {
 } from "../schema/project-do/index.ts";
 
 const identityFields = {
-    channel_id: pairedDaemon.channelId,
-    pairing_id: pairedDaemon.pairingId,
-    project_id: pairedDaemon.computerId,
+    computer_id: pairedDaemon.computerId,
 };
 const registrationFields = {
     claimed_at: runtimeRegistration.claimedAt,
@@ -32,10 +32,9 @@ const registrationFields = {
 };
 
 interface CreateRuntimePairing {
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly codeHash: string;
     readonly pollHash: string;
-    readonly channelId: string;
     readonly now: number;
     readonly expiresAt: number;
     readonly idempotencyKey: string;
@@ -56,17 +55,17 @@ function occupiedRuntimeCount(database: RelayDrizzleDatabase, computerId: string
                 or(
                     exists(
                         database
-                            .select({ pairingId: runtimeRegistration.pairingId })
+                            .select({ computerId: runtimeRegistration.computerId })
                             .from(runtimeRegistration)
-                            .where(eq(runtimeRegistration.pairingId, pairedDaemon.pairingId)),
+                            .where(eq(runtimeRegistration.computerId, pairedDaemon.computerId)),
                     ),
                     exists(
                         database
-                            .select({ pairingId: runtimePairingRequest.pairingId })
+                            .select({ computerId: runtimePairingRequest.computerId })
                             .from(runtimePairingRequest)
                             .where(
                                 and(
-                                    eq(runtimePairingRequest.pairingId, pairedDaemon.pairingId),
+                                    eq(runtimePairingRequest.computerId, pairedDaemon.computerId),
                                     gt(runtimePairingRequest.expiresAt, now),
                                 ),
                             ),
@@ -103,8 +102,8 @@ export class RuntimeDirectoryStorage {
                 registration: registrationFields,
             })
             .from(runtimePairingRequest)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimePairingRequest.pairingId))
-            .leftJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId));
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimePairingRequest.computerId))
+            .leftJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId));
 
     readonly readPairingCode = async (codeHash: string, signal: AbortSignal): Promise<PairingClaimRow | null> => {
         const rows = await this.pairingQuery(relayDrizzle(this.#database, signal))
@@ -115,9 +114,12 @@ export class RuntimeDirectoryStorage {
         return rows[0] ?? null;
     };
 
-    readonly readProjectPairing = async (pairingId: string, signal: AbortSignal): Promise<PairingChannelRow | null> => {
+    readonly readProjectPairing = async (
+        computerId: string,
+        signal: AbortSignal,
+    ): Promise<PairingChannelRow | null> => {
         const rows = await this.pairingQuery(relayDrizzle(this.#database, signal))
-            .where(and(eq(pairedDaemon.computerId, this.#computerId), eq(runtimePairingRequest.pairingId, pairingId)))
+            .where(and(eq(pairedDaemon.computerId, this.#computerId), eq(runtimePairingRequest.computerId, computerId)))
             .limit(1);
         return rows[0] ?? null;
     };
@@ -135,7 +137,7 @@ export class RuntimeDirectoryStorage {
                 created_by_owner_credential_id: runtimePairingRequest.createdByOwnerCredentialId,
             })
             .from(runtimePairingRequest)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimePairingRequest.pairingId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimePairingRequest.computerId))
             .where(
                 and(
                     eq(pairedDaemon.computerId, this.#computerId),
@@ -147,56 +149,81 @@ export class RuntimeDirectoryStorage {
     };
 
     readonly createRuntimePairing = async (value: CreateRuntimePairing, signal: AbortSignal): Promise<boolean> => {
-        const database = relayDrizzle(this.#database, signal);
-        // The capacity predicate is part of the INSERT, not an earlier read.
-        // SQLite serializes this batch with competing creations, claims, and
-        // revocations. Expired requests need no cleanup to stop reserving space.
-        const identity = database.insert(pairedDaemon).select(
-            database
-                .select({
-                    pairingId: sql<string>`${value.pairingId}`.as("pairing_id"),
-                    channelId: sql<string>`${value.channelId}`.as("channel_id"),
-                    computerId: sql<string>`${this.#computerId}`.as("project_id"),
-                    createdAt: sql<number>`${value.now}`.as("created_at"),
-                    revokedAt: sql<null>`null`.as("revoked_at"),
-                    revokedByOwnerCredentialId: sql<null>`null`.as("revoked_by_owner_credential_id"),
-                })
-                .from(sql`(select 1)`)
-                .where(lt(occupiedRuntimeCount(database, this.#computerId, value.now), MAX_DAEMONS_PER_COMPUTER)),
+        const computerId = this.#computerId;
+        const sql = this.#database;
+        const reservation = sql
+            .prepare(`
+            INSERT INTO runtimes (computer_id, created_at) VALUES (?, ?)
+            ON CONFLICT(computer_id) DO UPDATE SET created_at = excluded.created_at,
+                revoked_at = NULL, revoked_by_owner_credential_id = NULL
+            WHERE revoked_at IS NOT NULL OR (
+                NOT EXISTS (SELECT 1 FROM runtime_registrations WHERE computer_id = ?)
+                AND NOT EXISTS (SELECT 1 FROM runtime_pairing_requests WHERE computer_id = ? AND expires_at > ?)
+            )
+        `)
+            .bind(computerId, value.now, computerId, computerId, value.now);
+        const request = sql
+            .prepare(`
+            INSERT INTO runtime_pairing_requests
+                (computer_id, pairing_code_hash, poll_token_hash, expires_at, creation_idempotency_key, created_by_owner_credential_id)
+            SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1
+            ON CONFLICT(computer_id) DO UPDATE SET pairing_code_hash = excluded.pairing_code_hash,
+                poll_token_hash = excluded.poll_token_hash, expires_at = excluded.expires_at,
+                creation_idempotency_key = excluded.creation_idempotency_key,
+                created_by_owner_credential_id = excluded.created_by_owner_credential_id
+        `)
+            .bind(computerId, value.codeHash, value.pollHash, value.expiresAt, value.idempotencyKey, value.ownerId);
+        const audit = sql
+            .prepare(`
+            INSERT INTO runtime_pairing_audit_events
+                (audit_id, computer_id, actor_kind, actor_id, action, details_json, recorded_at)
+            SELECT ?, ?, ?, ?, 'runtime_pairing.requested', ?, ? WHERE changes() = 1
+        `)
+            .bind(
+                value.auditId,
+                computerId,
+                value.actorKind,
+                value.actorId,
+                JSON.stringify({ idempotencyKey: value.idempotencyKey }),
+                value.now,
+            );
+        // A replacement starts with a new code and no credentials inherited from the previous daemon.
+        const db = relayDrizzle(sql, signal);
+        const accepted = exists(
+            db
+                .select({ auditId: runtimePairingAuditEvent.auditId })
+                .from(runtimePairingAuditEvent)
+                .where(eq(runtimePairingAuditEvent.auditId, value.auditId)),
         );
-        const request = database.insert(runtimePairingRequest).select(
-            database
-                .select({
-                    pairingId: sql<string>`${value.pairingId}`.as("pairing_id"),
-                    pairingCodeHash: sql<string>`${value.codeHash}`.as("pairing_code_hash"),
-                    pollTokenHash: sql<string>`${value.pollHash}`.as("poll_token_hash"),
-                    expiresAt: sql<number>`${value.expiresAt}`.as("expires_at"),
-                    creationIdempotencyKey: sql<string>`${value.idempotencyKey}`.as("creation_idempotency_key"),
-                    createdByOwnerCredentialId: sql<string>`${value.ownerId}`.as("created_by_owner_credential_id"),
-                })
-                .from(pairedDaemon)
-                .where(eq(pairedDaemon.pairingId, value.pairingId)),
+        const cleanup = [runtimeRegistration, runtimeDaemonCredential, runtimeDaemonRetiredCredential].map((table) =>
+            this.statement(db.delete(table).where(and(eq(table.computerId, computerId), accepted))),
         );
-        const audit = database.insert(runtimePairingAuditEvent).select(
-            database
-                .select({
-                    auditId: sql<string>`${value.auditId}`.as("audit_id"),
-                    computerId: pairedDaemon.computerId,
-                    pairingId: runtimePairingRequest.pairingId,
-                    actorKind: sql<string>`${value.actorKind}`.as("actor_kind"),
-                    actorId: sql<string>`${value.actorId}`.as("actor_id"),
-                    action: sql<"runtime_pairing.requested">`'runtime_pairing.requested'`.as("action"),
-                    detailsJson: sql<string>`${JSON.stringify({ idempotencyKey: value.idempotencyKey })}`.as(
-                        "details_json",
-                    ),
-                    recordedAt: pairedDaemon.createdAt,
-                })
-                .from(runtimePairingRequest)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimePairingRequest.pairingId))
-                .where(eq(runtimePairingRequest.pairingId, value.pairingId)),
-        );
-        const results = await this.#database.batch(
-            [this.statement(identity), this.statement(request), this.statement(audit)],
+        const revokeHosts = db
+            .update(channelHostCredential)
+            .set({ revokedAt: value.now })
+            .where(
+                and(
+                    eq(channelHostCredential.computerId, computerId),
+                    isNull(channelHostCredential.revokedAt),
+                    accepted,
+                ),
+            );
+        const expireGrants = db
+            .update(channelAccessGrant)
+            .set({ expiresAt: value.now })
+            .where(
+                and(
+                    eq(channelAccessGrant.computerId, computerId),
+                    gt(channelAccessGrant.expiresAt, value.now),
+                    accepted,
+                ),
+            );
+        const fence = sql
+            .prepare(`UPDATE runtime_connection_state SET state='revoked', connection_epoch=connection_epoch+1, disconnected_at=?
+            WHERE computer_id=? AND EXISTS (SELECT 1 FROM runtime_pairing_audit_events WHERE audit_id=?)`)
+            .bind(value.now, computerId, value.auditId);
+        const results = await sql.batch(
+            [reservation, request, audit, fence, ...cleanup, this.statement(revokeHosts), this.statement(expireGrants)],
             signal,
         );
         return results[0]?.meta.changes === 1;
@@ -204,7 +231,7 @@ export class RuntimeDirectoryStorage {
 
     readonly claim = async (
         value: {
-            readonly pairingId: string;
+            readonly computerId: string;
             readonly codeHash: string;
             readonly daemonHash: string;
             readonly now: number;
@@ -219,15 +246,15 @@ export class RuntimeDirectoryStorage {
         const credential = database.insert(runtimeDaemonCredential).select(
             database
                 .select({
-                    pairingId: pairedDaemon.pairingId,
+                    computerId: pairedDaemon.computerId,
                     tokenHash: sql<string>`${value.daemonHash}`.as("token_hash"),
                 })
                 .from(runtimePairingRequest)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimePairingRequest.pairingId))
+                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimePairingRequest.computerId))
                 .where(
                     and(
                         eq(pairedDaemon.computerId, this.#computerId),
-                        eq(runtimePairingRequest.pairingId, value.pairingId),
+                        eq(runtimePairingRequest.computerId, value.computerId),
                         eq(runtimePairingRequest.pairingCodeHash, value.codeHash),
                         gt(runtimePairingRequest.expiresAt, value.now),
                         isNull(pairedDaemon.revokedAt),
@@ -237,9 +264,9 @@ export class RuntimeDirectoryStorage {
                         lte(occupiedRuntimeCount(database, this.#computerId, value.now), MAX_DAEMONS_PER_COMPUTER),
                         notExists(
                             database
-                                .select({ pairingId: runtimeRegistration.pairingId })
+                                .select({ computerId: runtimeRegistration.computerId })
                                 .from(runtimeRegistration)
-                                .where(eq(runtimeRegistration.pairingId, pairedDaemon.pairingId)),
+                                .where(eq(runtimeRegistration.computerId, pairedDaemon.computerId)),
                         ),
                     ),
                 ),
@@ -247,7 +274,7 @@ export class RuntimeDirectoryStorage {
         const registration = database.insert(runtimeRegistration).select(
             database
                 .select({
-                    pairingId: runtimeDaemonCredential.pairingId,
+                    computerId: runtimeDaemonCredential.computerId,
                     claimedAt: sql<number>`${value.now}`.as("claimed_at"),
                     machineName: sql<string>`${value.machineName}`.as("machine_name"),
                     workspaceName: sql<string>`${value.workspaceName}`.as("workspace_name"),
@@ -259,9 +286,9 @@ export class RuntimeDirectoryStorage {
                         eq(runtimeDaemonCredential.tokenHash, value.daemonHash),
                         notExists(
                             database
-                                .select({ pairingId: runtimeRegistration.pairingId })
+                                .select({ computerId: runtimeRegistration.computerId })
                                 .from(runtimeRegistration)
-                                .where(eq(runtimeRegistration.pairingId, runtimeDaemonCredential.pairingId)),
+                                .where(eq(runtimeRegistration.computerId, runtimeDaemonCredential.computerId)),
                         ),
                     ),
                 ),
@@ -271,17 +298,16 @@ export class RuntimeDirectoryStorage {
                 .select({
                     auditId: sql<string>`${value.auditId}`.as("audit_id"),
                     computerId: pairedDaemon.computerId,
-                    pairingId: runtimePairingRequest.pairingId,
                     actorKind: sql<string>`'runtime'`.as("actor_kind"),
-                    actorId: pairedDaemon.pairingId,
+                    actorId: pairedDaemon.computerId,
                     action: sql<"runtime_pairing.claimed">`'runtime_pairing.claimed'`.as("action"),
                     detailsJson: sql<string>`'{}'`.as("details_json"),
                     recordedAt: runtimeRegistration.claimedAt,
                 })
                 .from(runtimeDaemonCredential)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimeDaemonCredential.pairingId))
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
-                .innerJoin(runtimePairingRequest, eq(runtimePairingRequest.pairingId, pairedDaemon.pairingId))
+                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimeDaemonCredential.computerId))
+                .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
+                .innerJoin(runtimePairingRequest, eq(runtimePairingRequest.computerId, pairedDaemon.computerId))
                 .where(
                     and(
                         eq(runtimeDaemonCredential.tokenHash, value.daemonHash),
@@ -291,7 +317,7 @@ export class RuntimeDirectoryStorage {
                                 .from(runtimePairingAuditEvent)
                                 .where(
                                     and(
-                                        eq(runtimePairingAuditEvent.pairingId, value.pairingId),
+                                        eq(runtimePairingAuditEvent.computerId, value.computerId),
                                         eq(runtimePairingAuditEvent.action, "runtime_pairing.claimed"),
                                     ),
                                 ),
@@ -312,7 +338,6 @@ export class RuntimeDirectoryStorage {
             .values({
                 auditId: value.auditId,
                 computerId: this.#computerId,
-                pairingId: value.pairingId,
                 actorKind: value.actorKind,
                 actorId: value.actorId,
                 action: value.action,
@@ -322,26 +347,26 @@ export class RuntimeDirectoryStorage {
             .onConflictDoNothing();
     };
 
-    readonly readRuntime = async (pairingId: string, signal: AbortSignal): Promise<RuntimeDirectoryRow | null> => {
+    readonly readRuntime = async (computerId: string, signal: AbortSignal): Promise<RuntimeDirectoryRow | null> => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({ ...identityFields, revoked_at: pairedDaemon.revokedAt, registration: registrationFields })
             .from(pairedDaemon)
-            .leftJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
-            .where(and(eq(pairedDaemon.computerId, this.#computerId), eq(pairedDaemon.pairingId, pairingId)))
+            .leftJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
+            .where(and(eq(pairedDaemon.computerId, this.#computerId), eq(pairedDaemon.computerId, computerId)))
             .limit(1);
         return rows[0] ?? null;
     };
 
-    readonly readDaemon = async (channelId: string, tokenHash: string, signal: AbortSignal) => {
+    readonly readDaemon = async (computerId: string, tokenHash: string, signal: AbortSignal) => {
         const rows = await relayDrizzle(this.#database, signal)
             .select(identityFields)
             .from(pairedDaemon)
-            .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
-            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.pairingId, pairedDaemon.pairingId))
+            .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
+            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
             .where(
                 and(
                     eq(pairedDaemon.computerId, this.#computerId),
-                    eq(pairedDaemon.channelId, channelId),
+                    eq(pairedDaemon.computerId, computerId),
                     isNull(pairedDaemon.revokedAt),
                     eq(runtimeDaemonCredential.tokenHash, tokenHash),
                 ),
@@ -364,9 +389,9 @@ export class RuntimeDirectoryStorage {
         const database = relayDrizzle(this.#database, signal);
         const runtimeOf = (revoked: boolean) =>
             database
-                .select({ pairingId: pairedDaemon.pairingId })
+                .select({ computerId: pairedDaemon.computerId })
                 .from(pairedDaemon)
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
+                .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
                 .where(
                     and(
                         eq(pairedDaemon.computerId, this.#computerId),
@@ -375,7 +400,7 @@ export class RuntimeDirectoryStorage {
                 );
         const current = and(
             eq(runtimeDaemonCredential.tokenHash, presentedHash),
-            inArray(runtimeDaemonCredential.pairingId, runtimeOf(false)),
+            inArray(runtimeDaemonCredential.computerId, runtimeOf(false)),
         );
         // One batch: the presented credential is retired with its successor exactly when the successor replaces it.
         await this.#database.batch(
@@ -384,7 +409,7 @@ export class RuntimeDirectoryStorage {
                     database
                         .select({
                             tokenHash: runtimeDaemonCredential.tokenHash,
-                            pairingId: runtimeDaemonCredential.pairingId,
+                            computerId: runtimeDaemonCredential.computerId,
                             successorHash: sql<string>`${successorHash}`.as("successor_hash"),
                         })
                         .from(runtimeDaemonCredential)
@@ -401,40 +426,40 @@ export class RuntimeDirectoryStorage {
                 current_hash: runtimeDaemonCredential.tokenHash,
             })
             .from(runtimeDaemonRetiredCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.pairingId, runtimeDaemonRetiredCredential.pairingId))
-            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.pairingId, pairedDaemon.pairingId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimeDaemonRetiredCredential.computerId))
+            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
             .where(
                 and(
                     eq(runtimeDaemonRetiredCredential.tokenHash, presentedHash),
-                    inArray(runtimeDaemonRetiredCredential.pairingId, runtimeOf(false)),
+                    inArray(runtimeDaemonRetiredCredential.computerId, runtimeOf(false)),
                 ),
             )
             .limit(1);
         const row = rows[0];
         if (row !== undefined) {
-            const runtime = { channel_id: row.channel_id, pairing_id: row.pairing_id, project_id: row.project_id };
+            const runtime = { computer_id: row.computer_id };
             return row.successor_hash === successorHash && row.current_hash === successorHash
                 ? { kind: "rotated", runtime }
                 : { kind: "reused", runtime };
         }
         // A revoked Runtime keeps its credential hashes, so its daemon learns that its access ended for good.
         const revoked = await database
-            .select({ pairingId: runtimeDaemonCredential.pairingId })
+            .select({ computerId: runtimeDaemonCredential.computerId })
             .from(runtimeDaemonCredential)
             .where(
                 and(
                     eq(runtimeDaemonCredential.tokenHash, presentedHash),
-                    inArray(runtimeDaemonCredential.pairingId, runtimeOf(true)),
+                    inArray(runtimeDaemonCredential.computerId, runtimeOf(true)),
                 ),
             )
             .union(
                 database
-                    .select({ pairingId: runtimeDaemonRetiredCredential.pairingId })
+                    .select({ computerId: runtimeDaemonRetiredCredential.computerId })
                     .from(runtimeDaemonRetiredCredential)
                     .where(
                         and(
                             eq(runtimeDaemonRetiredCredential.tokenHash, presentedHash),
-                            inArray(runtimeDaemonRetiredCredential.pairingId, runtimeOf(true)),
+                            inArray(runtimeDaemonRetiredCredential.computerId, runtimeOf(true)),
                         ),
                     ),
             )
@@ -444,7 +469,7 @@ export class RuntimeDirectoryStorage {
 
     readonly revokeRuntime = async (
         value: {
-            readonly pairingId: string;
+            readonly computerId: string;
             readonly ownerId: string | null;
             readonly now: number;
             readonly actorKind: string;
@@ -456,7 +481,7 @@ export class RuntimeDirectoryStorage {
         const database = relayDrizzle(this.#database, signal);
         const identity = and(
             eq(pairedDaemon.computerId, this.#computerId),
-            eq(pairedDaemon.pairingId, value.pairingId),
+            eq(pairedDaemon.computerId, value.computerId),
         );
         const revocation = database
             .update(pairedDaemon)
@@ -473,7 +498,6 @@ export class RuntimeDirectoryStorage {
                     .select({
                         auditId: sql<string>`${value.auditId}`.as("audit_id"),
                         computerId: pairedDaemon.computerId,
-                        pairingId: runtimePairingRequest.pairingId,
                         actorKind: sql<string>`${value.actorKind}`.as("actor_kind"),
                         actorId: sql<string>`${value.actorId}`.as("actor_id"),
                         action: sql<"runtime_pairing.revoked">`'runtime_pairing.revoked'`.as("action"),
@@ -481,34 +505,34 @@ export class RuntimeDirectoryStorage {
                         recordedAt: sql<number>`${pairedDaemon.revokedAt}`.as("recorded_at"),
                     })
                     .from(pairedDaemon)
-                    .innerJoin(runtimePairingRequest, eq(runtimePairingRequest.pairingId, pairedDaemon.pairingId))
+                    .innerJoin(runtimePairingRequest, eq(runtimePairingRequest.computerId, pairedDaemon.computerId))
                     .where(identity),
             )
             .onConflictDoNothing();
         const results = await this.#database.batch([revocation, audit].map(this.statement), signal);
         // All writers preserve the first revocation time. Reading the committed
         // fact also makes overlapping retries return that same timestamp.
-        return results[0]?.meta.changes === 1 ? this.readRuntime(value.pairingId, signal) : null;
+        return results[0]?.meta.changes === 1 ? this.readRuntime(value.computerId, signal) : null;
     };
 
     readonly listRuntimes = async (signal: AbortSignal) =>
         await relayDrizzle(this.#database, signal)
             .select({ ...identityFields, ...registrationFields })
             .from(pairedDaemon)
-            .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
+            .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
             .where(and(eq(pairedDaemon.computerId, this.#computerId), isNull(pairedDaemon.revokedAt)))
-            .orderBy(pairedDaemon.createdAt, pairedDaemon.channelId)
+            .orderBy(pairedDaemon.createdAt, pairedDaemon.computerId)
             .limit(100);
 
-    readonly readChannel = async (channelId: string, signal: AbortSignal) => {
+    readonly readChannel = async (computerId: string, signal: AbortSignal) => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({ ...identityFields, ...registrationFields })
             .from(pairedDaemon)
-            .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
+            .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
             .where(
                 and(
                     eq(pairedDaemon.computerId, this.#computerId),
-                    eq(pairedDaemon.channelId, channelId),
+                    eq(pairedDaemon.computerId, computerId),
                     isNull(pairedDaemon.revokedAt),
                 ),
             )
@@ -516,16 +540,16 @@ export class RuntimeDirectoryStorage {
         return rows[0] ?? null;
     };
 
-    readonly updateAgents = async (channelId: string, tokenHash: string, agents: string, signal: AbortSignal) => {
+    readonly updateAgents = async (computerId: string, tokenHash: string, agents: string, signal: AbortSignal) => {
         const database = relayDrizzle(this.#database, signal);
         const identity = database
-            .select({ pairingId: pairedDaemon.pairingId })
+            .select({ computerId: pairedDaemon.computerId })
             .from(pairedDaemon)
-            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.pairingId, pairedDaemon.pairingId))
+            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
             .where(
                 and(
                     eq(pairedDaemon.computerId, this.#computerId),
-                    eq(pairedDaemon.channelId, channelId),
+                    eq(pairedDaemon.computerId, computerId),
                     isNull(pairedDaemon.revokedAt),
                     eq(runtimeDaemonCredential.tokenHash, tokenHash),
                 ),
@@ -534,7 +558,7 @@ export class RuntimeDirectoryStorage {
             database
                 .update(runtimeRegistration)
                 .set({ agentsJson: agents })
-                .where(eq(runtimeRegistration.pairingId, identity)),
+                .where(eq(runtimeRegistration.computerId, identity)),
         ).run(signal);
     };
 }

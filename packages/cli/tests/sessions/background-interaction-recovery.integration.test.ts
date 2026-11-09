@@ -118,7 +118,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
     const config = createControlledRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "background",
+            computerId: "background",
             defaultWorkspace: workspace,
             relayUrl,
         },

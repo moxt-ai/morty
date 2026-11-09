@@ -758,7 +758,7 @@ async function setup(options) {
 
     const deadline = Date.now() + SETUP_READY_TIMEOUT_MILLISECONDS;
     let ready = null;
-    let pairingId = null;
+    let computerId = null;
     let reusedConnectionId = null;
     for (;;) {
         const records = fs
@@ -772,15 +772,15 @@ async function setup(options) {
             fail(`setup failed: ${JSON.stringify(failure.error)}`);
         }
         const reused = records.findLast((record) => record !== null && record.status === "runtime_reused");
-        if (reused !== undefined && reused !== null && typeof reused.pairingId === "string") {
-            pairingId = reused.pairingId;
+        if (reused !== undefined && reused !== null && typeof reused.computerId === "string") {
+            computerId = reused.computerId;
             if (typeof reused.connectionId === "string") {
                 reusedConnectionId = reused.connectionId;
             }
         }
         const paired = records.findLast((record) => record !== null && record.status === "runtime_paired");
-        if (paired !== undefined && paired !== null && typeof paired.pairingId === "string") {
-            pairingId = paired.pairingId;
+        if (paired !== undefined && paired !== null && typeof paired.computerId === "string") {
+            computerId = paired.computerId;
         }
         const completed = records.findLast((record) => record !== null && record.status === "ready");
         if (completed !== undefined && completed !== null) {
@@ -798,7 +798,7 @@ async function setup(options) {
             `the setup runtime did not report ready within ${SETUP_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${setupLog}`,
         );
     }
-    if (pairingId === null) {
+    if (computerId === null) {
         fail("the setup runtime did not report its Runtime ID");
     }
     const handoffUrl = typeof ready.url === "string" ? ready.url : "";
@@ -826,7 +826,7 @@ async function setup(options) {
                 fail("Morty returned an invalid connection list");
             }
             const connection = listed.find(
-                (item) => item !== null && typeof item === "object" && item.pairing_id === pairingId,
+                (item) => item !== null && typeof item === "object" && item.computer_id === computerId,
             );
             if (
                 connection === undefined ||

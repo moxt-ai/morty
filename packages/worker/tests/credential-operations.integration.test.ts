@@ -113,11 +113,11 @@ test("Given a browser that joined through a link, When it asks for recovery acce
     for (const token of [browser, recovery]) {
         for (const refused of [
             await request(`${project}/identity/recovery-token`, token, "POST"),
-            await request(`${project}/management/pairings`, token, "POST", {
+            await request(`${project}/management/pairing`, token, "POST", {
                 idempotencyKey: "shared-pairing",
             }),
             await request(`/chat/computers/${owner.computerId}/bots/${botId}/setup`, token, "POST", {
-                pairingId: "shared-runtime",
+                computerId: "shared-runtime",
                 agentRef: "codex",
             }),
         ]) {

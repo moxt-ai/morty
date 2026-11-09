@@ -236,14 +236,14 @@ export async function createResponseLossProxy(upstream: string) {
             }
         },
         /** Loses a pairing response after the real service commits it. */
-        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/pairings(?:\?|$)/u),
+        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/pairing(?:\?|$)/u),
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
         /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
         dropNextSessionCreation: () => {
-            droppedRequest = /\/runtimes\/[^/]+\/sessions(?:\?|$)/u;
+            droppedRequest = /\/daemon\/sessions(?:\?|$)/u;
         },
         /** Loses the answer to the next Session creation; resolves with the status the service returned. */
-        interruptNextSessionCreation: () => loseNextResponse(/\/runtimes\/[^/]+\/sessions(?:\?|$)/u),
+        interruptNextSessionCreation: () => loseNextResponse(/\/daemon\/sessions(?:\?|$)/u),
         interruptNextTurn: (delivery: "before-acceptance" | "after-acceptance") => {
             armed = delivery;
         },

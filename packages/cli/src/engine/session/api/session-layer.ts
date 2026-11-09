@@ -62,7 +62,7 @@ export interface SessionLayerOptions {
     readonly turnActivity?: RuntimeTurnActivity;
     readonly onExecutionCountChange?: (count: number) => void;
     readonly bindingId: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly resolveAgent: ResolveAgent;
     readonly sink: SessionEventSink;
@@ -72,8 +72,8 @@ export interface SessionLayerOptions {
 
 /** Wires the session layer for one runtime: its stores, manager, turns, and native session browsing. */
 export function buildSessionLayer(options: SessionLayerOptions) {
-    const { bindingId, channelId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
-    const databases = channelSessionDatabasePaths(stateDirectory, channelId);
+    const { bindingId, computerId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
+    const databases = channelSessionDatabasePaths(stateDirectory, computerId);
     const sessionDatabase = openAcpSessionDatabase(databases.sessions);
     let events: CachedSessionEventStore;
     let operations: ExecutionReceipts;

@@ -22,20 +22,17 @@ import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
 const runtimePairingSchema = v.object({
-    channelId: v.string(),
     pairingCode: v.string(),
-    pairingId: v.string(),
     computerId: v.string(),
 });
 
 const runtimeClaimSchema = v.object({
-    channelId: v.string(),
+    computerId: v.string(),
     runtimeCredential: v.string(),
-    pairingId: v.string(),
 });
 
 export interface ControlledRuntimeConnection {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly origin: string;
     /** The Runtime's relay credential; it rotates on every connection and outlives restarts, as a saved one does. */
     readonly credentials: RuntimeCredentials;
@@ -192,7 +189,7 @@ export async function connectControlledAgentRuntime(options: {
         const runtime = controlledRuntime(
             harness.agents,
             {
-                channelId: options.connection.channelId,
+                computerId: options.connection.computerId,
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: options.connection.credentials,
@@ -303,7 +300,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairings`, {
+                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,
@@ -320,7 +317,7 @@ export async function createControlledAgentRuntime(options: {
         runtimeClaimSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/pairings/${pairing.pairingId}/redeem`, {
+                new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
                     body: JSON.stringify({
                         agents: harness.catalog,
                         machineName: "Controlled Agent Runtime",
@@ -337,7 +334,7 @@ export async function createControlledAgentRuntime(options: {
     const connected = await connectControlledAgentRuntime({
         behavior: options.behavior,
         connection: {
-            channelId: claim.channelId,
+            computerId: claim.computerId,
             origin: options.origin,
             credentials: memoryRuntimeCredentials(claim.runtimeCredential),
         },
@@ -352,6 +349,6 @@ export async function createControlledAgentRuntime(options: {
     return {
         ...connected,
         client,
-        pairingId: claim.pairingId,
+        computerId: claim.computerId,
     };
 }

@@ -11,10 +11,7 @@ import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
-export async function registerRuntimeFixture(
-    computerId: string,
-    pairingId: string,
-): Promise<{ readonly hostCredentialId: string }> {
+export async function registerRuntimeFixture(computerId: string): Promise<{ readonly hostCredentialId: string }> {
     const registeredAt = Date.UTC(2026, 9, 27);
     const appId = `app_${computerId}`;
     const directory = platformDrizzle(env.PLATFORM_DIRECTORY_DATABASE);
@@ -37,14 +34,11 @@ export async function registerRuntimeFixture(
         applyDurableObjectMigrations(state.storage, computerDurableObjectMigrations);
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         await database.batch([
-            database
-                .insert(pairedDaemon)
-                .values({ pairingId, computerId, channelId: pairingId, createdAt: registeredAt })
-                .onConflictDoNothing(),
+            database.insert(pairedDaemon).values({ computerId, createdAt: registeredAt }).onConflictDoNothing(),
             database
                 .insert(runtimeRegistration)
                 .values({
-                    pairingId,
+                    computerId,
                     claimedAt: registeredAt,
                     machineName: "Registered test Runtime",
                     workspaceName: "Registered test workspace",

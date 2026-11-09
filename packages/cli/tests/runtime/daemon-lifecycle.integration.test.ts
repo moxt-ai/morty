@@ -35,12 +35,11 @@ describe("Morty daemon lifecycle", () => {
             const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
             const signal = AbortSignal.timeout(30_000);
             const installation = await openMortyInstallation(signal, environment);
-            const channelId = "channel_start_failure";
+            const computerId = "channel_start_failure";
             await installation.saveConnection(
                 {
-                    channelId,
+                    computerId,
                     defaultWorkspace: workspace,
-                    pairingId: "pairing_failure",
                     relayOrigin: new URL("http://127.0.0.1:1"),
                     runtimeCredential: "a".repeat(43),
                 },
@@ -52,7 +51,7 @@ describe("Morty daemon lifecycle", () => {
             } else {
                 const sessions = join(installation.stateDirectory, "sessions");
                 await mkdir(sessions, { recursive: true });
-                const hash = createHash("sha256").update(channelId).digest("hex");
+                const hash = createHash("sha256").update(computerId).digest("hex");
                 await writeFile(join(sessions, `${hash}.sqlite`), "invalid SQLite database");
             }
             try {
@@ -149,9 +148,8 @@ describe("Morty pairing lifecycle", () => {
         const control = await openMortyInstallation(deadline, environment);
         const connection = await installation.saveConnection(
             {
-                channelId: "channel_test",
+                computerId: "computer_test",
                 defaultWorkspace: workspace,
-                pairingId: "pairing_test",
                 relayOrigin: relay.origin,
                 runtimeCredential: "a".repeat(43),
             },
@@ -164,7 +162,7 @@ describe("Morty pairing lifecycle", () => {
             const initiallyListed = await runCli(["pair", "list"], environment, deadline);
             expect(initiallyListed.code).toBe(0);
             expect(initiallyListed.stdout).toContain("| connection_id");
-            expect(initiallyListed.stdout).not.toContain("channel_id");
+            expect(initiallyListed.stdout).toContain("computer_id");
             expect(initiallyListed.stdout).toContain(connection.connectionId);
 
             const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
@@ -175,7 +173,7 @@ describe("Morty pairing lifecycle", () => {
             expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual([
                 {
                     connection_id: connection.connectionId,
-                    pairing_id: "pairing_test",
+                    computer_id: "computer_test",
                     status: "active",
                     workspace,
                 },

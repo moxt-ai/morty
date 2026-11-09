@@ -7,7 +7,7 @@ import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.
 import { ChannelService } from "../service/channel/channel-service.ts";
 import type { LocalSessionOperations } from "../service/channel/local-session-operations.ts";
 import { PairingDirectoryService } from "../service/pairing/pairing-directory-service.ts";
-import { PairingIdentityService } from "../service/pairing/pairing-identity-service.ts";
+import { ComputerIdentityService } from "../service/pairing/pairing-identity-service.ts";
 import { PairingService } from "../service/pairing/pairing-service.ts";
 
 interface PairingInfrastructure {
@@ -35,7 +35,7 @@ export interface RelayInfrastructure extends PairingInfrastructure {
 }
 
 function createPairings(cx: PairingInfrastructure) {
-    const identities = new PairingIdentityService(cx.identityStores, cx.stores, cx.projects);
+    const identities = new ComputerIdentityService(cx.identityStores, cx.stores, cx.projects);
     return new PairingDirectoryService({
         gateways: { machineAccounts: cx.machineAccounts },
         storages: {

@@ -90,7 +90,7 @@ interface CreatingIdentity {
 type PairingIntent =
     | { readonly kind: "none" }
     | { readonly kind: "requesting"; readonly requestKey: string }
-    | { readonly kind: "paired"; readonly pairingId: string };
+    | { readonly kind: "paired"; readonly computerId: string };
 
 interface ReadyIdentity extends IssuedIdentity {
     readonly kind: "ready";
@@ -118,8 +118,8 @@ function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
     return { kind: "ready", ...issued, pairing: { kind: "none" }, replacement: { kind: "unchanged" } };
 }
 
-function withPairedRuntime(identity: ReadyIdentity, pairingId: string): ReadyIdentity {
-    return { ...identity, pairing: { kind: "paired", pairingId } };
+function withPairedRuntime(identity: ReadyIdentity, computerId: string): ReadyIdentity {
+    return { ...identity, pairing: { kind: "paired", computerId } };
 }
 
 function withoutPairingIntent(identity: ReadyIdentity): ReadyIdentity {
@@ -229,27 +229,25 @@ type RuntimeSelection =
     | {
           readonly kind: "existing";
           readonly connectionId: string;
-          readonly pairingId: string;
+          readonly computerId: string;
           /** Whether the Worker binds the Machine to this Runtime. The Worker's binding is the only record of it. */
           readonly bound: boolean;
       }
     | {
           readonly kind: "pairing";
-          readonly channelId: string;
           readonly pairingCode: string;
-          readonly pairingId: string;
           readonly computerId: string;
           readonly relayUrl: string;
       };
 
 interface ManagedConnection {
     readonly connectionId: string;
-    readonly pairingId: string;
+    readonly computerId: string;
 }
 
 interface VerifiedIdentity {
     readonly context: MachineContext;
-    readonly expectedPairingId: string | null;
+    readonly expectedComputerId: string | null;
 }
 
 /**
@@ -755,8 +753,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     return { kind: "requesting", requestKey: savedIdentifier(fields["requestKey"]) };
                 }
                 case "paired": {
-                    const fields = exactly(value, ["kind", "pairingId"]);
-                    return { kind: "paired", pairingId: savedIdentifier(fields["pairingId"]) };
+                    const fields = exactly(value, ["kind", "computerId"]);
+                    return { kind: "paired", computerId: savedIdentifier(fields["computerId"]) };
                 }
                 default:
                     return invalid();
@@ -1080,7 +1078,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const bot = await request(context, "/management/bot");
         return {
             context: { ...context, botId: identifier(bot["botId"]) },
-            expectedPairingId: bot["pairingId"] === null ? null : identifier(bot["pairingId"]),
+            expectedComputerId: bot["computerId"] === null ? null : identifier(bot["computerId"]),
         };
     }
 
@@ -1196,7 +1194,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 const connection = object(item);
                 return {
                     connectionId: identifier(connection["connection_id"]),
-                    pairingId: identifier(connection["pairing_id"]),
+                    computerId: identifier(connection["computer_id"]),
                 };
             });
         } finally {
@@ -1208,12 +1206,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: MachineContext,
         requestKey: string,
     ): Promise<{ readonly runtime: RuntimeSelection; readonly expiresAt: number }> {
-        const pairing = await request(context, "/management/pairings", { idempotencyKey: requestKey });
+        const pairing = await request(context, "/management/pairing", { idempotencyKey: requestKey });
         const selection: RuntimeSelection = {
             kind: "pairing",
-            channelId: identifier(pairing["channelId"]),
             pairingCode: text(pairing["pairingCode"], /^[A-Za-z0-9-]+$/u),
-            pairingId: identifier(pairing["pairingId"]),
             computerId: identifier(pairing["computerId"]),
             relayUrl: origin(pairing["relayUrl"]),
         };
@@ -1261,7 +1257,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareRuntime(
         context: MachineContext,
         cwd: string,
-        expectedPairingId: string | null,
+        expectedComputerId: string | null,
         confirmedComputerId: string | null,
     ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
@@ -1271,7 +1267,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 status: "replacement_check",
                 reason,
                 computerId,
-                expectedPairingId,
+                expectedComputerId,
                 managedConnectionCount,
                 approved: confirmedComputerId === computerId,
                 platform: process.platform,
@@ -1289,30 +1285,30 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return await replaceWithApproval("replacement_result_unknown", null);
         }
         // Runtime IDs are unique, so the Runtime's own connection list names the connection that serves one.
-        const reusable = async (pairingId: string) => {
+        const reusable = async (computerId: string) => {
             const connections = await listManagedConnections(context.directory, cwd);
-            const existing = connections.find((connection) => connection.pairingId === pairingId);
+            const existing = connections.find((connection) => connection.computerId === computerId);
             if (existing !== undefined) {
                 emit({
                     status: "runtime_reused",
-                    pairingId: existing.pairingId,
+                    computerId: existing.computerId,
                     connectionId: existing.connectionId,
                 });
             }
             return { existing, managedConnectionCount: connections.length };
         };
-        if (expectedPairingId !== null && !(await machineRuntimeRevoked(context))) {
-            const { existing, managedConnectionCount } = await reusable(expectedPairingId);
+        if (expectedComputerId !== null && !(await machineRuntimeRevoked(context))) {
+            const { existing, managedConnectionCount } = await reusable(expectedComputerId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: true } };
             }
             // Losing the local pairing does not itself authorize ending shared access.
             return await replaceWithApproval("managed_runtime_missing", managedConnectionCount);
         }
-        if (expectedPairingId !== null) {
+        if (expectedComputerId !== null) {
             // Morty disconnected this computer because a copy of its connection key was used. The Machine and the
             // browsers that open it stay; only the computer's connection is paired again.
-            emit({ status: "runtime_revoked", pairingId: expectedPairingId });
+            emit({ status: "runtime_revoked", computerId: expectedComputerId });
             progress(
                 "pairing",
                 "Morty disconnected this computer because its connection key was used somewhere else. Pairing it again.",
@@ -1322,7 +1318,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // the Project's Runtime slots, so continue on it while this machine still manages its connection.
         const pairing = context.identity.pairing;
         if (pairing.kind === "paired") {
-            const { existing } = await reusable(pairing.pairingId);
+            const { existing } = await reusable(pairing.computerId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
@@ -1354,7 +1350,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 continue;
             }
             return {
-                context: await commit(requesting, withPairedRuntime(requesting.identity, runtime.pairingId)),
+                context: await commit(requesting, withPairedRuntime(requesting.identity, runtime.computerId)),
                 runtime,
             };
         }
@@ -1375,8 +1371,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "pair",
                 "--url",
                 runtime.relayUrl,
-                "--pairing",
-                runtime.pairingId,
+                "--computer",
+                runtime.computerId,
                 "--code-stdin",
                 "--workspace",
                 cwd,
@@ -1395,7 +1391,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
                 return false;
             }
-            emit({ status: "runtime_already_online", pairingId: runtime.pairingId, harness });
+            emit({ status: "runtime_already_online", computerId: runtime.computerId, harness });
             return true;
         };
         // Starting a saved connection is idempotent. Redeeming a one-time pairing is not.
@@ -1434,9 +1430,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         fail("RUNTIME_START_FAILED");
     }
 
-    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, pairingId: string, agentRef: string): boolean {
+    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, computerId: string, agentRef: string): boolean {
         return (
-            runtime["pairingId"] === pairingId &&
+            runtime["computerId"] === computerId &&
             runtime["online"] === true &&
             Array.isArray(runtime["agents"]) &&
             runtime["agents"].some((agent) => object(agent)["agentRef"] === agentRef)
@@ -1475,7 +1471,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
               ? state["runtimes"].map(object)
               : [];
         const current = candidates.find(
-            (candidate) => candidate["pairingId"] === runtime.pairingId && candidate["online"] === true,
+            (candidate) => candidate["computerId"] === runtime.computerId && candidate["online"] === true,
         );
         if (current === undefined || !Array.isArray(current["agents"])) {
             return null;
@@ -1547,12 +1543,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function waitForRuntime(context: MachineContext, runtime: RuntimeSelection, harness: string, cwd: string) {
-        const pairingId = runtime.pairingId;
+        const computerId = runtime.computerId;
         let attempts = 0;
         if (runtime.kind === "pairing") {
             while (true) {
                 signal.throwIfAborted();
-                const status = await request(context, `/management/pairings/${runtime.pairingId}`);
+                const status = await request(context, `/management/pairing`);
                 if (status["status"] !== "pending" && status["status"] !== "paired") {
                     fail("RUNTIME_PAIRING_UNAVAILABLE");
                 }
@@ -1560,11 +1556,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     progress("runtime", "Waiting for Runtime pairing to complete.");
                 }
                 if (status["status"] === "paired") {
-                    if (status["pairingId"] !== pairingId || !Array.isArray(status["agents"])) {
+                    if (status["computerId"] !== computerId || !Array.isArray(status["agents"])) {
                         fail("INVALID_RESPONSE");
                     }
                     if (status["agents"].some((agent) => object(agent)["id"] === harness)) {
-                        emit({ status: "runtime_paired", pairingId, harness });
+                        emit({ status: "runtime_paired", computerId, harness });
                         break;
                     }
                     await harnessUnavailable(
@@ -1587,9 +1583,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             const agents = await onlineRuntimeAgents(context, runtime);
             if (agents?.includes(harness) === true) {
                 if (runtime.kind === "existing") {
-                    emit({ status: "runtime_paired", pairingId, harness });
+                    emit({ status: "runtime_paired", computerId, harness });
                 }
-                emit({ status: "runtime_online", pairingId, harness });
+                emit({ status: "runtime_online", computerId, harness });
                 return;
             }
             if (agents === null) {
@@ -1610,11 +1606,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function bindAgent(context: MachineContext, runtime: RuntimeSelection, harness: string) {
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
-        const pairingId = runtime.pairingId;
+        const computerId = runtime.computerId;
         const agentRef = identifier(harness);
         try {
             await request(context, `/chat/computers/${context.identity.computerId}/bots/${context.botId}/setup`, {
-                pairingId,
+                computerId,
                 agentRef,
             });
         } catch (cause) {
@@ -1648,7 +1644,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 `/chat/computers/${context.identity.computerId}/bots/${context.botId}/workspace`,
                 {},
             );
-            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.pairingId, agentRef)) {
+            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.computerId, agentRef)) {
                 return;
             }
             if (attempts++ % 10 === 0) {
@@ -1827,7 +1823,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const verified = await verifyIdentityAndBot(await retireReplacedIdentity(identity.context));
         let machine = verified.context;
         emit({ status: "identity_ready", userId: machine.identity.userId, botId: machine.botId });
-        const prepared = await prepareRuntime(machine, cwd, verified.expectedPairingId, options.replaceProject);
+        const prepared = await prepareRuntime(machine, cwd, verified.expectedComputerId, options.replaceProject);
         machine = prepared.context;
         await startRuntime(machine, prepared.runtime, cwd, options.harness);
         await waitForRuntime(machine, prepared.runtime, options.harness, cwd);

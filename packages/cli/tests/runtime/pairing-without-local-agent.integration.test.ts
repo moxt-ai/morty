@@ -37,9 +37,8 @@ async function createPairingRelay(): Promise<PairingRelay> {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
-                    channelId: "unattended-channel",
+                    computerId: "unattended-channel",
                     runtimeCredential: "u".repeat(32),
-                    pairingId: "unattended-runtime",
                 }),
             );
         });
@@ -114,7 +113,7 @@ describe("pairing a machine without a local Agent", () => {
             "pair",
             "--url",
             relay.origin,
-            "--pairing",
+            "--computer",
             "piped-pairing",
             "--workspace",
             join(home, "workspace"),
@@ -154,7 +153,7 @@ describe("pairing a machine without a local Agent", () => {
                 {
                     defaultWorkspace: join(stateDirectory, "workspace"),
                     pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
-                    pairingId: "unattended-pairing",
+                    computerId: "unattended-pairing",
                     relayOrigin: relay.origin,
                 },
                 AbortSignal.timeout(20_000),
@@ -163,8 +162,7 @@ describe("pairing a machine without a local Agent", () => {
             expect(
                 await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(5_000)),
             ).toMatchObject({
-                channelId: "unattended-channel",
-                pairingId: "unattended-runtime",
+                computerId: "unattended-channel",
             });
             expect(relay.claims).toHaveLength(1);
             expect(relay.claims[0]).toMatchObject({
@@ -192,7 +190,7 @@ describe("pairing a machine without a local Agent", () => {
                 {
                     defaultWorkspace: join(stateDirectory, "workspace"),
                     pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
-                    pairingId: "unattended-pairing",
+                    computerId: "unattended-pairing",
                     relayOrigin: relay.origin,
                 },
                 AbortSignal.timeout(20_000),

@@ -362,7 +362,7 @@ describe.sequential("Platform Session-only boundary", () => {
         const computerId = text(project, "computerId");
         const pairing = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "private-reconnect-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
@@ -371,7 +371,7 @@ describe.sequential("Platform Session-only boundary", () => {
             ),
             201,
         );
-        const redemptionUrl = `${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`;
+        const redemptionUrl = `${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`;
         const claimed = await responseJson(
             await worker.fetch(
                 new Request(redemptionUrl, {
@@ -389,25 +389,23 @@ describe.sequential("Platform Session-only boundary", () => {
             200,
         );
         expect(claimed).not.toHaveProperty("appId");
-        const pairingId = text(claimed, "pairingId");
         expect(
             await responseJson(
                 await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/agents`,
-                        { headers: credentialHeaders(appCredential) },
-                    ),
+                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
+                        headers: credentialHeaders(appCredential),
+                    }),
                     environment,
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], pairingId });
+        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], computerId });
         const sessionId = "local-codex-session";
         const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         const hostResponse = await worker.fetch(
             new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/host?nativeRequestId=viewer-must-stay-live`,
+                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/host?nativeRequestId=viewer-must-stay-live`,
                 {
                     headers: { authorization: `Bearer ${appCredential}`, Upgrade: "websocket" },
                 },
@@ -444,7 +442,7 @@ describe.sequential("Platform Session-only boundary", () => {
             expect(JSON.parse(await hostMessages.next())).toEqual(rollback);
             const closeResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/sessions/session-to-close/close`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/session-to-close/close`,
                     {
                         body: "{}",
                         headers: credentialHeaders(appCredential),
@@ -483,7 +481,7 @@ describe.sequential("Platform Session-only boundary", () => {
             for (const outcome of ["idle", "busy"] as const) {
                 const activeTurnResponse = worker.fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/sessions/${sessionId}/active-turn`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/active-turn`,
                         {
                             body: JSON.stringify({ additionalDirectoryIds: [], agentId: "codex", directoryId: "root" }),
                             headers: credentialHeaders(appCredential),
@@ -778,7 +776,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
                         {
-                            body: JSON.stringify({ expiresInSeconds: 900, pairingId }),
+                            body: JSON.stringify({ expiresInSeconds: 900 }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -1076,7 +1074,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     kind: "http.request",
                     requestId: "runtime-agents",
                     method: "GET",
-                    path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/agents`,
+                    path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`,
                     headers: [["authorization", `Bearer ${appCredential}`]],
                     body: "",
                 }),
@@ -1184,7 +1182,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
                         {
-                            body: JSON.stringify({ expiresInSeconds: 900, pairingId }),
+                            body: JSON.stringify({ expiresInSeconds: 900 }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -1209,7 +1207,6 @@ describe.sequential("Platform Session-only boundary", () => {
                 issuedAtEpochMilliseconds: expect.any(Number),
                 kind: "expiring",
                 computerId,
-                pairingId,
             });
         } finally {
             daemon.close(1000, "Test complete");
@@ -1242,7 +1239,7 @@ describe.sequential("Platform Session-only boundary", () => {
         );
         const pairing = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "unattended-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
@@ -1253,7 +1250,7 @@ describe.sequential("Platform Session-only boundary", () => {
         );
         const claimed = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: [],
                         futureClientField: "unknown keys are tolerated",
@@ -1268,24 +1265,22 @@ describe.sequential("Platform Session-only boundary", () => {
             ),
             200,
         );
-        const pairingId = text(claimed, "pairingId");
         const runtimeCredential = text(claimed, "runtimeCredential");
 
         expect(
             await responseJson(
                 await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/agents`,
-                        { headers: credentialHeaders(appCredential) },
-                    ),
+                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
+                        headers: credentialHeaders(appCredential),
+                    }),
                     environment,
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [], pairingId });
+        ).toMatchObject({ agents: [], computerId });
 
         const catalogUpdate = await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/channels/${text(claimed, "channelId")}/catalog`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/channels/${text(claimed, "computerId")}/catalog`, {
                 body: JSON.stringify({ agents: [], "ignored keys are tolerated": true }),
                 headers: { authorization: `Bearer ${runtimeCredential}`, "content-type": "application/json" },
                 method: "PUT",
@@ -1296,15 +1291,14 @@ describe.sequential("Platform Session-only boundary", () => {
         expect(
             await responseJson(
                 await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/agents`,
-                        { headers: credentialHeaders(appCredential) },
-                    ),
+                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
+                        headers: credentialHeaders(appCredential),
+                    }),
                     environment,
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [], pairingId });
+        ).toMatchObject({ agents: [], computerId });
     });
 });
 
@@ -1338,7 +1332,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     const computerId = text(project, "computerId");
     const pairing = await responseJson(
         await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                 body: JSON.stringify({ idempotencyKey: `${slug}-runtime` }),
                 headers: credentialHeaders(appCredential),
                 method: "POST",
@@ -1349,7 +1343,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     );
     const claimed = await responseJson(
         await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                 body: JSON.stringify({
                     agents: readyAgents,
                     machineName: `${slug} Runtime`,
@@ -1363,7 +1357,6 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         ),
         200,
     );
-    const pairingId = text(claimed, "pairingId");
     const sessionId = `${slug}-session`;
     const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
     const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
@@ -1398,7 +1391,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             new Request(
                 `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
                 {
-                    body: JSON.stringify({ expiresInSeconds: 900, pairingId }),
+                    body: JSON.stringify({ expiresInSeconds: 900 }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 },
@@ -1430,7 +1423,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             ),
         revoke: () =>
             worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                     method: "DELETE",
                     headers: credentialHeaders(appCredential),
                 }),
@@ -1450,7 +1443,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         forkNative: (operationId: string, input: object) =>
             worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/native-session-forks/${operationId}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/native-session-forks/${operationId}`,
                     {
                         method: "POST",
                         headers: credentialHeaders(appCredential),
@@ -1466,12 +1459,11 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 readonly body?: unknown;
                 readonly credential?: string;
                 readonly computerId?: string;
-                readonly pairingId?: string;
             },
         ) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${init.computerId ?? computerId}/pairings/${init.pairingId ?? pairingId}/sessions/${sessionId}${path}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${init.computerId ?? computerId}/daemon/sessions/${sessionId}${path}`,
                     {
                         method: init.method,
                         headers: credentialHeaders(init.credential ?? appCredential),
@@ -1552,12 +1544,9 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             (
                 await responseJson(
                     await worker.fetch(
-                        new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/agents`,
-                            {
-                                headers: credentialHeaders(appCredential),
-                            },
-                        ),
+                        new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
+                            headers: credentialHeaders(appCredential),
+                        }),
                         environment,
                     ),
                     200,
@@ -1595,8 +1584,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 }),
             );
         },
-        pairingId,
-        issueRuntimeCredential: async (targetPairingId: string, issuer = appCredential) =>
+        issueRuntimeCredential: async (_targetComputerId: string, issuer = appCredential) =>
             text(
                 await responseJson(
                     await worker.fetch(
@@ -1605,7 +1593,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                             {
                                 method: "POST",
                                 headers: credentialHeaders(issuer),
-                                body: JSON.stringify({ expiresInSeconds: 900, pairingId: targetPairingId }),
+                                body: JSON.stringify({ expiresInSeconds: 900 }),
                             },
                         ),
                         environment,
@@ -1617,7 +1605,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         queryActiveTurn: async (signal: AbortSignal) =>
             worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/sessions/${sessionId}/active-turn`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/active-turn`,
                     {
                         method: "POST",
                         headers: credentialHeaders(appCredential),
@@ -1884,7 +1872,7 @@ describe.sequential("Platform Turn submission", () => {
                 const sessionCredential =
                     access === "write-only session"
                         ? await runtime.issueRuntimeCredential(
-                              runtime.pairingId,
+                              runtime.computerId,
                               await runtime.issueAppCredential(["session:write"]),
                           )
                         : undefined;
@@ -2243,12 +2231,6 @@ describe.sequential("Platform Turn submission", () => {
                     403,
                 ),
             ).toMatchObject({ error: { code: "project_access_denied" } });
-            expect(
-                await responseJson(
-                    await runtime.appSessionRequest("/events-v2", { method: "GET", pairingId: other.pairingId }),
-                    403,
-                ),
-            ).toMatchObject({ error: { code: "runtime_access_denied" } });
         } finally {
             runtime.daemon.close(1000, "Test complete");
             other.daemon.close(1000, "Test complete");
@@ -2262,10 +2244,9 @@ describe.sequential("Platform Turn submission", () => {
         const environment = bindings();
         const openHost = async (credential: string) =>
             await worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/pairings/${runtime.pairingId}/host`,
-                    { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
-                ),
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/daemon/host`, {
+                    headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" },
+                }),
                 environment,
             );
         let host: WebSocket | null = null;
@@ -2347,7 +2328,6 @@ describe.sequential("Platform Turn submission", () => {
         },
         { label: "empty event page", path: "/events-v2?limit=0", method: "GET" },
         { label: "empty event cursor", path: "/events-v2?cursor=", method: "GET" },
-        { label: "malformed Runtime target", path: "/events-v2", method: "GET", pairingId: "invalid%24runtime" },
     ])("App access reports $label as an invalid request", async (operation) => {
         const runtime = await connectRuntimeDaemon("app-invalid-request");
         try {
@@ -2586,7 +2566,7 @@ describe.sequential("Platform Turn submission", () => {
         const owner = await connectRuntimeDaemon("direct-owner");
         const other = await connectRuntimeDaemon("direct-other-project");
         try {
-            const credential = await other.issueRuntimeCredential(owner.pairingId);
+            const credential = await other.issueRuntimeCredential(owner.computerId);
             expect(
                 await responseJson(
                     await other.submitRuntimeTurn("foreign-project", () => credential, undefined, owner.computerId),
@@ -2722,7 +2702,7 @@ describe.sequential("Platform Turn submission", () => {
             expect(await responseJson(await runtime.submitRuntimeTurn("revoked"), 401)).toMatchObject({
                 error: { code: "credential_revoked" },
             });
-            const reissued = await runtime.issueRuntimeCredential(runtime.pairingId);
+            const reissued = await runtime.issueRuntimeCredential(runtime.computerId);
             const submitted = runtime.submitRuntimeTurn("reissued", () => reissued);
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 kind: "session.prompt",
@@ -2776,7 +2756,7 @@ describe.sequential("Platform Turn submission", () => {
         const computerId = text(project, "computerId");
         const pairing = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "long-prompt-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
@@ -2787,7 +2767,7 @@ describe.sequential("Platform Turn submission", () => {
         );
         const claimed = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: readyAgents,
                         machineName: "Long prompt Runtime",
@@ -2801,7 +2781,6 @@ describe.sequential("Platform Turn submission", () => {
             ),
             200,
         );
-        const pairingId = text(claimed, "pairingId");
         const sessionId = "long-prompt-session";
         const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
@@ -2818,7 +2797,7 @@ describe.sequential("Platform Turn submission", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
                         {
-                            body: JSON.stringify({ expiresInSeconds: 900, pairingId }),
+                            body: JSON.stringify({ expiresInSeconds: 900 }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -2973,7 +2952,7 @@ describe.sequential("Platform Turn submission", () => {
                 await responseJson(
                     await worker.fetch(
                         new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/sessions/${sessionId}/turns`,
+                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/sessions/${sessionId}/turns`,
                             {
                                 body: JSON.stringify({
                                     additionalDirectoryIds: [],
@@ -3043,7 +3022,7 @@ describe.sequential("Platform Turn submission", () => {
         const computerId = text(project, "computerId");
         const pairing = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "capability-gated-commands-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
@@ -3054,7 +3033,7 @@ describe.sequential("Platform Turn submission", () => {
         );
         const claimed = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: [
                             {
@@ -3079,14 +3058,13 @@ describe.sequential("Platform Turn submission", () => {
             ),
             200,
         );
-        const pairingId = text(claimed, "pairingId");
         const sessionId = "capability-gated-session";
         const sessionAccess = await responseJson(
             await worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`,
                     {
-                        body: JSON.stringify({ expiresInSeconds: 900, pairingId }),
+                        body: JSON.stringify({ expiresInSeconds: 900 }),
                         headers: credentialHeaders(appCredential),
                         method: "POST",
                     },
@@ -3101,15 +3079,14 @@ describe.sequential("Platform Turn submission", () => {
         expect(
             await responseJson(
                 await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings/${pairingId}/agents`,
-                        { headers: credentialHeaders(appCredential) },
-                    ),
+                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
+                        headers: credentialHeaders(appCredential),
+                    }),
                     environment,
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], pairingId });
+        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], computerId });
 
         // The Relay no longer decides from the catalog. It forwards the steer
         // to the Runtime, whose own rejection answers with the same
@@ -3211,7 +3188,7 @@ describe.sequential("Platform Turn submission", () => {
         const computerId = text(project, "computerId");
         const pairing = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairings`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "malformed-capabilities-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
@@ -3234,7 +3211,7 @@ describe.sequential("Platform Turn submission", () => {
         };
         const rejected = await responseJson(
             await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "pairingId")}/redeem`, {
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: [malformed],
                         machineName: "Malformed capabilities Runtime",
@@ -3643,7 +3620,7 @@ describe("Runtime prompt acknowledgements", () => {
     it("Given pending submissions, When the Runtime answers another request, Then only the reply naming each submission answers it", async () => {
         const runtime = await connectRuntimeDaemon("named-queue-change");
         try {
-            const credential = await runtime.issueRuntimeCredential(runtime.pairingId);
+            const credential = await runtime.issueRuntimeCredential(runtime.computerId);
             const queue = (idempotencyKey: string) =>
                 env.COMPUTER_RELAY.getByName(runtime.computerId).fetch(
                     new Request(

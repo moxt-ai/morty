@@ -22,7 +22,6 @@ export interface ChannelGateway {
     /** Closes the Runtime's live Session views opened with a Session credential issued no later than `revokedThrough`. */
     readonly disconnectSessionViewers: (
         computerId: string,
-        pairingId: string,
         revokedThrough: number,
         signal: AbortSignal,
     ) => Promise<void>;

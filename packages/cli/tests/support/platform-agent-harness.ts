@@ -18,9 +18,7 @@ import { memoryRuntimeCredentials } from "./runtime-credentials.ts";
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
 const runtimePairingSchema = v.object({
-    pairingId: v.string(),
     computerId: v.string(),
-    channelId: v.string(),
     pairingCode: v.string(),
 });
 
@@ -77,7 +75,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             runtimePairingSchema,
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairings`, {
+                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
                         body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                         headers: {
                             authorization: `Bearer ${options.credential}`,
@@ -93,7 +91,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             v.object({ runtimeCredential: v.string() }),
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/pairings/${pairing.pairingId}/redeem`, {
+                    new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
                         body: JSON.stringify({
                             agents: fakeAgentHarnessCatalog(harnesses),
                             machineName: "Controlled Agent harness",
@@ -113,7 +111,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         const config = createRuntimeConfig(
             {
                 credentials: memoryRuntimeCredentials(claim.runtimeCredential),
-                channelId: pairing.channelId,
+                computerId: pairing.computerId,
                 defaultWorkspace: workspace,
                 relayUrl,
             },
@@ -159,7 +157,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         return {
             client,
             failure,
-            pairingId: pairing.pairingId,
+            computerId: pairing.computerId,
             [Symbol.asyncDispose]: async () => {
                 if (disposed) {
                     return;

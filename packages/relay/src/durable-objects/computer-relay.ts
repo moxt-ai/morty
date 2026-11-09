@@ -14,6 +14,7 @@ import {
     type RequestRuntimePairing,
     type RevokeRuntime,
     type RuntimePairingRequest,
+    runtimeConnectionDurableObjectMigrations,
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
@@ -97,6 +98,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         }
         if (this.#store === null) {
             applyDurableObjectMigrations(this.ctx.storage, computerDurableObjectMigrations);
+            applyDurableObjectMigrations(this.ctx.storage, runtimeConnectionDurableObjectMigrations, "connections/");
             this.#store = new SqlitePlatformProjectStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),
@@ -171,13 +173,8 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         }
     }
 
-    async authenticateHost(
-        computerId: string,
-        channelId: string,
-        tokenHash: string,
-        now: number,
-    ): Promise<Result<"authenticateHost">> {
-        return await this.#operate(computerId).authenticateHost(channelId, tokenHash, now, uncancelled);
+    async authenticateHost(computerId: string, tokenHash: string, now: number): Promise<Result<"authenticateHost">> {
+        return await this.#operate(computerId).authenticateHost(computerId, tokenHash, now, uncancelled);
     }
 
     async isHostCredentialActive(
@@ -187,17 +184,12 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         return await this.#operate(computerId).isHostCredentialActive(identity, uncancelled);
     }
 
-    async listLinkedDevices(computerId: string, channelId: string): Promise<Result<"listLinkedDevices">> {
-        return await this.#operate(computerId).listLinkedDevices(channelId, uncancelled);
+    async listLinkedDevices(computerId: string): Promise<Result<"listLinkedDevices">> {
+        return await this.#operate(computerId).listLinkedDevices(computerId, uncancelled);
     }
 
-    async revokeLinkedDevice(
-        computerId: string,
-        channelId: string,
-        credentialId: string,
-        now: number,
-    ): Promise<boolean> {
-        return await this.#operate(computerId).revokeLinkedDevice(channelId, credentialId, now, uncancelled);
+    async revokeLinkedDevice(computerId: string, credentialId: string, now: number): Promise<boolean> {
+        return await this.#operate(computerId).revokeLinkedDevice(computerId, credentialId, now, uncancelled);
     }
 
     async createAccessGrant(computerId: string, value: CreateAccessGrant): Promise<boolean> {
@@ -216,37 +208,32 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         return await this.#operate(computerId).revokeBrowserCredential(credentialId, now, uncancelled);
     }
 
-    async updateAgentCatalog(
-        computerId: string,
-        channelId: string,
-        tokenHash: string,
-        agents: string,
-    ): Promise<boolean> {
-        return await this.#operate(computerId).updateAgentCatalog(channelId, tokenHash, agents, uncancelled);
+    async updateAgentCatalog(computerId: string, tokenHash: string, agents: string): Promise<boolean> {
+        return await this.#operate(computerId).updateAgentCatalog(computerId, tokenHash, agents, uncancelled);
     }
 
-    async isRuntimeActive(computerId: string, pairingId: string): Promise<boolean> {
-        return await this.#operate(computerId).isRuntimeActive(pairingId, uncancelled);
+    async isRuntimeActive(computerId: string): Promise<boolean> {
+        return await this.#operate(computerId).isRuntimeActive(computerId, uncancelled);
     }
 
-    async readRuntime(computerId: string, pairingId: string): Promise<Result<"readRuntime">> {
-        return await this.#operate(computerId).readRuntime(pairingId, uncancelled);
+    async readRuntime(computerId: string): Promise<Result<"readRuntime">> {
+        return await this.#operate(computerId).readRuntime(computerId, uncancelled);
     }
 
     async listRuntimes(computerId: string): Promise<Result<"listRuntimes">> {
         return await this.#operate(computerId).listRuntimes(uncancelled);
     }
 
-    async readChannel(computerId: string, channelId: string): Promise<Result<"readChannel">> {
-        return await this.#operate(computerId).readChannel(channelId, uncancelled);
+    async readChannel(computerId: string): Promise<Result<"readChannel">> {
+        return await this.#operate(computerId).readChannel(computerId, uncancelled);
     }
 
     async requestRuntimePairing(computerId: string, value: RequestRuntimePairing): Promise<RuntimePairingRequest> {
         return await this.#operate(computerId).requestRuntimePairing(value, uncancelled);
     }
 
-    async readRuntimePairing(computerId: string, pairingId: string): Promise<Result<"readRuntimePairing">> {
-        return await this.#operate(computerId).readRuntimePairing(pairingId, uncancelled);
+    async readRuntimePairing(computerId: string): Promise<Result<"readRuntimePairing">> {
+        return await this.#operate(computerId).readRuntimePairing(computerId, uncancelled);
     }
 
     async readPairingCode(computerId: string, codeHash: string): Promise<Result<"readPairingCode">> {
@@ -274,6 +261,10 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         successorHash: string,
     ): Promise<Result<"rotateRuntimeCredential">> {
         return await this.#operate(computerId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
+    }
+
+    async lastDaemonRevocation(computerId: string): Promise<number | null> {
+        return this.#operate(computerId).lastDaemonRevocation(uncancelled);
     }
 
     async recordAudit(computerId: string, audit: PlatformAuditRecord): Promise<void> {
@@ -322,12 +313,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
                 MORTY_COMPUTER_STORE: this.#operate(current.computerId),
                 MORTY_RUNTIME_EXECUTION: {
                     computerId: current.computerId,
-                    pairingId: current.pairingId,
-                    operations: createLocalSessionOperations(
-                        this.#connectionsForComputer.context,
-                        current.computerId,
-                        current.pairingId,
-                    ),
+                    operations: createLocalSessionOperations(this.#connectionsForComputer.context, current.computerId),
                 },
             };
             const response = await this.#application.fetch(request, environment);

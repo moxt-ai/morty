@@ -121,7 +121,7 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
     const config = createControlledRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "channel_environment",
+            computerId: "channel_environment",
             defaultWorkspace: workspace,
             relayUrl,
         },

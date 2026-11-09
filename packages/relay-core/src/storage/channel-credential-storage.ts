@@ -14,17 +14,17 @@ export class ChannelCredentialStorage {
     }
 
     readonly readActiveRuntime = async (
-        identity: { readonly computerId: string; readonly pairingId: string },
+        identity: { readonly computerId: string },
         signal: AbortSignal,
     ): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
         const runtimes = await database
-            .select({ pairingId: pairedDaemon.pairingId })
+            .select({ computerId: pairedDaemon.computerId })
             .from(pairedDaemon)
-            .innerJoin(runtimeRegistration, eq(runtimeRegistration.pairingId, pairedDaemon.pairingId))
+            .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
             .where(
                 and(
-                    eq(pairedDaemon.pairingId, identity.pairingId),
+                    eq(pairedDaemon.computerId, identity.computerId),
                     eq(pairedDaemon.computerId, identity.computerId),
                     isNull(pairedDaemon.revokedAt),
                 ),
@@ -38,12 +38,12 @@ export class ChannelCredentialStorage {
         const credentials = await database
             .select({ credentialId: channelHostCredential.credentialId })
             .from(channelHostCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.channelId, channelHostCredential.channelId))
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, channelHostCredential.computerId))
             .where(
                 and(
                     eq(channelHostCredential.credentialId, identity.credentialId),
-                    eq(channelHostCredential.channelId, identity.channelId),
-                    eq(pairedDaemon.pairingId, identity.pairingId),
+                    eq(channelHostCredential.computerId, identity.computerId),
+                    eq(pairedDaemon.computerId, identity.computerId),
                     eq(pairedDaemon.computerId, identity.computerId),
                     hostCredentialValid(database),
                 ),

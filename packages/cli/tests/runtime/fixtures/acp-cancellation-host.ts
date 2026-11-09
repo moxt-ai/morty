@@ -108,7 +108,7 @@ if (address === null || typeof address === "string") {
 }
 const config = createRuntimeConfig(
     {
-        channelId: "cancellation-test",
+        computerId: "cancellation-test",
         defaultWorkspace: join(directory, "workspace"),
         relayUrl: new URL(`ws://127.0.0.1:${address.port}/daemon`),
         credentials: memoryRuntimeCredentials("r".repeat(43)),

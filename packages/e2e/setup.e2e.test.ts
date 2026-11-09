@@ -30,7 +30,7 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(statuses.indexOf("runtime_online")).toBeLessThan(statuses.indexOf("binding_activated"));
     expect(connected.configuration).toHaveProperty("pairing", { kind: "none" });
     expect(connected.configuration).not.toHaveProperty("pairing_key");
-    expect(connected.configuration).not.toHaveProperty("expected_pairing_id");
+    expect(connected.configuration).not.toHaveProperty("expected_computer_id");
     expect(connected.configuration).not.toHaveProperty("runtime_process");
     const ready = connected.events.find((event) => event["status"] === "ready");
     expect(ready).not.toHaveProperty("qrDataUrl");

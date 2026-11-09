@@ -203,7 +203,7 @@ interface CatalogRelay {
     readonly waitForCatalogPutCountAtLeast: (n: number) => Promise<void>;
     readonly close: () => Promise<void>;
     readonly socket: Promise<Duplex>;
-    readonly url: (channelId: string) => URL;
+    readonly url: (computerId: string) => URL;
 }
 
 /** Accepts the daemon WebSocket and records every catalog publication, like the real Relay would. */
@@ -294,8 +294,8 @@ async function createCatalogRelay(): Promise<CatalogRelay> {
             return gate;
         },
         socket: socketReady.promise,
-        url: (channelId: string) => {
-            const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/${channelId}/daemon`);
+        url: (computerId: string) => {
+            const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/${computerId}/daemon`);
             return relayUrl;
         },
         waitForCatalogPutCountAtLeast: (n: number) => {
@@ -347,7 +347,7 @@ test("Given the daemon started before an Agent was installed, When the Relay req
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "channel_catalog",
+            computerId: "channel_catalog",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -434,7 +434,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "channel_catalog_race",
+            computerId: "channel_catalog_race",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -552,7 +552,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "channel_catalog_reply",
+            computerId: "channel_catalog_reply",
             defaultWorkspace: workspace,
             relayUrl,
         },

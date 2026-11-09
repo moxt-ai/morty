@@ -10,7 +10,6 @@ const claimsSchema = z
         issuedAtEpochMilliseconds: z.number().int().nonnegative(),
         computerId: identifierStringSchema,
         purpose: z.literal("session-access"),
-        pairingId: identifierStringSchema,
         sessionId: identifierStringSchema,
     })
     .readonly();

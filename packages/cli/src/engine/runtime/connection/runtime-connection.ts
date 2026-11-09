@@ -1,7 +1,6 @@
 export interface RuntimeConnectionInput {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly defaultWorkspace: string;
-    readonly pairingId: string;
     readonly relayOrigin: URL;
     readonly runtimeCredential: string;
 }
@@ -12,11 +11,10 @@ export type RuntimeConnectionActivation = "active" | "stopped";
 export class VerifiedRuntimeConnection {
     readonly kind = "verified";
     readonly activation: RuntimeConnectionActivation;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly connectionId: string;
     readonly defaultWorkspace: string;
     readonly installationId: string;
-    readonly pairingId: string;
     readonly relayOrigin: URL;
     /**
      * The credential issued when the connection was paired. It rotates on every connection, so the credential the
@@ -28,18 +26,16 @@ export class VerifiedRuntimeConnection {
         activation: RuntimeConnectionActivation,
         installationId: string,
         connectionId: string,
-        channelId: string,
+        computerId: string,
         defaultWorkspace: string,
-        pairingId: string,
         relayOrigin: URL,
         runtimeCredential: string,
     ) {
         this.activation = activation;
-        this.channelId = channelId;
+        this.computerId = computerId;
         this.connectionId = connectionId;
         this.defaultWorkspace = defaultWorkspace;
         this.installationId = installationId;
-        this.pairingId = pairingId;
         this.relayOrigin = relayOrigin;
         this.runtimeCredential = runtimeCredential;
     }
