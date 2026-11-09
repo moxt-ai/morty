@@ -733,6 +733,7 @@ export function createSessionPaneModel(options: {
                     change.interactions satisfies never;
             }
         };
+        let executionPosition: SessionExecutionSnapshot["executionPosition"];
         /** Reads the Runtime's execution snapshot, observes it and returns it. */
         const readExecution = async (
             connected: MortyClient,
@@ -749,6 +750,15 @@ export function createSessionPaneModel(options: {
                 deliveryCommandId ?? undefined,
             );
             signal.throwIfAborted();
+            if (
+                snapshot.executionPosition !== undefined &&
+                executionPosition !== undefined &&
+                snapshot.executionPosition.sessionGenerationId === executionPosition.sessionGenerationId &&
+                BigInt(snapshot.executionPosition.throughPosition) < BigInt(executionPosition.throughPosition)
+            ) {
+                return snapshot;
+            }
+            executionPosition = snapshot.executionPosition;
             observeExecution(
                 { kind: "snapshot", snapshot, turnAtRead, deliveryCommandId, readAt: Date.now() },
                 { queued: new Set(snapshot.queued.map((queued) => queued.commandId)), acceptedBefore },
@@ -1053,6 +1063,33 @@ export function createSessionPaneModel(options: {
                         fact: SessionLifecycleFact,
                         event: SessionLiveEvent,
                     ): Promise<void> => {
+                        if (
+                            fact.kind !== "none" &&
+                            fact.kind !== "interaction-requested" &&
+                            fact.kind !== "permission-resolved" &&
+                            fact.kind !== "elicitation-resolved"
+                        ) {
+                            if (
+                                executionPosition !== undefined &&
+                                executionPosition.sessionGenerationId !== event.sessionGenerationId
+                            ) {
+                                await readExecution(connected, get().turn, signal);
+                            }
+                            if (
+                                executionPosition !== undefined &&
+                                (executionPosition.sessionGenerationId !== event.sessionGenerationId ||
+                                    BigInt(event.position) <= BigInt(executionPosition.throughPosition))
+                            ) {
+                                return;
+                            }
+                            // Unversioned peers keep the existing reconciliation path.
+                            if (executionPosition !== undefined) {
+                                executionPosition = {
+                                    sessionGenerationId: event.sessionGenerationId,
+                                    throughPosition: event.position,
+                                };
+                            }
+                        }
                         switch (fact.kind) {
                             case "interaction-requested":
                             case "permission-resolved":

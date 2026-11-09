@@ -58,39 +58,45 @@ export class SessionTurns {
         }
     };
 
-    readonly executionSnapshot = async (matches: (command: SessionPromptCommand) => Promise<boolean>) => {
-        for (const session of this.#bySessionId.values()) {
-            const matching: ActiveRuntimeTurn[] = [];
-            for (const turn of session.turns()) {
-                if (await matches(turn.command)) {
-                    matching.push(turn);
+    /** Resolve identities first, then read every execution projection in one synchronous step. */
+    readonly executionSnapshot = async <T>(
+        sessionId: string,
+        matches: (command: SessionPromptCommand) => Promise<boolean>,
+        read: (snapshot: {
+            readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>;
+            readonly queued: QueuedTurnSnapshot;
+        }) => T,
+        signal: AbortSignal,
+    ): Promise<T> => {
+        const matched = new Map<ActiveRuntimeTurn, boolean>();
+        for (;;) {
+            signal.throwIfAborted();
+            const current = this.#bySessionId.get(sessionId)?.turns() ?? [];
+            const unresolved = current.filter((turn) => !matched.has(turn));
+            if (unresolved.length > 0) {
+                for (const turn of unresolved) {
+                    matched.set(turn, await matches(turn.command));
                 }
-            }
-            // The snapshot reports the first matching running turn; candidates that
-            // settled during the asynchronous match are excluded, and queued entries
-            // must each match the caller's execution identity: a sessionId alone
-            // does not establish agent or directory equality.
-            const current = matching.filter(
-                (turn) => this.get(turn.command.commandId, turn.command.sessionId) === turn,
-            );
-            const turnSnapshot = current.map((turn) => turn.snapshot()).find((snapshot) => snapshot !== null);
-            if (turnSnapshot === undefined && current.length === 0) {
+                // A command may arrive or settle during directory resolution. Re-read the live index.
                 continue;
             }
-            const queued: QueuedTurnSnapshot[number][] = [];
-            for (const candidate of current) {
-                if (!candidate.isQueued()) {
-                    continue;
-                }
-                queued.push({
+            const matching = current.filter((turn) => matched.get(turn) === true);
+            const turn =
+                matching.map((candidate) => candidate.snapshot()).find((snapshot) => snapshot !== null) ?? null;
+            const queued = matching
+                .filter(
+                    (candidate) =>
+                        candidate.isQueued() &&
+                        !this.#operations.isTerminalExecution(candidate.command.commandId, sessionId),
+                )
+                .map((candidate) => ({
                     commandId: candidate.command.commandId,
                     prompt: candidate.command.prompt,
                     attachments: candidate.command.attachments,
-                });
-            }
-            return { turn: turnSnapshot ?? null, queued };
+                }));
+            // No await between reading the turns and the caller's receipts, interactions and event position.
+            return read({ turn, queued });
         }
-        return { turn: null, queued: [] };
     };
 
     readonly admitAndWait = async (

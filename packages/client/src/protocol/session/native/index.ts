@@ -197,6 +197,15 @@ const nativeSessionResultSchema = z.discriminatedUnion("action", [
                 )
                 .readonly(),
             turn: activeTurnSnapshotSchema.nullable(),
+            // The whole execution read covers this prefix of the Session event log.
+            // Older Runtimes and relays omit it; callers retain the unversioned behavior.
+            executionPosition: z
+                .object({
+                    sessionGenerationId: identifier,
+                    throughPosition: z.string().regex(/^(0|[1-9][0-9]*)$/),
+                })
+                .readonly()
+                .optional(),
             // Null when this Runtime has no retained Session for the requested identity.
             interactionState: sessionInteractionSnapshotSchema.nullable(),
             // Present only when the request named a command.
