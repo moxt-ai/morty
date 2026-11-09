@@ -398,12 +398,13 @@ for (const configured of [false, true]) {
     }) => {
         const nativeSessionId = crypto.randomUUID();
         await using fixture = await createChatFixture(cloud, undefined, new Set([nativeSessionId]));
-        await using bound = configured ? await cloud.connectAgent(fixture.computerId) : null;
+        await using bound = configured ? await createChatFixture(cloud) : null;
+        const owner = bound ?? fixture;
         if (bound !== null) {
             expect(
                 (
-                    await fixture.request(`chat/bots/${fixture.botId}/setup`, {
-                        runtimeId: bound.runtimeId,
+                    await owner.request(`chat/bots/${owner.botId}/setup`, {
+                        runtimeId: bound.runtime.runtimeId,
                         agentRef: "codex",
                     })
                 ).status,
@@ -428,7 +429,7 @@ for (const configured of [false, true]) {
         ];
         const responses = [];
         for (const { path, input } of paths) {
-            const response = await fixture.request(`chat/bots/${fixture.botId}/${path}`, input);
+            const response = await owner.request(`chat/bots/${owner.botId}/${path}`, input);
             responses.push({ path, status: response.status, body: await response.json() });
         }
         expect.soft(responses).toMatchObject(
@@ -443,10 +444,10 @@ for (const configured of [false, true]) {
             .toEqual(before);
         if (!configured) {
             expect(
-                (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+                (await owner.request(`chat/bots/${owner.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
             ).toBe(202);
         }
-        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        const managed = await owner.request(`chat/bots/${owner.botId}/managed-sessions`, {});
         expect(managed.status).toBe(200);
         expect(await managed.json()).toEqual({ sessions: [] });
     });

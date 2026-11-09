@@ -1,19 +1,12 @@
-import { DurableObject } from "cloudflare:workers";
-import * as v from "valibot";
+import { ComputerRelay as ProductionComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
 import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
-import { ComputerChat } from "../../src/components/project/computer-chat.ts";
-import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../../src/infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
 import { managedBot } from "../../src/schema/project-do/index.ts";
 
 export { ChatWebSocketDurableObject, default } from "../../src/index.ts";
 
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
-export class ComputerRelay extends DurableObject<CloudBindings> {
-    readonly #chat = new ComputerChat(this.ctx.storage, (id) =>
-        v.parse(durableObjectNamespaceBindingSchema(), this.env.COMPUTER_RELAY).idFromName(id).equals(this.ctx.id),
-    );
-
+export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
         if (request.url === "https://computer.internal/incomplete-bootstrap" && request.method === "DELETE") {
             // Reconstruct an interrupted bootstrap: the credential committed, but the mapping and Machine did not.
@@ -48,6 +41,6 @@ export class ComputerRelay extends DurableObject<CloudBindings> {
                     .map((row) => row.kind),
             );
         }
-        return await this.#chat.fetch(request, this.env);
+        return await super.fetch(request);
     }
 }

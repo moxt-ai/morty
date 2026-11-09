@@ -18,7 +18,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         ...(loseTurnResponses ? { loseTurnResponses: true as const } : {}),
         ...(delayExecutionReads ? { delayExecutionReads: true as const } : {}),
         platformAllowedOrigins: new Set(["*"]),
-        workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
+        workerEntryPoint: resolve(process.cwd(), "../worker/tests/support/credential-storage-worker.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
     const origin = cloud.origin;
