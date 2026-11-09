@@ -806,7 +806,9 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         client.events.list(access.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
-    const revoked = await fixture.request("identity/revoke-all-access", {});
+    const revoked = await fixture.request("identity/revoke-all-access", {
+        successor: `morty_anon_v1_${"A".repeat(43)}`,
+    });
     expect(revoked.status).toBe(200);
     expect(await revoked.json()).toEqual({ status: "access_revoked", sessionAccess: "revoked" });
 
@@ -877,7 +879,9 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     );
     expect(await nextFrame()).toMatchObject({ kind: "event", subscriptionId: "statuses" });
 
-    expect((await fixture.request("identity/revoke-all-access", {})).status).toBe(200);
+    expect(
+        (await fixture.request("identity/revoke-all-access", { successor: `morty_anon_v1_${"A".repeat(43)}` })).status,
+    ).toBe(200);
     await fixture.runtime.client.turns.submitToRuntime(
         target,
         {

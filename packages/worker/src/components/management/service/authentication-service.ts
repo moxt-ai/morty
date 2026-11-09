@@ -344,7 +344,39 @@ export class AuthenticationService {
         }
     };
 
+    /** Revokes all access, and replaces the machine's own credential with `successor` so a copy of it ends too. */
     readonly revokeAllAccess = async (
+        token: string | undefined,
+        successor: string,
+        signal: AbortSignal,
+    ): Promise<
+        | { readonly kind: "revoked"; readonly sessionAccess: IssuedSessionAccess }
+        | { readonly kind: "unauthenticated" | "forbidden" }
+    > => {
+        const access = await this.authorize(token, "revokeAllAccess", signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
+        }
+        if (
+            !(await this.identities.revokeAllAccess(
+                access.credential.userId,
+                access.token,
+                successor,
+                Date.now(),
+                signal,
+            ))
+        ) {
+            return { kind: "unauthenticated" };
+        }
+        // Revoked access can no longer obtain Session credentials; those it already holds end only at the Platform.
+        return { kind: "revoked", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+    };
+
+    /**
+     * Revokes all access except the machine's own credential. Project replacement keeps it until setup has saved the
+     * successor Project's identity, and then ends it.
+     */
+    readonly revokeOtherAccess = async (
         token: string | undefined,
         signal: AbortSignal,
     ): Promise<
@@ -356,7 +388,6 @@ export class AuthenticationService {
             return refused(access);
         }
         await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
-        // Revoked access can no longer obtain Session credentials; those it already holds end only at the Platform.
         return { kind: "revoked", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
     };
 
