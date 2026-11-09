@@ -159,7 +159,7 @@ test("Given a device that shared links before and after renewing its credential,
 
     const removed = await request(`/identity/v1/devices/${device.id}`, owner.token, "DELETE");
     expect(removed.status).toBe(200);
-    expect(await removed.json()).toMatchObject({ sessionAccess: "revoked" });
+    expect(await removed.json()).toEqual({ status: "device_access_ended" });
     expect((await request("/session", renewed)).status).toBe(401);
     expect((await redeem(unusedBeforeRenewal)).status).toBe(410);
     expect((await redeem(unusedAfterRenewal)).status).toBe(410);

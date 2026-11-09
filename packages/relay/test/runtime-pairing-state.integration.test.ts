@@ -368,7 +368,7 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
 });
 
-it("revoking a pairing invalidates its daemon credential after the same computer pairs again", async () => {
+it("Given a Runtime and a Session credential issued before its owner revoked it, When the computer is paired again, Then neither the old daemon credential nor that Session credential is accepted", async () => {
     const app = await project();
     const original = await app.pair("original");
     const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });

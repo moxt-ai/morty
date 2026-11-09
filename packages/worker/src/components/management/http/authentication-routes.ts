@@ -237,15 +237,7 @@ export function createAuthenticationRoutes() {
                 );
                 switch (result.kind) {
                     case "revoked":
-                        if (result.sessionAccess.kind === "unconfirmed") {
-                            context.env.logger.warn(
-                                { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
-                                "Revoked access did not reach the Session credentials already issued",
-                            );
-                        }
-                        return json({ status: "access_revoked", sessionAccess: result.sessionAccess.kind }, 200, {
-                            "Cache-Control": "no-store",
-                        });
+                        return json({ status: "access_revoked" }, 200, { "Cache-Control": "no-store" });
                     case "unauthenticated":
                         throw new ManagementError("UNAUTHENTICATED", "Local identity is required.", 401);
                     case "forbidden":
@@ -264,19 +256,7 @@ export function createAuthenticationRoutes() {
             );
             switch (result.kind) {
                 case "ended":
-                    if (result.sessionAccess.kind === "unconfirmed") {
-                        context.env.logger.warn(
-                            { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
-                            "Disconnected browsers did not reach the Session credentials already issued",
-                        );
-                    }
-                    return json(
-                        { status: "other_browser_access_ended", sessionAccess: result.sessionAccess.kind },
-                        200,
-                        {
-                            "Cache-Control": "no-store",
-                        },
-                    );
+                    return json({ status: "other_browser_access_ended" }, 200, { "Cache-Control": "no-store" });
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
                 case "forbidden":
@@ -295,15 +275,7 @@ export function createAuthenticationRoutes() {
             );
             switch (result.kind) {
                 case "ended":
-                    if (result.sessionAccess.kind === "unconfirmed") {
-                        context.env.logger.warn(
-                            { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
-                            "A disconnected device did not reach the Session credentials already issued",
-                        );
-                    }
-                    return json({ status: "device_access_ended", sessionAccess: result.sessionAccess.kind }, 200, {
-                        "Cache-Control": "no-store",
-                    });
+                    return json({ status: "device_access_ended" }, 200, { "Cache-Control": "no-store" });
                 case "own":
                     throw new ManagementError(
                         "OWN_DEVICE",

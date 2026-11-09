@@ -9,7 +9,7 @@ import {
     ProjectRowSchema,
 } from "../entity/platform-records.ts";
 import type { PlatformProjectStores } from "../infra/platform-project-store.ts";
-import { machineAccessRevocation, machineAccount, machineAccountGrant, serviceCredential } from "../schema/d1/index.ts";
+import { machineAccount, machineAccountGrant, serviceCredential } from "../schema/d1/index.ts";
 import { waitForD1 } from "./d1-operation.ts";
 import { decodeOptionalStorageRecord } from "./decode-storage-record.ts";
 import { platformDrizzle } from "./platform-drizzle-database.ts";
@@ -89,50 +89,18 @@ export class PlatformControlPlaneStorage {
     };
 
     /**
-     * Records that the Project revoked its Session credentials at `revokedAt`. The latest revocation is kept, so retries
-     * and overlapping revocations converge. Returns the Project's latest revocation time.
+     * Records that the Project revoked its Session credentials at `revokedAt`, in the Project's own storage, and returns
+     * its latest revocation.
      */
     readonly recordSessionAccessRevocation = async (
         computerId: string,
         revokedAt: number,
         signal: AbortSignal,
-    ): Promise<number> => {
-        const rows = await waitForD1(
-            () =>
-                platformDrizzle(this.#database)
-                    .insert(machineAccessRevocation)
-                    .values({ computerId, revokedAt })
-                    .onConflictDoUpdate({
-                        target: machineAccessRevocation.computerId,
-                        set: {
-                            revokedAt: sql`max(${machineAccessRevocation.revokedAt}, excluded.revoked_at)`,
-                        },
-                    })
-                    .returning({ revokedAt: machineAccessRevocation.revokedAt }),
-            signal,
-        );
-        const row = rows[0];
-        if (row === undefined) {
-            throw new Error("The Session access revocation was not recorded");
-        }
-        return row.revokedAt;
-    };
+    ): Promise<number> => await this.#projects.forProject(computerId).revokeSessionAccess(revokedAt, signal);
 
     /** The latest time the Project revoked its Session credentials, or null when it never did. */
-    readonly readSessionAccessRevocation = async (computerId: string, signal: AbortSignal): Promise<number | null> => {
-        const rows = await waitForD1(
-            () =>
-                platformDrizzle(this.#database)
-                    .select({ revokedAt: machineAccessRevocation.revokedAt })
-                    .from(machineAccessRevocation)
-                    .where(eq(machineAccessRevocation.computerId, computerId))
-                    .limit(1),
-            signal,
-        );
-        const sessionCutoff = rows[0]?.revokedAt ?? null;
-        const daemonCutoff = await this.#projects.forProject(computerId).lastDaemonRevocation(signal);
-        return sessionCutoff === null ? daemonCutoff : Math.max(sessionCutoff, daemonCutoff ?? 0);
-    };
+    readonly readSessionAccessRevocation = async (computerId: string, signal: AbortSignal): Promise<number | null> =>
+        await this.#projects.forProject(computerId).readSessionAccessRevocation(signal);
 
     /** The authoritative grant list is owned by the credential in D1. */
     readonly scopedProjects = async (

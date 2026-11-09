@@ -2,12 +2,7 @@ import { NativeSessionMap, sameNativeSession } from "@morty-build/client/native-
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type {
-    IdentityTransfer,
-    LinkedDevice,
-    OpenWindowsAfterDisconnect,
-    SharingTerms,
-} from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityTransfer, LinkedDevice, SharingTerms } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -139,10 +134,8 @@ export function createChatWorkspace(options: {
     readonly accessExpiresAt?: ((signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly linkedDevices?: ((signal: AbortSignal) => Promise<readonly LinkedDevice[]>) | undefined;
     readonly waitForLinkedDevicesChange?: ((signal: AbortSignal) => Promise<void>) | undefined;
-    readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>) | undefined;
-    readonly endDeviceAccess?:
-        | ((deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>)
-        | undefined;
+    readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
+    readonly endDeviceAccess?: ((deviceId: string, signal: AbortSignal) => Promise<void>) | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserRelay: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;

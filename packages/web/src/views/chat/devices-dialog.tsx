@@ -211,8 +211,6 @@ export function DevicesDialog({
                         {state.disconnected.kind === "device"
                             ? `${state.disconnected.name} can no longer use your computer.`
                             : "Other devices can no longer use your computer, and links you shared that no one opened stop working."}
-                        {state.disconnected.openWindows === "unconfirmed" &&
-                            " Chat windows already open on them may keep working for up to 15 minutes; disconnecting again retries closing them."}
                     </p>
                 )}
 

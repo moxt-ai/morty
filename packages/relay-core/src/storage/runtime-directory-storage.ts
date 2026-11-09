@@ -15,7 +15,9 @@ import {
     daemonCredential,
     retiredDaemonCredential,
     runtimePairingRequest,
+    sessionAccessRevocation,
 } from "../schema/project-do/index.ts";
+import { keepLatestSessionAccessRevocation } from "./session-access-revocation-storage.ts";
 
 const identityFields = {
     computer_id: computer.computerId,
@@ -397,7 +399,24 @@ export class RuntimeDirectoryStorage {
             FROM computer WHERE computer_id = ? AND revoked_at IS NOT NULL AND changes() = 1
             ON CONFLICT DO NOTHING`)
             .bind(value.auditId, value.actorKind, value.actorId, value.computerId);
-        const results = await this.#database.batch([this.statement(revocation), audit], signal);
+        // Revoking the Runtime also revokes the Session credentials issued until then. That record outlives the
+        // computer's revocation, which pairing it again clears.
+        const sessionAccess = database
+            .insert(sessionAccessRevocation)
+            .select(
+                database
+                    .select({
+                        computerId: computer.computerId,
+                        revokedAt: sql<number>`${computer.revokedAt}`.as("revoked_at"),
+                    })
+                    .from(computer)
+                    .where(and(identity, isNotNull(computer.revokedAt))),
+            )
+            .onConflictDoUpdate(keepLatestSessionAccessRevocation);
+        const results = await this.#database.batch(
+            [this.statement(revocation), audit, this.statement(sessionAccess)],
+            signal,
+        );
         // All writers preserve the first revocation time. Reading the committed
         // fact also makes overlapping retries return that same timestamp.
         return results[0]?.meta.changes === 1 ? this.readRuntime(value.computerId, signal) : null;
