@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
@@ -133,3 +134,79 @@ test.each(["current", "another service origin", "retired configuration", "ambigu
         });
     },
 );
+
+test("Given the answer to setup's Runtime pairing is lost, When setup runs again, Then the Machine is bound to the Runtime of that same pairing", {
+    timeout: 60_000,
+}, async () => {
+    await using cleanup = new AsyncDisposableStack();
+    const fixture = await createIdentityFixture({
+        listenOnLoopback: true,
+        workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
+    });
+    cleanup.defer(() => fixture.close());
+    const network = await createResponseLossProxy(fixture.origin);
+    cleanup.defer(() => network.close());
+    // Setup reaches the Worker through a network that can lose one answer; the Worker serves that origin.
+    await fixture.changeAppOrigin(network.origin);
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-pairing-")));
+    cleanup.defer(() => rm(directory, { recursive: true, force: true }));
+    const state = join(directory, "state");
+    const workspace = join(directory, "workspace");
+    await mkdir(workspace);
+    const runtime = new ControlledSetupRuntime({ agentId: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    cleanup.defer(() => runtime.disconnect());
+    let time = Date.parse("2026-10-30T00:00:00Z");
+    const run = async () =>
+        await runSetup(
+            [
+                "setup",
+                "--base-url",
+                network.origin,
+                "--cwd",
+                workspace,
+                "--harness",
+                "codex",
+                "--session-id",
+                "native-pairing",
+            ],
+            {
+                state,
+                runtime,
+                agentEnvironment: {},
+                signal: AbortSignal.timeout(40_000),
+                clock: {
+                    now: () => new Date(time),
+                    wait: async (milliseconds, signal) => {
+                        signal.throwIfAborted();
+                        time += milliseconds;
+                    },
+                },
+                emit: () => undefined,
+            },
+        );
+
+    const lost = network.interruptNextRuntimePairing();
+    expect(await run()).not.toBe(0);
+    const pairing = await lost;
+    expect(pairing.status).toBe(201);
+    const lostPairing = v.parse(v.object({ runtimeId: v.string(), pairingId: v.string() }), JSON.parse(pairing.body));
+    const pairedRuntime = lostPairing.runtimeId;
+
+    expect(await run()).toBe(0);
+    const saved = v.parse(
+        v.object({ identity: v.object({ user_token: v.string(), project_id: v.string() }) }),
+        JSON.parse(await readFile(join(state, "config.json"), "utf8")),
+    );
+    const machine = await fetch(`${fixture.origin}/morty/api/projects/${saved.identity.project_id}/management/bot`, {
+        headers: { authorization: `Bearer ${saved.identity.user_token}` },
+    });
+    const actual: unknown = await machine.json();
+    const original = await fetch(
+        `${fixture.origin}/morty/api/projects/${saved.identity.project_id}/management/runtime-pairings/${lostPairing.pairingId}`,
+        { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
+    );
+    expect(original.status).toBe(200);
+    const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
+    expect(originalStatus).toBe("paired");
+    expect(actual).toMatchObject({ runtimeId: pairedRuntime });
+});
