@@ -28,10 +28,8 @@ it("Given two clients holding one configuration revision, When they edit concurr
         );
         expect(ready.configurationRevision).toEqual(expect.any(String));
         const edit = {
-            harness: "claude",
             booleanValue: false,
             configId: "model",
-            directory: ".",
             expectedConfigurationRevision: ready.configurationRevision,
             value: "test-large",
             valueType: "select" as const,

@@ -75,8 +75,6 @@ test("Given a Codex turn whose subagent thread reports on the same connection, W
                     kind: "session.prompt",
                     commandId,
                     target: peer.target,
-                    harness: "codex",
-                    directory: ".",
                     attachments: [],
                     prompt: "Delegate the work to a subagent",
                     disposition: SessionPromptDisposition.Append,

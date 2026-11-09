@@ -46,9 +46,7 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
             async (peer) => {
                 peer.send(
                     encodeSessionPromptCommand({
-                        harness: "codex",
                         commandId: randomUUID(),
-                        directory,
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

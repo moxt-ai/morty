@@ -104,9 +104,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    harness: "codex",
                     commandId,
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

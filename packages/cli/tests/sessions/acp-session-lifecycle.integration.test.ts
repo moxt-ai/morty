@@ -922,7 +922,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         },
     );
 
-    it("Given a harness owns an empty conversation, When another harness is selected, Then the old pair cannot be rebound and the new harness creates its own conversation", async () => {
+    it("Given a harness owns an empty conversation, When another harness is selected, Then the new harness creates its own conversation", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -973,19 +973,11 @@ child.once("exit", (code) => process.exit(code ?? 84));
         );
 
         try {
-            const target = await manager.createNativeSession({
+            await manager.createNativeSession({
                 agent: codex,
                 cwd: process.cwd(),
                 signal: new AbortController().signal,
             });
-            await expect(
-                manager.prepareSession({
-                    agent: claude,
-                    cwd: process.cwd(),
-                    target,
-                    signal: new AbortController().signal,
-                }),
-            ).rejects.toMatchObject({ code: "session_identity_mismatch" });
             const selected = await manager.createNativeSession({
                 agent: claude,
                 cwd: process.cwd(),
@@ -1614,89 +1606,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                 }
             }
             await rm(temporaryDirectory, { force: true, recursive: true });
-        }
-    });
-
-    it("Given an existing Agent conversation, When a caller changes its Agent identity, Then the local boundary rejects the request", async () => {
-        const manager = new SessionManager({
-            observer: new NullSessionObserver(),
-            store: new MemorySessionStore(),
-            adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
-                new UnretainedExternalContentStore().put({
-                    bytes: content.bytes,
-                    kind: content.kind,
-                    mediaType: content.mediaType,
-                    name: content.name,
-                    target: sessionTarget,
-                    signal,
-                }),
-            ),
-            timer: systemTimer,
-            maxProcesses: null,
-        });
-        const codex = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
-            (options) =>
-                new ControlledAcpConnection(
-                    {
-                        harness: "codex",
-                        adapterPath: process.execPath,
-                        arguments: [fakeAgentPath],
-                        environment: options.environment,
-                    },
-                    options,
-                ),
-        );
-        const claude = new AcpAgentDefinition(
-            "claude",
-            "Claude Code",
-            process.execPath,
-            (options) =>
-                new ControlledAcpConnection(
-                    {
-                        harness: "claude",
-                        adapterPath: process.execPath,
-                        arguments: [fakeAgentPath],
-                        environment: options.environment,
-                    },
-                    options,
-                ),
-        );
-
-        try {
-            const target = await manager.createNativeSession({
-                agent: codex,
-                cwd: process.cwd(),
-                signal: AbortSignal.timeout(10_000),
-            });
-            await manager.runPrompt({
-                agent: codex,
-                commandId: "command-locked-first",
-                cwd: process.cwd(),
-                images: [],
-                prompt: "first",
-                resources: [],
-                target,
-                signal: new AbortController().signal,
-            });
-            await expect(
-                manager.runPrompt({
-                    agent: claude,
-                    commandId: "command-locked-second",
-                    cwd: process.cwd(),
-                    images: [],
-                    prompt: "second",
-                    resources: [],
-                    target,
-                    signal: new AbortController().signal,
-                }),
-            ).rejects.toMatchObject({ code: "session_identity_mismatch" });
-        } finally {
-            await manager.close();
         }
     });
 

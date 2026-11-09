@@ -436,7 +436,6 @@ test.for([
                 sendText(
                     await socketReady.promise,
                     encodeSessionPreviewHistoryPageLoad({
-                        harness,
                         directory: ".",
                         kind: "session.preview-history.page.load",
                         requestId: "preview-after-agent-upgrade",

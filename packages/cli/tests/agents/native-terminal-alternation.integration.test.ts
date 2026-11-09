@@ -89,8 +89,6 @@ async function promptFromMorty(
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            harness: sessionTarget.harness,
-            directory: ".",
             attachments: [],
             prompt,
             disposition: SessionPromptDisposition.Append,

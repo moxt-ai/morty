@@ -12,6 +12,7 @@ import {
     decodeSessionHistoryPageLoaded,
     decodeSessionInfoUpdatedEvent,
     decodeSessionPermissionRequestedEvent,
+    decodeSessionPromptAcceptedEvent,
     decodeSessionReadyEvent,
     decodeSessionRestoredEvent,
     decodeSessionStatusChangedEvent,
@@ -33,6 +34,7 @@ import {
     SESSION_INFO_UPDATED_KIND,
     SESSION_PERMISSION_REQUESTED_KIND,
     SESSION_PERMISSION_RESOLVED_KIND,
+    SESSION_PROMPT_ACCEPTED_KIND,
     SESSION_QUERIED_KIND,
     SESSION_READY_KIND,
     SESSION_RESTORED_KIND,
@@ -153,9 +155,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
         const submittedAt = Date.now();
         socket.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId: "interaction_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -172,8 +172,6 @@ test("Given a newly created native Session, When its first Turn resolves interac
             socket.send(
                 encodeNativeSessionRequest({
                     action: "active-turn",
-                    harness: "claude",
-                    directory: ".",
                     kind: "native.session.request",
                     requestId,
                     target: sessionTarget,
@@ -326,9 +324,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId: "announced_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -434,9 +430,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId: "null_input_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -542,9 +536,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId: "orphan_update_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -744,9 +736,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
             initial.socket.send(
                 encodeSessionPromptCommand({
-                    harness: "codex",
                     commandId: "initial_turn",
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -832,7 +822,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
     }
 }, 30_000);
 
-test("Given queued prompts from the running Agent identity and another one, When an active-turn snapshot is taken for the running identity, Then it reports its own queued prompt with that prompt's files and excludes the foreign one", async () => {
+test("Given a running turn and a queued prompt with a file, When an active-turn snapshot names only the Session, Then it reports the queued prompt with that prompt's files", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-queued-identity-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
@@ -864,25 +854,6 @@ test("Given queued prompts from the running Agent identity and another one, When
             MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent"),
         },
     );
-    const otherAgent = new AcpAgentDefinition(
-        "codex",
-        "Codex",
-        process.execPath,
-        (options) =>
-            new ControlledAcpConnection(
-                {
-                    harness: "codex",
-                    adapterPath: process.execPath,
-                    arguments: [fakeAgentPath, "--agent-name", "Codex"],
-                    environment: options.environment,
-                },
-                options,
-            ),
-        {
-            MORTY_FAKE_ACP_PAUSE_AFTER_PERMISSION: "1",
-            MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent"),
-        },
-    );
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
@@ -890,7 +861,7 @@ test("Given queued prompts from the running Agent identity and another one, When
             defaultWorkspace: workspace,
             relayUrl,
         },
-        [agent, otherAgent],
+        [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
@@ -912,9 +883,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         const sessionTarget = decodeSessionReadyEvent(await messages.nextKind(SESSION_READY_KIND)).target;
         socket.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId: "running_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -925,20 +894,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toMatchObject({
             status: { commandId: "running_turn", kind: "working" },
         });
-        // A different Agent identity queues behind the running turn in the same Session.
-        socket.send(
-            encodeSessionPromptCommand({
-                harness: "codex",
-                commandId: "foreign_queued_turn",
-                directory: ".",
-                disposition: SessionPromptDisposition.Append,
-                attachments: [],
-                kind: "session.prompt",
-                prompt: "queued for another agent",
-                target: sessionTarget,
-            }),
-        );
-        // The running identity queues a prompt with a file, which a client needs to restore it for editing.
+        // A prompt with a file queues behind the running turn; a client needs the file to restore it for editing.
         const report = {
             byteLength: 17,
             contentKey: "a".repeat(64),
@@ -949,9 +905,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         };
         socket.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId: "own_queued_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [report],
                 kind: "session.prompt",
@@ -959,14 +913,19 @@ test("Given queued prompts from the running Agent identity and another one, When
                 target: sessionTarget,
             }),
         );
-        // The snapshot for the Claude identity must not report the Codex queued prompt.
+        // A client reads the queue once the Runtime has answered that the prompt waits in it.
+        for (;;) {
+            const accepted = decodeSessionPromptAcceptedEvent(await messages.nextKind(SESSION_PROMPT_ACCEPTED_KIND));
+            if (accepted.requestId === "own_queued_turn") {
+                expect(accepted.state).toBe("queued");
+                break;
+            }
+        }
         socket.send(
             encodeNativeSessionRequest({
                 action: "active-turn",
-                harness: "claude",
-                directory: ".",
                 kind: "native.session.request",
-                requestId: "claude_snapshot",
+                requestId: "session_snapshot",
                 target: sessionTarget,
             }),
         );

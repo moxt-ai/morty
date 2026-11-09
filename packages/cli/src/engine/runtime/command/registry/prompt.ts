@@ -24,6 +24,18 @@ export const sessionPromptCommand: RuntimeCommand = {
             });
             return;
         }
+        // A prompt names only its Session; it runs with the Agent and directory of the Session this Runtime holds.
+        const session = context.sessions.findSessions([message.target])[0];
+        if (session === undefined) {
+            send(context.socket, {
+                code: "session_not_found",
+                requestId: message.commandId,
+                kind: "session.operation.failed",
+                message: "The Session was not found",
+                target: message.target,
+            });
+            return;
+        }
         // A steer joins a running turn, so the Session admits it only while the Agent runs the turn it names. An
         // appended prompt is always admitted: the Session runs or queues it.
         const receipt = context.operations.claimExecution(
@@ -87,7 +99,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             return;
         }
         const turn = context.sessionTurns.start(message, receipt.attemptId);
-        context.eventProjection.requested(message);
+        context.eventProjection.requested(message, { harness: session.harness, directory: session.cwd });
         const { commandId, target } = message;
         // A prompt is answered once, at the first of: it entered the queue, it started, or it ended without starting.
         let answered = false;
@@ -126,6 +138,7 @@ export const sessionPromptCommand: RuntimeCommand = {
         void executePrompt({
             eventProjection: context.eventProjection,
             command: message,
+            session,
             resolveAgent: context.resolveAgent,
             readArtifact: async (attachment, signal) => {
                 const artifact = await context.externalContent.read(

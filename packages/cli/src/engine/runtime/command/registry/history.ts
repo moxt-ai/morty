@@ -162,7 +162,7 @@ async function executeSessionPreviewHistoryPageLoad(
     try {
         const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(command.harness, signal, command.target)),
+            ...(await resolveAgent(command.target.harness, signal, command.target)),
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -188,7 +188,7 @@ async function executeSessionPreviewHistoryPageLoad(
                 "session_history_v2_load_failed",
                 command.requestId,
                 {
-                    harness: command.harness,
+                    harness: command.target.harness,
                     code: operationErrorCode(error),
                     sessionId: command.target.sessionId,
                 },

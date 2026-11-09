@@ -114,17 +114,8 @@ export interface CreateMortySessionRequest {
     readonly operationId: string;
 }
 
-/**
- * The binding of an existing Session as an operation on it states it. The Session's Runtime owns its binding: a field
- * left out is the Session's own, and a supplied field is checked against it. Relays released before binding resolution
- * require every field, so leave fields out only with a Relay that resolves them.
- */
-export interface MortySessionBinding {
-    readonly harness?: string;
-    readonly directory?: string;
-}
-
-interface SubmitMortyTurnContent extends MortySessionBinding {
+/** A Turn's content. The Runtime runs it with the Agent and directory of the Session it holds. */
+interface SubmitMortyTurnContent {
     readonly attachments: readonly PromptAttachment[];
     readonly content: string;
     readonly idempotencyKey: string;

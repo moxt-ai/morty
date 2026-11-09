@@ -45,8 +45,6 @@ test.each(["pi", "claude", "codex"] as const)(
                         kind: "session.prompt",
                         commandId,
                         target: peer.target,
-                        harness,
-                        directory: ".",
                         attachments: [],
                         disposition: "append",
                         prompt: text,

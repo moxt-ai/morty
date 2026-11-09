@@ -156,9 +156,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             const commandId = randomUUID();
             const queuedCommandId = randomUUID();
             const originalPrompt = encodeSessionPromptCommand({
-                harness: "codex",
                 commandId,
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -194,8 +192,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                     socket.send(
                         encodeNativeSessionCommand({
                             action: "active-turn",
-                            harness: "codex",
-                            directory: config.defaultWorkspace,
                             kind: "native.session.request",
                             requestId: "queued_snapshot",
                             target: sessionTarget,
@@ -279,9 +275,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         await providerEntered.promise;
                         socket.send(
                             encodeSessionPromptCommand({
-                                harness: "codex",
                                 commandId: queuedCommandId,
-                                directory: ".",
                                 disposition: SessionPromptDisposition.Append,
                                 attachments: [],
                                 kind: "session.prompt",
@@ -312,8 +306,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                             socket.send(
                                 encodeNativeSessionCommand({
                                     action: "active-turn",
-                                    harness: "codex",
-                                    directory: ".",
                                     kind: "native.session.request",
                                     requestId: randomUUID(),
                                     target: sessionTarget,

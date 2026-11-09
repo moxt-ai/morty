@@ -90,9 +90,13 @@ const lastTurnOutcomeSchema = z.discriminatedUnion("state", [
 ]);
 export type LastTurnOutcome = z.infer<typeof lastTurnOutcomeSchema>;
 
-const identity = {
+const requestEnvelope = {
     ...envelope,
     kind: z.literal(NATIVE_SESSION_REQUEST_KIND),
+};
+// An Agent's own sessions on disk exist before any Morty Session does, so browsing them names the Agent and directory.
+const agentDirectory = {
+    ...requestEnvelope,
     harness: identifier,
     directory,
 };
@@ -100,25 +104,26 @@ const identity = {
 const nativeSessionRequestSchema = z.discriminatedUnion("action", [
     z
         .object({
-            ...identity,
+            ...requestEnvelope,
             action: z.literal("active-turn"),
             // Asks the Runtime for this command's delivery alongside the execution snapshot. It is not
             // named `commandId`, which routes a request as the command it names.
             deliveryCommandId: identifier.optional(),
+            // The Runtime reads the Session it holds for this target.
             target: nativeSessionTargetSchema,
         })
         .readonly(),
-    z.object({ ...identity, action: z.literal("find"), sessionId: identifier }).readonly(),
+    z.object({ ...agentDirectory, action: z.literal("find"), sessionId: identifier }).readonly(),
     z
         .object({
-            ...identity,
+            ...agentDirectory,
             action: z.literal("list"),
             cursor: identifier.nullable(),
         })
         .readonly(),
     z
         .object({
-            ...identity,
+            ...agentDirectory,
             action: z.enum(["import", "fork"]),
             sessionId: identifier,
         })
@@ -128,25 +133,26 @@ export type NativeSessionRequest = z.infer<typeof nativeSessionRequestSchema>;
 const nativeSessionCommandSchema = z.discriminatedUnion("action", [
     z
         .object({
-            ...identity,
+            ...requestEnvelope,
             action: z.literal("active-turn"),
             // Asks the Runtime for this command's delivery alongside the execution snapshot. It is not
             // named `commandId`, which routes a request as the command it names.
             deliveryCommandId: identifier.optional(),
+            // The Runtime reads the Session it holds for this target.
             target: nativeSessionTargetSchema,
         })
         .readonly(),
-    z.object({ ...identity, action: z.literal("find"), sessionId: identifier }).readonly(),
+    z.object({ ...agentDirectory, action: z.literal("find"), sessionId: identifier }).readonly(),
     z
         .object({
-            ...identity,
+            ...agentDirectory,
             action: z.literal("list"),
             cursor: identifier.nullable(),
         })
         .readonly(),
     z
         .object({
-            ...identity,
+            ...agentDirectory,
             action: z.enum(["import", "fork"]),
             sessionId: identifier,
         })
