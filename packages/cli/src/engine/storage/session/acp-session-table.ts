@@ -6,7 +6,7 @@ import type { LocalSqliteDatabase } from "../sqlite/local-sqlite-database.ts";
 
 /** One saved session row. The list columns hold JSON text that the session record decodes. */
 export interface AcpSessionRow {
-    readonly agentId: string;
+    readonly harness: string;
     readonly configurations: string;
     readonly cwd: string;
     readonly sessionId: string;
@@ -16,7 +16,7 @@ export interface AcpSessionRow {
 }
 
 const acpSessionRowSchema = z.object({
-    agentId: z.string(),
+    harness: z.string(),
     configurations: z.string(),
     cwd: z.string(),
     sessionId: z.string(),
@@ -46,7 +46,7 @@ export class AcpSessionTable {
         const row = this.#database.orm
             .select()
             .from(acpSession)
-            .where(and(eq(acpSession.agentId, target.harness), eq(acpSession.sessionId, target.sessionId)))
+            .where(and(eq(acpSession.harness, target.harness), eq(acpSession.sessionId, target.sessionId)))
             .get();
         return row === undefined ? undefined : decodeRow(row);
     };
@@ -54,7 +54,7 @@ export class AcpSessionTable {
     readonly remove = (target: NativeSessionTarget): void => {
         this.#database.orm
             .delete(acpSession)
-            .where(and(eq(acpSession.agentId, target.harness), eq(acpSession.sessionId, target.sessionId)))
+            .where(and(eq(acpSession.harness, target.harness), eq(acpSession.sessionId, target.sessionId)))
             .run();
     };
 
@@ -62,7 +62,7 @@ export class AcpSessionTable {
         this.#database.orm
             .insert(acpSession)
             .values(row)
-            .onConflictDoUpdate({ target: [acpSession.agentId, acpSession.sessionId], set: row })
+            .onConflictDoUpdate({ target: [acpSession.harness, acpSession.sessionId], set: row })
             .run();
     };
 }

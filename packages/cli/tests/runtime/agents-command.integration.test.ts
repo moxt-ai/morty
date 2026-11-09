@@ -90,7 +90,7 @@ describe("Morty agents command", () => {
         expect(inventory).toMatchObject({
             available: [],
             unavailable: expect.arrayContaining([
-                expect.objectContaining({ id: "pi", status: "missing_agent", code: "agent_not_found" }),
+                expect.objectContaining({ harness: "pi", status: "missing_agent", code: "agent_not_found" }),
             ]),
         });
     });

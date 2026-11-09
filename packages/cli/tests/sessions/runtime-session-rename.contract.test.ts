@@ -17,7 +17,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         const runtime = await platform.connectAgent(project.computerId);
         const { target: sessionTarget } = await runtime.client.sessions.create(
             {
-                agentId: "claude",
+                harness: "claude",
                 configurations: [],
                 directory: ".",
                 computerId: runtime.computerId,
@@ -28,7 +28,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         await runtime.client.turns.submitToRuntime(
             sessionTarget,
             {
-                agentId: "claude",
+                harness: "claude",
                 content: "Remember this conversation",
                 directory: ".",
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
@@ -54,7 +54,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
 
         await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
             expect.objectContaining({
-                agentId: "claude",
+                harness: "claude",
                 prompted: true,
                 target: sessionTarget,
                 status: { kind: "idle" },
@@ -67,7 +67,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         const discovery = await runtime.client.runtimes.nativeSessions(
             {
                 action: "list",
-                agentId: "claude",
+                harness: "claude",
                 cursor: null,
                 directory: ".",
             },

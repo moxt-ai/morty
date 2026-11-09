@@ -24,7 +24,7 @@ const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.met
 class PromptMediaAgent extends ControlledAcpSpecification {
     readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled prompt media";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
@@ -50,7 +50,7 @@ test("Given a persisted native conversation, When a client prompts after restart
                     peer.send(
                         encodeSessionPromptCommand({
                             kind: "session.prompt",
-                            agentId: "controlled-acp",
+                            harness: "controlled-acp",
                             directory: ".",
                             target: peer.target,
                             commandId,
@@ -198,7 +198,7 @@ if (process.argv.includes("--version")) {
             async (peer) => {
                 peer.send(
                     encodeSessionPrepareCommand({
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         directory: ".",
                         kind: "session.prepare",
                         requestId: "prepare-file-read-session",

@@ -22,12 +22,12 @@ import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
     computerId: platformIdentifier,
-    agentRef: platformIdentifier,
+    harness: platformIdentifier,
 });
 const nativeDirectory = v.custom<string>(isDirectoryPath);
 const nativeIdentity = {
     computerId: platformIdentifier,
-    agentId: platformIdentifier,
+    harness: platformIdentifier,
     directory: nativeDirectory,
 };
 const nativeListInput = v.strictObject({
@@ -55,14 +55,14 @@ const sessionConfigurations = v.pipe(
 );
 // A page loaded before drafts named their directory omits `workspaceRef`; its settings are the default directory's.
 const agentSettingsInput = v.strictObject({
-    agentRef: platformIdentifier,
+    harness: platformIdentifier,
     workspaceRef: v.optional(nativeDirectory),
 });
 const nativeSessionTargetInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const accessInput = v.union([
     nativeSessionTargetInput,
     v.strictObject({
-        agentRef: platformIdentifier,
+        harness: platformIdentifier,
         conversationKey: platformIdentifier,
         configurations: sessionConfigurations,
         workspaceRef: nativeDirectory,
@@ -220,7 +220,7 @@ export function createBotChatRoutes() {
             async (context) =>
                 privateJson(
                     await context.env.services.chat.agentSettings(context.get("chatScope"), {
-                        agentRef: context.req.valid("json").agentRef,
+                        harness: context.req.valid("json").harness,
                         workspaceRef: context.req.valid("json").workspaceRef ?? ".",
                     }),
                 ),

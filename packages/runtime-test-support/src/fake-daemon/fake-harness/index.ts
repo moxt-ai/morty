@@ -600,7 +600,7 @@ class ControlledAgentEndpoint implements FakeHarnessEndpoint {
 export function createFakeHarness(options: FakeAgentHarnessOptions) {
     const state = new ControlledAgentState(options);
     const agents = [
-        { id: options.agentId ?? "codex", name: options.agentName ?? "Codex" },
+        { harness: options.harness ?? "codex", name: options.agentName ?? "Codex" },
         ...(options.additionalAgents ?? []),
     ];
     return {
@@ -610,14 +610,14 @@ export function createFakeHarness(options: FakeAgentHarnessOptions) {
                 onPromptDelegation: (stage: PromptDelegationStage) => Promise<void>,
             ): FakeHarnessEndpoint =>
                 new ControlledAgentEndpoint(state, agent.name, onSessionUpdate, onPromptDelegation),
-            id: agent.id,
+            harness: agent.harness,
             name: agent.name,
         })),
         catalog: agents.map((agent) => ({
-            agentPath: `/fake-daemon/${agent.id}`,
+            agentPath: `/fake-daemon/${agent.harness}`,
             agentVersion: "controlled-harness",
             capabilities: fakeHarnessCapabilities,
-            id: agent.id,
+            harness: agent.harness,
             label: agent.name,
         })),
         continueReply: state.continueReply,

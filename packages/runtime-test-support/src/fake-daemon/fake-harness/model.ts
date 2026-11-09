@@ -60,9 +60,9 @@ export interface HarnessReplyPlan {
 }
 
 export interface FakeAgentHarnessOptions {
-    readonly agentId?: string;
+    readonly harness?: string;
     readonly agentName?: string;
-    readonly additionalAgents?: readonly { readonly id: string; readonly name: string }[];
+    readonly additionalAgents?: readonly { readonly harness: string; readonly name: string }[];
     readonly echoUserMessage?: boolean;
     readonly sessionIds?: ReadonlySet<string>;
     readonly reply: (prompt: string, turnNumber: number, mode: "prompt" | "steer") => HarnessReplyPlan;

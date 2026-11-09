@@ -25,7 +25,7 @@ test("Given Codex auto-compacts a conversation, When the daemon relays the turns
         ]) {
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "codex",
+                    harness: "codex",
                     commandId: randomUUID(),
                     directory: ".",
                     disposition: SessionPromptDisposition.Append,

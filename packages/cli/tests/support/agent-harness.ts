@@ -7,7 +7,7 @@ import { ControlledAcpConnection } from "./agents/controlled-acp-connection.ts";
 const harnessPath = fileURLToPath(new URL("../sessions/fixtures/acp-peer.ts", import.meta.url));
 
 export interface FakeAgentHarnessDefinition {
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     readonly arguments?: readonly string[];
     readonly isolatedNativeStorage?: boolean;
@@ -33,16 +33,16 @@ export function fakeAgentHarnessCapabilities(definition: FakeAgentHarnessDefinit
 /** A controlled Agent executable behind the production daemon and ACP adapter. */
 export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDirectory: string): AcpAgentDefinition {
     const nativeStorage =
-        definition.isolatedNativeStorage === true ? join(stateDirectory, definition.id) : stateDirectory;
+        definition.isolatedNativeStorage === true ? join(stateDirectory, definition.harness) : stateDirectory;
     mkdirSync(nativeStorage, { recursive: true });
     return new AcpAgentDefinition(
-        definition.id,
+        definition.harness,
         definition.label,
         process.execPath,
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: definition.id,
+                    harness: definition.harness,
                     adapterPath: process.execPath,
                     arguments: [harnessPath, "--agent-name", definition.label, ...(definition.arguments ?? [])],
                     environment: options.environment,
@@ -59,6 +59,6 @@ export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDi
 
 export const defaultFakeAgentHarness: FakeAgentHarnessDefinition = {
     arguments: ["--load-only"],
-    id: "claude",
+    harness: "claude",
     label: "Codex",
 };

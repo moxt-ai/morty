@@ -133,16 +133,16 @@ export class RecordingObserver implements SessionObserver {
 export function fakeAgent(
     additionalArguments: readonly string[] = [],
     environment: Readonly<Record<string, string>> = {},
-    id = "codex",
+    harness = "codex",
 ): AcpAgentDefinition {
     return new AcpAgentDefinition(
-        id,
+        harness,
         "Codex",
         process.execPath,
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id,
+                    harness,
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Codex", ...additionalArguments],
                     environment: options.environment,

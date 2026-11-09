@@ -25,7 +25,7 @@ it("Given a permission request without its execution context, When it crosses th
 it("Given Agent settings without the inspected directory, When a client decodes them, Then it rejects the retired response instead of applying settings to another directory", () => {
     const settings = {
         kind: "agent.settings.discovered",
-        agentId: "agent-1",
+        harness: "agent-1",
         agentName: "Claude",
         agentVersion: "2",
         requestId: "request-1",
@@ -90,7 +90,7 @@ it("Given history holding a turn's lifecycle, When a client decodes it, Then the
 });
 it("Given a session list entry without status, When a client decodes it, Then it rejects the retired entry", () => {
     const entry = {
-        agentId: "agent-1",
+        harness: "agent-1",
         directory: ".",
         directoryLabel: "Workspace",
         prompted: false,
@@ -107,7 +107,7 @@ it("Given a session list entry without status, When a client decodes it, Then it
 
 it("Given a Session's metadata disagrees with its native pair, When it crosses the protocol boundary, Then the client rejects the conflicting identity", () => {
     const entry = {
-        agentId: "claude",
+        harness: "claude",
         directory: ".",
         directoryLabel: "Workspace",
         prompted: false,
@@ -118,7 +118,7 @@ it("Given a Session's metadata disagrees with its native pair, When it crosses t
         updatedAt: "2026-11-07T00:00:00.000Z",
     };
     for (const conflicting of [
-        { ...entry, agentId: "codex" },
+        { ...entry, harness: "codex" },
         { ...entry, sessionId: "native-2" },
     ]) {
         expect(() =>

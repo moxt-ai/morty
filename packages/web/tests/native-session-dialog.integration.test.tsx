@@ -95,7 +95,7 @@ test("Given Pi is not installed on the Runtime, When the user opens Open Session
 test("Given Pi is installed on the Runtime, When the user opens Open Session, Then Pi appears once in the agent tabs", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
+    const app = await createTestApp({ connectAgent: true, agent: { harness: "pi", label: "Pi" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.getAttribute("data-connection-status") === "connected",

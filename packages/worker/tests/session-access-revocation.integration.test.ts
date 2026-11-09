@@ -18,7 +18,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
         const owner = await cloud.createAnonymousUser();
         await using runtime = await cloud.connectAgent(owner.computerId, [
             {
-                id: "configuration-test",
+                harness: "configuration-test",
                 label: "Configuration Test",
                 beforeSessionCreated: async () => {
                     if (hold) {
@@ -45,7 +45,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
             (
                 await request(`${chat}/setup`, owner.token, {
                     computerId: runtime.computerId,
-                    agentRef: "configuration-test",
+                    harness: "configuration-test",
                 })
             ).status,
         ).toBe(202);
@@ -66,7 +66,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
         }
         hold = true;
         const opening = request(`${chat}/access`, browser, {
-            agentRef: "configuration-test",
+            harness: "configuration-test",
             configurations: [],
             conversationKey: "revocation-race",
             workspaceRef: ".",

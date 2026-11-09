@@ -106,7 +106,7 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "controlled-acp",
+                    harness: "controlled-acp",
                     adapterPath: process.execPath,
                     arguments: [recorderPath],
                     environment: options.environment,
@@ -137,7 +137,7 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
         sendText(
             socket,
             encodeAgentSettingsDiscoverCommand({
-                agentId: agent.id,
+                harness: agent.harness,
                 kind: AGENT_SETTINGS_DISCOVER_KIND,
                 requestId: "environment-discovery",
             }),

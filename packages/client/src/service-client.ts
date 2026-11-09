@@ -141,8 +141,8 @@ export type UpdateMortySessionConfigurationRequest = MortySessionBinding &
 
 /** Writes the supplied binding fields to a query. */
 function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBinding): void {
-    if (binding.agentId !== undefined) {
-        query.set("agentId", binding.agentId);
+    if (binding.harness !== undefined) {
+        query.set("harness", binding.harness);
     }
     if (binding.directory !== undefined) {
         query.set("directory", binding.directory);
@@ -150,7 +150,7 @@ function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBin
 }
 
 export interface ForkMortyNativeSessionRequest {
-    readonly agentId: string;
+    readonly harness: string;
     readonly sessionId: string;
     readonly directory: string;
 }
@@ -911,14 +911,14 @@ export class MortyRuntimeResources {
     };
 
     readonly discoverAgentSettings = async (
-        agentId: string,
+        harness: string,
         request: DiscoverMortyAgentSettingsRequest,
         signal: AbortSignal,
     ): Promise<AgentSettingsDiscoveredEvent> =>
         decodeAgentSettingsDiscoveredEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/agents/${encodeURIComponent(agentId)}/settings`),
+                    projectPath(this.#computerId, `daemon/agents/${encodeURIComponent(harness)}/settings`),
                     request,
                     signal,
                 ),
@@ -1124,7 +1124,7 @@ export class MortySessionResources {
     readonly load = async (
         sessionTarget: NativeSessionTarget,
         request: {
-            readonly agentId: string;
+            readonly harness: string;
             readonly directory: string;
         },
         signal: AbortSignal,
@@ -1161,9 +1161,9 @@ export class MortySessionResources {
         if (
             restored.target.harness !== parsed.data.harness ||
             restored.target.sessionId !== parsed.data.sessionId ||
-            restored.entry.agentId !== parsed.data.harness ||
+            restored.entry.harness !== parsed.data.harness ||
             restored.entry.sessionId !== parsed.data.sessionId ||
-            restored.ready.agentId !== parsed.data.harness ||
+            restored.ready.harness !== parsed.data.harness ||
             !sameNativeSession(restored.entry.target, restored.ready.target)
         ) {
             throw new MortyProtocolError("The Runtime restored a different harness or native Session");

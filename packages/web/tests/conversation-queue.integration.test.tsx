@@ -205,7 +205,7 @@ test("Given a follow-up is queued, When the user stops the active turn, Then the
 }, async () => {
     const activePrompt = "wait for steering";
     const queuedPrompt = "Explain Golang ==";
-    const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
+    const app = await createTestApp({ connectAgent: true, agent: { harness: "pi", label: "Pi" } });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.getAttribute("data-connection-status") === "connected",

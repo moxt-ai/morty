@@ -43,7 +43,7 @@ test("Given a native session handoff, When the page loads, Then it shows the sha
 }, async () => {
     const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
     const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
+        agent: { harness: "pi", label: "Pi" },
         connectAgent: true,
         sessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
@@ -67,7 +67,7 @@ test("Given a native session handoff, When the page loads, Then the loading surf
 }, async () => {
     const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
     const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
+        agent: { harness: "pi", label: "Pi" },
         connectAgent: true,
         sessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
@@ -142,7 +142,7 @@ test("Given a native session handoff without a matching Agent, When the page loa
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
-        agent: { id: "codex", label: "Codex" },
+        agent: { harness: "codex", label: "Codex" },
         connectAgent: true,
         page: {
             harness: "pi",
@@ -174,7 +174,7 @@ test("Given opening a native session fails, When the user tries again, Then the 
     // The retry must run the whole open-session request again: once a Runtime answers
     // for the redeemed access, the failure moves from the missing Agent to the
     // missing native session.
-    await app.connectAgent({ id: "pi", label: "Pi" });
+    await app.connectAgent({ harness: "pi", label: "Pi" });
     await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
 
     await app.waitForView(() => {
@@ -187,7 +187,7 @@ test("Given the Morty access was redeemed and opening the original session faile
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
+        agent: { harness: "pi", label: "Pi" },
         connectAgent: true,
         page: {
             harness: "pi",
@@ -269,7 +269,7 @@ test("Given a native session handoff whose Runtime went offline, When the page l
 }, async () => {
     const app = await createTestApp({
         prepare: async (application) => {
-            const runtime = await application.connectAgent({ id: "claude", label: "Claude" });
+            const runtime = await application.connectAgent({ harness: "claude", label: "Claude" });
             await runtime.disconnect();
         },
         page: {
@@ -533,7 +533,7 @@ for (const segments of [0, 4, 8]) {
                 await mkdir(directory, { recursive: true });
                 const app = await createTestApp({
                     connectAgent: true,
-                    agent: { id: "codex", label: "Codex" },
+                    agent: { harness: "codex", label: "Codex" },
                     page: {
                         kind: "continue",
                         harness: "codex",
@@ -574,7 +574,7 @@ test("Given a handoff requests a missing directory, When it opens, Then the Runt
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "codex", label: "Codex" },
+        agent: { harness: "codex", label: "Codex" },
         sessionIds: new Set(["native-directory-session"]),
         page: {
             kind: "continue",
@@ -597,7 +597,7 @@ for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         expect(new TextEncoder().encode(workspace).length).toBeGreaterThan(1533);
         const app = await createTestApp({
             connectAgent: true,
-            agent: { id: "codex", label: "Codex" },
+            agent: { harness: "codex", label: "Codex" },
             page: { kind: "continue", harness: "codex", sessionId: "native-directory-session", workspace },
         });
         const alert = await app.waitForView(() => getByRole(document.body, "alert"));

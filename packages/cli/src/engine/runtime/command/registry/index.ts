@@ -63,7 +63,7 @@ export function createCommandRegistry(context: CommandContext): {
     ];
     return {
         dispatch: (message): void => {
-            if ("target" in message && "agentId" in message && message.target.harness !== message.agentId) {
+            if ("target" in message && "harness" in message && message.target.harness !== message.harness) {
                 const requestId = "commandId" in message ? message.commandId : message.requestId;
                 send(context.socket, {
                     kind: "session.operation.failed",
@@ -74,8 +74,8 @@ export function createCommandRegistry(context: CommandContext): {
                 });
                 context.diagnostics.daemonDiagnostic("session_target_rejected", requestId, {
                     code: "session_identity_mismatch",
-                    harness: message.target.harness,
-                    agentId: message.agentId,
+                    targetHarness: message.target.harness,
+                    harness: message.harness,
                 });
                 return;
             }

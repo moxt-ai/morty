@@ -28,9 +28,9 @@ export class LocalAgentCatalog {
         this.#snapshot = this.validate(agents);
     }
 
-    readonly find = (agentId: string): AcpAgentDefinition => {
+    readonly find = (harness: string): AcpAgentDefinition => {
         for (const agent of this.#snapshot.agents) {
-            if (agent.id === agentId) {
+            if (agent.harness === harness) {
                 return agent;
             }
         }
@@ -63,10 +63,10 @@ export class LocalAgentCatalog {
     private readonly validate = (agents: readonly AcpAgentDefinition[]): LocalAgentCatalogSnapshot => {
         const identifiers = new Set<string>();
         for (const agent of agents) {
-            if (identifiers.has(agent.id)) {
+            if (identifiers.has(agent.harness)) {
                 throw new Error("The local Agent catalog contains duplicate entries");
             }
-            identifiers.add(agent.id);
+            identifiers.add(agent.harness);
         }
         return new LocalAgentCatalogSnapshot(agents);
     };

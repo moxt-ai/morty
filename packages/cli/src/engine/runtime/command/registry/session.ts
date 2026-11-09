@@ -49,7 +49,7 @@ async function prepareSession(
             "workspace-resolve",
             async () => await resolveSessionDirectory(directories, command.directory, signal),
         );
-        const resolvedAgent = await resolveAgent(command.agentId, signal, command.target);
+        const resolvedAgent = await resolveAgent(command.harness, signal, command.target);
         const preparation = {
             ...resolvedAgent,
             cwd: resolved.cwd,
@@ -93,7 +93,7 @@ async function prepareSession(
         };
         const prepared = await prepare();
         return {
-            agentId: command.agentId,
+            harness: command.harness,
             agentName: prepared.agentName,
             agentVersion: prepared.agentVersion,
             capabilities: prepared.capabilities,
@@ -169,7 +169,7 @@ async function executeSessionPrepare(
             "session_prepare_failed",
             command.requestId,
             {
-                agentId: command.agentId,
+                harness: command.harness,
                 code: operationErrorCode(error),
                 sessionId: command.target.sessionId,
             },
@@ -201,7 +201,7 @@ async function executeSessionRestore(
         });
         const ready = await prepareSession(
             {
-                agentId: entry.agentId,
+                harness: entry.harness,
                 directory: entry.directory,
                 kind: "session.prepare",
                 requestId: command.requestId,
@@ -255,7 +255,7 @@ async function executeSessionRename(
         const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const renamed = await sessions.renameSession(
             {
-                ...(await resolveAgent(entry.agentId, signal, command.target)),
+                ...(await resolveAgent(entry.harness, signal, command.target)),
                 cwd: resolved.cwd,
                 target: command.target,
                 signal,
@@ -288,7 +288,7 @@ async function executeSessionConfigure(
     try {
         const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const snapshot = await sessions.configureSession({
-            ...(await resolveAgent(command.agentId, signal, command.target)),
+            ...(await resolveAgent(command.harness, signal, command.target)),
             booleanValue: command.booleanValue,
             configId: command.configId,
             expectedConfigurationRevision: command.expectedConfigurationRevision,
@@ -350,11 +350,11 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
     const signal = AbortSignal.any([context.signal, timeout.signal]);
     try {
         const resolved = await resolveSessionDirectory(context.directories, command.directory, signal);
-        const agent = await context.resolveAgent(command.agentId, signal);
+        const agent = await context.resolveAgent(command.harness, signal);
         const ready = await context.sessionCreations.run(
             command.operationId,
             {
-                agentId: command.agentId,
+                harness: command.harness,
                 cwd: resolved.cwd,
                 configurations: command.configurations,
             },
@@ -386,7 +386,7 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
         );
         signal.throwIfAborted();
         context.diagnostics.daemonDiagnostic("session_creation_resolved", command.requestId, {
-            agentId: command.agentId,
+            harness: command.harness,
             operationId: command.operationId,
             sessionId: ready.target.sessionId,
         });
@@ -399,7 +399,7 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
         context.diagnostics.daemonDiagnostic(
             "session_create_failed",
             command.requestId,
-            { agentId: command.agentId, operationId: command.operationId, code: operationErrorCode(failure) },
+            { harness: command.harness, operationId: command.operationId, code: operationErrorCode(failure) },
             failure,
         );
         reportOperationFailure(context.socket, command.requestId, undefined, failure);
@@ -439,7 +439,7 @@ export const sessionCreateCommand: RuntimeCommand = {
                     "session_create_failed",
                     message.requestId,
                     {
-                        agentId: message.agentId,
+                        harness: message.harness,
                         operationId: message.operationId,
                         code: operationErrorCode(cause),
                     },
@@ -525,7 +525,7 @@ async function executeSessionConfigRead(
         });
         const ready = await prepareSession(
             {
-                agentId: entry.agentId,
+                harness: entry.harness,
                 directory: entry.directory,
                 kind: "session.prepare",
                 requestId: command.requestId,

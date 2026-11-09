@@ -5,7 +5,7 @@ const CONTROLLED_ACP_VERSION = "1.0.0";
 export class ControlledAcpAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = CONTROLLED_ACP_VERSION;
     readonly agentExecutable = "controlled-acp";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled ACP";
     override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;

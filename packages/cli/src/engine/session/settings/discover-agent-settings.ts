@@ -23,8 +23,8 @@ import { isModelOption } from "./configuration-dependencies.ts";
  * Correlation details for a settings-discovery failure, safe for the remote diagnostic log. The
  * configuration-value failure carries the requested and offered values itself.
  */
-export function agentSettingsFailureDetails(agentId: string, failure: unknown): Readonly<Record<string, string>> {
-    const details = { agentId, code: operationErrorCode(failure) };
+export function agentSettingsFailureDetails(harness: string, failure: unknown): Readonly<Record<string, string>> {
+    const details = { harness, code: operationErrorCode(failure) };
     return failure instanceof AcpConfigurationValueUnavailableError
         ? {
               ...details,
@@ -64,7 +64,7 @@ export async function discoverAgentSettings(
     sessions: SessionManager,
     signal: AbortSignal,
 ): Promise<AgentSettingsDiscovery> {
-    const { agent, adapter: harnessAdapter } = await resolveAgent(command.agentId, signal);
+    const { agent, adapter: harnessAdapter } = await resolveAgent(command.harness, signal);
     // The Agent reads project settings from the directory a Session starts in, so the defaults it reports are those
     // of the requested directory.
     const directory = command.directory ?? ".";
@@ -115,7 +115,7 @@ export async function discoverAgentSettings(
             }
         }
     }
-    const adapter = agentSettingsAdapterForAgent(agent.id);
+    const adapter = agentSettingsAdapterForAgent(agent.harness);
     const modelEffort = await discoverModelEffort(
         command,
         agent,
@@ -141,7 +141,7 @@ export async function discoverAgentSettings(
     );
     return {
         event: {
-            agentId: command.agentId,
+            harness: command.harness,
             agentName: selectedSnapshot.agentName,
             agentVersion: selectedSnapshot.agentVersion,
             directory,
@@ -173,7 +173,7 @@ function settingsFromSnapshot(
     configOptions: readonly SessionConfigOption[],
 ): readonly AgentSetting[] {
     const settings = [
-        ...agentSettingsAdapterForAgent(agent.id).settings(agent).map(settingFromOption),
+        ...agentSettingsAdapterForAgent(agent.harness).settings(agent).map(settingFromOption),
         ...configOptions.map(settingFromOption),
     ];
     const identifiers = new Set<string>();
@@ -374,7 +374,7 @@ function settingsRevision(
         .update(
             JSON.stringify({
                 adapterVersion: agent.adapterVersion,
-                agentId: agent.id,
+                harness: agent.harness,
                 agentVersion: agent.agentVersion,
                 modelEffort: revisionModelEffort,
                 reportedAgentVersion,

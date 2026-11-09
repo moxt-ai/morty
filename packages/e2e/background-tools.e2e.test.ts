@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { id: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
+test.use({ runtimeAgent: { harness: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
 for (const width of [1440, 390]) {
     test(`Given a background tool at ${width}px, When its reply ends and the task later completes, Then the original card stays live and survives reload`, async ({
         runtime,

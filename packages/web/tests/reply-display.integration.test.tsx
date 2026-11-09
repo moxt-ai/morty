@@ -28,7 +28,7 @@ function workingIndicators(app: TestApp): HTMLElement[] {
 async function startToolLifecycle(prompt: string): Promise<TestApp> {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
         page: { kind: "bootstrap", identity: true },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), prompt);
@@ -174,7 +174,7 @@ test("Given the agent asks for permission mid-turn, When the request is waiting,
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "interaction-test", label: "Interaction Agent" },
+        agent: { harness: "interaction-test", label: "Interaction Agent" },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "request user input");
     await app.waitForView(() => getByRole(document.body, "alertdialog", { name: "Agent permission request" }));

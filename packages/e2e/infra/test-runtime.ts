@@ -10,20 +10,20 @@ import { ControlledSetupRuntime } from "./setup-daemon.ts";
 import { followSetupInstructions } from "./setup-instructions.ts";
 
 export async function createTestRuntime(
-    harness: E2EHarness,
+    journey: E2EHarness,
     browserName: "chromium" | "firefox" | "webkit" = "chromium",
     contextOptions: BrowserContextOptions = {},
     machineName = "Browser test Runtime",
-    agent: { readonly id: string; readonly name: string } = { id: "claude", name: "Claude Code" },
+    agent: { readonly harness: string; readonly name: string } = { harness: "claude", name: "Claude Code" },
 ) {
     const setupClockStart = Date.parse("2026-09-15T12:00:00Z");
     let setupClockTime = setupClockStart;
-    const agentId = agent.id;
+    const harness = agent.harness;
     const agentName = agent.name;
-    const stack = await LocalStack.create(harness);
+    const stack = await LocalStack.create(journey);
     const runtime = new ControlledSetupRuntime(
         {
-            agentId,
+            harness,
             agentName,
             files: mortyFiles,
             reply: mortyReply,
@@ -43,14 +43,14 @@ export async function createTestRuntime(
     try {
         const context = await browser.newContext(contextOptions);
         const page = await context.newPage();
-        await harness.attachBrowser(browser, context, page);
-        const chat = new ChatApi(stack.chatOrigin, harness.signal);
+        await journey.attachBrowser(browser, context, page);
+        const chat = new ChatApi(stack.chatOrigin, journey.signal);
 
         const openChat = async () => {
             const identity = object(
                 await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
                     body: { creationKey: anonymousCreationKey() },
-                    signal: harness.signal,
+                    signal: journey.signal,
                 }),
                 "anonymous identity",
             );
@@ -96,7 +96,7 @@ export async function createTestRuntime(
                         ? runtime
                         : new ControlledSetupRuntime(
                               {
-                                  agentId,
+                                  harness,
                                   agentName,
                                   files: mortyFiles,
                                   reply: mortyReply,
@@ -111,7 +111,7 @@ export async function createTestRuntime(
                 await openChat();
                 const pairing = await chat.createPairing();
                 await computer.run(
-                    harness.workDirectory,
+                    journey.workDirectory,
                     [
                         "pair",
                         "--url",
@@ -121,12 +121,12 @@ export async function createTestRuntime(
                         "--code-stdin",
                     ],
                     stack.directories.workspace,
-                    harness.signal,
+                    journey.signal,
                     text(pairing["pairingCode"], "pairing code"),
                 );
-                const paired = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), agentId);
-                await chat.bindAgent(paired.computerId, agentId);
-                await chat.readBinding(agentId);
+                const paired = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), harness);
+                await chat.bindAgent(paired.computerId, harness);
+                await chat.readBinding(harness);
                 await page.reload();
             },
             disconnectRuntime: async () => await runtime.disconnect(),
@@ -135,16 +135,16 @@ export async function createTestRuntime(
             resumeRuntime: runtime.resume,
             forgetRuntimeConnections: async () => await runtime.forgetConnections(),
             connectUnrelatedRuntime: async () => {
-                const unrelated = new ChatApi(stack.chatOrigin, harness.signal);
+                const unrelated = new ChatApi(stack.chatOrigin, journey.signal);
                 await unrelated.useBrowserIdentity(
                     await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
                         body: { creationKey: anonymousCreationKey() },
-                        signal: harness.signal,
+                        signal: journey.signal,
                     }),
                 );
                 const pairing = await unrelated.createPairing();
                 await runtime.run(
-                    harness.workDirectory,
+                    journey.workDirectory,
                     [
                         "pair",
                         "--url",
@@ -154,10 +154,10 @@ export async function createTestRuntime(
                         "--code-stdin",
                     ],
                     stack.directories.workspace,
-                    harness.signal,
+                    journey.signal,
                     text(pairing["pairingCode"], "pairing code"),
                 );
-                await unrelated.readPairedAgent(text(pairing["computerId"], "unrelated computerId"), agentId);
+                await unrelated.readPairedAgent(text(pairing["computerId"], "unrelated computerId"), harness);
             },
             followInstructions: async (
                 instructionUrl: string,
@@ -167,17 +167,17 @@ export async function createTestRuntime(
                 replaceProject?: string,
             ) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
-                if (sessionId !== undefined && agentId !== "claude") {
-                    throw new Error(`No harness session variable is modeled for the ${agentId} agent`);
+                if (sessionId !== undefined && harness !== "claude") {
+                    throw new Error(`No harness session variable is modeled for the ${harness} agent`);
                 }
                 setupClockTime = setupClockStart;
                 const result = await followSetupInstructions({
                     instructionUrl: url.href,
                     cwd: workspace ?? stack.directories.workspace,
-                    downloads: harness.workDirectory,
-                    state: join(harness.workDirectory, "morty-state"),
-                    harness: agentId,
-                    signal: harness.signal,
+                    downloads: journey.workDirectory,
+                    state: join(journey.workDirectory, "morty-state"),
+                    harness,
+                    signal: journey.signal,
                     clock: {
                         now: () => new Date(setupClockTime),
                         wait: async (milliseconds, signal) => {

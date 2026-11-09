@@ -268,7 +268,7 @@ export function createChatWorkspace(options: {
             },
             onOpenSession: (session) => {
                 home.getState().openManaged({
-                    harness: session.result.ready.agentId,
+                    harness: session.result.ready.harness,
                     sessionId: session.entry.sessionId,
                 });
             },
@@ -428,7 +428,7 @@ export function createChatWorkspace(options: {
                 options.clock.now(),
                 {
                     kind: "session",
-                    harness: selection.session.result.ready.agentId,
+                    harness: selection.session.result.ready.harness,
                     sessionId: selection.session.entry.sessionId,
                 },
                 selection.session.result.ready.directoryLabel,
@@ -496,7 +496,7 @@ export function createChatWorkspace(options: {
                     selection.kind === "ready"
                         ? {
                               kind: "session" as const,
-                              harness: selection.session.result.ready.agentId,
+                              harness: selection.session.result.ready.harness,
                               sessionId: selection.session.entry.sessionId,
                           }
                         : selection.kind === "draft"

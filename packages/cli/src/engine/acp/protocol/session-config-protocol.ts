@@ -298,6 +298,6 @@ class StandardSessionConfigProtocol implements SessionConfigProtocol {
 
 const standardSessionConfigProtocol = new StandardSessionConfigProtocol();
 
-export function sessionConfigProtocolForAgent(_agentId: string): SessionConfigProtocol {
+export function sessionConfigProtocolForAgent(_harness: string): SessionConfigProtocol {
     return standardSessionConfigProtocol;
 }

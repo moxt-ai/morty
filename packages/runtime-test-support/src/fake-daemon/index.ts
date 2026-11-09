@@ -36,7 +36,7 @@ export function createFakeDaemon(options: FakeAgentHarnessOptions) {
         agents: harness.agents.map(
             (agent) =>
                 new AcpAgentDefinition(
-                    agent.id,
+                    agent.harness,
                     agent.name,
                     process.execPath,
                     (options) =>

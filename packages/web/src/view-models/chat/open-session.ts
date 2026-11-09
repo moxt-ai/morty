@@ -3,7 +3,7 @@ import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenMortySession {
-    readonly agentRef: string;
+    readonly harness: string;
     readonly result:
         | Extract<NativeSessionResult, { readonly ready: unknown }>
         | {

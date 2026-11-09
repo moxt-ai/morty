@@ -93,7 +93,7 @@ export type LastTurnOutcome = z.infer<typeof lastTurnOutcomeSchema>;
 const identity = {
     ...envelope,
     kind: z.literal(NATIVE_SESSION_REQUEST_KIND),
-    agentId: identifier,
+    harness: identifier,
     directory,
 };
 

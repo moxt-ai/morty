@@ -6,7 +6,7 @@ import { decodeStoredSessionConfigurations, type StoredSessionConfiguration } fr
 
 export class StoredSession {
     readonly target: NativeSessionTarget;
-    get agentId(): string {
+    get harness(): string {
         return this.target.harness;
     }
     readonly configurations: readonly StoredSessionConfiguration[];
@@ -97,7 +97,7 @@ function decodeStoredSession(row: AcpSessionRow): StoredSession {
     const decodedConfigurations: unknown = JSON.parse(row.configurations);
     const configurations = decodeStoredSessionConfigurations(decodedConfigurations);
     return new StoredSession(
-        { harness: row.agentId, sessionId: row.sessionId },
+        { harness: row.harness, sessionId: row.sessionId },
         row.cwd,
         row.prompted,
         row.title,
@@ -137,7 +137,7 @@ export class SqliteSessionStore implements SessionStore {
 
     readonly write = (session: StoredSession): void => {
         this.#table.upsert({
-            agentId: session.agentId,
+            harness: session.harness,
             configurations: JSON.stringify(session.configurations),
             cwd: session.cwd,
             sessionId: session.sessionId,

@@ -25,7 +25,7 @@ const agent = new AcpAgentDefinition(
     (options) =>
         new ControlledAcpConnection(
             {
-                id: "pressure-agent",
+                harness: "pressure-agent",
                 adapterPath: process.execPath,
                 arguments: [new URL("./output-peer.mjs", import.meta.url).pathname],
                 environment: options.environment,

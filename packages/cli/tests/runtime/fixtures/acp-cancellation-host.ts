@@ -94,7 +94,7 @@ relay.on("connection", (socket) => {
     socket.send(
         encodeAgentSettingsDiscoverCommand({
             kind: "agent.settings.discover",
-            agentId: "cancellation-peer",
+            harness: "cancellation-peer",
             requestId: cancelled ? "healthy-settings" : "cancelled-settings",
         }),
     );

@@ -1,6 +1,6 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { id: "interaction-test", name: "Interaction Agent" } });
+test.use({ runtimeAgent: { harness: "interaction-test", name: "Interaction Agent" } });
 
 test.describe("composer stays pinned to the pane bottom", () => {
     // A short window leaves no room for the header, the answer card, and the

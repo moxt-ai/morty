@@ -395,7 +395,7 @@ export class AcpExecutionConnections {
         }
         connection.beginStateChange();
         try {
-            const configured = await sessionConfigProtocolForAgent(scope.agent.id).configure(
+            const configured = await sessionConfigProtocolForAgent(scope.agent.harness).configure(
                 current,
                 {
                     booleanValue: selection.type === "boolean" ? selection.booleanValue : false,

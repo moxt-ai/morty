@@ -12,7 +12,7 @@ const MAXIMUM_REPORT_BYTES = 60_000;
 // process logs also carry a captured stderr and message tail that can quote Agent
 // output, and that must stay local.
 const REMOTE_DIAGNOSTIC_FIELDS = [
-    "agentId",
+    "harness",
     "operation",
     "computerId",
     "closeCode",

@@ -8,7 +8,7 @@ export class CodexAgentSpecification extends InProcessAcpAgentSpecification {
     override readonly versionProbeTimeoutMilliseconds = 10_000;
     readonly agentExecutable = "codex";
     readonly createConnection: AgentConnectionFactory = (options) => new CodexAgentConnection(options);
-    readonly id = "codex";
+    readonly harness = "codex";
     readonly label = "Codex";
     override readonly minimumSupportedAgentVersion = "0.153.0";
     override readonly maximumTestedAgentVersion = "0.154.0";

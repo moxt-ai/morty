@@ -14,7 +14,7 @@ async function expectTools(page: E2EPage, label: string, count: number) {
     }).toPass();
 }
 
-test.use({ runtimeAgent: { id: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
+test.use({ runtimeAgent: { harness: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
 for (const width of [1440, 390]) {
     test(`Given a running tool at ${width}px, When I stop and reload the turn, Then unfinished tools are interrupted, the stop stays where it ended, and later turns preserve that outcome`, async ({
         runtime,

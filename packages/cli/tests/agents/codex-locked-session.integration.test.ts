@@ -67,7 +67,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
             await completed.promise;
             const base = {
                 kind: "native.session.request",
-                agentId: "codex",
+                harness: "codex",
                 directory: ".",
             } as const;
             peer.send(encodeNativeSessionCommand({ ...base, action: "list", requestId: "list", cursor: null }));

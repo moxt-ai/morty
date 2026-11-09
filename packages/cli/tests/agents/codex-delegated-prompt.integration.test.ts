@@ -135,7 +135,7 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            agentId: "codex",
+            harness: "codex",
             attachments: [],
             commandId,
             directory: ".",
@@ -189,7 +189,7 @@ async function nextEvent(peer: RealDaemonPeer, matches: (event: SessionLiveEvent
 
 async function importThread(peer: RealDaemonPeer, threadId: string): Promise<RealDaemonPeer["target"]> {
     const identity = {
-        agentId: "codex",
+        harness: "codex",
         directory: ".",
         kind: "native.session.request",
     } as const;

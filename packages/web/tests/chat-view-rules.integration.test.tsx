@@ -9,7 +9,7 @@ import { TestClock } from "./infra/test-clock.ts";
 test("Given an Agent identifier containing a colon, When its conversation opens, Then configuration shows the Runtime's Agent label", {
     timeout: 60_000,
 }, async () => {
-    const app = await createTestApp({ agents: [{ id: "team:codex", label: "Team Codex" }], connectAgent: true });
+    const app = await createTestApp({ agents: [{ harness: "team:codex", label: "Team Codex" }], connectAgent: true });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Work with the team Agent");
     await app.waitForView(() =>
         expect(

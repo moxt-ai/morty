@@ -1,7 +1,7 @@
 import { expect, test } from "./infra/test.ts";
 
 test.describe("answer request spacing", () => {
-    test.use({ runtimeAgent: { id: "interaction-test", name: "Interaction Agent" } });
+    test.use({ runtimeAgent: { harness: "interaction-test", name: "Interaction Agent" } });
 
     test("Given a pending answer request, When it is shown, Then the card sits 8px above the composer", async ({
         runtime,

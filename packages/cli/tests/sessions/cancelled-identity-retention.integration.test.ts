@@ -71,7 +71,7 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
     peer.send(
         JSON.stringify({
             action: "active-turn",
-            agentId: "controlled-acp",
+            harness: "controlled-acp",
             deliveryCommandId: commandId,
             directory: ".",
             kind: "native.session.request",
@@ -93,7 +93,7 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
 
 const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string) =>
     encodeSessionPromptCommand({
-        agentId: "controlled-acp",
+        harness: "controlled-acp",
         attachments: [],
         commandId,
         directory: ".",
@@ -185,7 +185,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                         );
                     const prompt = (id: string, text: string) =>
                         encodeSessionPromptCommand({
-                            agentId: "controlled-acp",
+                            harness: "controlled-acp",
                             attachments: [],
                             commandId: id,
                             directory: ".",

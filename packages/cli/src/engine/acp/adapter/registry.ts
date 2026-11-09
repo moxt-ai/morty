@@ -10,7 +10,7 @@ export const harnessAdapters: AdapterResolver = (
     agent: AcpAgentDefinition,
     dependencies: AdapterDependencies,
 ): Adapter => {
-    switch (agent.id) {
+    switch (agent.harness) {
         case "codex":
             return new CodexAdapter(agent, dependencies);
         case "claude":
@@ -19,7 +19,7 @@ export const harnessAdapters: AdapterResolver = (
             return new PiAdapter(agent, dependencies);
         default:
             throw new AcpExecutionError(
-                `Agent "${agent.id}" has no registered harness adapter.`,
+                `Agent "${agent.harness}" has no registered harness adapter.`,
                 {},
                 "agent_adapter_not_found",
             );

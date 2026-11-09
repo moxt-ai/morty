@@ -179,7 +179,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     );
                 }
                 const destination = identityDestination("/chat", identity);
-                destination.searchParams.set("harness", session.result.ready.agentId);
+                destination.searchParams.set("harness", session.result.ready.harness);
                 destination.searchParams.set("sessionId", session.entry.sessionId);
                 window.location.replace(destination);
             } catch (cause) {

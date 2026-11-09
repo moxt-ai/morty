@@ -25,16 +25,16 @@ afterEach(() => vi.useRealTimers());
 
 test.each(["codex", "claude"] as const)(
     "Given a real %s conversation, When it is reclaimed after two idle hours, Then its process exits and its original history continues in a new process",
-    async (agentId) => {
+    async (harness) => {
         await using provider =
-            agentId === "codex"
+            harness === "codex"
                 ? await FakeOpenAiProvider.start("morty-test-model", "IDLE_RECOVERY_REPLY")
                 : await FakeAnthropicProvider.start("claude-sonnet-4-6", "IDLE_RECOVERY_REPLY");
         await using agent =
             provider instanceof FakeOpenAiProvider
                 ? await CodexFixture.create(provider)
                 : await ClaudeFixture.create(provider);
-        const directory = await mkdtemp(join(tmpdir(), `morty-idle-real-${agentId}-`));
+        const directory = await mkdtemp(join(tmpdir(), `morty-idle-real-${harness}-`));
         const processes = join(directory, "processes");
         const launcher = join(directory, "agent.mjs");
         await mkdir(processes);
@@ -43,11 +43,11 @@ test.each(["codex", "claude"] as const)(
         vi.useFakeTimers({ now: new Date("2026-10-22T00:00:00Z"), toFake: ["Date"] });
         try {
             await withRealDaemon(
-                agentId === "codex" ? new CodexAgentSpecification() : new ClaudeCodeAgentSpecification(),
-                { ...agent.environment, [agentId === "codex" ? "MORTY_CODEX_PATH" : "MORTY_CLAUDE_PATH"]: launcher },
+                harness === "codex" ? new CodexAgentSpecification() : new ClaudeCodeAgentSpecification(),
+                { ...agent.environment, [harness === "codex" ? "MORTY_CODEX_PATH" : "MORTY_CLAUDE_PATH"]: launcher },
                 async (peer) => {
                     const sessionTarget = peer.target;
-                    await prompt(peer, agentId, sessionTarget, "Remember ORIGINAL_BEFORE_IDLE and reply without tools");
+                    await prompt(peer, harness, sessionTarget, "Remember ORIGINAL_BEFORE_IDLE and reply without tools");
                     const retained = (await readdir(processes)).filter((name) => name.endsWith(".process"));
                     expect(retained).toHaveLength(1);
                     const original = retained[0];
@@ -65,7 +65,7 @@ test.each(["codex", "claude"] as const)(
                             kind: "native.session.request",
                             action: "list",
                             requestId: crypto.randomUUID(),
-                            agentId,
+                            harness,
                             directory: ".",
                             cursor: null,
                         }),
@@ -82,7 +82,7 @@ test.each(["codex", "claude"] as const)(
                         }
                     }
                     const readers = (await readdir(processes)).filter((name) => name.endsWith(".process"));
-                    await prompt(peer, agentId, sessionTarget, "Continue AFTER_IDLE_RECOVERY without tools");
+                    await prompt(peer, harness, sessionTarget, "Continue AFTER_IDLE_RECOVERY without tools");
                     const resumed = (await readdir(processes)).filter((name) => name.endsWith(".process"));
                     expect(resumed).toHaveLength(readers.length + 1);
                     expect(resumed).toEqual(expect.arrayContaining(readers));
@@ -126,7 +126,7 @@ test.each(["codex", "claude"] as const)(
 
 async function prompt(
     peer: RealDaemonPeer,
-    agentId: string,
+    harness: string,
     sessionTarget: RealDaemonPeer["target"],
     text: string,
 ): Promise<void> {
@@ -136,7 +136,7 @@ async function prompt(
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            agentId,
+            harness,
             directory: ".",
             attachments: [],
             prompt: text,

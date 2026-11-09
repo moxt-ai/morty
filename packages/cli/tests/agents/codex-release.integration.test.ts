@@ -27,7 +27,7 @@ async function promptFromMorty(
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            agentId: "codex",
+            harness: "codex",
             directory: ".",
             attachments: [],
             prompt,

@@ -80,15 +80,15 @@ export async function fixture(
     // Controlled ACP peers are used only for protocol-specific scenarios.
     const executable = join(temporary, "agent.mjs");
     await writeFile(executable, `#!${process.execPath}\nawait import(${JSON.stringify(acpUrl)});\n`, { mode: 0o700 });
-    const agentId = label === "Claude Code" ? "claude" : label === "Codex" ? "codex" : "pi";
+    const harness = label === "Claude Code" ? "claude" : label === "Codex" ? "codex" : "pi";
     const agent = new AcpAgentDefinition(
-        agentId,
+        harness,
         label,
         executable,
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: agentId,
+                    harness: harness,
                     adapterPath: executable,
                     arguments: [
                         "--agent-name",
@@ -144,7 +144,7 @@ export async function fixture(
     const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));
     const creations = new SessionCreations(new SessionCreationTable(database));
     let service = new NativeSessionService(
-        (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
+        (harness) => sessions.resolveAgent(config.catalog.find(harness)),
         directories,
         sessions.sessions,
         creations,
@@ -155,7 +155,7 @@ export async function fixture(
         }),
     );
     const identity = {
-        agentId: agent.id,
+        harness: agent.harness,
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",
@@ -256,7 +256,7 @@ export async function fixture(
                 maxProcesses: null,
             });
             service = new NativeSessionService(
-                (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
+                (harness) => sessions.resolveAgent(config.catalog.find(harness)),
                 directories,
                 sessions.sessions,
                 creations,

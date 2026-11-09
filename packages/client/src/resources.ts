@@ -107,7 +107,7 @@ export class MortySessionAccessRevocation {
 
 /** Creates an Agent-owned Session with its initial settings. Reuse the operation ID after response loss. */
 export interface CreateMortySessionRequest {
-    readonly agentId: string;
+    readonly harness: string;
     readonly configurations: readonly SessionConfigurationSelection[];
     readonly directory: string;
     readonly computerId: string;
@@ -120,7 +120,7 @@ export interface CreateMortySessionRequest {
  * require every field, so leave fields out only with a Relay that resolves them.
  */
 export interface MortySessionBinding {
-    readonly agentId?: string;
+    readonly harness?: string;
     readonly directory?: string;
 }
 
@@ -272,14 +272,20 @@ export class MortyAgentDescriptor {
     readonly agentPath: string;
     readonly agentVersion: string;
     readonly capabilities: SessionCapabilities;
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
 
-    constructor(agentPath: string, agentVersion: string, capabilities: SessionCapabilities, id: string, label: string) {
+    constructor(
+        agentPath: string,
+        agentVersion: string,
+        capabilities: SessionCapabilities,
+        harness: string,
+        label: string,
+    ) {
         this.agentPath = agentPath;
         this.agentVersion = agentVersion;
         this.capabilities = Object.freeze({ ...capabilities });
-        this.id = id;
+        this.harness = harness;
         this.label = label;
     }
 }
@@ -298,7 +304,7 @@ function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
         !Object.hasOwn(agent, "agentPath") ||
         !Object.hasOwn(agent, "agentVersion") ||
         !Object.hasOwn(agent, "capabilities") ||
-        !Object.hasOwn(agent, "id") ||
+        !Object.hasOwn(agent, "harness") ||
         !Object.hasOwn(agent, "label")
     ) {
         throw invalidResponse("The service returned an invalid Agent descriptor");
@@ -313,7 +319,7 @@ function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
         agentPath,
         agentVersion,
         decodeMortyAgentCapabilities(agent["capabilities"]),
-        identifierField(agent, "id"),
+        identifierField(agent, "harness"),
         label.trim(),
     );
 }

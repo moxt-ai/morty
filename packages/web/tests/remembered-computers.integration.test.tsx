@@ -489,7 +489,7 @@ test("Given two computers, When I end the current access, Then the other compute
 test("Given saved access for the same computer, When an old native handoff link has expired without an identity query, Then that access still opens the intended target", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ agent: { id: "pi", label: "Pi" }, connectAgent: true });
+    const app = await createTestApp({ agent: { harness: "pi", label: "Pi" }, connectAgent: true });
     await startConversation(app, "Keep the issued grant");
     window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=morty_transfer_v1.${app.identity.computerId}.${"a".repeat(43)}`;
     const continued = await app.reload();

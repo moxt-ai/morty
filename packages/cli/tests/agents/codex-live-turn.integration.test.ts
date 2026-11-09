@@ -137,7 +137,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                 kind: "session.create",
                 requestId: randomUUID(),
                 operationId: randomUUID(),
-                agentId: "codex",
+                harness: "codex",
                 directory: ".",
                 configurations: [],
             }),
@@ -156,7 +156,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             const commandId = randomUUID();
             const queuedCommandId = randomUUID();
             const originalPrompt = encodeSessionPromptCommand({
-                agentId: "codex",
+                harness: "codex",
                 commandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,
@@ -194,7 +194,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                     socket.send(
                         encodeNativeSessionCommand({
                             action: "active-turn",
-                            agentId: "codex",
+                            harness: "codex",
                             directory: config.defaultWorkspace,
                             kind: "native.session.request",
                             requestId: "queued_snapshot",
@@ -279,7 +279,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         await providerEntered.promise;
                         socket.send(
                             encodeSessionPromptCommand({
-                                agentId: "codex",
+                                harness: "codex",
                                 commandId: queuedCommandId,
                                 directory: ".",
                                 disposition: SessionPromptDisposition.Append,
@@ -312,7 +312,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                             socket.send(
                                 encodeNativeSessionCommand({
                                     action: "active-turn",
-                                    agentId: "codex",
+                                    harness: "codex",
                                     directory: ".",
                                     kind: "native.session.request",
                                     requestId: randomUUID(),

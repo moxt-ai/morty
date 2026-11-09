@@ -40,7 +40,7 @@ export interface ControlledRuntimeConnection {
 
 /** An Agent the controlled Runtime exposes. */
 export interface ControlledAgent {
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     /** Controls replies through the real daemon's Agent dependency. */
     readonly reply?: FakeAgentHarnessOptions["reply"];
@@ -141,31 +141,31 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     const harness = createFakeDaemon(
         workspace === undefined ? behavior : { ...behavior, reply: workspaceReply(behavior, workspace) },
     );
-    if (behavior.agentId === "diagnostics-test") {
+    if (behavior.harness === "diagnostics-test") {
         return { ...harness, agents: [createSettingsAgent("diagnostics")] };
     }
-    if (behavior.agentId === "tool-lifecycle-test") {
+    if (behavior.harness === "tool-lifecycle-test") {
         return { ...harness, agents: [createToolLifecycleAgent(behavior.beforeCancellationApplied)] };
     }
-    if (behavior.agentId === "interaction-test") {
+    if (behavior.harness === "interaction-test") {
         return { ...harness, agents: [createInteractionAgent(behavior.onBackgroundPermissionReady)] };
     }
-    if (behavior.agentId === "configuration-test") {
+    if (behavior.harness === "configuration-test") {
         return {
             ...harness,
             agents: [createSettingsAgent("full", behavior.beforeConfigurationApplied, behavior.beforeSessionCreated)],
         };
     }
-    if (behavior.agentId === "dependent-settings-test") {
+    if (behavior.harness === "dependent-settings-test") {
         return { ...harness, agents: [createSettingsAgent("dependent")] };
     }
-    if (behavior.agentId === "settings-test") {
+    if (behavior.harness === "settings-test") {
         return { ...harness, agents: [createSettingsAgent("model", undefined, behavior.beforeSessionCreated)] };
     }
-    if (behavior.agentId === "signed-out-test") {
+    if (behavior.harness === "signed-out-test") {
         return { ...harness, agents: [createUnavailableAgent("signed-out-test", "Signed-out Agent", "signed-out")] };
     }
-    if (behavior.agentId === "broken-test") {
+    if (behavior.harness === "broken-test") {
         return { ...harness, agents: [createUnavailableAgent("broken-test", "Broken Agent", "broken")] };
     }
     return harness;
@@ -267,7 +267,7 @@ export async function connectControlledAgentRuntime(options: {
         },
         /** Restarts the Runtime offering other Agents, which it publishes to the Platform when it reconnects. */
         restartWithAgents: async (
-            agents: Pick<ControlledAgentBehavior, "additionalAgents" | "agentId" | "agentName">,
+            agents: Pick<ControlledAgentBehavior, "additionalAgents" | "harness" | "agentName">,
         ): Promise<void> => {
             if (state.kind === "disposed") {
                 throw new Error("Cannot restart a disposed controlled Runtime");

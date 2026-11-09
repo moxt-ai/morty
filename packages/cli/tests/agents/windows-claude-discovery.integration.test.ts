@@ -65,7 +65,7 @@ test.runIf(process.platform === "win32").each([
             );
             const inventory: unknown = JSON.parse(result.stdout);
             expect(inventory).toMatchObject({
-                available: expect.arrayContaining([expect.objectContaining({ id: "claude" })]),
+                available: expect.arrayContaining([expect.objectContaining({ harness: "claude" })]),
             });
         } finally {
             await rm(directory, { recursive: true, force: true });

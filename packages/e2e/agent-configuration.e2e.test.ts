@@ -1,6 +1,6 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { id: "configuration-test", name: "Settings Agent" } });
+test.use({ runtimeAgent: { harness: "configuration-test", name: "Settings Agent" } });
 
 test("Given desktop configuration, When the user opens settings and selects a model, Then the panel fits its content and restores focus", async ({
     runtime,

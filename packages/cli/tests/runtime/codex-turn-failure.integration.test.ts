@@ -20,7 +20,7 @@ test("Given Codex fails a turn with a reason, When a member's prompt runs throug
                 kind: "session.prompt",
                 commandId,
                 target: peer.target,
-                agentId: "codex",
+                harness: "codex",
                 directory: ".",
                 attachments: [],
                 prompt: "Do the work",

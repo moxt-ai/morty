@@ -36,7 +36,7 @@ const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.met
 class FirstAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled ACP";
     override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
@@ -49,7 +49,7 @@ class FirstAgentSpecification extends ControlledAcpSpecification {
 class LaterInstalledAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp-later";
-    readonly id = "controlled-acp-later";
+    readonly harness = "controlled-acp-later";
     readonly label = "Controlled ACP Later";
     override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
@@ -373,18 +373,18 @@ test("Given the daemon started before an Agent was installed, When the Relay req
             AGENT_CATALOG_DISCOVERED_KIND,
         );
         expect(
-            outcome.kind === AGENT_CATALOG_DISCOVERED_KIND ? outcome.event.agents.map((a) => a.id).sort() : [],
+            outcome.kind === AGENT_CATALOG_DISCOVERED_KIND ? outcome.event.agents.map((a) => a.harness).sort() : [],
         ).toEqual(["controlled-acp", "controlled-acp-later"]);
 
         // The daemon republished its catalog so Relay-served reads stop serving the boot set.
         const republished = relay.catalogBodies
-            .map((body) => JSON.parse(body) as { agents: { id: string }[] })
-            .filter((catalog) => catalog.agents.some((entry) => entry.id === "controlled-acp-later"));
+            .map((body) => JSON.parse(body) as { agents: { harness: string }[] })
+            .filter((catalog) => catalog.agents.some((entry) => entry.harness === "controlled-acp-later"));
         expect(republished).toHaveLength(1);
         expect(
             config.catalog
                 .read()
-                .agents.map((agent) => agent.id)
+                .agents.map((agent) => agent.harness)
                 .sort(),
         ).toEqual(["controlled-acp", "controlled-acp-later"]);
     } finally {
@@ -468,7 +468,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         sendText(
             socket,
             encodeSessionCreateCommand({
-                agentId: "controlled-acp",
+                harness: "controlled-acp",
                 directory: ".",
                 kind: "session.create",
                 requestId: prepareRequestId,
@@ -490,15 +490,15 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         expect(
             config.catalog
                 .read()
-                .agents.map((agent) => agent.id)
+                .agents.map((agent) => agent.harness)
                 .sort(),
         ).toEqual(["controlled-acp"]);
         const lastPublished = JSON.parse(relay.catalogBodies[relay.catalogBodies.length - 1] ?? "{}") as {
-            agents: { agentVersion: string; id: string }[];
+            agents: { agentVersion: string; harness: string }[];
         };
-        expect(lastPublished.agents.map((entry) => ({ agentVersion: entry.agentVersion, id: entry.id }))).toEqual([
-            { agentVersion: "1.1.0", id: "controlled-acp" },
-        ]);
+        expect(
+            lastPublished.agents.map((entry) => ({ agentVersion: entry.agentVersion, harness: entry.harness })),
+        ).toEqual([{ agentVersion: "1.1.0", harness: "controlled-acp" }]);
         // The committed memory and the last Relay publication describe the same Agents: the
         // failed discovery's rollback did not silently diverge them.
         const catalogedVersion = config.catalog.read().agents[0]?.agentVersion;
@@ -593,7 +593,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         sendText(
             socket,
             encodeSessionCreateCommand({
-                agentId: "controlled-acp",
+                harness: "controlled-acp",
                 directory: ".",
                 kind: "session.create",
                 requestId: prepareRequestId,
@@ -615,9 +615,9 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         }
         // The reply describes the snapshot the discovery itself published (the pre-upgrade
         // Agent), not the newer snapshot the resolver committed after the lock released.
-        expect(outcome.event.agents.map((agent) => ({ agentVersion: agent.agentVersion, id: agent.id }))).toEqual([
-            { agentVersion: "1.0.0", id: "controlled-acp" },
-        ]);
+        expect(
+            outcome.event.agents.map((agent) => ({ agentVersion: agent.agentVersion, harness: agent.harness })),
+        ).toEqual([{ agentVersion: "1.0.0", harness: "controlled-acp" }]);
 
         // The queued resolver swap still commits on top: the session serves the upgrade and the
         // final catalog reflects it.

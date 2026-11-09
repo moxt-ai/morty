@@ -49,13 +49,13 @@ function runtimeSetupMessage(code: string): string {
 type ChatSessionTarget = {
     readonly target: NativeSessionTarget;
     readonly computerId: string;
-    readonly agentRef: string;
+    readonly harness: string;
     readonly workspaceRef: string;
 };
 
 export type NewChatSessionInput = {
     readonly computerId: string;
-    readonly agentRef: string;
+    readonly harness: string;
     readonly workspaceRef: string;
     readonly operationId: string;
     readonly configurations: readonly {
@@ -71,7 +71,7 @@ export type ExistingChatSessionInput = ChatSessionTarget;
 const discoveredRuntimeSchema = v.object({
     agents: v.array(
         v.object({
-            id: platformIdentifier,
+            harness: platformIdentifier,
             label: v.string(),
         }),
     ),
@@ -134,7 +134,7 @@ export class PlatformProjectGateway {
                 computerId: runtime.computerId,
                 machineName: runtime.machineName,
                 online: runtime.online,
-                agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
+                agents: runtime.agents.map((agent) => ({ harness: agent.harness, label: agent.label })),
             }));
         });
 
@@ -178,7 +178,7 @@ export class PlatformProjectGateway {
                 computerId: runtime.computerId,
                 machineName: runtime.machineName,
                 online: runtime.online,
-                agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
+                agents: runtime.agents.map((agent) => ({ harness: agent.harness, label: agent.label })),
             };
         } catch (cause) {
             parent.throwIfAborted();
@@ -334,7 +334,7 @@ export class PlatformProjectGateway {
 
     readonly discoverChatAgentSettings = async (
         computerId: string,
-        selection: { readonly computerId: string; readonly agentRef: string; readonly workspaceRef: string },
+        selection: { readonly computerId: string; readonly harness: string; readonly workspaceRef: string },
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -342,11 +342,11 @@ export class PlatformProjectGateway {
             signal,
             async (client) => {
                 const settings = await client.runtimes.discoverAgentSettings(
-                    selection.agentRef,
+                    selection.harness,
                     { directory: selection.workspaceRef },
                     signal,
                 );
-                if (settings.agentId !== selection.agentRef || settings.directory !== selection.workspaceRef) {
+                if (settings.harness !== selection.harness || settings.directory !== selection.workspaceRef) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Morty returned settings for an unexpected Agent or directory.",
@@ -366,7 +366,7 @@ export class PlatformProjectGateway {
             async (client) => {
                 const ready = await client.sessions.create(
                     {
-                        agentId: input.agentRef,
+                        harness: input.harness,
                         configurations: input.configurations,
                         directory: input.workspaceRef,
                         computerId: input.computerId,
@@ -374,7 +374,7 @@ export class PlatformProjectGateway {
                     },
                     signal,
                 );
-                if (ready.agentId !== input.agentRef || ready.directory !== input.workspaceRef) {
+                if (ready.harness !== input.harness || ready.directory !== input.workspaceRef) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Morty returned an unexpected Session binding.",
@@ -430,7 +430,7 @@ export class PlatformProjectGateway {
                     await client.sessions.load(
                         input.target,
                         {
-                            agentId: input.agentRef,
+                            harness: input.harness,
                             directory: input.workspaceRef,
                         },
                         signal,
@@ -465,7 +465,7 @@ export class PlatformProjectGateway {
             credential: access.credential,
             expiresAt: access.expiresAt,
             ready,
-            agentRef: session.agentRef,
+            harness: session.harness,
             workspaceRef: session.workspaceRef,
         };
     };
@@ -496,7 +496,7 @@ export class PlatformProjectGateway {
                 const session = restored.entry;
                 const ready = restored.ready;
                 return {
-                    agentRef: session.agentId,
+                    harness: session.harness,
                     ready,
                     entry: {
                         target: session.target,

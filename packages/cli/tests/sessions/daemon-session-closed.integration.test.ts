@@ -33,12 +33,12 @@ import {
 } from "../support/agents/real-daemon.ts";
 
 // Native identities always belong to the Agent that created them.
-const NATIVE_AGENT_ID = "claude";
+const NATIVE_HARNESS = "claude";
 
 /** Each discovery or execution process receives the next endpoint index. */
 class ClosableAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
-    readonly id = NATIVE_AGENT_ID;
+    readonly harness = NATIVE_HARNESS;
     readonly label = "Controlled Claude";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
@@ -109,7 +109,7 @@ async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["targ
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionPrepareCommand({
-            agentId: NATIVE_AGENT_ID,
+            harness: NATIVE_HARNESS,
             directory: ".",
             kind: "session.prepare",
             requestId,
@@ -123,7 +123,7 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            agentId: NATIVE_AGENT_ID,
+            harness: NATIVE_HARNESS,
             commandId,
             directory: ".",
             disposition: SessionPromptDisposition.Append,
@@ -155,7 +155,7 @@ function sendClose(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]
 
 /** Prepares a Session, runs one prompt in it, and closes it; the reply to the close has been received. */
 async function closedSession(peer: RealDaemonPeer, title: string): Promise<RealDaemonPeer["target"]> {
-    const sessionTarget = await prepareNewRealSession(peer, NATIVE_AGENT_ID);
+    const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
     await prompt(peer, sessionTarget, title);
     const requestId = sendClose(peer, sessionTarget);
     expect(decodeSessionClosedEvent(await nextMessageOfKind(peer, "session.closed")).requestId).toBe(requestId);
@@ -165,7 +165,7 @@ async function closedSession(peer: RealDaemonPeer, title: string): Promise<RealD
 test("Given a client closes a Session, When the Runtime stops its Agent process, Then the Runtime announces the closed Session and why before it answers the close request", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await prepareNewRealSession(peer, NATIVE_AGENT_ID);
+        const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
         const endpointsBeforeClose = specification.sessions.endpointCount();
         const requestId = sendClose(peer, sessionTarget);
 
@@ -320,7 +320,7 @@ test("Given a closed Session, When a client answers a permission request or an e
 test("Given a Session whose Agent process is still stopping, When a client sends a prompt, Then the Runtime reports session_closed without waiting for the process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await prepareNewRealSession(peer, NATIVE_AGENT_ID);
+        const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
         const teardown = specification.sessions.closes.hold();
         sendClose(peer, sessionTarget);
         await teardown.entered;

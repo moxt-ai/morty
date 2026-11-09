@@ -56,7 +56,7 @@ async function probeWithRetry<Value>(
             return await probe();
         } catch (failure) {
             context.onProbeDiagnostic?.({
-                agentId: specification.id,
+                harness: specification.harness,
                 source,
                 event: signal.aborted ? "agent_probe_cancelled" : "agent_probe_failed",
                 attempt,
@@ -202,7 +202,7 @@ export async function discoverAgent(
                 capabilities: SessionCapabilities,
             ): AcpAgentDefinition =>
                 new AcpAgentDefinition(
-                    specification.id,
+                    specification.harness,
                     specification.label,
                     agent.path,
                     specification.createConnection,

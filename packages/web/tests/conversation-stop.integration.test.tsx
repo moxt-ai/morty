@@ -19,7 +19,7 @@ test("Given an Agent takes longer than the Stop deadline, When its cancelled tur
         connectAgent: true,
         clock,
         agent: {
-            id: "tool-lifecycle-test",
+            harness: "tool-lifecycle-test",
             label: "Controlled Agent",
             beforeCancellationApplied: async () => {
                 cancellation.resolve();
@@ -61,7 +61,7 @@ test("Given a follow-up the Runtime rejected while a reply runs, When I ask to s
     const app = await createTestApp({
         connectAgent: true,
         agent: {
-            id: "tool-lifecycle-test",
+            harness: "tool-lifecycle-test",
             label: "Controlled Agent",
             beforeCancellationApplied: async () => {
                 cancellation.resolve();

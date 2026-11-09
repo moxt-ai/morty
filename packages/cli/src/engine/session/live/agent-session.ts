@@ -103,8 +103,8 @@ type SessionAddress =
 export class AgentSession implements AgentSessionRestore {
     // The restore surface: AgentSessionRestore members expose private state to
     // session-restore.ts only. The class keeps the fields private.
-    get agentId(): string {
-        return this.#agentId;
+    get harness(): string {
+        return this.#harness;
     }
     get capabilities(): SessionCapabilities {
         return this.#capabilities;
@@ -123,7 +123,7 @@ export class AgentSession implements AgentSessionRestore {
             return this.#address.target;
         }
         if (this.#nativeIdentity.kind === "bound") {
-            return { harness: this.#agentId, sessionId: this.#nativeIdentity.sessionId };
+            return { harness: this.#harness, sessionId: this.#nativeIdentity.sessionId };
         }
         throw new AcpExecutionError("The harness has not established a Session", {}, "invalid_agent_session");
     }
@@ -145,7 +145,7 @@ export class AgentSession implements AgentSessionRestore {
         return this.#nativeIdentity.kind === "bound" ? this.#nativeIdentity.sessionId : "";
     }
     readonly #adapter: Adapter;
-    readonly #agentId: string;
+    readonly #harness: string;
     readonly #cwd: string;
     readonly #environment: Readonly<Record<string, string>>;
     readonly #getObserver: () => SessionObserver;
@@ -185,7 +185,7 @@ export class AgentSession implements AgentSessionRestore {
         this.#agentCommand = () => execution.agentCommand(this.target);
         this.#settledTurns = () => execution.settledTurns(this.target);
         this.#adapter = adapter;
-        this.#agentId = agent.id;
+        this.#harness = agent.harness;
         this.#commands = [];
         this.#cwd = cwd;
         this.#environment = agent.environment;
@@ -264,7 +264,7 @@ export class AgentSession implements AgentSessionRestore {
         metrics: OperationMetrics,
         adapter: Adapter,
     ): Promise<AgentSession> {
-        if (address.kind === "established" && address.target.harness !== options.agent.id) {
+        if (address.kind === "established" && address.target.harness !== options.agent.harness) {
             throw new AcpExecutionError(
                 "The native Session belongs to a different harness",
                 {},
@@ -304,7 +304,7 @@ export class AgentSession implements AgentSessionRestore {
                 }
                 options.signal.throwIfAborted();
                 if (error instanceof RetryableAcpInitializationError && attempt === 1) {
-                    console.warn(`[${options.agent.id}-acp] ACP agent initialization failed; retrying once`);
+                    console.warn(`[${options.agent.harness}-acp] ACP agent initialization failed; retrying once`);
                     continue;
                 }
                 if (error instanceof AcpExecutionError) {
@@ -386,7 +386,7 @@ export class AgentSession implements AgentSessionRestore {
             store,
             async (runtime) => {
                 runtime.#capabilities = capabilities;
-                const source = store.read({ harness: options.agent.id, sessionId: origin.sessionId });
+                const source = store.read({ harness: options.agent.harness, sessionId: origin.sessionId });
                 const opened = await runtime.#writeNativeHistory(
                     async () => await runtime.forkSession(origin.sessionId, options.signal),
                 );
@@ -412,7 +412,7 @@ export class AgentSession implements AgentSessionRestore {
             options.adapter,
         );
 
-    readonly belongsTo = (agentId: string, cwd: string): boolean => this.#agentId === agentId && this.#cwd === cwd;
+    readonly belongsTo = (harness: string, cwd: string): boolean => this.#harness === harness && this.#cwd === cwd;
 
     readonly usesEnvironment = (environment: Readonly<Record<string, string>>): boolean =>
         recordsEqual(this.#environment, environment);
@@ -638,7 +638,7 @@ export class AgentSession implements AgentSessionRestore {
                     current = await this.#readNativeHistoryRevision(signal);
                 } catch (error) {
                     signal.throwIfAborted();
-                    console.warn(`[${this.#agentId}-acp] Native history revision could not be read`, error);
+                    console.warn(`[${this.#harness}-acp] Native history revision could not be read`, error);
                     return false;
                 }
                 // Our own writes that began meanwhile record a new baseline when they settle.
@@ -697,7 +697,7 @@ export class AgentSession implements AgentSessionRestore {
         } catch (error) {
             // A released process has no writer left to compare; any other failure keeps reuse unchanged.
             if (!(error instanceof AcpExecutionError && error.code === "invalid_agent_session")) {
-                console.warn(`[${this.#agentId}-acp] Native history revision could not be recorded`, error);
+                console.warn(`[${this.#harness}-acp] Native history revision could not be recorded`, error);
             }
         } finally {
             if (this.#nativeHistoryBaseline === recording) {
@@ -1024,7 +1024,7 @@ export class AgentSession implements AgentSessionRestore {
             this.#address.kind === "awaiting-native" &&
             this.#nativeIdentity.kind === "unbound" &&
             (!isIdentifier(sessionId) ||
-                !(this.#store.read({ harness: this.#agentId, sessionId: sessionId }) instanceof MissingStoredSession))
+                !(this.#store.read({ harness: this.#harness, sessionId: sessionId }) instanceof MissingStoredSession))
         ) {
             throw new AcpExecutionError(
                 "The Agent returned an invalid new Session ID",
@@ -1041,7 +1041,7 @@ export class AgentSession implements AgentSessionRestore {
         }
         if (
             this.#address.kind === "established" &&
-            !sameNativeSession(this.#address.target, { harness: this.#agentId, sessionId: sessionId })
+            !sameNativeSession(this.#address.target, { harness: this.#harness, sessionId: sessionId })
         ) {
             throw new AcpExecutionError(
                 "The harness returned a different native Session",

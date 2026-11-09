@@ -12,7 +12,7 @@ test("Given an old setting edit response in flight, When another client changes 
     const app = await createTestApp({
         environment,
         connectAgent: true,
-        agent: { id: "settings-test", label: "Settings Agent" },
+        agent: { harness: "settings-test", label: "Settings Agent" },
     });
     const network = app.network;
     if (!network || !app.daemon) {

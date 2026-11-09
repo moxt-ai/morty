@@ -123,9 +123,9 @@ export const MAX_AGENT_SETTING_PREFERENCES = 100;
  * The settings the user chose for an Agent, one per setting. Version 1 stored every setting a Session ran with,
  * chosen or not; those entries cannot tell a choice from a default, so they are no longer read.
  */
-export const lastAgentSettingsEntry = (computerId: string, agentRef: string) =>
+export const lastAgentSettingsEntry = (computerId: string, harness: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("morty:last-agent-settings:v2:", computerId, agentRef),
+        key: scopedKey("morty:last-agent-settings:v2:", computerId, harness),
         schema: v.pipe(
             v.array(agentSettingPreferenceSchema),
             v.maxLength(MAX_AGENT_SETTING_PREFERENCES),
@@ -159,9 +159,9 @@ export const lastHarnessEntry = (computerId: string): LocalStorageEntry<string> 
 const directorySchema = v.custom<string>(isDirectoryPath, "Invalid directory path");
 const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_WORKSPACE_PATH_LENGTH));
 
-export const lastCwdEntry = (computerId: string, agentRef: string): LocalStorageEntry<string> =>
+export const lastCwdEntry = (computerId: string, harness: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:last-cwd:", computerId, agentRef),
+        key: scopedKey("morty:last-cwd:", computerId, harness),
         schema: directorySchema,
     });
 

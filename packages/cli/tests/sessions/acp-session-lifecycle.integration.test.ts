@@ -80,7 +80,7 @@ describe("ACP conversation sessions", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -139,7 +139,7 @@ describe("ACP conversation sessions", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -709,7 +709,7 @@ describe("ACP conversation sessions", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "claude",
+                        harness: "claude",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                         environment: options.environment,
@@ -780,7 +780,7 @@ describe("ACP conversation sessions", () => {
         });
         try {
             expect(restartedRuntime.findSessions([sessionTarget])).toEqual([
-                expect.objectContaining({ agentId: "claude", prompted: true, target: sessionTarget }),
+                expect.objectContaining({ harness: "claude", prompted: true, target: sessionTarget }),
             ]);
         } finally {
             await restartedRuntime.close();
@@ -844,7 +844,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 (options) =>
                     new ControlledAcpConnection(
                         {
-                            id: "pi",
+                            harness: "pi",
                             adapterPath: adapterIdentity.realPath,
                             arguments: [],
                             environment: options.environment,
@@ -948,7 +948,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -963,7 +963,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "claude",
+                        harness: "claude",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                         environment: options.environment,
@@ -1038,7 +1038,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 (options) =>
                     new ControlledAcpConnection(
                         {
-                            id: "codex",
+                            harness: "codex",
                             adapterPath: process.execPath,
                             arguments: [fakeAgentPath, "--agent-name", "Codex"],
                             environment: options.environment,
@@ -1096,7 +1096,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -1187,7 +1187,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex", "--exclusive-writer"],
                         environment: options.environment,
@@ -1298,7 +1298,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [
                             fakeAgentPath,
@@ -1352,7 +1352,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--authentication-required"],
                         environment: options.environment,
@@ -1400,7 +1400,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -1460,7 +1460,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -1549,7 +1549,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [adapterPath],
                         environment: options.environment,
@@ -1643,7 +1643,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath],
                         environment: options.environment,
@@ -1658,7 +1658,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "claude",
+                        harness: "claude",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath],
                         environment: options.environment,
@@ -1726,7 +1726,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--exit-after-session-creation"],
                         environment: options.environment,

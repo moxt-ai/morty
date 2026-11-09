@@ -41,14 +41,14 @@ const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.met
 class RefreshableAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
-    readonly id: string;
+    readonly harness: string;
     readonly label = "Controlled ACP";
     override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
 
     constructor(id: string) {
         super("MORTY_TEST_REFRESHABLE_AGENT_PATH", []);
-        this.id = id;
+        this.harness = id;
     }
 }
 
@@ -57,7 +57,7 @@ class RefreshableAgentSpecification extends ControlledAcpSpecification {
 class UnchangedPeerAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp-peer";
-    readonly id = "controlled-acp-peer";
+    readonly harness = "controlled-acp-peer";
     readonly label = "Controlled ACP Peer";
 
     constructor() {
@@ -65,8 +65,8 @@ class UnchangedPeerAgentSpecification extends ControlledAcpSpecification {
     }
 }
 
-function specifications(agentId: string): readonly LocalAgentSpecification[] {
-    return [new RefreshableAgentSpecification(agentId), new UnchangedPeerAgentSpecification()];
+function specifications(harness: string): readonly LocalAgentSpecification[] {
+    return [new RefreshableAgentSpecification(harness), new UnchangedPeerAgentSpecification()];
 }
 
 function launcherSource(version: string, peerUrl: string, nativeSessions = true): string {
@@ -224,15 +224,15 @@ class ClientFrames {
 }
 
 test.for([
-    { agentId: "controlled-acp", queryBeforeUpgrade: false },
-    { agentId: "controlled-acp", queryBeforeUpgrade: true },
-    { agentId: "codex", queryBeforeUpgrade: false },
+    { harness: "controlled-acp", queryBeforeUpgrade: false },
+    { harness: "controlled-acp", queryBeforeUpgrade: true },
+    { harness: "codex", queryBeforeUpgrade: false },
 ])(
-    "Given a $agentId conversation and retained reader=$queryBeforeUpgrade before an upgrade, When preparation and native history are requested, Then both use the upgraded Agent without restarting",
+    "Given a $harness conversation and retained reader=$queryBeforeUpgrade before an upgrade, When preparation and native history are requested, Then both use the upgraded Agent without restarting",
     {
         timeout: 120_000,
     },
-    async ({ agentId, queryBeforeUpgrade }) => {
+    async ({ harness, queryBeforeUpgrade }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
         const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-agent-refresh-"));
@@ -308,9 +308,9 @@ test.for([
             defaultWorkspace: workspace,
             environment,
             signal: AbortSignal.timeout(60_000),
-            specifications: specifications(agentId),
+            specifications: specifications(harness),
         });
-        const agent = inventory.readyAgents().find((entry) => entry.id === agentId);
+        const agent = inventory.readyAgents().find((entry) => entry.harness === harness);
         if (agent === undefined || inventory.readyAgents().length !== 2) {
             await rm(stateDirectory, { force: true, recursive: true });
             throw new Error(`Controlled agent was not discovered: ${JSON.stringify(inventory.unavailable)}`);
@@ -322,7 +322,7 @@ test.for([
                 defaultWorkspace: workspace,
                 relayUrl,
             },
-            agentId === "codex"
+            harness === "codex"
                 ? new RuntimeAgentDependencies(inventory.readyAgents())
                 : new RuntimeAgentDependencies(inventory.readyAgents(), acpAdapters),
             new RuntimeLocalContext(stateDirectory, environment),
@@ -334,7 +334,7 @@ test.for([
                         defaultWorkspace: workspace,
                         environment,
                         signal: refreshSignal,
-                        specifications: specifications(agentId),
+                        specifications: specifications(harness),
                     }),
                 () => config,
                 publishAgentCatalog,
@@ -348,7 +348,7 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeSessionCreateCommand({
-                    agentId,
+                    harness,
                     directory: ".",
                     kind: "session.create",
                     requestId: "prepare-before-agent-upgrade",
@@ -364,7 +364,7 @@ test.for([
                 sendText(
                     await socketReady.promise,
                     encodeNativeSessionCommand({
-                        agentId,
+                        harness,
                         directory: ".",
                         kind: NATIVE_SESSION_REQUEST_KIND,
                         requestId: "browse-before-agent-upgrade",
@@ -384,7 +384,7 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeSessionCreateCommand({
-                    agentId,
+                    harness,
                     directory: ".",
                     kind: "session.create",
                     requestId: prepareRequestId,
@@ -398,14 +398,14 @@ test.for([
             );
             expect(prepared).toMatchObject({
                 kind: "session.ready",
-                ready: { agentVersion: "1.1.0", target: { harness: agentId, sessionId: expect.any(String) } },
+                ready: { agentVersion: "1.1.0", target: { harness: harness, sessionId: expect.any(String) } },
             });
 
             const settingsRequestId = "settings-after-agent-upgrade";
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    agentId,
+                    harness,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: settingsRequestId,
                 }),
@@ -419,7 +419,7 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeNativeSessionCommand({
-                    agentId,
+                    harness,
                     directory: ".",
                     kind: NATIVE_SESSION_REQUEST_KIND,
                     requestId: "browse-after-agent-upgrade",
@@ -432,15 +432,15 @@ test.for([
                 result: { action: "list", capabilities: { listSessions: true }, entries: [], nextCursor: null },
             });
 
-            if (agentId === "codex") {
+            if (harness === "codex") {
                 sendText(
                     await socketReady.promise,
                     encodeSessionPreviewHistoryPageLoad({
-                        agentId,
+                        harness,
                         directory: ".",
                         kind: "session.preview-history.page.load",
                         requestId: "preview-after-agent-upgrade",
-                        target: { harness: agentId, sessionId: "saved-thread" },
+                        target: { harness: harness, sessionId: "saved-thread" },
                         eventLimit: 100,
                         cursor: null,
                     }),
@@ -463,11 +463,11 @@ test.for([
             }
 
             const republished = catalogBodies
-                .map((body) => JSON.parse(body) as { agents: { agentVersion: string; id: string }[] })
+                .map((body) => JSON.parse(body) as { agents: { agentVersion: string; harness: string }[] })
                 .filter((catalog) => catalog.agents.some((entry) => entry.agentVersion === "1.1.0"));
             expect(republished).toHaveLength(1);
-            expect(republished[0]?.agents.map((entry) => entry.id).sort()).toEqual(
-                [agentId, "controlled-acp-peer"].sort(),
+            expect(republished[0]?.agents.map((entry) => entry.harness).sort()).toEqual(
+                [harness, "controlled-acp-peer"].sort(),
             );
         } finally {
             cancellation.abort();

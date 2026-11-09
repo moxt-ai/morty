@@ -462,7 +462,7 @@ function SessionRenderItemContent({
         <MortySessionMessage
             active={active}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
-            failureAgentRef={pane.agentRef}
+            failureHarness={pane.harness}
             failureMachineName={machineName}
             message={item.message}
             onRemoveUnknownDelivery={onRemoveUnknownDelivery}
@@ -524,7 +524,7 @@ function SessionConversationTitleBar({
     titleEdit,
     titleLoading,
     centered,
-    agentRef,
+    harness,
     agentLabel,
     onOpenTitleEdit,
     onSetTitleDraft,
@@ -535,7 +535,7 @@ function SessionConversationTitleBar({
     readonly titleEdit: TitleEdit;
     readonly titleLoading: boolean;
     readonly centered: boolean;
-    readonly agentRef: string;
+    readonly harness: string;
     readonly agentLabel: string;
     readonly onOpenTitleEdit: () => void;
     readonly onSetTitleDraft: (draft: string) => void;
@@ -547,7 +547,7 @@ function SessionConversationTitleBar({
     const titleHarnessMark = (loading: boolean) =>
         centered ? null : (
             <HarnessMark
-                agentRef={agentRef || agentLabel}
+                harness={harness || agentLabel}
                 appearance="line"
                 className="text-copy-secondary"
                 label={agentLabel}
@@ -817,7 +817,7 @@ function MortySessionPaneBody({
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
     const welcome = useStore(pane.welcome, (state) => state.state);
-    const harness = sessionHarnessSelection(runtimeConfiguration?.runtime ?? null, pane.agentRef);
+    const harness = sessionHarnessSelection(runtimeConfiguration?.runtime ?? null, pane.harness);
 
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const signal = pane.operationsSignal();
@@ -869,7 +869,7 @@ function MortySessionPaneBody({
     const authenticationRecovery =
         presentation.authenticationFailure === null
             ? null
-            : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
+            : authenticationGuidance(presentation.authenticationFailure.code, pane.harness, executionContext.machine);
     // The notice slot's three inputs, shared by the pane-level in-flow slot and the
     // composer's overlay slot so both placements render the very same card.
     const slotConnectionNotice =
@@ -925,7 +925,7 @@ function MortySessionPaneBody({
         title,
         titleEdit,
         titleLoading: sessionMessagesLoading,
-        agentRef: executionContext.agentRef,
+        harness: executionContext.harness,
         agentLabel: executionContext.agent,
         onOpenTitleEdit: () => pane.store.getState().openTitleEdit(),
         onSetTitleDraft: (draft: string) => pane.store.getState().setTitleDraft(draft),

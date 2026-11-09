@@ -20,7 +20,7 @@ import { prepareNewRealSession, type RealDaemonPeer, withControlledDaemon } from
 class ModelDependentSettingsAgent extends ControlledAcpSpecification {
     readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled model-dependent settings";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
@@ -91,7 +91,7 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
 });
 
 const identity = (_peer: RealDaemonPeer) => ({
-    agentId: "controlled-acp",
+    harness: "controlled-acp",
     directory: ".",
 });
 

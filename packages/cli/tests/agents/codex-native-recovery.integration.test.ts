@@ -80,7 +80,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                         kind: "session.prompt",
                         commandId,
                         target: nativeId,
-                        agentId: "codex",
+                        harness: "codex",
                         directory: ".",
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",

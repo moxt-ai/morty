@@ -80,7 +80,7 @@ class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
             options.client,
         );
     readonly agentExecutable = "node";
-    readonly id = "controlled-close";
+    readonly harness = "controlled-close";
     readonly label = "Controlled Close";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
@@ -161,7 +161,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                 const promptCommandId = crypto.randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         commandId: promptCommandId,
                         directory: ".",
                         disposition: SessionPromptDisposition.Append,

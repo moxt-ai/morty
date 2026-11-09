@@ -55,7 +55,7 @@ child.once('exit', code => process.exit(code ?? 1));\n`,
             );
             const inventory: unknown = JSON.parse(result.stdout);
             expect(inventory).toMatchObject({
-                available: expect.arrayContaining([expect.objectContaining({ id: "codex" })]),
+                available: expect.arrayContaining([expect.objectContaining({ harness: "codex" })]),
             });
         } finally {
             await rm(directory, { recursive: true, force: true });

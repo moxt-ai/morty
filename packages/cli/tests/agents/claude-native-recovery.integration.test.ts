@@ -41,7 +41,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                         kind: "session.prompt",
                         commandId,
                         target: nativeId,
-                        agentId: "claude",
+                        harness: "claude",
                         directory: ".",
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
@@ -132,7 +132,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
         const sendPrompt = (sessionTarget: NativeSessionTarget, commandId: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "claude",
+                    harness: "claude",
                     commandId,
                     directory: ".",
                     disposition: SessionPromptDisposition.Append,
@@ -177,7 +177,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
         expect(await finish(peer.target, sourceCommandId)).toContain("CLAUDE_FORK_REPLY");
 
         const identity = {
-            agentId: "claude",
+            harness: "claude",
             directory: ".",
             kind: "native.session.request",
         } as const;

@@ -41,7 +41,7 @@ type SessionPromptPlacement =
     | { readonly disposition: typeof SessionPromptDisposition.Steer; readonly targetCommandId: string };
 
 export type SessionPromptCommand = {
-    readonly agentId: string;
+    readonly harness: string;
 
     readonly commandId: string;
     readonly directory: string;
@@ -160,7 +160,7 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
     }
 
     return {
-        agentId: readIdentifier(value, "agentId"),
+        harness: readIdentifier(value, "harness"),
         commandId: readIdentifier(value, "commandId"),
         directory: readDirectoryPath(value, "directory"),
         attachments,

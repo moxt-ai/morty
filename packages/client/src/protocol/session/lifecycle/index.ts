@@ -46,7 +46,7 @@ export type SessionStatusChangedEvent = z.infer<typeof sessionStatusChangedEvent
 
 const sessionMetadataSchema = z
     .object({
-        agentId: IDENTIFIER,
+        harness: IDENTIFIER,
         directory: DIRECTORY_PATH,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         prompted: z.boolean(),
@@ -56,7 +56,7 @@ const sessionMetadataSchema = z
         title: z.string().max(500),
         updatedAt: z.iso.datetime({ offset: true }),
     })
-    .refine((entry) => entry.agentId === entry.target.harness && entry.sessionId === entry.target.sessionId, {
+    .refine((entry) => entry.harness === entry.target.harness && entry.sessionId === entry.target.sessionId, {
         message: "Session metadata must describe its native pair",
     })
     .readonly();
@@ -165,7 +165,7 @@ const sessionCreateCommandSchema = z
         kind: z.literal(SESSION_CREATE_KIND),
         requestId: IDENTIFIER,
         operationId: IDENTIFIER,
-        agentId: IDENTIFIER,
+        harness: IDENTIFIER,
         directory: DIRECTORY_PATH,
         configurations: sessionConfigurationSelectionsSchema,
     })
@@ -204,7 +204,7 @@ const runtimeTimingsSchema = z
 
 export const sessionReadyEventSchema = z
     .object({
-        agentId: IDENTIFIER,
+        harness: IDENTIFIER,
         agentName: z.string().max(255),
         agentVersion: z.string().max(128),
         capabilities: sessionCapabilitiesSchema,
