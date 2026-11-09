@@ -2,7 +2,7 @@ import { fireEvent, getByLabelText, getByRole, queryAllByRole, queryByRole } fro
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
+import { refreshSessions, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -179,6 +179,7 @@ test("Given a background reply is running when the Runtime goes offline, When th
         expect(agentAnswered(viewer, "Partial reply")).toBe(true);
         expect(entryStatus(viewer, "Background conversation")).toBe("Session working");
     });
+    await refreshSessions(app);
     await app.waitForView(() => expect(entryStatus(app, "Background conversation")).toBe("Session working"));
     await viewer.close();
 
@@ -187,6 +188,7 @@ test("Given a background reply is running when the Runtime goes offline, When th
     await daemon.reconnect();
     await app.waitForView(() => expect(connectionStatus(app)).toBe("connected"), RUNTIME_CHANGE_TIMEOUT_MS);
 
+    await refreshSessions(app);
     await app.waitForView(
         () => expect(entryStatus(app, "Background conversation")).not.toBe("Session working"),
         RUNTIME_CHANGE_TIMEOUT_MS,

@@ -67,6 +67,7 @@ test("Given a new session with an unsent draft, When the browser resumes after r
         try {
             await act(async () => {
                 window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+                app.transport.open();
                 clock.advanceBy(30_000);
                 window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
             });
@@ -106,7 +107,10 @@ test("Given a new session with an interrupted bridge, When recovery takes thirty
         expect(reconnectStatusText(app)).toContain("Connection interrupted");
         expect(getByRole(document.body, "button", { name: "Retry now" })).toBeDefined();
     });
-    await act(async () => clock.advanceBy(30_000));
+    await act(async () => {
+        app.transport.open();
+        clock.advanceBy(30_000);
+    });
     await notice;
     // Nothing sits between the log and this draft composer, so the notice floats over the log.
     expect(noticePlacement(app)).toBe("overlay");
@@ -545,7 +549,10 @@ test("Given an active turn and an unsent follow-up, When connection freshness is
     await app.user.keyboard("{Enter}");
     expect(composer).toHaveProperty("value", "Keep my follow-up");
     expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
-    await act(async () => clock.advanceBy(1_000));
+    await act(async () => {
+        app.transport.open();
+        clock.advanceBy(5000);
+    });
     await app.waitForView(() => expect(app.elementByTestId(dataTestId.sendMessage)).toHaveProperty("disabled", false));
     expect(reconnectStatusText(app)).toBeNull();
     expect(composer).toHaveProperty("value", "Keep my follow-up");

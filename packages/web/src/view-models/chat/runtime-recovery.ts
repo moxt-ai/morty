@@ -2,7 +2,7 @@ import type { Clock } from "../../services/time/clock.ts";
 
 /**
  * How the page saw a Runtime configuration: read directly by a load, or delivered by a configuration watch. A watch
- * snapshot follows a change when the Runtime changed since the previous one, or may have while the bridge was down.
+ * snapshot follows a change when the Runtime changed since the previous one, or may have while the browser was offline.
  */
 export type RuntimeObservation = { readonly kind: "read" } | { readonly kind: "watch"; readonly afterChange: boolean };
 

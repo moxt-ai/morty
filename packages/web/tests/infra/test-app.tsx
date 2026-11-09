@@ -8,13 +8,13 @@ import * as v from "valibot";
 import { afterAll, afterEach } from "vitest";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
-import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
 import { encodeIdentityScope, identityScopeSchema } from "../../src/services/identity/identity-scope-url.ts";
 import { saveAccess } from "../../src/services/identity/remembered-computers.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 import { assembleMorty } from "../../src/views/bootstrap.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
+import { TestApiTransport } from "../support/test-api-transport.ts";
 
 declare global {
     var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -92,8 +92,7 @@ export async function createTestApp(
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
-    const current =
-        options.application ?? (await (options.environment ?? (await environment)).createApplication(options.clock));
+    const current = options.application ?? (await (options.environment ?? (await environment)).createApplication());
     await options.prepare?.(current);
     const daemon =
         options.connectAgent === true
@@ -262,7 +261,7 @@ export async function createTestApp(
             // transport; the reloaded document keeps the live server and
             // Runtime fixtures but replaces the disposed transport so a
             // late close from the old socket cannot reject its requests.
-            const transport = new WebSocketApiTransport(current.origin, options.clock);
+            const transport = new TestApiTransport(current.origin);
             transport.open();
             return await createTestApp({
                 application: { ...current, transport, close: () => transport.dispose() },
@@ -271,7 +270,7 @@ export async function createTestApp(
             });
         },
         openViewer: async () => {
-            const transport = new WebSocketApiTransport(current.origin, options.clock);
+            const transport = new TestApiTransport(current.origin);
             transport.open();
             return await createTestApp({
                 application: { ...current, transport, close: () => transport.dispose() },

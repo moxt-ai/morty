@@ -16,10 +16,6 @@ export const readableR2BucketBindingSchema = v.custom<Pick<R2Bucket, "get">>((va
 export const durableObjectNamespaceBindingSchema = <T extends Rpc.DurableObjectBranded | undefined = undefined>() =>
     v.custom<DurableObjectNamespace<T>>((value) => hasMethods(value, ["get", "idFromName"]));
 
-export const webSocketNamespaceBindingSchema = v.custom<DurableObjectNamespace>((value) =>
-    hasMethods(value, ["get", "newUniqueId"]),
-);
-
 export const projectStorageBindingsSchema = v.pipe(
     v.object({
         CHAT_COMPUTER_ID: v.string(),
@@ -42,7 +38,6 @@ export const appOriginBindingSchema = v.pipe(v.object({ APP_ORIGIN: v.string() }
 export const platformCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_SECRET: v.string() }), v.readonly());
 
 export interface CloudBindings {
-    readonly CHAT_WEBSOCKETS?: unknown;
     readonly COMPUTER_RELAY?: unknown;
     readonly CHAT_ATTACHMENTS_APAC?: unknown;
     readonly ANONYMOUS_CREATION_LIMITER?: unknown;

@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -20,9 +20,7 @@ afterEach(async () => {
 async function stateDirectory() {
     const root = await mkdtemp(join(tmpdir(), "morty-daemon-lock-"));
     cleanups.push(async () => await rm(root, { force: true, recursive: true }));
-    const directory = installationDirectory(root, "installation");
-    await mkdir(directory);
-    return directory;
+    return installationDirectory(root);
 }
 
 /** Contenders wait at a process boundary so concurrency does not depend on sleeps or wall-clock timing. */

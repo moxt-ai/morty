@@ -77,6 +77,8 @@ const test = base.extend<{ readonly network: Network }>({
                     upstream.once("open", resolve);
                     upstream.once("error", reject);
                 });
+                // A client can leave before it sends its first frame or the upstream opens.
+                void opened.catch(() => client.terminate());
                 let outbound = Promise.resolve();
                 let inbound = Promise.resolve();
                 client.on("message", (data, isBinary) => {

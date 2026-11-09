@@ -92,7 +92,6 @@ type BotChatHomeProps = {
         | "nativeSession"
         | "managedSessions"
         | "managedSession"
-        | "subscribeManagedSessionStatuses"
         | "connectSession"
         | "createConversation"
         | "conversationSession"

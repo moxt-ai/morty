@@ -5,7 +5,7 @@ import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
+import { HttpApiTransport } from "../src/services/api/http-api-transport.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -20,8 +20,8 @@ import { createTestApp } from "./infra/test-app.tsx";
  * operation fails on its own, so measurements and requests degrade instead of
  * reaching the network.
  */
-function noopTransport(): WebSocketApiTransport {
-    return new WebSocketApiTransport("http://127.0.0.1:1");
+function noopTransport(): HttpApiTransport {
+    return new HttpApiTransport("http://127.0.0.1:1");
 }
 
 const observers = new Set<MutationObserver>();
@@ -337,7 +337,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
         expect(report.network).toMatchObject({
             online: navigator.onLine,
             measurements: {
-                browserMorty: { kind: "unavailable", code: "bridge_unavailable" },
+                browserMorty: { kind: "unavailable" },
                 browserRelay: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
             },
         });

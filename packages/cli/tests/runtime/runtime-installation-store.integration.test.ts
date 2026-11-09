@@ -54,8 +54,7 @@ describe("Runtime installation storage", () => {
             const relocated = join(stateRoot, "renamed-data");
             await rename(join(stateRoot, "installations", "build.morty.cli"), relocated);
             const engine = await RuntimeInstallationStore.open(relocated, signal);
-            expect(engine.installationId).toBe(original.installationId);
-            expect(engine.stateDirectory).toBe(join(relocated, original.installationId));
+            expect(engine.stateDirectory).toBe(relocated);
             await expect(engine.readConnection(connection.connectionId, signal)).resolves.toEqual(connection);
             const saved = await engine.saveConnection(
                 {
@@ -95,7 +94,7 @@ describe("Runtime installation storage", () => {
                     computerId: "old_channel",
                     connectionId,
                     defaultWorkspace: "/workspace/old",
-                    installationId: installation.installationId,
+                    installationId: "obsolete",
                     kind: "verified",
                     relayOrigin: "https://relay.example.com/",
                     runtimeCredential: "a".repeat(43),
@@ -155,10 +154,6 @@ describe("Runtime installation storage", () => {
             await expect(morty.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
                 code: "connection_not_found",
             } satisfies Pick<RuntimeInstallationStoreError, "code">);
-            await writeFile(morty.pairingPath, await readFile(moxt.pairingPath), { mode: 0o600 });
-            await expect(morty.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
-                code: "connection_owner_mismatch",
-            });
         } finally {
             await rm(stateRoot, { force: true, recursive: true });
         }

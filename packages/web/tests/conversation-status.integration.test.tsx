@@ -1,6 +1,6 @@
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { refreshSessions, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
@@ -79,7 +79,7 @@ test("Given an open conversation, When I send a message the Runtime has not rece
     await app.close();
 });
 
-test("Given a conversation still answering in the background, When I start another conversation and the first one finishes before a new Runtime connection could open, Then the sidebar marks the first one unread", {
+test("Given a conversation still answering in the background, When I start another conversation and refresh after the first one finishes, Then the sidebar marks the first one unread", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const heldPrompt = "hold after first delta";
@@ -96,13 +96,11 @@ test("Given a conversation still answering in the background, When I start anoth
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBe("Session working"));
 
-    // Starting a conversation changes the set of Sessions; following it must not depend on a new Runtime connection.
-    const release = await executionNetwork.holdLaterRuntimeHosts();
-    onTestFinished(release);
     await sendPrompt(app, await readyComposer(app), "Start another conversation");
     await app.waitForView(() => expect(directoryEntry(app, "Start another conversation")).toBeDefined());
     await daemon.continueReply(heldPrompt, { outcome: "complete", output: [] });
 
+    await refreshSessions(app);
     await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBe("Unread response"));
 });
 

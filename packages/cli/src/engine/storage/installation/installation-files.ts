@@ -4,22 +4,15 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { isNodeError } from "../../util/node-error.ts";
 
-// Engine data lives beneath its explicitly selected data directory. `current.json`
-// selects the installation containing the daemon state and its single pairing.
-
 const MAXIMUM_FILE_BYTES = 16 * 1024;
-
-export function installationPointerPath(engineDataDir: string): string {
-    return join(engineDataDir, "current.json");
-}
 
 const installationDirectorySchema = z.string().brand<"InstallationDirectory">();
 
-/** One data directory selected by the current pointer. */
+/** The private directory containing daemon data. */
 export type InstallationDirectory = z.infer<typeof installationDirectorySchema>;
 
-export function installationDirectory(engineDataDir: string, installationId: string): InstallationDirectory {
-    return installationDirectorySchema.parse(join(engineDataDir, installationId));
+export function installationDirectory(engineDataDir: string): InstallationDirectory {
+    return installationDirectorySchema.parse(engineDataDir);
 }
 
 export type InstallationFileRead =

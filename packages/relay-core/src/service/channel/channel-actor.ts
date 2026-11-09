@@ -294,6 +294,18 @@ export class ChannelActor {
                 this.#liveEvents.receive(message);
                 return;
             }
+            if (kind === SESSION_CLOSE_NOTICE_KIND) {
+                this.broadcast(
+                    this.#peers
+                        .viewers()
+                        .filter(
+                            (viewer) =>
+                                viewer.expiresAt > Date.now() && sameNativeSession(viewer.target, message.target),
+                        )
+                        .map((viewer) => viewer.socket),
+                    wire,
+                );
+            }
             if (kind === SESSION_INFO_UPDATED_KIND) {
                 this.broadcast(
                     this.#peers.hosts(),

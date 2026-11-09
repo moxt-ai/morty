@@ -35,6 +35,9 @@ export async function createResponseLossProxy(upstream: string) {
     const loseNextResponse = async (path: RegExp) => (await loseNextResponseWithBody(path)).status;
     // The next request to lose on its way: the service never receives it.
     let droppedRequest: RegExp | null = null;
+    let holdSharing: {
+        readonly receive: (body: string, disconnect: () => void) => void;
+    } | null = null;
     const server = createServer((incoming, outgoing) => {
         if (droppedRequest !== null && incoming.method === "POST" && droppedRequest.test(incoming.url ?? "")) {
             droppedRequest = null;
@@ -49,6 +52,20 @@ export async function createResponseLossProxy(upstream: string) {
                 headers: { ...incoming.headers, host: new URL(upstream).host },
             },
             (response) => {
+                if (
+                    holdSharing !== null &&
+                    incoming.method === "POST" &&
+                    incoming.url?.endsWith("/identity/transfers")
+                ) {
+                    const held = holdSharing;
+                    holdSharing = null;
+                    const chunks: Buffer[] = [];
+                    response.on("data", (chunk: Buffer) => chunks.push(chunk));
+                    response.on("end", () =>
+                        held.receive(decoded(response.headers["content-encoding"], chunks), () => outgoing.destroy()),
+                    );
+                    return;
+                }
                 if (lostResponse !== null && incoming.method === "POST" && lostResponse.path.test(incoming.url ?? "")) {
                     const { lost } = lostResponse;
                     lostResponse = null;
@@ -74,9 +91,6 @@ export async function createResponseLossProxy(upstream: string) {
     let heldConfiguration: { readonly client: WebSocket; readonly data: Buffer; readonly binary: boolean } | null =
         null;
     let holdConfiguration: { readonly resolve: () => void } | null = null;
-    let holdSharing: {
-        readonly receive: (body: string, disconnect: () => void) => void;
-    } | null = null;
     const sockets = new Set<WebSocket>();
     const webSockets = new WebSocketServer({ server });
     let armed: "before-acceptance" | "after-acceptance" | "held" | null = null;
@@ -104,10 +118,6 @@ export async function createResponseLossProxy(upstream: string) {
         });
         sockets.add(remote);
         let configurationResponse: { readonly requestId: string; readonly ready: () => void } | null = null;
-        let sharingResponse: {
-            readonly requestId: string;
-            readonly receive: (body: string, disconnect: () => void) => void;
-        } | null = null;
         let lostRequestId: string | null = null;
         const pending: { readonly data: Buffer; readonly binary: boolean }[] = [];
         client.on("message", (data, binary) => {
@@ -118,23 +128,6 @@ export async function createResponseLossProxy(upstream: string) {
                   : Buffer.from(new Uint8Array(data));
             if (!binary) {
                 const frame: unknown = JSON.parse(bytes.toString());
-                if (
-                    holdSharing !== null &&
-                    typeof frame === "object" &&
-                    frame !== null &&
-                    "kind" in frame &&
-                    frame.kind === "request" &&
-                    "method" in frame &&
-                    frame.method === "POST" &&
-                    "path" in frame &&
-                    typeof frame.path === "string" &&
-                    frame.path.endsWith("/identity/transfers") &&
-                    "requestId" in frame &&
-                    typeof frame.requestId === "string"
-                ) {
-                    sharingResponse = { requestId: frame.requestId, receive: holdSharing.receive };
-                    holdSharing = null;
-                }
                 if (
                     holdConfiguration !== null &&
                     typeof frame === "object" &&
@@ -199,26 +192,6 @@ export async function createResponseLossProxy(upstream: string) {
             }
         });
         remote.on("message", (data, binary) => {
-            if (sharingResponse !== null && !binary) {
-                const frame: unknown = JSON.parse(data.toString());
-                if (
-                    typeof frame === "object" &&
-                    frame !== null &&
-                    "kind" in frame &&
-                    frame.kind === "response" &&
-                    "requestId" in frame &&
-                    frame.requestId === sharingResponse.requestId &&
-                    "body" in frame &&
-                    typeof frame.body === "string"
-                ) {
-                    sharingResponse.receive(frame.body, () => {
-                        client.terminate();
-                        remote.terminate();
-                    });
-                    sharingResponse = null;
-                    return;
-                }
-            }
             if (configurationResponse !== null && !binary) {
                 const frame: unknown = JSON.parse(data.toString());
                 if (

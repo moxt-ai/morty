@@ -82,9 +82,7 @@ it("Given first-use initialization is pending, When its owner and one waiter can
             { status: "fulfilled", value: [] },
         ]);
         expect(await manager.list(AbortSignal.timeout(5_000))).toEqual([]);
-        expect(await readdir(directory)).toEqual(
-            expect.arrayContaining(["current.json", expect.stringMatching(/^min_[a-f0-9]{32}$/)]),
-        );
+        expect(await readdir(directory)).toEqual([]);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }

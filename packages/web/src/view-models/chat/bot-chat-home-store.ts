@@ -1,7 +1,7 @@
 import { sameNativeSession } from "@morty-build/client/native-session";
 import { type NativeSessionTarget, readNativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
+import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
 import type {
     BotChatApi,
     BotRuntimeConfiguration,
@@ -268,7 +268,6 @@ export const createBotChatHomeStore = (
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
-        | "waitForBridge"
     >,
     options: {
         readonly computerId: string;
@@ -482,7 +481,7 @@ export const createBotChatHomeStore = (
                     }
                 };
                 /**
-                 * Which stage of the load is in flight. A bridge failure before
+                 * Which stage of the load is in flight. A network failure before
                  * the session content exists is an unfinished user request that
                  * must become an operable failure; afterwards it only takes the
                  * background watches, which can be resumed without replaying
@@ -496,7 +495,7 @@ export const createBotChatHomeStore = (
                 /**
                  * Follows the Runtime configuration. Each watch adopts its comparison baseline as the snapshot, so a
                  * brief Runtime change between two reads cannot leave the page stale. `baselineFollowsChange` says
-                 * the first baseline may already differ from what the page last saw, as after a dropped bridge.
+                 * the first baseline may already differ from what the page last saw, as after a network outage.
                  */
                 const watchRuntimeConfigurationChanges = async (baselineFollowsChange = false): Promise<void> => {
                     let afterChange = baselineFollowsChange;
@@ -522,7 +521,7 @@ export const createBotChatHomeStore = (
                 const applyConfiguration = (configuration: BotRuntimeConfiguration, afterChange: boolean): void => {
                     signal.throwIfAborted();
                     if (get().selection.kind === "draft") {
-                        // A recovered configuration read completes draft initialization after a bridge drop.
+                        // A recovered configuration read completes draft initialization after a network outage.
                         set({ initialization: { kind: "ready" } });
                     }
                     observeConfiguration(configuration, { kind: "watch", afterChange });
@@ -539,22 +538,13 @@ export const createBotChatHomeStore = (
                     });
                     options.onRuntimeConfiguration(configuration, observation);
                 };
-                /**
-                 * A dropped socket takes every watch with it. This loop re-arms
-                 * the safe watches every time the bridge returns, so repeated
-                 * drops on the same page keep being followed by recovery, and a
-                 * drop during the recovery reads themselves re-enters it. The
-                 * recovery only re-reads pairing and restores configuration watches:
-                 * it never re-issues a fork/import load that the user did not ask to
-                 * repeat.
-                 */
+                /** Refresh binding and workspace after an interrupted API read. */
                 const followConfigurationChanges = async (watchSignal: AbortSignal): Promise<void> => {
                     let dropped = true;
                     let armed = false;
                     while (true) {
                         try {
                             if (dropped) {
-                                await requests.waitForBridge(watchSignal);
                                 watchSignal.throwIfAborted();
                                 const binding = await requests.readRuntimeBinding(watchSignal);
                                 watchSignal.throwIfAborted();
@@ -581,18 +571,19 @@ export const createBotChatHomeStore = (
                             }
                             // A bound Machine keeps following workspace
                             // changes even while its Runtime is offline.
-                            // A watch re-armed after a dropped bridge may find a Runtime that changed meanwhile.
+                            // A watch re-armed after a network outage may find a Runtime that changed meanwhile.
                             const rearmed = armed;
                             armed = true;
                             await watchRuntimeConfigurationChanges(rearmed);
                             return;
                         } catch (cause) {
                             watchSignal.throwIfAborted();
-                            if (!isChatBridgeError(cause)) {
+                            if (!isApiConnectionError(cause)) {
                                 throw cause;
                             }
-                            console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                            console.error("The Morty API request failed.", cause);
                             configurationUnavailable();
+                            await options.clock.sleep(5000, watchSignal);
                             dropped = true;
                         }
                     }
@@ -637,9 +628,9 @@ export const createBotChatHomeStore = (
                                 ? { notices: { ...current.notices, pairing: { kind: "visible" as const } } }
                                 : {}),
                         }));
-                        // The bridge drop during the setup wait is handled by
+                        // The interruption during the setup wait is handled by
                         // the same repeatable recovery loop that owns every
-                        // later watch: it waits for the bridge, re-reads the
+                        // later watch: it waits for connectivity, re-reads the
                         // pairing state, and keeps waiting on the setup watch
                         // for an unconfigured Machine.
                         phase = "setup";
@@ -716,15 +707,15 @@ export const createBotChatHomeStore = (
                         onRestart();
                         return;
                     }
-                    if (isChatBridgeError(cause)) {
+                    if (isApiConnectionError(cause)) {
                         configurationUnavailable();
-                        // A dropped bridge is an ordinary failed call. An
+                        // A network outage is an ordinary failed call. An
                         // established conversation keeps whatever it showed, and
                         // the next user action reports its own failure; a load
                         // the user is still waiting on must not strand the page,
                         // so it becomes an operable failure state that keeps its
                         // target.
-                        console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                        console.error("The Morty API request failed.", cause);
                         const message = formatError(cause, "Chat is unavailable.");
                         const current = get();
                         if (current.selection.kind === "pending" || current.selection.kind === "loading") {
@@ -735,7 +726,7 @@ export const createBotChatHomeStore = (
                             return;
                         }
                         // Content is already on screen: the view stays, and the
-                        // dropped watches are re-armed when the bridge returns.
+                        // dropped watches are re-armed when connectivity returns.
                         await followConfigurationChanges(signal);
                         return;
                     }

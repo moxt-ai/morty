@@ -85,6 +85,13 @@
             "when": 1794208949476,
             "tag": "0011_computer_authorization",
             "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "6",
+            "when": 1794208949477,
+            "tag": "0012_daemon_credentials",
+            "breakpoints": true
         }
     ]
 }
