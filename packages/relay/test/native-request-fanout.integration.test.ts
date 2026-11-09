@@ -157,6 +157,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
+                executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                 interactionState: null,
             });
         daemon.socket.send(reply("query-7"));

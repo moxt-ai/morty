@@ -151,6 +151,7 @@ export async function fixture(
         async () => ({
             turn: null,
             queued: [],
+            executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },
             interactionState: null,
         }),
     );
@@ -263,6 +264,7 @@ export async function fixture(
                 async () => ({
                     turn: null,
                     queued: [],
+                    executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },
                     interactionState: null,
                 }),
             );

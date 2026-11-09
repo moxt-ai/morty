@@ -49,6 +49,7 @@ describe("Session config read contracts", () => {
 describe("Session execution read contracts", () => {
     const execution = {
         action: "active-turn",
+        executionPosition: { sessionGenerationId: "generation-1", throughPosition: "4" },
         kind: "native.session.result",
         queued: [],
         queuedCancellation: "before-start",
@@ -77,6 +78,11 @@ describe("Session execution read contracts", () => {
     it("Given an execution missing current interaction recovery, When it crosses the launch protocol boundary, Then an older snapshot cannot silently clear pending requests", () => {
         const { interactionState: _interactionState, ...oldSnapshot } = execution;
         expect(() => decodeNativeSessionResult(JSON.stringify(oldSnapshot))).toThrow();
+    });
+
+    it("Given an execution without the log position it covers, When it crosses the launch protocol boundary, Then the unordered snapshot is rejected", () => {
+        const { executionPosition: _executionPosition, ...unordered } = execution;
+        expect(() => decodeNativeSessionResult(JSON.stringify(unordered))).toThrow();
     });
 
     it("Given an execution with a known command delivery, When it is decoded, Then the delivery is kept", () => {
