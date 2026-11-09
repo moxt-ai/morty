@@ -13,11 +13,7 @@ export function openAgentQuestions(messages: readonly SessionMessage[]): Readonl
     for (const message of messages) {
         if (message.role === "user") {
             open.clear();
-        } else if (
-            message.presentation.kind === "message" &&
-            message.presentation.messageId !== null &&
-            message.presentation.questions.length > 0
-        ) {
+        } else if (message.presentation.kind === "message" && message.presentation.questions.length > 0) {
             open.set(message.presentation.messageId, message.presentation.questions);
         }
     }

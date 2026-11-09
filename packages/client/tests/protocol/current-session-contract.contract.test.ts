@@ -65,7 +65,11 @@ it("Given history holding a turn's lifecycle, When a client decodes it, Then the
             {
                 ...fields,
                 eventId: "message",
-                payload: { content: { text: "Hello", type: "text" }, sessionUpdate: "user_message_chunk" },
+                payload: {
+                    content: { text: "Hello", type: "text" },
+                    messageId: "message-1",
+                    sessionUpdate: "user_message_chunk",
+                },
                 type: "acp",
             },
             {

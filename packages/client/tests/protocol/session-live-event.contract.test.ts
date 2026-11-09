@@ -23,6 +23,20 @@ const eventWithoutProvenance = {
 const sharedEvent = eventWithoutProvenance;
 
 describe("Session Event V2 contracts", () => {
+    it.each(["user_message_chunk", "agent_message_chunk", "agent_thought_chunk"])(
+        "Given a %s, When it crosses recorded or live boundaries, Then a non-null message identity is required",
+        (sessionUpdate) => {
+            const payload = { content: sharedEvent.payload.content, sessionUpdate };
+            for (const invalid of [payload, { ...payload, messageId: null }, { ...payload, messageId: "" }]) {
+                expect(() => decodeSessionEvent({ ...sharedEvent, payload: invalid })).toThrow();
+                expect(() => decodeSessionLiveEvent({ ...sharedEvent, payload: invalid, position: "1" })).toThrow();
+            }
+            const event = { ...sharedEvent, payload: { ...payload, messageId: "message-1" } };
+            expect(decodeSessionEvent(event)).toEqual(event);
+            expect(decodeSessionLiveEvent({ ...event, position: "1" })).toEqual({ ...event, position: "1" });
+        },
+    );
+
     it("Given the lossless relay boundary, When routing metadata or batch bounds are invalid, Then it rejects the envelope", () => {
         const event = { ...sharedEvent, position: "1" };
         for (const events of [
@@ -57,6 +71,7 @@ describe("Session Event V2 contracts", () => {
             ...sharedEvent,
             payload: {
                 content: { data: "a".repeat(1_000_001), mimeType: "image/png", type: "image" as const },
+                messageId: "message-1",
                 sessionUpdate: "agent_message_chunk" as const,
             },
         };
@@ -145,6 +160,7 @@ describe("Session Event V2 contracts", () => {
             ...sharedEvent,
             payload: {
                 _meta: { source: "agent" },
+                messageId: "message-1",
                 content: {
                     _meta: { source: "content" },
                     annotations: { _meta: { source: "annotations" }, audience: ["user"] },
@@ -159,6 +175,7 @@ describe("Session Event V2 contracts", () => {
             ...event,
             payload: {
                 content: { annotations: { audience: ["user"] }, text: "Hello", type: "text" },
+                messageId: "message-1",
                 sessionUpdate: "agent_message_chunk",
             },
         });
