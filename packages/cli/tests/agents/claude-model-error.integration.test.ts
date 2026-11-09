@@ -40,9 +40,8 @@ test("Given Claude receives a model-not-found response, When I send a prompt, Th
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "claude",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

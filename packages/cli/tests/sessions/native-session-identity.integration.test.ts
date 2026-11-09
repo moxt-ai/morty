@@ -16,7 +16,7 @@ describe("native session identity", () => {
                 {
                     ...f.identity,
                     action: "import",
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                 },
                 signal,
             );
@@ -38,7 +38,7 @@ describe("native session identity", () => {
                 {
                     ...f.identity,
                     action: "import",
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                     requestId: "repeated-v2-import",
                 },
                 signal,
@@ -87,7 +87,7 @@ describe("native session identity", () => {
                     null,
                 );
 
-                const result = await f.service.execute({ ...f.identity, action, entryId: entry.entryId }, signal);
+                const result = await f.service.execute({ ...f.identity, action, sessionId: entry.sessionId }, signal);
                 if (result.action !== action) {
                     throw new Error("Expected a native open result");
                 }
@@ -121,7 +121,10 @@ describe("native session identity", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const first = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            const first = await f.service.execute(
+                { ...f.identity, action: "import", sessionId: entry.sessionId },
+                signal,
+            );
             if (first.action !== "import") {
                 throw new Error("Expected a native import");
             }
@@ -131,7 +134,7 @@ describe("native session identity", () => {
                 {
                     ...f.identity,
                     action: "import",
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                     requestId: "import-after-close",
                 },
                 signal,
@@ -152,7 +155,10 @@ describe("native session identity", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const first = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            const first = await f.service.execute(
+                { ...f.identity, action: "import", sessionId: entry.sessionId },
+                signal,
+            );
             if (first.action !== "import") {
                 throw new Error("Expected a native import");
             }
@@ -187,7 +193,7 @@ describe("native session identity", () => {
                 {
                     ...f.identity,
                     action: "import",
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                     requestId: "import-while-running",
                 },
                 signal,
@@ -213,7 +219,7 @@ describe("native session identity", () => {
                     throw new Error("Missing native session");
                 }
                 const opened = await f.service.execute(
-                    { ...f.identity, action, entryId: entry.entryId },
+                    { ...f.identity, action, sessionId: entry.sessionId },
                     new AbortController().signal,
                 );
                 if (opened.action !== action) {
@@ -308,7 +314,7 @@ describe("native session identity", () => {
                 {
                     ...f.identity,
                     action: "fork",
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                 },
                 signal,
             );
@@ -369,7 +375,7 @@ describe("native session identity", () => {
                     {
                         ...f.identity,
                         action: "fork",
-                        entryId: entry.entryId,
+                        sessionId: entry.sessionId,
                     },
                     new AbortController().signal,
                 ),

@@ -166,8 +166,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       requestId: crypto.randomUUID(),
                                       operationId: crypto.randomUUID(),
                                       agentId: "codex",
-                                      bindingId: "workspace",
-                                      directoryId: "default",
+                                      directory: ".",
                                       configurations: [],
                                   })
                                 : encodeSessionPrepareCommand({
@@ -175,8 +174,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       requestId: crypto.randomUUID(),
                                       target,
                                       agentId: "codex",
-                                      bindingId: "workspace",
-                                      directoryId: "default",
+                                      directory: ".",
                                   }),
                         );
                         expected.push({

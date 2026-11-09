@@ -2,7 +2,6 @@ import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/pro
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { saveLastCwdPreference, saveRecentCwdPreference } from "@/services/chat/last-cwd-preference";
-import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
 import {
     type AnonymousIdentity,
@@ -168,11 +167,11 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 // A handoff supplies a requested path, never filesystem authority.
                 // Resolve it through the Runtime before recording a browser preference.
                 const configuration = await chat.runtimeConfiguration(signal);
-                const directory = await chat.directory(pathDirectoryId(handoff.workspace), signal);
+                const directory = await chat.directory(handoff.workspace, signal);
                 signal.throwIfAborted();
-                saveLastCwdPreference(configuration.runtime.computerId, handoff.harness, directory.directoryId);
+                saveLastCwdPreference(configuration.runtime.computerId, handoff.harness, directory.directory);
                 saveRecentCwdPreference(identity.computerId, {
-                    directoryId: directory.directoryId,
+                    directory: directory.directory,
                     directoryLabel: directory.directoryLabel,
                 });
                 const session = await chat.continueNativeSession(handoff.harness, handoff.sessionId, signal);

@@ -61,8 +61,7 @@ test("Given native text and structured task snapshots with delimiter-heavy subje
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 cursor: null,
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",

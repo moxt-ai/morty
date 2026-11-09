@@ -1,4 +1,4 @@
-import { type Identifier, isDirectoryIdentifier, isIdentifier } from "@morty-build/client/protocol";
+import { type Identifier, isDirectoryPath, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 
@@ -7,12 +7,12 @@ import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 // limits mirror the Runtime protocol's, so a request the Runtime would refuse fails before any Runtime round trip.
 
 const identifier = v.custom<Identifier>(isIdentifier);
-const directoryIdentifier = v.custom<string>(isDirectoryIdentifier);
+const directoryPath = v.custom<string>(isDirectoryPath);
 
 /** The binding of an existing Session: each omitted field is the Session's own. */
 export const sessionBindingEntries = {
     agentId: v.optional(identifier),
-    directoryId: v.optional(directoryIdentifier),
+    directory: v.optional(directoryPath),
 };
 
 /** A Turn submission apart from its attachments, which an API may state in more than one representation. */

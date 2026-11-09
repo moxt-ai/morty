@@ -17,7 +17,6 @@ import {
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
-import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { isRuntimeConnectionFailure } from "@/services/management/management-api";
 import type { AgentModelCatalog } from "../../services/diagnostics/model-catalog.ts";
 import { formatError } from "../format-error.ts";
@@ -66,7 +65,7 @@ export function draftConfiguration(settings: DraftSettingsState): ChatDraftConfi
     }
     return {
         agentRef: settings.selectedAgent.agentRef,
-        workspaceRef: settings.cwd.directoryId,
+        workspaceRef: settings.cwd.directory,
         workspaceLabel: settings.cwd.directoryLabel,
         configurations: settings.options
             .filter((option) => option.category === "model" || settings.changedOptionIds.has(option.id))
@@ -97,9 +96,9 @@ export interface DraftControlsStore {
     readonly cwdMenuOpen: boolean;
     readonly recentCwds: readonly RecentCwdPreference[];
     readonly settings: DraftSettingsState;
-    readonly browseCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
+    readonly browseCwd: (directory: string, signal: AbortSignal) => Promise<void>;
     readonly closeCwd: () => void;
-    readonly forgetRecentCwd: (directoryId: string) => void;
+    readonly forgetRecentCwd: (directory: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     /**
      * The Runtime's Agents changed. A draft whose Agent the Runtime no longer offers loads again, which settles on an
@@ -110,7 +109,7 @@ export interface DraftControlsStore {
     readonly setCwdMenuOpen: (open: boolean) => void;
     readonly refreshAgentSettings: (signal: AbortSignal) => Promise<void>;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
-    readonly selectRecentCwd: (directoryId: string, signal: AbortSignal) => Promise<void>;
+    readonly selectRecentCwd: (directory: string, signal: AbortSignal) => Promise<void>;
     readonly selectHarness: (value: string, disabled: boolean, signal: AbortSignal) => Promise<void>;
     readonly selectOption: (configId: string, value: string) => void;
     readonly toggleOption: (configId: string) => void;
@@ -175,12 +174,12 @@ export const createDraftControlsStore = (
             refresh: boolean,
             operation: SettingsOperation,
         ) => {
-            const key = JSON.stringify([agentRef, cwd.directoryId]);
+            const key = JSON.stringify([agentRef, cwd.directory]);
             const cached = refresh ? undefined : agentSettings.get(key);
             if (cached !== undefined) {
                 return cached;
             }
-            const result = await requests.agentSettings(agentRef, cwd.directoryId, operation.signal);
+            const result = await requests.agentSettings(agentRef, cwd.directory, operation.signal);
             if (operation.current()) {
                 agentSettings.set(key, result);
             }
@@ -230,9 +229,9 @@ export const createDraftControlsStore = (
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
-            saveLastCwdPreference(selected.computerId, selected.agentRef, directory.directoryId);
+            saveLastCwdPreference(selected.computerId, selected.agentRef, directory.directory);
             return saveRecentCwdPreference(computerId, {
-                directoryId: directory.directoryId,
+                directory: directory.directory,
                 directoryLabel: directory.directoryLabel,
             });
         };
@@ -273,13 +272,13 @@ export const createDraftControlsStore = (
             const recentCwds =
                 existingRecentCwds === null
                     ? saveRecentCwdPreference(computerId, {
-                          directoryId: cwd.directoryId,
+                          directory: cwd.directory,
                           directoryLabel: cwd.directoryLabel,
                       })
                     : existingRecentCwds;
             set({ settings: ready, recentCwds });
         };
-        const browseCwd = async (directoryId: string, lifetimeSignal: AbortSignal): Promise<void> => {
+        const browseCwd = async (directory: string, lifetimeSignal: AbortSignal): Promise<void> => {
             const settings = get().settings;
             if (settings.kind !== "ready") {
                 return;
@@ -293,9 +292,9 @@ export const createDraftControlsStore = (
             const signal = AbortSignal.any([lifetimeSignal, operation.signal, AbortSignal.timeout(120_000)]);
             set({ cwdBrowser: { kind: "loading", directory: previousDirectory, path: previousPath } });
             try {
-                const directory = await requests.directory(directoryId, signal);
+                const listing = await requests.directory(directory, signal);
                 signal.throwIfAborted();
-                set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
+                set({ cwdBrowser: { kind: "ready", directory: listing, path: listing.directoryLabel } });
             } catch (cause) {
                 if (operation.signal.aborted) {
                     return;
@@ -338,7 +337,7 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
-                const directory = await requests.directory(pathDirectoryId(requestedPath), signal);
+                const directory = await requests.directory(requestedPath, signal);
                 signal.throwIfAborted();
                 set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
             } catch (cause) {
@@ -387,13 +386,13 @@ export const createDraftControlsStore = (
                     awaitAgent();
                     return;
                 }
-                const defaultCwd = await requests.directory("default", operation.signal);
+                const defaultCwd = await requests.directory(".", operation.signal);
                 operation.signal.throwIfAborted();
-                const savedDirectoryId = readLastCwdPreference(selected.computerId, selected.agentRef);
+                const savedDirectory = readLastCwdPreference(selected.computerId, selected.agentRef);
                 let cwd = defaultCwd;
-                if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
+                if (savedDirectory !== null && savedDirectory !== defaultCwd.directory) {
                     try {
-                        cwd = await requests.directory(savedDirectoryId, operation.signal);
+                        cwd = await requests.directory(savedDirectory, operation.signal);
                         operation.signal.throwIfAborted();
                     } catch {
                         // An unreadable chosen directory gives way to the default for this draft only; the choice
@@ -466,14 +465,14 @@ export const createDraftControlsStore = (
                 cwdOperation = null;
                 set({ cwdBrowser: { kind: "closed" } });
             },
-            forgetRecentCwd: (directoryId) => {
+            forgetRecentCwd: (directory) => {
                 const settings = get().settings;
                 const selected = settings.kind === "ready" ? settings.selectedAgent : null;
                 const recentCwds = get().recentCwds;
-                if (selected === null || !recentCwds.some((directory) => directory.directoryId === directoryId)) {
+                if (selected === null || !recentCwds.some((recent) => recent.directory === directory)) {
                     return;
                 }
-                set({ recentCwds: forgetRecentCwdPreference(computerId, directoryId) });
+                set({ recentCwds: forgetRecentCwdPreference(computerId, directory) });
             },
             load,
             runtimeChanged: async (configuration, signal) => {
@@ -563,7 +562,7 @@ export const createDraftControlsStore = (
                     const loading = { kind: "loading", directory: browser.directory, path: browser.path } as const;
                     set({ cwdBrowser: loading });
                     try {
-                        directory = await requests.directory(pathDirectoryId(requestedPath), operation.signal);
+                        directory = await requests.directory(requestedPath, operation.signal);
                         operation.signal.throwIfAborted();
                     } catch (cause) {
                         if (signal.aborted) {
@@ -593,19 +592,19 @@ export const createDraftControlsStore = (
                     await applyDirectory(settings, directory, signal);
                 }
             },
-            selectRecentCwd: async (directoryId, signal) => {
+            selectRecentCwd: async (directory, signal) => {
                 const settings = get().settings;
-                const recent = get().recentCwds.find((directory) => directory.directoryId === directoryId);
+                const recent = get().recentCwds.find((recent) => recent.directory === directory);
                 if (settings.kind !== "ready" || recent === undefined) {
                     return;
                 }
                 const operation = beginDirectoryChoice(signal);
                 try {
-                    const directory = await requests.directory(directoryId, operation.signal);
+                    const listing = await requests.directory(directory, operation.signal);
                     operation.signal.throwIfAborted();
                     if (operation.current()) {
                         operation.release();
-                        await applyDirectory(settings, directory, signal);
+                        await applyDirectory(settings, listing, signal);
                     }
                 } catch (cause) {
                     if (signal.aborted || !operation.current()) {

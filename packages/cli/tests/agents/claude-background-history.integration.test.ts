@@ -119,8 +119,7 @@ test("Given native task notifications and user-pasted notification text, When Cl
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 cursor: null,
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",
@@ -218,8 +217,7 @@ test("Given Claude is running a background command, When two idle hours pass and
                             commandId,
                             target: sessionTarget,
                             agentId: "claude",
-                            bindingId: peer.bindingId,
-                            directoryId: "default",
+                            directory: ".",
                             attachments: [],
                             prompt,
                             disposition: SessionPromptDisposition.Append,

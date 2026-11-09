@@ -5,7 +5,7 @@ import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts
 import { decodeZodMessage as decode, encodeZodMessage as encode } from "../../shared/message-codec.ts";
 import { sessionConfigOptionsSchema, sessionConfigurationSelectionsSchema } from "../configuration/index.ts";
 import {
-    DIRECTORY_IDENTIFIER,
+    DIRECTORY_PATH,
     sessionCapabilitiesSchema,
     sessionCommandSchema,
     sessionIdentityFields,
@@ -47,7 +47,7 @@ export type SessionStatusChangedEvent = z.infer<typeof sessionStatusChangedEvent
 const sessionMetadataSchema = z
     .object({
         agentId: IDENTIFIER,
-        directoryId: DIRECTORY_IDENTIFIER,
+        directory: DIRECTORY_PATH,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         prompted: z.boolean(),
         sessionId: IDENTIFIER,
@@ -165,9 +165,8 @@ const sessionCreateCommandSchema = z
         kind: z.literal(SESSION_CREATE_KIND),
         requestId: IDENTIFIER,
         operationId: IDENTIFIER,
-        bindingId: IDENTIFIER,
         agentId: IDENTIFIER,
-        directoryId: DIRECTORY_IDENTIFIER,
+        directory: DIRECTORY_PATH,
         configurations: sessionConfigurationSelectionsSchema,
     })
     .readonly();
@@ -212,7 +211,7 @@ export const sessionReadyEventSchema = z
         commands: z.array(sessionCommandSchema).max(500).readonly(),
         configOptions: sessionConfigOptionsSchema,
         configurationRevision: IDENTIFIER,
-        directoryId: DIRECTORY_IDENTIFIER,
+        directory: DIRECTORY_PATH,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         kind: z.literal(SESSION_READY_KIND),
         requestId: IDENTIFIER,

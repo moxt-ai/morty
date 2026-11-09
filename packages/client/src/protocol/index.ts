@@ -528,14 +528,12 @@ export {
     decodeWorkspaceListCommand,
     encodeWorkspaceEntriesEvent,
     encodeWorkspaceListCommand,
-    RUNTIME_WORKSPACE_BINDING_ID,
     WORKSPACE_ENTRIES_KIND,
     WORKSPACE_LIST_KIND,
 } from "./session/workspace/index.ts";
 
 export {
-    isDirectoryIdentifier,
-    MAX_DIRECTORY_IDENTIFIER_LENGTH,
+    isDirectoryPath,
     MAX_WORKSPACE_PATH_LENGTH,
 } from "./shared/directory.ts";
 

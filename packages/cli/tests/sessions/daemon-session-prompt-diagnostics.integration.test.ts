@@ -30,8 +30,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
             async (peer) => {
                 const identity = {
                     agentId: "controlled-acp",
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                 };
                 const prepareId = randomUUID();
                 peer.send(

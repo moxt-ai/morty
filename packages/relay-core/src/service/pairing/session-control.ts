@@ -16,7 +16,6 @@ import {
     decodeSessionRenameCommand,
     type NativeSessionTarget,
     ProtocolMessageError,
-    RUNTIME_WORKSPACE_BINDING_ID,
     type SessionPromptCommand,
 } from "@morty-build/client/protocol";
 import type { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
@@ -40,7 +39,7 @@ export type RuntimeControl = (
 /** The Agent and directories a Session runs in. */
 export interface SessionExecutionIdentity {
     readonly agentId: string;
-    readonly directoryId: string;
+    readonly directory: string;
 }
 
 /**
@@ -49,7 +48,7 @@ export interface SessionExecutionIdentity {
  */
 export interface SessionBindingRequest {
     readonly agentId?: string | undefined;
-    readonly directoryId?: string | undefined;
+    readonly directory?: string | undefined;
 }
 
 export interface TurnSubmission extends SessionBindingRequest {
@@ -107,9 +106,8 @@ export class SessionControl {
                 JSON.stringify({
                     agentId: binding.agentId,
                     attachments: turn.attachments,
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     commandId: turn.commandId,
-                    directoryId: binding.directoryId,
+                    directory: binding.directory,
                     disposition: turn.disposition,
                     kind: "session.prompt",
                     prompt: turn.content,
@@ -236,7 +234,6 @@ export class SessionControl {
                 JSON.stringify({
                     ...configuration,
                     ...(await this.#binding(configuration, permission)),
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     kind: "session.configure",
                     requestId: crypto.randomUUID(),
                     target: this.#target,
@@ -267,12 +264,10 @@ export class SessionControl {
                 JSON.stringify({
                     action: "active-turn",
                     agentId: identity.agentId,
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     ...(deliveryCommandId === undefined ? {} : { deliveryCommandId }),
-                    directoryId: identity.directoryId,
+                    directory: identity.directory,
                     kind: "native.session.request",
                     requestId: crypto.randomUUID(),
-                    discoveryId: crypto.randomUUID(),
                     target: this.#target,
                 }),
             ),
@@ -295,9 +290,8 @@ export class SessionControl {
             decodeSessionPreviewHistoryPageLoad(
                 JSON.stringify({
                     agentId: identity.agentId,
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     cursor: page.cursor,
-                    directoryId: identity.directoryId,
+                    directory: identity.directory,
                     eventLimit: page.eventLimit,
                     kind: "session.preview-history.page.load",
                     requestId: crypto.randomUUID(),
@@ -343,12 +337,12 @@ export class SessionControl {
         supplied: SessionBindingRequest,
         permission: ProjectPermission,
     ): Promise<SessionExecutionIdentity> => {
-        const { agentId, directoryId } = supplied;
+        const { agentId, directory } = supplied;
         if (agentId !== undefined && agentId !== this.#target.harness) {
             throw new PairingDirectoryError("invalid_request", "The Session belongs to a different harness");
         }
-        if (agentId !== undefined && directoryId !== undefined) {
-            return { agentId, directoryId };
+        if (agentId !== undefined && directory !== undefined) {
+            return { agentId, directory };
         }
         const queried = await this.#control(
             decodeSessionQueryCommand(
@@ -369,7 +363,7 @@ export class SessionControl {
         }
         return {
             agentId: agentId ?? session.agentId,
-            directoryId: directoryId ?? session.directoryId,
+            directory: directory ?? session.directory,
         };
     };
 }

@@ -334,7 +334,7 @@ test("Given a Bot has a recent directory from another harness, When its Runtime 
         prepare: (current) =>
             window.localStorage.setItem(
                 `morty:recent-cwd:${encodeURIComponent(current.computerId)}`,
-                JSON.stringify([{ directoryId: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
+                JSON.stringify([{ directory: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
             ),
     });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
@@ -697,8 +697,8 @@ test("Given another tab saved a recent directory, When this tab reopens its dire
     timeout: 30_000,
 }, async () => {
     const key = (computerId: string) => `morty:recent-cwd:${encodeURIComponent(computerId)}`;
-    const here = { directoryId: "directory-here", directoryLabel: "/project-here" };
-    const there = { directoryId: "directory-there", directoryLabel: "/project-from-another-tab" };
+    const here = { directory: "directory-here", directoryLabel: "/project-here" };
+    const there = { directory: "directory-there", directoryLabel: "/project-from-another-tab" };
     const app = await createTestApp({
         connectAgent: true,
         prepare: (current) => window.localStorage.setItem(key(current.computerId), JSON.stringify([here])),

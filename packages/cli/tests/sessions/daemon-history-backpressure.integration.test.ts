@@ -82,9 +82,8 @@ if (process.argv.includes("--version")) {
                     peer.send(
                         encodeSessionPreviewHistoryPageLoad({
                             agentId: "claude",
-                            bindingId: peer.bindingId,
                             cursor: null,
-                            directoryId: "default",
+                            directory: ".",
                             eventLimit: 10000,
                             kind: "session.preview-history.page.load",
                             requestId: "large-history-preview",

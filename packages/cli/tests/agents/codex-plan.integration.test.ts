@@ -93,10 +93,8 @@ test.each(["owned", "borrowed"])(
                     }
                     const identity = {
                         agentId: "codex",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         kind: "native.session.request",
-                        discoveryId: randomUUID(),
                     } as const;
                     const findId = randomUUID();
                     peer.send(
@@ -117,7 +115,7 @@ test.each(["owned", "borrowed"])(
                             ...identity,
                             requestId: importId,
                             action: "import",
-                            entryId: found.entry.entryId,
+                            sessionId: found.entry.sessionId,
                         }),
                     );
                     const imported = await nativeResult(peer, importId);
@@ -133,8 +131,7 @@ test.each(["owned", "borrowed"])(
                         commandId,
                         target: sessionTarget,
                         agentId: "codex",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         attachments: [],
                         prompt: "Stream a concise proposed plan",
                         disposition: SessionPromptDisposition.Append,

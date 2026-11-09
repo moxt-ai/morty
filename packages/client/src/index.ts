@@ -64,7 +64,6 @@ export {
     mortyApiPath,
     mortyApiUrl,
     parseMortyApiPrefix,
-    RUNTIME_WORKSPACE_BINDING_ID,
     SESSION_CLOSED_ERROR_CODE,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";

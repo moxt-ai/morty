@@ -37,8 +37,8 @@ describe("native session authorization", () => {
                 const command = {
                     ...f.identity,
                     action: "import",
-                    directoryId: entry.directoryId,
-                    entryId: entry.entryId,
+                    directory: entry.directory,
+                    sessionId: entry.sessionId,
                 } satisfies NativeSessionCommand;
                 const first = await f.service.execute(command, new AbortController().signal);
                 expect(first).toMatchObject({
@@ -46,7 +46,7 @@ describe("native session authorization", () => {
                     ready: {
                         target: { harness: f.agent.id, sessionId: entry.sessionId },
                         restored: true,
-                        directoryId: entry.directoryId,
+                        directory: entry.directory,
                         directoryLabel: entry.directoryLabel,
                         capabilities: {
                             listSessions: true,
@@ -59,7 +59,7 @@ describe("native session authorization", () => {
                     ready: { target: { harness: f.agent.id, sessionId: entry.sessionId } },
                 });
                 await expect(
-                    f.service.execute({ ...command, entryId: "forged" }, new AbortController().signal),
+                    f.service.execute({ ...command, sessionId: "forged" }, new AbortController().signal),
                 ).rejects.toMatchObject({ code: "native_session_not_found" });
                 await expect(f.list("forged-cursor")).rejects.toMatchObject({
                     code: "native_session_cursor_expired",
@@ -93,7 +93,7 @@ describe("native session authorization", () => {
                     {
                         ...f.identity,
                         action: "import",
-                        entryId: found.entry.entryId,
+                        sessionId: found.entry.sessionId,
                     },
                     new AbortController().signal,
                 ),
@@ -124,7 +124,7 @@ describe("native session authorization", () => {
             await symlink(outside, alias);
             await expect(
                 f.service.execute(
-                    { ...f.identity, directoryId: entry.directoryId, action: "import", entryId: entry.entryId },
+                    { ...f.identity, directory: entry.directory, action: "import", sessionId: entry.sessionId },
                     new AbortController().signal,
                 ),
             ).rejects.toMatchObject({ code: "native_session_target_changed" });

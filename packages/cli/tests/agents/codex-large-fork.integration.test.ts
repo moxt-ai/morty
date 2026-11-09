@@ -30,8 +30,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                     commandId,
                     target: sourceSessionId,
                     agentId: "codex",
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     attachments: [],
                     prompt: `Question ${turn}: answer without using tools`,
                     disposition: SessionPromptDisposition.Append,
@@ -59,10 +58,8 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
         }
         const identity = {
             agentId: "codex",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
             kind: "native.session.request",
-            discoveryId: randomUUID(),
         } as const;
         const resultFor = async (requestId: string): Promise<NativeSessionResult> => {
             for (;;) {
@@ -95,7 +92,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
             encodeNativeSessionCommand({
                 ...identity,
                 action: "fork",
-                entryId: source.entryId,
+                sessionId: source.sessionId,
                 requestId: forkId,
             }),
         );

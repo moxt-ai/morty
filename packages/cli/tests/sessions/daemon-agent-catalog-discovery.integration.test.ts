@@ -469,8 +469,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
             socket,
             encodeSessionCreateCommand({
                 agentId: "controlled-acp",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: prepareRequestId,
                 operationId: crypto.randomUUID(),
@@ -595,8 +594,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
             socket,
             encodeSessionCreateCommand({
                 agentId: "controlled-acp",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: prepareRequestId,
                 operationId: crypto.randomUUID(),

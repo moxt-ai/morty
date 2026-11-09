@@ -1,4 +1,4 @@
-import { isDirectoryIdentifier, isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
+import { isDirectoryPath, isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { identityScopeSchema } from "../identity/identity-scope-url.ts";
 
@@ -156,17 +156,17 @@ export const lastHarnessEntry = (computerId: string): LocalStorageEntry<string> 
 // Working-directory preferences
 // ---------------------------------------------------------------------------
 
-const directoryIdSchema = v.custom<string>(isDirectoryIdentifier, "Invalid directory identifier");
+const directorySchema = v.custom<string>(isDirectoryPath, "Invalid directory path");
 const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_WORKSPACE_PATH_LENGTH));
 
 export const lastCwdEntry = (computerId: string, agentRef: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
         key: scopedKey("morty:last-cwd:", computerId, agentRef),
-        schema: directoryIdSchema,
+        schema: directorySchema,
     });
 
 const recentCwdPreferenceSchema = v.pipe(
-    v.object({ directoryId: directoryIdSchema, directoryLabel: directoryLabelSchema }),
+    v.object({ directory: directorySchema, directoryLabel: directoryLabelSchema }),
     v.readonly(),
 );
 export type RecentCwdPreference = v.InferOutput<typeof recentCwdPreferenceSchema>;
@@ -178,7 +178,7 @@ export const recentCwdEntry = (computerId: string) =>
             v.array(recentCwdPreferenceSchema),
             v.maxLength(10),
             v.check(
-                (recent) => new Set(recent.map((preference) => preference.directoryId)).size === recent.length,
+                (recent) => new Set(recent.map((preference) => preference.directory)).size === recent.length,
                 "Duplicate recent directories",
             ),
             v.readonly(),

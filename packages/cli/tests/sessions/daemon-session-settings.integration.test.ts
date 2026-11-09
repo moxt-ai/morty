@@ -109,12 +109,7 @@ class TerminalSessionResult {
 
 const bufferedSessionEvents = new WeakMap<ClientFrames, SessionLiveEvent[]>();
 
-async function createSession(
-    socket: Duplex,
-    frames: ClientFrames,
-    agentId: string,
-    bindingId: string,
-): Promise<NativeSessionTarget> {
+async function createSession(socket: Duplex, frames: ClientFrames, agentId: string): Promise<NativeSessionTarget> {
     sendText(
         socket,
         encodeSessionCreateCommand({
@@ -122,8 +117,7 @@ async function createSession(
             requestId: crypto.randomUUID(),
             operationId: crypto.randomUUID(),
             agentId,
-            bindingId,
-            directoryId: "default",
+            directory: ".",
             configurations: [],
         }),
     );
@@ -458,7 +452,7 @@ describe("daemon session configuration boundary", () => {
             mkdir(nativeStateDirectory),
         ]);
         await writeFile(join(project, ".claude", "settings.json"), JSON.stringify({ model: "test-large" }));
-        const projectDirectoryId = `path-${Buffer.from(await realpath(project)).toString("base64url")}`;
+        const projectDirectory = await realpath(project);
 
         const socketReady = Promise.withResolvers<Duplex>();
         const relaySockets = new Set<Duplex>();
@@ -532,13 +526,13 @@ describe("daemon session configuration boundary", () => {
                 socket,
                 encodeAgentSettingsDiscoverCommand({
                     agentId: agent.id,
-                    directoryId: projectDirectoryId,
+                    directory: projectDirectory,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: "controlled-settings-in-project",
                 }),
             );
             const inProject = await readAgentSettings(frames, "controlled-settings-in-project");
-            expect(inProject.directoryId).toBe(projectDirectoryId);
+            expect(inProject.directory).toBe(projectDirectory);
             expect(inProject.settings).toContainEqual(
                 expect.objectContaining({ defaultValue: "test-large", id: "model" }),
             );
@@ -552,7 +546,7 @@ describe("daemon session configuration boundary", () => {
                 }),
             );
             const inDefault = await readAgentSettings(frames, "controlled-settings-in-default");
-            expect(inDefault.directoryId).toBe("default");
+            expect(inDefault.directory).toBe(".");
             expect(inDefault.settings).toContainEqual(
                 expect.objectContaining({ defaultValue: "test-small", id: "model" }),
             );
@@ -865,13 +859,12 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
+            const sessionTarget = await createSession(socket, frames, agent.id);
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
                 agentId: agent.id,
-                bindingId: config.bindingId,
                 commandId: runningCommandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -991,13 +984,12 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
+            const sessionTarget = await createSession(socket, frames, agent.id);
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
                 agentId: agent.id,
-                bindingId: config.bindingId,
                 commandId: runningCommandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

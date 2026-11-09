@@ -136,7 +136,10 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const opened = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            const opened = await f.service.execute(
+                { ...f.identity, action: "import", sessionId: entry.sessionId },
+                signal,
+            );
             if (opened.action !== "import") {
                 throw new Error("Expected native import");
             }
@@ -180,7 +183,10 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const opened = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            const opened = await f.service.execute(
+                { ...f.identity, action: "import", sessionId: entry.sessionId },
+                signal,
+            );
             if (opened.action !== "import") {
                 throw new Error("Expected native import");
             }
@@ -219,7 +225,10 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const opened = await f.service.execute({ ...f.identity, action: "fork", entryId: entry.entryId }, signal);
+            const opened = await f.service.execute(
+                { ...f.identity, action: "fork", sessionId: entry.sessionId },
+                signal,
+            );
             if (opened.action !== "fork") {
                 throw new Error("Expected native fork");
             }
@@ -333,7 +342,10 @@ describe("native session history", () => {
             if (entry === undefined) {
                 throw new Error("Missing Pi conversation");
             }
-            const opened = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
+            const opened = await f.service.execute(
+                { ...f.identity, action: "import", sessionId: entry.sessionId },
+                signal,
+            );
             if (opened.action !== "import") {
                 throw new Error("Expected native import");
             }
@@ -428,7 +440,7 @@ describe("native session history", () => {
                 {
                     ...f.identity,
                     action: "fork",
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                 },
                 new AbortController().signal,
             );
@@ -456,11 +468,11 @@ describe("native session history", () => {
             }
 
             const first = await f.service.execute(
-                { ...f.identity, action: "fork", entryId: entry.entryId, requestId: crypto.randomUUID() },
+                { ...f.identity, action: "fork", sessionId: entry.sessionId, requestId: crypto.randomUUID() },
                 new AbortController().signal,
             );
             const second = await f.service.execute(
-                { ...f.identity, action: "fork", entryId: entry.entryId, requestId: crypto.randomUUID() },
+                { ...f.identity, action: "fork", sessionId: entry.sessionId, requestId: crypto.randomUUID() },
                 new AbortController().signal,
             );
 
@@ -489,7 +501,7 @@ describe("native session history", () => {
                     {
                         ...f.identity,
                         action,
-                        entryId: entry.entryId,
+                        sessionId: entry.sessionId,
                     },
                     new AbortController().signal,
                 );

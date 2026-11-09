@@ -18,12 +18,12 @@ export interface OpenMortySession {
               readonly target: NativeSessionTarget;
               readonly ready: SessionReadyEvent;
           };
-    readonly entry: Omit<NativeSessionEntry, "entryId">;
+    readonly entry: NativeSessionEntry;
 }
 
 /** The selected Session retains its connection metadata; its display title belongs to the title store. */
 export type SelectedMortySession = Omit<OpenMortySession, "entry"> & {
-    readonly entry: Omit<NativeSessionEntry, "entryId" | "title">;
+    readonly entry: Omit<NativeSessionEntry, "title">;
 };
 
 export function selectedSession(session: OpenMortySession): SelectedMortySession {

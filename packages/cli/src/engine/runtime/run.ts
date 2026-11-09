@@ -131,7 +131,6 @@ export async function runRuntime(
     const layer = buildSessionLayer({
         processes,
         ...(options.turnActivity === undefined ? {} : { turnActivity: options.turnActivity }),
-        bindingId: config.bindingId,
         computerId: config.computerId,
         defaultWorkspace: config.defaultWorkspace,
         resolveAgent,

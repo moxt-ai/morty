@@ -90,10 +90,9 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
     }
 });
 
-const identity = (peer: RealDaemonPeer) => ({
+const identity = (_peer: RealDaemonPeer) => ({
     agentId: "controlled-acp",
-    bindingId: peer.bindingId,
-    directoryId: "default",
+    directory: ".",
 });
 
 async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {

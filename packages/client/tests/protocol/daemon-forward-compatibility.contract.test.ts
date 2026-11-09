@@ -18,13 +18,12 @@ test("Given a future sender adds fields, When the daemon decodes a known command
         decodeKnownServiceToDaemonMessage(
             JSON.stringify({
                 kind: "workspace.list",
-                bindingId: "workspace",
-                directoryId: "default",
+                directory: ".",
                 requestId: "request-1",
                 futureOptions: { format: 3 },
             }),
         ),
-    ).toEqual({ kind: "workspace.list", bindingId: "workspace", directoryId: "default", requestId: "request-1" });
+    ).toEqual({ kind: "workspace.list", directory: ".", requestId: "request-1" });
 });
 
 test("Given a future envelope or invalid known fields, When the daemon decodes it, Then it skips it without executing", () => {

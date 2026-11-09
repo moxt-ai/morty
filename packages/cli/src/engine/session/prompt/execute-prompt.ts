@@ -46,7 +46,7 @@ export async function executePrompt({
     cancellationRequested,
 }: ExecutePromptOptions): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectory(directories, command.bindingId, command.directoryId, signal);
+        const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(
             command.agentId,
             signal,

@@ -69,9 +69,8 @@ test.each(["foreground", "background"] as const)(
                     peer.send(
                         encodeSessionPromptCommand({
                             agentId: "codex",
-                            bindingId: peer.bindingId,
                             commandId,
-                            directoryId: "default",
+                            directory: ".",
                             disposition: SessionPromptDisposition.Append,
                             attachments: [],
                             kind: "session.prompt",

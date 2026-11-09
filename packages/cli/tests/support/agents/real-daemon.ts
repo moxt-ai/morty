@@ -18,7 +18,6 @@ import {
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_WORKSPACE_BINDING_ID,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -49,7 +48,7 @@ export interface DaemonConnectionPeer {
     readonly stateDirectory: string;
     readonly send: (message: string | Uint8Array) => void;
     readonly workspace: string;
-    readonly bindingId: string;
+
     readonly readDiagnostics: () => Promise<string>;
     readonly signal: AbortSignal;
     readonly nextEvent: () => Promise<string>;
@@ -335,7 +334,6 @@ async function withDaemonConnection(
                 await connected.promise;
             },
             stateDirectory: directory,
-            bindingId: RUNTIME_WORKSPACE_BINDING_ID,
             cli: async (args) => await cli(args),
             readDiagnostics: async () => await readFile(join(directory, "logs", "daemon.log"), "utf8"),
             signal,
@@ -407,9 +405,7 @@ export async function importRealSession(
     const identity = {
         kind: "native.session.request",
         agentId,
-        bindingId: peer.bindingId,
-        directoryId: "default",
-        discoveryId: randomUUID(),
+        directory: ".",
     } as const;
     const receive = async (requestId: string) => {
         for (;;) {
@@ -436,10 +432,9 @@ export async function importRealSession(
     peer.send(
         encodeNativeSessionCommand({
             ...identity,
-            discoveryId: found.discoveryId,
-            directoryId: found.entry.directoryId,
+            directory: found.entry.directory,
             action: "import",
-            entryId: found.entry.entryId,
+            sessionId: found.entry.sessionId,
             requestId: importId,
         }),
     );
@@ -460,8 +455,7 @@ export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId:
             operationId: randomUUID(),
             configurations: [],
             agentId,
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
         }),
     );
     for (;;) {

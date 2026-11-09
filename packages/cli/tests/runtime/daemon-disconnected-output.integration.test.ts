@@ -231,8 +231,7 @@ class RelayPeer {
     readonly barrier = async (): Promise<void> => {
         this.socket.send(
             encodeWorkspaceListCommand({
-                bindingId: "workspace",
-                directoryId: "default",
+                directory: ".",
                 kind: "workspace.list",
                 requestId: crypto.randomUUID(),
             }),
@@ -314,7 +313,6 @@ async function startRuntime() {
     await initial.barrier();
     return {
         activity,
-        bindingId: config.bindingId,
         get cancellation() {
             return cancellation;
         },
@@ -332,8 +330,7 @@ async function startRuntime() {
                     requestId: crypto.randomUUID(),
                     operationId: crypto.randomUUID(),
                     agentId: "controlled",
-                    bindingId: config.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     configurations: [],
                 }),
             );
@@ -348,9 +345,8 @@ async function startRuntime() {
             peer.socket.send(
                 encodeSessionPromptCommand({
                     agentId: "controlled",
-                    bindingId: config.bindingId,
                     commandId: `command-${label}`,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: "append",
                     attachments: [],
                     kind: "session.prompt",
@@ -537,8 +533,7 @@ test.each([
         runtime.initial.socket.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "controlled",
-                bindingId: runtime.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.preview-history.page.load",
                 target: { harness: "controlled", sessionId: nativeThought.payload.messageId },
                 requestId: "reasoning-native-preview",

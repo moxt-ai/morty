@@ -130,7 +130,7 @@ describe("native session preparation", () => {
             const command = {
                 ...f.identity,
                 action: "import",
-                entryId: entry.entryId,
+                sessionId: entry.sessionId,
             } satisfies NativeSessionCommand;
             await expect(f.service.execute(command, new AbortController().signal)).rejects.toMatchObject({
                 code: "acp_agent_error",
@@ -161,7 +161,7 @@ describe("native session preparation", () => {
                     {
                         ...f.identity,
                         action: "import",
-                        entryId: entry.entryId,
+                        sessionId: entry.sessionId,
                     },
                     new AbortController().signal,
                 ),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
+import { DIRECTORY_PATH } from "../../shared/directory.ts";
 import { identifierStringSchema as identifier } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
 import { boundedJsonSchema, toolCallLocationSchema } from "../../shared/tool-input.ts";
@@ -351,12 +351,12 @@ const lifecycleBase = { commandId: identifier };
 const promptMessageId = z.string().min(1).max(2_048);
 export interface PromptExecutionContext {
     readonly agentId: string;
-    readonly directoryId: string;
+    readonly directory: string;
 }
 const promptExecutionContextSchema = z
     .object({
         agentId: identifier,
-        directoryId: DIRECTORY_IDENTIFIER,
+        directory: DIRECTORY_PATH,
     })
     .readonly() satisfies z.ZodType<PromptExecutionContext>;
 

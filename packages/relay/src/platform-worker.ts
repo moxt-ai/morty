@@ -3,7 +3,7 @@ import {
     decodeContentWriteCommand,
     decodeFileReadCommand,
     type Identifier,
-    isDirectoryIdentifier,
+    isDirectoryPath,
     isIdentifier,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
@@ -155,11 +155,10 @@ const sessionIdentifier = v.custom<Identifier>(isIdentifier);
 /** A Session binding stated in a query string. Each omitted field is the Session's own. */
 function sessionBindingQuery(request: { readonly query: (name: string) => string | undefined }): SessionBindingRequest {
     const agentId = request.query("agentId");
-    const directoryId = request.query("directoryId");
+    const directory = request.query("directory");
     return {
         agentId: agentId === undefined ? undefined : v.parse(sessionIdentifier, agentId),
-        directoryId:
-            directoryId === undefined ? undefined : v.parse(v.custom<string>(isDirectoryIdentifier), directoryId),
+        directory: directory === undefined ? undefined : v.parse(v.custom<string>(isDirectoryPath), directory),
     };
 }
 
@@ -404,7 +403,6 @@ export function createPlatformApplication(
             context.header("Cache-Control", "no-store");
             return context.json({
                 acceptedAt,
-                bindingId: "workspace",
                 idempotencyKey: body.idempotencyKey,
                 request: {
                     content: body.content,

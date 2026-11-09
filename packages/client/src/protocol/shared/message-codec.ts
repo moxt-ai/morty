@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { isDirectoryIdentifier, MAX_DIRECTORY_IDENTIFIER_LENGTH } from "./directory.ts";
+import { isDirectoryPath, MAX_WORKSPACE_PATH_LENGTH } from "./directory.ts";
 import { decodeIdentifier, type Identifier } from "./identifier.ts";
 
 export class ProtocolMessageError extends Error {
@@ -56,9 +56,9 @@ export function readIdentifier(value: Readonly<Record<string, unknown>>, key: st
     }
 }
 
-export function readDirectoryIdentifier(value: Readonly<Record<string, unknown>>, key: string): string {
-    const field = readString(value, key, MAX_DIRECTORY_IDENTIFIER_LENGTH);
-    if (!isDirectoryIdentifier(field)) {
+export function readDirectoryPath(value: Readonly<Record<string, unknown>>, key: string): string {
+    const field = readString(value, key, MAX_WORKSPACE_PATH_LENGTH);
+    if (!isDirectoryPath(field)) {
         throw new ProtocolMessageError(`Invalid directory identifier field: ${key}`);
     }
     return field;

@@ -1,4 +1,4 @@
-import { isDirectoryIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
+import { isDirectoryPath, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import {
     centralLocalStorage,
     lastCwdEntry,
@@ -22,23 +22,23 @@ export function saveRecentCwdPreference(
 ): readonly RecentCwdPreference[] {
     const existing = readRecentCwdPreferences(computerId) ?? [];
     if (
-        !isDirectoryIdentifier(directory.directoryId) ||
+        !isDirectoryPath(directory.directory) ||
         directory.directoryLabel.length === 0 ||
         directory.directoryLabel.length > MAX_WORKSPACE_PATH_LENGTH
     ) {
         return existing;
     }
-    const recent = [
-        directory,
-        ...existing.filter((preference) => preference.directoryId !== directory.directoryId),
-    ].slice(0, 10);
+    const recent = [directory, ...existing.filter((preference) => preference.directory !== directory.directory)].slice(
+        0,
+        10,
+    );
     centralLocalStorage.write(recentCwdEntry(computerId), recent);
     return recent;
 }
 
-export function forgetRecentCwdPreference(computerId: string, directoryId: string): readonly RecentCwdPreference[] {
+export function forgetRecentCwdPreference(computerId: string, directory: string): readonly RecentCwdPreference[] {
     const recent = (readRecentCwdPreferences(computerId) ?? []).filter(
-        (preference) => preference.directoryId !== directoryId,
+        (preference) => preference.directory !== directory,
     );
     centralLocalStorage.write(recentCwdEntry(computerId), recent);
     return recent;
@@ -48,9 +48,9 @@ export function readLastCwdPreference(computerId: string, agentRef: string): str
     return centralLocalStorage.read(lastCwdEntry(computerId, agentRef));
 }
 
-export function saveLastCwdPreference(computerId: string, agentRef: string, directoryId: string): void {
-    if (!isDirectoryIdentifier(directoryId)) {
+export function saveLastCwdPreference(computerId: string, agentRef: string, directory: string): void {
+    if (!isDirectoryPath(directory)) {
         return;
     }
-    centralLocalStorage.write(lastCwdEntry(computerId, agentRef), directoryId);
+    centralLocalStorage.write(lastCwdEntry(computerId, agentRef), directory);
 }

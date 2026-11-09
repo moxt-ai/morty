@@ -19,17 +19,15 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 test("Given a deeply nested multibyte workspace, When real Codex runs a tool through the daemon, Then it writes in the selected directory and its native history reopens", async () => {
     const root = await mkdtemp(join(tmpdir(), "morty-long-codex-"));
     try {
-        // macOS has a lower filesystem path limit; Linux also crosses the old 2048-character wire limit.
+        // macOS has a lower filesystem path limit; Linux exercises deeper paths.
         const workspace = join(
             root,
             ...Array.from({ length: process.platform === "linux" ? 8 : 3 }, () => "\u00e9".repeat(110)),
         );
         await mkdir(workspace, { recursive: true });
         const canonical = await realpath(workspace);
-        const directoryId = `path-${Buffer.from(canonical).toString("base64url")}`;
-        if (process.platform === "linux") {
-            expect(directoryId.length).toBeGreaterThan(2048);
-        }
+        const directory = canonical;
+        expect(directory).toBe(canonical);
         const prompt = "Write the actual working directory to workspace-result.txt, then report completion.";
         const command = `node -e "require('node:fs').writeFileSync('workspace-result.txt', process.cwd())"`;
         await using provider = await FakeOpenAiProvider.start("morty-test-model", "LONG_WORKSPACE_DONE", {
@@ -49,9 +47,8 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "codex",
-                        bindingId: peer.bindingId,
                         commandId: randomUUID(),
-                        directoryId,
+                        directory,
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

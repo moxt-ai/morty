@@ -58,8 +58,7 @@ if (process.argv.includes("--version")) {
                 peer.send(
                     encodeSessionCreateCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         kind: "session.create",
                         requestId,
                         operationId: "initialization-failure",

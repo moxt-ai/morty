@@ -118,9 +118,8 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     peer.send(
         encodeSessionPromptCommand({
             agentId: "claude",
-            bindingId: peer.bindingId,
             commandId: crypto.randomUUID(),
-            directoryId: "default",
+            directory: ".",
             disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",
@@ -236,10 +235,8 @@ test.each(["resume", "load"] as const)(
                         kind: "native.session.request",
                         action: "list",
                         requestId: crypto.randomUUID(),
-                        discoveryId: crypto.randomUUID(),
                         agentId: "claude",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         cursor: null,
                     }),
                 );
@@ -282,10 +279,9 @@ test("Given a client read a conversation's settings before its idle process exit
         peer.send(
             encodeSessionConfigureCommand({
                 agentId: "claude",
-                bindingId: peer.bindingId,
                 booleanValue: false,
                 configId: "model",
-                directoryId: "default",
+                directory: ".",
                 expectedConfigurationRevision: read.configurationRevision,
                 kind: "session.configure",
                 requestId: configureId,
@@ -347,10 +343,8 @@ test("Given a retained native session browser, When two idle hours pass, Then it
                 encodeNativeSessionCommand({
                     kind: "native.session.request",
                     requestId: crypto.randomUUID(),
-                    discoveryId: "native-browser",
                     agentId: "claude",
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     action: "list",
                     cursor: null,
                 }),
@@ -389,8 +383,7 @@ test("Given an old retained process was closed and the daemon restarted, When it
                 requestId: crypto.randomUUID(),
                 target: sessionTarget,
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
             }),
         );
         expect(decodeSessionReadyEvent(await nextResponse(peer, "session.ready")).target).toEqual(sessionTarget);
@@ -419,8 +412,7 @@ test("Given native history is loading in a retained process, When three hours pa
                 requestId: crypto.randomUUID(),
                 target: sessionTarget,
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
             }),
         );
         await nextResponse(peer, "session.ready");

@@ -1,6 +1,6 @@
 import { nativeSessionKey } from "@morty-build/client/native-session";
 import {
-    isDirectoryIdentifier,
+    isDirectoryPath,
     isIdentifier,
     MAX_PROMPT_ATTACHMENT_BYTES,
     type NativeSessionTarget,
@@ -297,7 +297,7 @@ const uploadedAttachmentSchema = v.strictObject({
 });
 const pendingRequestEntries = {
     agentId: v.exactOptional(submissionIdentifier),
-    directoryId: v.exactOptional(v.custom<string>(isDirectoryIdentifier)),
+    directory: v.exactOptional(v.custom<string>(isDirectoryPath)),
     // Preserve the attempted request exactly; the receiving API owns prompt-size rejection.
     content: v.string(),
     attachments: v.pipe(v.array(uploadedAttachmentSchema), v.maxLength(16), v.readonly()),

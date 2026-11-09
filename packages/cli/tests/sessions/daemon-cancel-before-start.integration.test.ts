@@ -32,9 +32,8 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
@@ -95,9 +94,8 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                 const prompt = (commandId: string, text: string) =>
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
@@ -256,9 +254,8 @@ test("Given an unacknowledged command, When Stop arrives before its prompt, Then
                 const prompt = (commandId: string) =>
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
@@ -327,9 +324,8 @@ test("Given a prompt still loading its conversation's saved history, When the cl
                 const prompt = (commandId: string, text: string) =>
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: "session.prompt",

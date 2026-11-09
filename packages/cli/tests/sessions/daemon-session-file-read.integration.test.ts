@@ -51,8 +51,7 @@ test("Given a persisted native conversation, When a client prompts after restart
                         encodeSessionPromptCommand({
                             kind: "session.prompt",
                             agentId: "controlled-acp",
-                            bindingId: peer.bindingId,
-                            directoryId: "default",
+                            directory: ".",
                             target: peer.target,
                             commandId,
                             disposition: SessionPromptDisposition.Append,
@@ -200,8 +199,7 @@ if (process.argv.includes("--version")) {
                 peer.send(
                     encodeSessionPrepareCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         kind: "session.prepare",
                         requestId: "prepare-file-read-session",
                         target: peer.target,

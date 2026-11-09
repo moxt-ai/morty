@@ -26,8 +26,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
             async (peer) => {
                 const identity = {
                     agentId: "controlled-acp",
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     attachments: [],
                     kind: "session.prompt" as const,
                     target: peer.target,

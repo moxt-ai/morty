@@ -350,8 +350,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 firstSocket,
                 encodeWorkspaceListCommand({
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     kind: WORKSPACE_LIST_KIND,
                     requestId: "acknowledgement-barrier",
                 }),
@@ -485,8 +484,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 encodeWorkspaceListCommand({
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     kind: WORKSPACE_LIST_KIND,
                     requestId: "before-relay-ready",
                 }),
@@ -587,8 +585,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 encodeWorkspaceListCommand({
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     kind: WORKSPACE_LIST_KIND,
                     requestId: `connection-${clientFrames.length.toString()}`,
                 }),
@@ -656,8 +653,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 encodeWorkspaceListCommand({
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     kind: WORKSPACE_LIST_KIND,
                     requestId: "after-twenty-minutes",
                 }),
@@ -807,8 +803,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 encodeWorkspaceListCommand({
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     kind: WORKSPACE_LIST_KIND,
                     requestId: "after-rejection",
                 }),
@@ -821,8 +816,7 @@ describe("daemon relay connection liveness", () => {
                 socket,
                 JSON.stringify({
                     kind: WORKSPACE_LIST_KIND,
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     requestId: "extended-workspace-request",
                     futureOptions: { format: "v3" },
                 }),
@@ -842,8 +836,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 encodeWorkspaceListCommand({
-                    bindingId: "workspace",
-                    directoryId: "default",
+                    directory: ".",
                     kind: WORKSPACE_LIST_KIND,
                     requestId: "after-second-unknown",
                 }),
@@ -944,8 +937,7 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     socket,
                     encodeWorkspaceListCommand({
-                        bindingId: "workspace",
-                        directoryId: "default",
+                        directory: ".",
                         kind: WORKSPACE_LIST_KIND,
                         requestId: "after-reconnect",
                     }),
@@ -1024,8 +1016,7 @@ describe("daemon relay connection liveness", () => {
                         requestId: commandId,
                         operationId: commandId,
                         agentId: "codex",
-                        bindingId: "workspace",
-                        directoryId: "default",
+                        directory: ".",
                         configurations: [],
                     }),
                 );
@@ -1050,8 +1041,7 @@ describe("daemon relay connection liveness", () => {
                             commandId,
                             target: sessionTarget,
                             agentId: "codex",
-                            bindingId: "workspace",
-                            directoryId: "default",
+                            directory: ".",
                             disposition: "append",
                             attachments: [],
                             prompt: "broadcast without viewers",
@@ -1100,9 +1090,8 @@ describe("daemon relay connection liveness", () => {
                     firstSocket,
                     encodeSessionPromptCommand({
                         agentId: "codex",
-                        bindingId: "workspace",
                         commandId: `live-command-${turn}`,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: SESSION_PROMPT_KIND,

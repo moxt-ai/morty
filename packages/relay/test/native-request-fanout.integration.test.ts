@@ -151,7 +151,6 @@ it("isolates native query replies from live fanout across hibernation and daemon
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId,
-                discoveryId: requestId,
                 target: { harness: "claude", sessionId: "session-7" },
                 turn: null,
                 queued: [],

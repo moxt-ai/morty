@@ -60,7 +60,6 @@ function unsupportedModelIds(unsupportedModels: readonly AcpConfigurationValueUn
 export async function discoverAgentSettings(
     command: AgentSettingsDiscoverCommand,
     resolveAgent: ResolveAgent,
-    bindingId: string,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
     signal: AbortSignal,
@@ -68,8 +67,8 @@ export async function discoverAgentSettings(
     const { agent, adapter: harnessAdapter } = await resolveAgent(command.agentId, signal);
     // The Agent reads project settings from the directory a Session starts in, so the defaults it reports are those
     // of the requested directory.
-    const directoryId = command.directoryId ?? "default";
-    const cwd = await directories.resolve(bindingId, directoryId, signal);
+    const directory = command.directory ?? ".";
+    const cwd = await directories.resolve(directory, signal);
     const inspectedBaseSnapshot = await sessions.inspectAgentSettings({
         adapter: harnessAdapter,
         agent,
@@ -145,7 +144,7 @@ export async function discoverAgentSettings(
             agentId: command.agentId,
             agentName: selectedSnapshot.agentName,
             agentVersion: selectedSnapshot.agentVersion,
-            directoryId,
+            directory,
             kind: AGENT_SETTINGS_DISCOVERED_KIND,
             modelEffort,
             requestId: command.requestId,

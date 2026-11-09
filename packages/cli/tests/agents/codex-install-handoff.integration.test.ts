@@ -49,10 +49,8 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
 
         const identity = {
             agentId: "codex",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
             kind: "native.session.request",
-            discoveryId: randomUUID(),
         } as const;
         const nextResult = async (requestId: string) => {
             for (;;) {
@@ -89,7 +87,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
             encodeNativeSessionCommand({
                 ...identity,
                 action: "import",
-                entryId: found.entry.entryId,
+                sessionId: found.entry.sessionId,
                 requestId: importRequestId,
             }),
         );
@@ -110,8 +108,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
                 commandId,
                 target: imported.target,
                 agentId: "codex",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 attachments: [],
                 prompt: "Continue this conversation after installation",
                 disposition: SessionPromptDisposition.Append,

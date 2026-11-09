@@ -18,7 +18,7 @@ import {
     decodeSessionStatusChangedEvent,
     decodeWorkspaceEntriesEvent,
     type Identifier,
-    isDirectoryIdentifier,
+    isDirectoryPath,
     isIdentifier,
     type NativeSessionTarget,
     SESSION_CLOSE_NOTICE_KIND,
@@ -44,7 +44,7 @@ const accessSchema = v.pipe(
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         ready: v.unknown(),
         agentRef: identifier,
-        workspaceRef: v.custom<string>(isDirectoryIdentifier),
+        workspaceRef: v.custom<string>(isDirectoryPath),
     }),
     v.readonly(),
 );
@@ -68,7 +68,7 @@ const managedSessionSchema = v.pipe(
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
-        directoryId: v.string(),
+        directory: v.string(),
         computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
@@ -156,7 +156,7 @@ const sessionAccessSchema = v.object({
 const localSessionEntrySchema = v.object({
     sessionId: identifier,
     title: v.string(),
-    directoryId: v.string(),
+    directory: v.string(),
     directoryLabel: v.string(),
     updatedAt: v.nullable(v.string()),
 });
@@ -368,7 +368,7 @@ export class BotChatApi {
         entry: {
             sessionId: access.target.sessionId,
             title,
-            directoryId: access.workspaceRef,
+            directory: access.workspaceRef,
             directoryLabel,
             updatedAt: null,
         },
@@ -475,10 +475,8 @@ export class BotChatApi {
     };
     readonly runtimeConfiguration = async (parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
         v.parse(runtimeConfigurationSchema, await this.#request("workspace", undefined, parent));
-    readonly directory = async (directoryId: string, signal: AbortSignal) =>
-        decodeWorkspaceEntriesEvent(
-            JSON.stringify(await this.#request("workspace/directory", { directoryId }, signal)),
-        );
+    readonly directory = async (directory: string, signal: AbortSignal) =>
+        decodeWorkspaceEntriesEvent(JSON.stringify(await this.#request("workspace/directory", { directory }, signal)));
     /** Resolves once the watched resource differs from the snapshot this client last read, or from its first sample. */
     readonly #waitForResourceChange = async (
         url: URL,
@@ -546,11 +544,11 @@ export class BotChatApi {
                 "Fork through forkNativeSession and read local history through the session preview endpoint.",
             );
         }
-        const { entryId, action, ...identity } = input;
+        const { sessionId, action, ...identity } = input;
         return decodeNativeSessionResult(
             JSON.stringify(
                 await this.#request(
-                    `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/${action}`,
+                    `native-session/${encodeURIComponent(v.parse(identifier, sessionId))}/${action}`,
                     { ...identity, computerId },
                     signal,
                 ),
@@ -560,17 +558,16 @@ export class BotChatApi {
     readonly nativeSession = async (
         computerId: string,
         input: {
-            readonly entryId: string;
             readonly agentId: string;
-            readonly directoryId: string;
+            readonly directory: string;
             readonly sessionId: string;
         },
         signal: AbortSignal,
     ) => {
-        const { entryId, ...identity } = input;
+        const { sessionId, ...identity } = input;
         return decodeNativeSessionEvents(
             await this.#request(
-                `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
+                `native-session/${encodeURIComponent(v.parse(identifier, sessionId))}`,
                 { ...identity, computerId },
                 signal,
             ),

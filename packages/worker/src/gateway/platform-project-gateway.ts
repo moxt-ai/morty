@@ -324,11 +324,11 @@ export class PlatformProjectGateway {
         return response.webSocket;
     };
 
-    readonly listChatDirectory = async (computerId: string, directoryId: string, signal: AbortSignal) =>
+    readonly listChatDirectory = async (computerId: string, directory: string, signal: AbortSignal) =>
         await this.#withProject(
             computerId,
             signal,
-            async (client) => await client.runtimes.listWorkspace(directoryId, signal),
+            async (client) => await client.runtimes.listWorkspace(directory, signal),
             120000,
         );
 
@@ -343,10 +343,10 @@ export class PlatformProjectGateway {
             async (client) => {
                 const settings = await client.runtimes.discoverAgentSettings(
                     selection.agentRef,
-                    { directoryId: selection.workspaceRef },
+                    { directory: selection.workspaceRef },
                     signal,
                 );
-                if (settings.agentId !== selection.agentRef || settings.directoryId !== selection.workspaceRef) {
+                if (settings.agentId !== selection.agentRef || settings.directory !== selection.workspaceRef) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Morty returned settings for an unexpected Agent or directory.",
@@ -368,13 +368,13 @@ export class PlatformProjectGateway {
                     {
                         agentId: input.agentRef,
                         configurations: input.configurations,
-                        directoryId: input.workspaceRef,
+                        directory: input.workspaceRef,
                         computerId: input.computerId,
                         operationId: input.operationId,
                     },
                     signal,
                 );
-                if (ready.agentId !== input.agentRef || ready.directoryId !== input.workspaceRef) {
+                if (ready.agentId !== input.agentRef || ready.directory !== input.workspaceRef) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Morty returned an unexpected Session binding.",
@@ -431,7 +431,7 @@ export class PlatformProjectGateway {
                         input.target,
                         {
                             agentId: input.agentRef,
-                            directoryId: input.workspaceRef,
+                            directory: input.workspaceRef,
                         },
                         signal,
                     ),
@@ -502,7 +502,7 @@ export class PlatformProjectGateway {
                         target: session.target,
                         sessionId: session.sessionId,
                         title: session.title,
-                        directoryId: ready.directoryId,
+                        directory: ready.directory,
                         directoryLabel: ready.directoryLabel,
                         updatedAt: session.updatedAt,
                     },

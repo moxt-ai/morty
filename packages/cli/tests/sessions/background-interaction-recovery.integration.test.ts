@@ -132,8 +132,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         const identity = {
             agentId: "claude",
-            bindingId: config.bindingId,
-            directoryId: "default",
+            directory: ".",
         };
         socket.send(
             encodeSessionCreateCommand({
@@ -178,7 +177,6 @@ test("Given a completed foreground turn, When its Agent requests background perm
                     action: "active-turn",
                     kind: "native.session.request",
                     requestId,
-                    discoveryId: crypto.randomUUID(),
                     target: sessionTarget,
                 }),
             );

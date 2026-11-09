@@ -1,7 +1,7 @@
 import {
     encodeSessionCloseNoticeEvent,
     encodeSessionStatusChangedEvent,
-    isDirectoryIdentifier,
+    isDirectoryPath,
 } from "@morty-build/client/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -24,21 +24,20 @@ const setupInput = v.strictObject({
     computerId: platformIdentifier,
     agentRef: platformIdentifier,
 });
-const nativeDirectoryId = v.custom<string>(isDirectoryIdentifier);
+const nativeDirectory = v.custom<string>(isDirectoryPath);
 const nativeIdentity = {
     computerId: platformIdentifier,
     agentId: platformIdentifier,
-    directoryId: nativeDirectoryId,
+    directory: nativeDirectory,
 };
 const nativeListInput = v.strictObject({
     ...nativeIdentity,
     action: v.literal("list"),
     cursor: v.nullable(platformIdentifier),
-    discoveryId: v.nullable(platformIdentifier),
 });
-const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
+const nativeEntryInput = v.strictObject({ ...nativeIdentity });
 const nativePreviewInput = v.strictObject({ ...nativeIdentity, sessionId: platformIdentifier });
-const directoryInput = v.strictObject({ directoryId: nativeDirectoryId });
+const directoryInput = v.strictObject({ directory: nativeDirectory });
 const nativeContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const sessionConfiguration = v.strictObject({
     booleanValue: v.boolean(),
@@ -57,7 +56,7 @@ const sessionConfigurations = v.pipe(
 // A page loaded before drafts named their directory omits `workspaceRef`; its settings are the default directory's.
 const agentSettingsInput = v.strictObject({
     agentRef: platformIdentifier,
-    workspaceRef: v.optional(nativeDirectoryId),
+    workspaceRef: v.optional(nativeDirectory),
 });
 const nativeSessionTargetInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const accessInput = v.union([
@@ -66,7 +65,7 @@ const accessInput = v.union([
         agentRef: platformIdentifier,
         conversationKey: platformIdentifier,
         configurations: sessionConfigurations,
-        workspaceRef: nativeDirectoryId,
+        workspaceRef: nativeDirectory,
     }),
 ]);
 
@@ -205,7 +204,7 @@ export function createBotChatRoutes() {
                 privateJson(
                     await context.env.services.chat.listDirectory(
                         context.get("chatScope"),
-                        context.req.valid("json").directoryId,
+                        context.req.valid("json").directory,
                     ),
                 ),
         )
@@ -222,7 +221,7 @@ export function createBotChatRoutes() {
                 privateJson(
                     await context.env.services.chat.agentSettings(context.get("chatScope"), {
                         agentRef: context.req.valid("json").agentRef,
-                        workspaceRef: context.req.valid("json").workspaceRef ?? "default",
+                        workspaceRef: context.req.valid("json").workspaceRef ?? ".",
                     }),
                 ),
         )
@@ -305,13 +304,15 @@ export function createBotChatRoutes() {
             "/native-session/:id",
             authenticatedSession,
             authorizedChat(120000),
-            bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
-                // The preview is addressed by the request body; validate the path identifier for the route contract.
-                v.parse(platformIdentifier, context.req.param("id"));
+                const sessionId = v.parse(platformIdentifier, context.req.param("id"));
                 const { computerId, ...input } = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.previewNativeSession(context.get("chatScope"), computerId, input),
+                    await context.env.services.chat.previewNativeSession(context.get("chatScope"), computerId, {
+                        ...input,
+                        sessionId,
+                    }),
                 );
             },
         )
@@ -321,13 +322,13 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
-                const entryId = v.parse(platformIdentifier, context.req.param("id"));
+                const sessionId = v.parse(platformIdentifier, context.req.param("id"));
                 const { computerId, ...input } = context.req.valid("json");
                 return privateJson(
                     await context.env.services.chat.importNativeSession(
                         context.get("chatScope"),
                         computerId,
-                        entryId,
+                        sessionId,
                         input,
                     ),
                 );
