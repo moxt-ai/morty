@@ -112,10 +112,14 @@ Agent supports it.
 
 ### Workspace and directory
 
-The local filesystem context authorized for Agent work. The browser works with
-opaque directory identities supplied by the Runtime, not arbitrary client-provided
-paths. Additional directories extend a Session's authorized context without
-creating a new Runtime.
+The local filesystem context authorized for Agent work. Clients select explicit
+directory paths, not opaque directory identities. The local execution boundary
+validates the requested paths, resolves their filesystem targets, and authorizes
+the resolved directories before use. Relative paths resolve against the paired
+Computer's configured workspace; home-relative paths select the current local
+user's home. Additional directories extend a Session's authorized context without
+creating a new Runtime. Discovery and previously accepted paths never replace
+current local authorization.
 
 ## Session and history concepts
 
