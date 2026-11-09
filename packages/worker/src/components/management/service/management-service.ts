@@ -52,26 +52,24 @@ export class ManagementService {
 
     /** The one Machine Morty serves a user; setup and every browser handoff resolve it here. Reading never creates. */
     readonly userBot = async (userId: string, signal: AbortSignal) => {
-        const served = servedBot(await this.#managedBots.listBots(userId, signal));
-        if (served === undefined) {
+        const machine = await this.#managedBots.readMachine(userId, signal);
+        if (machine === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return served;
+        return machine;
     };
 
     /**
      * Gives the user its Machine unless it already has one. Only identity bootstrap and transfer redemption call this;
      * both are retried writes, so repeating them returns the same Machine.
      */
-    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) => {
-        const served = servedBot(await this.#managedBots.listBots(userId, signal));
-        if (served !== undefined) {
-            return served;
-        }
-        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
-        await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
-        return { ...bot, runtimeId: null };
-    };
+    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) =>
+        await this.#managedBots.claimMachine(
+            userId,
+            { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" },
+            Date.now(),
+            signal,
+        );
 
     readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
         const bot = await this.#managedBots.readBot(userId, botId, signal);
@@ -208,12 +206,4 @@ async function derivedToken(
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replace(/=+$/u, "")}`;
-}
-
-/** A Project identity owns exactly one Machine; ambiguous stored state must not select another target. */
-function servedBot<Bot>(bots: readonly Bot[]): Bot | undefined {
-    if (bots.length > 1) {
-        throw new ManagementError("BOT_STATE_INVALID", "Machine state is invalid. Set up a fresh Morty identity.", 409);
-    }
-    return bots[0];
 }

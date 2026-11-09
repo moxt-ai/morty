@@ -1,4 +1,4 @@
-import * as v from "valibot";
+
 import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
 import { ProjectDurableObject as Project } from "../../src/components/project/project-durable-object.ts";
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
@@ -13,24 +13,6 @@ export class ProjectDurableObject extends Project {
             // Reconstruct an interrupted bootstrap: the credential committed, but the mapping and Machine did not.
             const database = requireIdentityDatabase(new DurableObjectDatabase(this.ctx.storage));
             await database.batch([database.delete(managedBot), database.delete(platformProjectMapping)]);
-            return new Response(null, { status: 204 });
-        }
-        if (request.url === "https://project.internal/additional-machine" && request.method === "POST") {
-            // Reconstruct invalid persisted state; current management must reject multiple Machines.
-            const machine = v.parse(
-                v.object({ userId: v.string(), botId: v.string(), createdAt: v.number() }),
-                await request.json(),
-            );
-            await requireIdentityDatabase(new DurableObjectDatabase(this.ctx.storage))
-                .insert(managedBot)
-                .values({
-                    userId: machine.userId,
-                    botId: machine.botId,
-                    displayName: "My Machine",
-                    createdAt: machine.createdAt,
-                    updatedAt: machine.createdAt,
-                })
-                .run();
             return new Response(null, { status: 204 });
         }
         if (request.url === "https://project.internal/aged-links" && request.method === "POST") {

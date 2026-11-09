@@ -39,16 +39,16 @@ export class ManagedBotStorage {
         return database;
     };
 
-    /** The user's Machines, oldest first. */
-    readonly listBots = async (userId: string, signal: AbortSignal): Promise<readonly ListedManagedBot[]> => {
+    /** The Machine of this Project's owner, if it has one. */
+    readonly readMachine = async (userId: string, signal: AbortSignal): Promise<ListedManagedBot | null> => {
         signal.throwIfAborted();
-        const result = await this.#requireDatabase()
+        const row = await this.#requireDatabase()
             .select({ botId: managedBot.botId, displayName: managedBot.displayName, runtimeId: managedBot.runtimeId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
-            .orderBy(managedBot.createdAt, managedBot.botId);
+            .get();
         signal.throwIfAborted();
-        return v.parse(v.array(listedBotSchema), result);
+        return row === undefined ? null : v.parse(listedBotSchema, row);
     };
 
     readonly ownsBot = async (userId: string, botId: string, signal: AbortSignal): Promise<boolean> => {
@@ -134,34 +134,34 @@ export class ManagedBotStorage {
         return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "not-found";
     };
 
-    readonly saveClaim = async (userId: string, bot: ManagedBot, now: number, signal: AbortSignal): Promise<void> => {
-        const value = v.parse(managedBotSchema, bot);
+    /**
+     * Gives the owner `machine` unless it already has a Machine, and returns the owner's Machine either way: the owner
+     * is the key, so a repeated or concurrent claim never adds a second one.
+     */
+    readonly claimMachine = async (
+        userId: string,
+        machine: ManagedBot,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<ListedManagedBot> => {
+        const value = v.parse(managedBotSchema, machine);
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(managedBot)
-            .values({
-                userId,
-                botId: value.botId,
-                displayName: value.displayName,
-                createdAt: now,
-                updatedAt: now,
-            })
-            .onConflictDoUpdate({
-                target: managedBot.botId,
-                set: { displayName: value.displayName, updatedAt: now },
-                setWhere: eq(managedBot.userId, userId),
-            })
+            .values({ userId, botId: value.botId, displayName: value.displayName, createdAt: now, updatedAt: now })
+            .onConflictDoNothing({ target: managedBot.userId })
             .run();
-        signal.throwIfAborted();
-        if (!(await this.ownsBot(userId, value.botId, signal))) {
-            throw new ManagementStorageError("BOT_ALREADY_CLAIMED", "This bot is already owned by another user.");
+        const claimed = await this.readMachine(userId, signal);
+        if (claimed === null) {
+            throw new ManagementStorageError("DATABASE_UNAVAILABLE", "The Machine could not be stored.");
         }
+        return claimed;
     };
 }
 
 class ManagementStorageError extends Error implements HttpError {
-    readonly code: "BOT_ALREADY_CLAIMED" | "DATABASE_UNAVAILABLE";
-    constructor(code: "BOT_ALREADY_CLAIMED" | "DATABASE_UNAVAILABLE", message: string) {
+    readonly code: "DATABASE_UNAVAILABLE";
+    constructor(code: "DATABASE_UNAVAILABLE", message: string) {
         super(message);
         this.code = code;
         this.name = "ManagementStorageError";
@@ -169,6 +169,6 @@ class ManagementStorageError extends Error implements HttpError {
 
     readonly toHttpJson: HttpError["toHttpJson"] = () => ({
         body: { error: { code: this.code, message: this.message } },
-        status: this.code === "BOT_ALREADY_CLAIMED" ? 409 : 503,
+        status: 503,
     });
 }
