@@ -76,6 +76,10 @@ export class PairingService {
         const channels = await this.#pairings.listProjectRuntimes(projectId, token, signal);
         const channel = channels.find((candidate) => candidate.runtimeId === runtimeId);
         if (channel === undefined) {
+            // A revoked Runtime is not listed; saying so lets its Machine be paired again instead of waiting for it.
+            if (await this.#pairings.isProjectRuntimeRevoked(projectId, runtimeId, token, signal)) {
+                throw new PairingDirectoryError("runtime_revoked", "The Runtime has been revoked");
+            }
             throw new PairingDirectoryError(
                 "runtime_access_denied",
                 "The project credential cannot access this Runtime",

@@ -198,3 +198,93 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     expect(originalStatus).toBe("paired");
     expect(actual).toMatchObject({ runtimeId: pairedRuntime });
 });
+
+test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
+    timeout: 60_000,
+}, async () => {
+    await using cleanup = new AsyncDisposableStack();
+    const fixture = await createIdentityFixture({
+        listenOnLoopback: true,
+        workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
+    });
+    cleanup.defer(() => fixture.close());
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-revoked-")));
+    cleanup.defer(() => rm(directory, { recursive: true, force: true }));
+    const state = join(directory, "state");
+    const workspace = join(directory, "workspace");
+    await mkdir(workspace);
+    const runtime = new ControlledSetupRuntime({ agentId: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    cleanup.defer(() => runtime.disconnect());
+    let time = Date.parse("2026-11-09T00:00:00Z");
+    const run = async () => {
+        const events: Readonly<Record<string, unknown>>[] = [];
+        const code = await runSetup(
+            [
+                "setup",
+                "--base-url",
+                fixture.origin,
+                "--cwd",
+                workspace,
+                "--harness",
+                "codex",
+                "--session-id",
+                "native-revoked",
+            ],
+            {
+                state,
+                runtime,
+                agentEnvironment: {},
+                signal: AbortSignal.timeout(40_000),
+                clock: {
+                    now: () => new Date(time),
+                    wait: async (milliseconds, signal) => {
+                        signal.throwIfAborted();
+                        time += milliseconds;
+                    },
+                },
+                emit: (event) => events.push(event),
+            },
+        );
+        expect(code, JSON.stringify(events)).toBe(0);
+        return {
+            events,
+            ready: v.parse(v.object({ status: v.literal("ready"), botId: v.string() }), events.at(-1)),
+        };
+    };
+    const savedIdentity = v.object({
+        identity: v.object({ user_token: v.string(), project_id: v.string() }),
+    });
+    const machineRuntime = async () => {
+        const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
+        const response = await worker.fetch(
+            new Request(`${fixture.origin}/morty/api/projects/${identity.project_id}/management/bot`, {
+                headers: { authorization: `Bearer ${identity.user_token}` },
+            }),
+            fixture.environment(fixture.origin),
+        );
+        expect(response.status).toBe(200);
+        return { identity, runtimeId: v.parse(v.object({ runtimeId: v.string() }), await response.json()).runtimeId };
+    };
+    const first = await run();
+    const before = await machineRuntime();
+    const revoked = await fixture.platformRequest(
+        new Request(
+            `https://platform.test/morty/api/v1/projects/${before.identity.project_id}/runtimes/${before.runtimeId}`,
+            {
+                method: "DELETE",
+                headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
+            },
+        ),
+    );
+    expect(revoked.status).toBe(204);
+
+    const again = await run();
+    const after = await machineRuntime();
+
+    expect(again.events).toContainEqual(
+        expect.objectContaining({ status: "runtime_revoked", runtimeId: before.runtimeId }),
+    );
+    expect(again.ready.botId).toBe(first.ready.botId);
+    expect(after.identity).toEqual(before.identity);
+    expect(after.runtimeId).not.toBe(before.runtimeId);
+});

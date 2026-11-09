@@ -14,6 +14,7 @@ import { WorkspaceDirectoryService } from "../../src/engine/session/workspace/wo
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
@@ -130,6 +131,7 @@ export async function fixture(
     });
     const config = createRuntimeConfig(
         {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
             defaultWorkspace: workspace,
             channelId: "test-channel",
             relayUrl: new URL("ws://localhost/"),

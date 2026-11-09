@@ -1,7 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { validateIdentifier } from "../entity/pairing/pairing.ts";
 import type { PairingIdentityCredential } from "../entity/pairing/pairing-identity.ts";
-import type { CredentialMatch, PairingScopeRow } from "../entity/pairing/pairing-records.ts";
+import type { CredentialMatch } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
@@ -118,22 +118,4 @@ async function credentialRows(
                     ),
                 );
     }
-}
-
-/** The registered, unrevoked Runtimes in this storage whose daemon credential matches. */
-export async function runtimeCredentialMatches(
-    database: SqlDatabase,
-    tokenHash: string,
-    signal: AbortSignal,
-): Promise<readonly PairingScopeRow[]> {
-    return await relayDrizzle(database, signal)
-        .select({
-            project_id: runtimeIdentity.projectId,
-            runtime_id: runtimeIdentity.runtimeId,
-            channel_id: runtimeIdentity.channelId,
-        })
-        .from(runtimeIdentity)
-        .innerJoin(runtimeRegistration, eq(runtimeRegistration.runtimeId, runtimeIdentity.runtimeId))
-        .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.runtimeId, runtimeIdentity.runtimeId))
-        .where(and(eq(runtimeDaemonCredential.tokenHash, tokenHash), isNull(runtimeIdentity.revokedAt)));
 }

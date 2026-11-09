@@ -122,6 +122,8 @@ function historyNavigation(onDraft: () => void) {
 export function createChatWorkspace(options: {
     readonly clock: Clock;
     readonly botId: string;
+    /** Starts the page over once its Machine's revoked Runtime was replaced; see the home store's announcement. */
+    readonly onRuntimeReplaced: () => void;
     readonly rememberedIdentity?: IdentityScope;
     readonly computers?: ComputerSwitcherModel;
     readonly accessNotice?: string | null;
@@ -194,6 +196,13 @@ export function createChatWorkspace(options: {
         onRestart: () => {
             startHomeLoad();
             startDirectoryLoad();
+        },
+        onRuntimeReplaced: () => {
+            // A Session belongs to the Runtime that held it, so the page starts over on the Machine's new conversation.
+            const url = new URL(window.location.href);
+            url.searchParams.delete("sessionId");
+            window.history.replaceState(window.history.state, "", url);
+            options.onRuntimeReplaced();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
         onFirstMessage: (sessionId, message) => sessionState(sessionId).delivery.getState().awaitConnection(message),

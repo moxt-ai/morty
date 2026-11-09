@@ -19,6 +19,10 @@ export class VerifiedRuntimeConnection {
     readonly installationId: string;
     readonly pairingId: string;
     readonly relayOrigin: URL;
+    /**
+     * The credential issued when the connection was paired. It rotates on every connection, so the credential the
+     * Relay accepts now is read through `RuntimeInstallationStore.runtimeCredentials`.
+     */
     readonly runtimeCredential: string;
 
     readonly runtimeId: string;

@@ -3,6 +3,7 @@ import { RUNTIME_WORKSPACE_BINDING_ID } from "@morty-build/client/protocol";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
 import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
+import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 
 /**
  * Where a Runtime keeps its local data, and the environment it runs and launches Agents with. The data directory is
@@ -55,6 +56,7 @@ export interface RuntimeConfig {
     readonly localContext: RuntimeLocalContext;
     readonly reconnectTarget: RuntimeReconnectTarget | null;
     readonly relayUrl: URL;
+    readonly credentials: RuntimeCredentials;
     /** Stable embedding context for one Session; applied to a copied Agent before process reuse is checked. */
     readonly sessionEnvironment?: (context: {
         readonly sessionId: string;
@@ -77,6 +79,7 @@ export interface RuntimeConnectionConfig {
     readonly defaultWorkspace: string;
     readonly channelId: string;
     readonly relayUrl: URL;
+    readonly credentials: RuntimeCredentials;
 }
 
 export function createRuntimeConfig(
@@ -100,6 +103,7 @@ export function createRuntimeConfig(
         localContext,
         reconnectTarget,
         relayUrl: connection.relayUrl,
+        credentials: connection.credentials,
         ...(resolveAgent === undefined ? {} : { resolveAgent }),
         ...(rediscoverAgents === undefined ? {} : { rediscoverAgents }),
     };

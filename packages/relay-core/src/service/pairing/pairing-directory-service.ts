@@ -1,9 +1,9 @@
+import { isRuntimeCredentialSuccessor } from "@morty-build/client/protocol";
 import {
     PROJECT_HOST_PERMISSIONS,
     type ProjectAccessContext,
     ProjectAuthenticationError,
     ProjectPermission,
-    RuntimeAccessContext,
 } from "../../entity/authentication/project-authentication.ts";
 import { ProjectScope } from "../../entity/do/session.ts";
 import type { AgentDescriptor, ClaimedPairing } from "../../entity/pairing/pairing.ts";
@@ -107,31 +107,39 @@ export class PairingDirectoryService implements PairingOperations {
         return row;
     };
 
-    readonly authorizeDaemon: PairingOperations["authorizeDaemon"] = async (channelId, token, signal) => {
+    readonly rotateRuntimeCredential: PairingOperations["rotateRuntimeCredential"] = async (
+        token,
+        successor,
+        signal,
+    ) => {
         signal.throwIfAborted();
-        const tokenHash = await hashPairingCredential(validateToken(token));
-        const storage = await this.identityStorage({ kind: "daemon", channelId, tokenHash }, signal);
-        const row = await storage.readDaemon(channelId, tokenHash, signal);
-        if (row === null) {
-            throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
+        const current = validateToken(token);
+        if (!isRuntimeCredentialSuccessor(current, successor)) {
+            throw new PairingDirectoryError("unauthorized", "A valid Runtime credential successor is required");
         }
-        if (row.channel_id !== channelId) {
-            throw new PairingDirectoryError("invalid_directory_record", "The channel directory is invalid");
-        }
-        return new RuntimeAccessContext(
-            new ProjectScope(row.project_id),
-            row.runtime_id,
-            row.channel_id,
-            `daemon:${row.channel_id}`,
-        );
-    };
-
-    readonly authorizeRuntimeCredential: PairingOperations["authorizeRuntimeCredential"] = async (token, signal) => {
-        signal.throwIfAborted();
-        return await this.#cx.services.identities.authenticateRuntime(
-            await hashPairingCredential(validateToken(token)),
+        const rotation = await this.#cx.services.identities.rotateRuntime(
+            await hashPairingCredential(current),
+            await hashPairingCredential(successor),
             signal,
         );
+        if (rotation.kind !== "reused") {
+            return rotation;
+        }
+        // Only the daemon that saved a successor can present the retired credential with it. Another successor means
+        // a copy of the credential connected first, so neither copy may keep the Runtime.
+        const storage = await this.projectStorage(rotation.access.scope, signal);
+        await storage.revokeRuntime(
+            {
+                runtimeId: rotation.access.runtimeId,
+                ownerId: null,
+                now: Date.now(),
+                actorKind: "relay",
+                actorId: "runtime_credential_reuse",
+                auditId: `rpa_${crypto.randomUUID()}`,
+            },
+            signal,
+        );
+        return rotation;
     };
 
     readonly authorizeHost: PairingOperations["authorizeHost"] = async (channelId, token, signal) => {
@@ -512,6 +520,18 @@ export class PairingDirectoryService implements PairingOperations {
         );
     };
 
+    readonly isProjectRuntimeRevoked: PairingOperations["isProjectRuntimeRevoked"] = async (
+        projectId,
+        runtimeId,
+        token,
+        signal,
+    ) => {
+        const access = await this.authorizeProject(projectId, token, ProjectPermission.RuntimeRead, signal);
+        const storage = await this.projectStorage(access.scope, signal);
+        const row = await storage.readRuntime(validateIdentifier(runtimeId, "runtime_id"), signal);
+        return row !== null && runtimeRevokedAt(row.revoked_at) !== null;
+    };
+
     readonly readChannel: PairingOperations["readChannel"] = async (channelId, token, signal) => {
         const access = await this.readAuthorizedHost(channelId, token, signal);
         const storage = await this.projectStorage(new ProjectScope(access.project_id), signal);
@@ -607,12 +627,30 @@ export class PairingDirectoryService implements PairingOperations {
         }
     };
 
-    readonly updateAgentCatalog: PairingOperations["updateAgentCatalog"] = async (channelId, token, agents, signal) => {
+    readonly updateAgentCatalog: PairingOperations["updateAgentCatalog"] = async (
+        channelId,
+        token,
+        successor,
+        agents,
+        signal,
+    ) => {
         signal.throwIfAborted();
-        const tokenHash = await hashPairingCredential(validateToken(token));
-        const storage = await this.identityStorage({ kind: "daemon", channelId, tokenHash }, signal);
-        if (!(await storage.updateAgentCatalog(channelId, tokenHash, JSON.stringify(agents), signal))) {
-            throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
+        // Whichever presented credential the Relay holds as current authorizes; holding it is the proof.
+        for (const presented of successor === null ? [token] : [token, successor]) {
+            const tokenHash = await hashPairingCredential(validateToken(presented));
+            let storage: ProjectStore;
+            try {
+                storage = await this.identityStorage({ kind: "daemon", channelId, tokenHash }, signal);
+            } catch (cause) {
+                if (cause instanceof PairingDirectoryError && cause.code === "unauthorized") {
+                    continue;
+                }
+                throw cause;
+            }
+            if (await storage.updateAgentCatalog(channelId, tokenHash, JSON.stringify(agents), signal)) {
+                return;
+            }
         }
+        throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
     };
 }

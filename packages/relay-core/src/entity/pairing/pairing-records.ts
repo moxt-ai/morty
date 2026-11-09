@@ -4,6 +4,16 @@ export interface PairingScopeRow {
     readonly project_id: string;
 }
 
+/** What presenting a Runtime credential with its successor found, after any rotation it caused. */
+export type RuntimeCredentialRotation =
+    /** The successor authenticates now: rotated just now, or by an earlier attempt whose reply was lost. */
+    | { readonly kind: "rotated"; readonly runtime: PairingScopeRow }
+    /** A credential an earlier rotation retired, presented with another successor: a copy is in use elsewhere. */
+    | { readonly kind: "reused"; readonly runtime: PairingScopeRow }
+    /** A credential of a Runtime whose access has ended. */
+    | { readonly kind: "revoked" }
+    | { readonly kind: "unknown" };
+
 /** A host credential that authenticated, with the Runtime it reaches. */
 export interface AuthorizedChannelRow extends PairingScopeRow {
     readonly credential_id: string;

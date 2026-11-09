@@ -1,5 +1,9 @@
 import { createServer, request as httpRequest } from "node:http";
-import { decodeNativeSessionRequest, decodeNativeSessionResult } from "@morty-build/client/protocol";
+import {
+    decodeNativeSessionRequest,
+    decodeNativeSessionResult,
+    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
+} from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 
@@ -28,11 +32,12 @@ export async function createForkLossProxy(upstream: string, loss: "request" | "r
         const url = new URL(request.url ?? "/", upstream);
         url.protocol = "ws:";
         const relay = new WebSocket(url, {
-            headers: {
-                ...(request.headers.authorization === undefined
-                    ? {}
-                    : { authorization: request.headers.authorization }),
-            },
+            headers: Object.fromEntries(
+                ["authorization", RUNTIME_SUCCESSOR_CREDENTIAL_HEADER].flatMap((name) => {
+                    const value = request.headers[name];
+                    return typeof value === "string" ? [[name, value]] : [];
+                }),
+            ),
         });
         peers.add(daemon);
         peers.add(relay);

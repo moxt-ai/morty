@@ -27,6 +27,7 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runti
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 class Messages {
     readonly #closed = Promise.withResolvers<never>();
@@ -89,7 +90,6 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/real-codex-collaboration/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const agent = new AcpAgentDefinition(
         "codex",
         "Codex",
@@ -98,7 +98,12 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         codex.environment,
     );
     const config = createRuntimeConfig(
-        { channelId: "real-codex-collaboration", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            channelId: "real-codex-collaboration",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         new RuntimeAgentDependencies([agent]),
         new RuntimeLocalContext(stateDirectory, process.env),
     );

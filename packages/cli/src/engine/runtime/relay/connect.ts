@@ -1,7 +1,6 @@
 import { type Dispatcher, WebSocket } from "undici";
 
 import { environmentProxyDispatcher } from "../../util/network/environment-proxy.ts";
-import { relayAuthorization } from "./relay-authentication.ts";
 import { isRuntimeRelayRevocation, RuntimeRelayRevokedError } from "./runtime-revocation.ts";
 
 // The Relay accepts a daemon only after it has made the Channel's previous connection offline, and a
@@ -35,6 +34,7 @@ class RelayConnectionError extends Error {
 
 export function connectRelay(
     url: URL,
+    headers: Readonly<Record<string, string>>,
     signal: AbortSignal,
     transportFailed: (failure: Error, source: string) => void = () => undefined,
 ): Promise<RelayConnection> {
@@ -100,10 +100,7 @@ export function connectRelay(
             };
             return dispatch(options, trackedHandler);
         });
-        const endpoint = new URL(url);
-        const headers = relayAuthorization(endpoint);
-        endpoint.searchParams.delete("token");
-        const socket = new WebSocket(endpoint, {
+        const socket = new WebSocket(new URL(url), {
             dispatcher,
             headers,
         });

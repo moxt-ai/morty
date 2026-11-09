@@ -12,7 +12,9 @@ import * as v from "valibot";
 import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
+import type { RuntimeCredentials } from "../../../packages/cli/src/engine/runtime/connection/runtime-credentials.ts";
 import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
+import { memoryRuntimeCredentials } from "../../../packages/cli/tests/support/runtime-credentials.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
@@ -36,7 +38,8 @@ const runtimeClaimSchema = v.object({
 export interface ControlledRuntimeConnection {
     readonly channelId: string;
     readonly origin: string;
-    readonly runtimeCredential: string;
+    /** The Runtime's relay credential; it rotates on every connection and outlives restarts, as a saved one does. */
+    readonly credentials: RuntimeCredentials;
 }
 
 /** An Agent the controlled Runtime exposes. */
@@ -184,13 +187,17 @@ export async function connectControlledAgentRuntime(options: {
     await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
     const relayUrl = new URL("/morty/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-    relayUrl.searchParams.set("token", options.connection.runtimeCredential);
     // The Agents can change across restarts, as when the user installs another Agent on the machine.
     const configure = (behavior: ControlledAgentBehavior) => {
         const harness = createMortyFakeDaemon(behavior, workspace);
         const runtime = controlledRuntime(
             harness.agents,
-            { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
+            {
+                channelId: options.connection.channelId,
+                defaultWorkspace: workspace,
+                relayUrl,
+                credentials: options.connection.credentials,
+            },
             directory,
         );
         return { harness, runtime };
@@ -333,7 +340,7 @@ export async function createControlledAgentRuntime(options: {
         connection: {
             channelId: claim.channelId,
             origin: options.origin,
-            runtimeCredential: claim.runtimeCredential,
+            credentials: memoryRuntimeCredentials(claim.runtimeCredential),
         },
         signal: options.signal,
     });

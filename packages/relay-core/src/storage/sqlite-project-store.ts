@@ -1,7 +1,7 @@
 import type { ProjectStore } from "../infra/project-store.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import { ChannelCredentialStorage } from "./channel-credential-storage.ts";
-import { credentialMatches, runtimeCredentialMatches } from "./pairing-identity-storage.ts";
+import { credentialMatches } from "./pairing-identity-storage.ts";
 import { PairingStorage } from "./pairing-storage.ts";
 import { RuntimeDirectoryStorage } from "./runtime-directory-storage.ts";
 
@@ -94,9 +94,6 @@ export class SqliteProjectStore implements ProjectStore {
     readonly revokeBrowserCredential: ProjectStore["revokeBrowserCredential"] = async (credentialId, now, signal) =>
         await this.#pairings.revokeBrowser(this.#projectId, credentialId, now, signal);
 
-    readonly readDaemon: ProjectStore["readDaemon"] = async (channelId, tokenHash, signal) =>
-        await this.#runtimes.readDaemon(channelId, tokenHash, signal);
-
     readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (channelId, tokenHash, agents, signal) =>
         (await this.#runtimes.updateAgents(channelId, tokenHash, agents, signal)).meta.changes === 1;
 
@@ -179,6 +176,9 @@ export class SqliteProjectStore implements ProjectStore {
     readonly findCredential: ProjectStore["findCredential"] = async (credential, signal) =>
         await credentialMatches(this.#database, credential, signal);
 
-    readonly findRuntimeCredential: ProjectStore["findRuntimeCredential"] = async (tokenHash, signal) =>
-        await runtimeCredentialMatches(this.#database, tokenHash, signal);
+    readonly rotateRuntimeCredential: ProjectStore["rotateRuntimeCredential"] = async (
+        presentedHash,
+        successorHash,
+        signal,
+    ) => await this.#runtimes.rotateDaemonCredential(presentedHash, successorHash, signal);
 }

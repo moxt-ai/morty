@@ -155,6 +155,7 @@ export function createMortyApplication(options: {
         });
         workspace = createChatWorkspace({
             clock: options.clock ?? systemClock,
+            onRuntimeReplaced: () => window.location.reload(),
             rememberedIdentity: identity,
             accessNotice: session.notice,
             computers: createComputerSwitcher({

@@ -39,7 +39,7 @@ import type { SessionTitles, SessionTitlesStore } from "./session-titles-store.t
 
 export type BotChatHomeStoreApi = Omit<ReturnType<typeof createBotChatHomeStore>, "setState">;
 
-type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" | "agent-required";
+type SetupReason = "unconfigured" | "runtime-revoked" | "agent-missing" | "runtime-offline" | "agent-required";
 
 /** Initialization owns only the entry request, never the selected session or the Runtime's availability. */
 type HomeInitialization =
@@ -51,13 +51,22 @@ type HomeInitialization =
           readonly message: string;
       };
 
-type BotPairing = { readonly kind: "checking" } | { readonly kind: "paired" } | { readonly kind: "unpaired" };
+/**
+ * Whether the Machine has a Runtime to reach. `revoked`: Morty ended its Runtime because a copy of the computer's
+ * connection key was used, and the computer pairs the Machine again by running setup.
+ */
+type BotPairing =
+    | { readonly kind: "checking" }
+    | { readonly kind: "paired" }
+    | { readonly kind: "unpaired" }
+    | { readonly kind: "revoked" };
 
 export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
     | { readonly kind: "connected"; readonly label: "Connected" }
     | { readonly kind: "unavailable"; readonly label: "Unavailable" }
     | { readonly kind: "unpaired"; readonly label: "Disconnected" }
+    | { readonly kind: "revoked"; readonly label: "Disconnected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 
 /**
@@ -69,6 +78,9 @@ export function botConnectionStatus(
 ): BotConnectionStatus {
     if (home.pairing.kind === "unpaired") {
         return { kind: "unpaired", label: "Disconnected" };
+    }
+    if (home.pairing.kind === "revoked") {
+        return { kind: "revoked", label: "Disconnected" };
     }
     if (!home.networkAvailable || home.configurationWatch.kind === "unavailable") {
         return { kind: "unavailable", label: "Unavailable" };
@@ -170,6 +182,9 @@ function initialSelection(urlValue: string, createId: () => string): Conversatio
 function homeSetupReason(home: BotChatHomeStore): SetupReason | null {
     if (home.pairing.kind === "unpaired") {
         return "unconfigured";
+    }
+    if (home.pairing.kind === "revoked") {
+        return "runtime-revoked";
     }
     if (
         (home.selection.kind === "failed" && home.selection.failure === "agent-required") ||
@@ -274,6 +289,11 @@ export const createBotChatHomeStore = (
         readonly navigation: BotChatNavigation;
         /** Announced when the owner must restart the home and directory loads. */
         readonly onRestart: () => void;
+        /**
+         * Announced once setup has paired a Machine whose Runtime was revoked with a new Runtime. Every Session
+         * connection this page opened belongs to the revoked Runtime, so the owner starts the page over.
+         */
+        readonly onRuntimeReplaced: () => void;
         /** Announced when a created conversation joins the directory: the owner reloads it without reloading the home view. */
         readonly onDirectoryRefreshed: () => void;
         /**
@@ -735,6 +755,27 @@ export const createBotChatHomeStore = (
                         // Content is already on screen: the view stays, and the
                         // dropped watches are re-armed when the bridge returns.
                         await followConfigurationChanges(signal);
+                        return;
+                    }
+                    if (cause instanceof CloudApiError && cause.code === "RUNTIME_REVOKED") {
+                        // Setup on that computer pairs the Machine with a new Runtime; the page loads again once the
+                        // Machine's binding names it.
+                        set((current) => ({
+                            pairing: { kind: "revoked" },
+                            initialization: { kind: "ready" },
+                            selection:
+                                current.selection.kind === "pending" || current.selection.kind === "loading"
+                                    ? transitionConversationSelection(current.selection, {
+                                          kind: "session-load-failed",
+                                          failure: "unavailable",
+                                          message: cause.message,
+                                          target: current.selection.target,
+                                      })
+                                    : current.selection,
+                        }));
+                        await requests.waitForRuntimeBindingChange(botId, signal);
+                        signal.throwIfAborted();
+                        options.onRuntimeReplaced();
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {

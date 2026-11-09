@@ -6,8 +6,8 @@ import type {
     LinkedDeviceRow,
     PairingChannelRow,
     PairingClaimRow,
-    PairingScopeRow,
     RuntimeChannelRow,
+    RuntimeCredentialRotation,
     RuntimeDirectoryRow,
     RuntimePairingRow,
 } from "../entity/pairing/pairing-records.ts";
@@ -85,7 +85,8 @@ export interface ClaimPairing {
 
 export interface RevokeRuntime {
     readonly runtimeId: string;
-    readonly ownerId: string;
+    /** The owner credential that revoked the Runtime; null when the Relay revoked it for a reused credential. */
+    readonly ownerId: string | null;
     readonly now: number;
     readonly actorKind: string;
     readonly actorId: string;
@@ -119,7 +120,6 @@ export interface ProjectStore {
     readonly createBrowserCredential: (value: CreateBrowserCredential, signal: AbortSignal) => Promise<boolean>;
     /** Revokes a browser credential; false when the Project has no such credential. Repeating it succeeds. */
     readonly revokeBrowserCredential: (credentialId: string, now: number, signal: AbortSignal) => Promise<boolean>;
-    readonly readDaemon: (channelId: string, tokenHash: string, signal: AbortSignal) => Promise<PairingScopeRow | null>;
     readonly updateAgentCatalog: (
         channelId: string,
         tokenHash: string,
@@ -152,7 +152,11 @@ export interface ProjectStore {
         credential: PairingIdentityCredential,
         signal: AbortSignal,
     ) => Promise<readonly CredentialMatch[]>;
-    readonly findRuntimeCredential: (tokenHash: string, signal: AbortSignal) => Promise<readonly PairingScopeRow[]>;
+    readonly rotateRuntimeCredential: (
+        presentedHash: string,
+        successorHash: string,
+        signal: AbortSignal,
+    ) => Promise<RuntimeCredentialRotation>;
 }
 
 export interface ProjectStoreResolver {

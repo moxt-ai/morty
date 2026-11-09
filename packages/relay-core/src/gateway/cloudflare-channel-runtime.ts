@@ -36,6 +36,13 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         );
     };
 
+    readonly refuseRevokedDaemon = (): Response => {
+        const pair = new WebSocketPair();
+        pair[1].accept();
+        pair[1].close(1008, "Runtime revoked");
+        return new Response(null, { status: 101, webSocket: pair[0] });
+    };
+
     readonly acceptHost = async (
         access: ChannelHostCredential | ProjectCredentialHostAccess,
         request: Request,

@@ -71,6 +71,13 @@
             "when": 1794195345487,
             "tag": "0009_machine_identity",
             "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "6",
+            "when": 1794200661590,
+            "tag": "0010_rotate_runtime_daemon_credentials",
+            "breakpoints": true
         }
     ]
 }

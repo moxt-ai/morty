@@ -205,7 +205,7 @@ export class ChatService {
 
     readonly setupRuntimes = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
-        if (bot.configuration !== null) {
+        if (bot.configuration !== null && !(await this.#runtimeRevoked(scope, bot.configuration.runtimeId))) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine already has a configured Runtime.", 409);
         }
         return { runtimes: await this.#platform.chatRuntimes(scope.projectId, scope.signal) };
@@ -231,6 +231,18 @@ export class ChatService {
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         return bot;
+    };
+
+    readonly #runtimeRevoked = async (scope: ChatScope, runtimeId: string): Promise<boolean> => {
+        try {
+            await this.#platform.getChatRuntimeAgents(scope.projectId, runtimeId, scope.signal);
+            return false;
+        } catch (cause) {
+            if (cause instanceof PlatformProjectError && cause.code === "RUNTIME_REVOKED") {
+                return true;
+            }
+            throw cause;
+        }
     };
 
     readonly localRuntime = async (scope: ChatScope) => {
@@ -737,7 +749,12 @@ export class ChatService {
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
         const current = await this.#bot(scope);
-        if (current.configuration !== null && current.configuration.runtimeId !== input.runtimeId) {
+        // A Machine keeps its Runtime until that Runtime is revoked; setup then pairs the Machine with another.
+        const replaced =
+            current.configuration === null || current.configuration.runtimeId === input.runtimeId
+                ? null
+                : current.configuration.runtimeId;
+        if (replaced !== null && !(await this.#runtimeRevoked(scope, replaced))) {
             throw new PlatformProjectError(
                 "BOT_RUNTIME_FIXED",
                 "Create a new Machine to pair a different Runtime.",
@@ -754,6 +771,7 @@ export class ChatService {
             scope.userId,
             scope.botId,
             { runtimeId: decodeIdentifier(input.runtimeId) },
+            replaced,
             Date.now(),
             scope.signal,
         );

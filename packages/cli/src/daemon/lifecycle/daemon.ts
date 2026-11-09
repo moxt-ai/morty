@@ -1,6 +1,7 @@
 import { refreshAgentCatalog } from "../../engine/runtime/catalog/refresh-agent-catalog.ts";
 import type { RuntimeConfig } from "../../engine/runtime/config.ts";
 import { prepareRuntimeConnection } from "../../engine/runtime/pairing.ts";
+import { RuntimeRelayRevokedError } from "../../engine/runtime/relay/runtime-revocation.ts";
 import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
 import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
 import { RuntimeTurnActivity } from "../../engine/session/turn/runtime-turn-activity.ts";
@@ -152,10 +153,29 @@ async function runDaemonRuntime(
                                 fail(connection.connectionId, new Error("The Runtime stopped unexpectedly"));
                             }
                         },
-                        (cause: unknown) => {
-                            if (!combined.aborted && !controller.signal.aborted) {
-                                fail(connection.connectionId, cause);
+                        async (cause: unknown) => {
+                            if (combined.aborted || controller.signal.aborted) {
+                                return;
                             }
+                            if (!(cause instanceof RuntimeRelayRevokedError)) {
+                                fail(connection.connectionId, cause);
+                                return;
+                            }
+                            // A revoked Runtime never connects again; setup pairs this computer anew, and the daemon
+                            // keeps running to serve that pairing.
+                            lifecycleLog.record(
+                                JSON.stringify({
+                                    kind: "runtime_revoked",
+                                    connectionId: connection.connectionId,
+                                    timestamp: new Date().toISOString(),
+                                }),
+                            );
+                            console.error(
+                                `Morty disconnected Runtime ${connection.connectionId}: its connection key was used somewhere else. Run Morty setup on this computer again to reconnect.`,
+                            );
+                            await installation
+                                .setConnectionActivation(connection.connectionId, "stopped", combined)
+                                .catch((failure: unknown) => fail(connection.connectionId, failure));
                         },
                     );
                     active = { connectionId: connection.connectionId, config, controller, completion };

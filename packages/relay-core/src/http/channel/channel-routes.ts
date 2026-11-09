@@ -1,3 +1,4 @@
+import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import { validateAgents, validateIdentifier } from "../../entity/pairing/pairing.ts";
 import { bearerToken, readString } from "../../infra/relay-http.ts";
@@ -16,6 +17,7 @@ export function createChannelRoutes() {
             await useCases.updateAgentCatalog(
                 validateIdentifier(context.req.param("channelId"), "channel_id"),
                 bearerToken(context.req.raw),
+                context.req.header(RUNTIME_SUCCESSOR_CREDENTIAL_HEADER) ?? null,
                 agents,
                 context.req.raw.signal,
             );
@@ -87,15 +89,5 @@ export function createChannelRoutes() {
                 request.signal,
             );
             return await context.env.gateways.channelGateway.acceptHost(access, request, request.signal);
-        })
-        .get("/:channelId/daemon", async (context) => {
-            const useCases = context.env.services.channels;
-            const request = context.req.raw;
-            const access = await useCases.authorizeDaemon(
-                validateIdentifier(context.req.param("channelId"), "channel_id"),
-                bearerToken(request),
-                request.signal,
-            );
-            return await context.env.gateways.channelGateway.acceptDaemon(access, request, request.signal);
         });
 }

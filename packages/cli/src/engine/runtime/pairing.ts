@@ -18,6 +18,7 @@ import {
     RuntimeLocalContext,
 } from "./config.ts";
 import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 
 const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
@@ -211,19 +212,20 @@ async function claimPairing(
 
 function buildSavedRuntimeConfig(
     connection: VerifiedRuntimeConnection,
+    credentials: RuntimeCredentials,
     defaultWorkspace: string,
     inventory: LocalAgentInventory,
     localContext: RuntimeLocalContext,
 ): RuntimeConfig {
     const relayUrl = mortyApiUrl(connection.relayOrigin, "/v1/runtimes/connect");
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-    relayUrl.searchParams.set("token", connection.runtimeCredential);
 
     const config: RuntimeConfig = createRuntimeConfig(
         {
             defaultWorkspace,
             channelId: connection.channelId,
             relayUrl,
+            credentials,
         },
         new RuntimeAgentDependencies(inventory.readyAgents()),
         localContext,
@@ -322,5 +324,11 @@ export async function prepareRuntimeConnection(
         },
         connection.channelId,
     );
-    return buildSavedRuntimeConfig(connection, defaultWorkspace, inventory, localContext);
+    return buildSavedRuntimeConfig(
+        connection,
+        installation.runtimeCredentials(connection.connectionId),
+        defaultWorkspace,
+        inventory,
+        localContext,
+    );
 }

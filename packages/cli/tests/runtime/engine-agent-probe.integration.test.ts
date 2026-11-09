@@ -10,6 +10,7 @@ import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 interface ProbeOptions {
     readonly scenario:
@@ -148,7 +149,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
                       channelId: saved.channelId,
                       defaultWorkspace: workspace,
                       relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                      runtimeCredential: saved.runtimeCredential,
+                      credentials: memoryRuntimeCredentials(saved.runtimeCredential),
                   },
               };
     const execution = engine.runLoop({

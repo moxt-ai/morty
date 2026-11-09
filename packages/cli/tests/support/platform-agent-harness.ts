@@ -13,6 +13,7 @@ import {
     fakeAgentHarnessCapabilities,
 } from "./agent-harness.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "./controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "./runtime-credentials.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
@@ -109,10 +110,14 @@ export async function createFakeAgentHarnessRuntime(options: {
         );
         const relayUrl = new URL(mortyApiPath("/v1/runtimes/connect"), options.relayOrigin ?? options.origin);
         relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-        relayUrl.searchParams.set("token", claim.runtimeCredential);
         const localContext = new RuntimeLocalContext(directory, process.env);
         const config = createRuntimeConfig(
-            { channelId: pairing.channelId, defaultWorkspace: workspace, relayUrl },
+            {
+                credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+                channelId: pairing.channelId,
+                defaultWorkspace: workspace,
+                relayUrl,
+            },
             harnesses.map((definition) => fakeAgentHarness(definition, harnessState)),
             localContext,
         );

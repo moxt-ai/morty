@@ -37,6 +37,7 @@ import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtim
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { type ScheduledTask, systemTimer, type Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("../sessions/fixtures/acp-peer.ts", import.meta.url));
@@ -311,6 +312,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
                 channelId: "heartbeat-channel",
                 relayUrl: new URL(
@@ -453,6 +455,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
                 channelId: "runtime-revoked-channel",
                 relayUrl: new URL(
@@ -606,6 +609,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
                 channelId: "liveness-channel",
                 relayUrl: new URL(
@@ -762,6 +766,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
                 channelId: "unsupported-channel",
                 relayUrl: new URL(
@@ -983,10 +988,11 @@ describe("daemon relay connection liveness", () => {
         process.env["no_proxy"] = "127.0.0.1,localhost";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
                 channelId: "reconciliation-channel",
                 relayUrl: new URL(
-                    `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/reconciliation-channel/daemon?token=reconciliation-secret`,
+                    `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/reconciliation-channel/daemon`,
                 ),
             },
             new RuntimeAgentDependencies([

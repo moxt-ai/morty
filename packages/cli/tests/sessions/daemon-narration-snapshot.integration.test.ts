@@ -22,6 +22,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -142,7 +143,6 @@ describe("daemon narration delivery", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_beta/daemon`);
-        relayUrl.searchParams.set("token", "e".repeat(43));
         const agent = new AcpAgentDefinition(
             "controlled-acp",
             "Controlled ACP",
@@ -164,6 +164,7 @@ describe("daemon narration delivery", () => {
                 channelId: "channel_beta",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("e".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
