@@ -109,7 +109,7 @@ export class MortySessionAccessRevocation {
 export interface CreateMortySessionRequest {
     readonly agentId: string;
     readonly configurations: readonly SessionConfigurationSelection[];
-    readonly directoryId: string;
+    readonly directory: string;
     readonly computerId: string;
     readonly operationId: string;
 }
@@ -121,7 +121,7 @@ export interface CreateMortySessionRequest {
  */
 export interface MortySessionBinding {
     readonly agentId?: string;
-    readonly directoryId?: string;
+    readonly directory?: string;
 }
 
 interface SubmitMortyTurnContent extends MortySessionBinding {
@@ -636,7 +636,7 @@ export class MortyIndeterminateTurnState extends MortyTurnState {
 
 export class MortyTurn {
     readonly acceptedAt: string;
-    readonly bindingId: string;
+
     readonly idempotencyKey: string;
     readonly request: TurnRequest;
     readonly target: NativeSessionTarget;
@@ -645,7 +645,6 @@ export class MortyTurn {
 
     constructor(
         acceptedAt: string,
-        bindingId: string,
         content: string,
         idempotencyKey: string,
         target: NativeSessionTarget,
@@ -655,7 +654,6 @@ export class MortyTurn {
         request: TurnRequest = { content, kind: "prompt", sessionConfigurations },
     ) {
         this.acceptedAt = acceptedAt;
-        this.bindingId = bindingId;
         this.idempotencyKey = idempotencyKey;
         this.request = request;
         this.target = target;
@@ -708,7 +706,6 @@ export function decodeMortyTurn(value: unknown): MortyTurn | null {
     }
     return new MortyTurn(
         turn.acceptedAt,
-        turn.bindingId,
         turn.request.kind === "prompt" ? turn.request.content : "",
         turn.idempotencyKey,
         turn.target,

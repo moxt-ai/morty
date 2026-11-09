@@ -68,29 +68,27 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
             const base = {
                 kind: "native.session.request",
                 agentId: "codex",
-                bindingId: peer.bindingId,
-                directoryId: "default",
-                discoveryId: randomUUID(),
+                directory: ".",
             } as const;
             peer.send(encodeNativeSessionCommand({ ...base, action: "list", requestId: "list", cursor: null }));
-            let entryId = "";
+            let sessionId = "";
             for (;;) {
                 const message = await peer.nextMessage();
                 if (decodeMessageKind(message) === "native.session.result") {
                     const result = decodeNativeSessionResult(message);
                     if (result.action === "list") {
-                        entryId = result.entries[0]?.entryId ?? "";
+                        sessionId = result.entries[0]?.sessionId ?? "";
                         break;
                     }
                 }
             }
-            expect(entryId).not.toBe("");
+            expect(sessionId).not.toBe("");
             peer.send(
                 encodeNativeSessionCommand({
                     ...base,
                     action: "import",
                     requestId: "open",
-                    entryId,
+                    sessionId,
                 }),
             );
             for (;;) {

@@ -36,9 +36,8 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "codex",
-                    bindingId: peer.bindingId,
                     commandId: activeCommandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -50,9 +49,8 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "codex",
-                    bindingId: peer.bindingId,
                     commandId: steeringCommandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -197,9 +195,8 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "codex",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
@@ -345,8 +342,7 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                         commandId,
                         target: peer.target,
                         agentId: "codex",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         attachments: [],
                         prompt: `Reply to ${commandId}`,
                         disposition: SessionPromptDisposition.Append,

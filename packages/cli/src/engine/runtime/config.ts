@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { type NativeSessionTarget, RUNTIME_WORKSPACE_BINDING_ID } from "@morty-build/client/protocol";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
 import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
@@ -50,7 +50,7 @@ export interface RuntimeConfig {
     readonly adapters: RuntimeAgentDependencies["adapters"];
     readonly agents: readonly CatalogAgent[];
     readonly defaultWorkspace: string;
-    readonly bindingId: string;
+
     readonly catalog: LocalAgentCatalog;
     readonly computerId: string;
     readonly localContext: RuntimeLocalContext;
@@ -94,7 +94,6 @@ export function createRuntimeConfig(
         adapters: dependencies.adapters,
         agents: runtimeAgents,
         defaultWorkspace: connection.defaultWorkspace,
-        bindingId: RUNTIME_WORKSPACE_BINDING_ID,
         catalog: new LocalAgentCatalog(runtimeAgents),
         computerId: connection.computerId,
         localContext,

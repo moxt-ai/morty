@@ -359,7 +359,7 @@ export function sessionPanePresentation(
 
 interface SessionIdentity {
     readonly agentId: string;
-    readonly directoryId: string;
+    readonly directory: string;
 }
 
 async function readSessionHistory(
@@ -546,7 +546,7 @@ export function createSessionPaneModel(options: {
         ) ?? null;
     const sessionIdentity: SessionIdentity = {
         agentId: session.agentRef,
-        directoryId: session.result.ready.directoryId,
+        directory: session.result.ready.directory,
     };
     /**
      * Lends the Session's operations this pane's connection as it is now. A failure an operation meets through it
@@ -888,7 +888,7 @@ export function createSessionPaneModel(options: {
                     // Freeze semantic intent before delivery owns retries, including identity.
                     return {
                         agentId: session.agentRef,
-                        directoryId: session.result.ready.directoryId,
+                        directory: session.result.ready.directory,
                         attachments: uploadedAttachments,
                         content: content.trim(),
                     };

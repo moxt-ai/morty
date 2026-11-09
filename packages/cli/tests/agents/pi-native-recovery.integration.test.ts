@@ -44,8 +44,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                         commandId,
                         target: nativeId,
                         agentId: "pi",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
                         disposition: SessionPromptDisposition.Append,
@@ -140,8 +139,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 commandId,
                 target: sourceSessionId,
                 agentId: "pi",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 attachments: [],
                 prompt: "Reply with a short greeting, without using tools",
                 disposition: SessionPromptDisposition.Append,
@@ -165,12 +163,10 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             }
         }
 
-        const discoveryId = randomUUID();
         const listRequestId = randomUUID();
         const identity = {
             agentId: "pi",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
         } as const;
         peer.send(
             encodeNativeSessionCommand({
@@ -179,7 +175,6 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 cursor: null,
                 kind: "native.session.request",
                 requestId: listRequestId,
-                discoveryId,
             }),
         );
         let entry: Extract<
@@ -231,10 +226,9 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             encodeNativeSessionCommand({
                 ...identity,
                 action: "import",
-                entryId: entry.entryId,
+                sessionId: entry.sessionId,
                 kind: "native.session.request",
                 requestId: importRequestId,
-                discoveryId,
             }),
         );
         for (;;) {
@@ -265,8 +259,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 commandId: sourceCommandId,
                 target: sourceSessionId,
                 agentId: "pi",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 attachments: [],
                 prompt: "Save this conversation so it can be forked",
                 disposition: SessionPromptDisposition.Append,
@@ -283,12 +276,10 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
             }
         }
 
-        const discoveryId = randomUUID();
         const listRequestId = randomUUID();
         const identity = {
             agentId: "pi",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
         } as const;
         peer.send(
             encodeNativeSessionCommand({
@@ -297,7 +288,6 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 cursor: null,
                 kind: "native.session.request",
                 requestId: listRequestId,
-                discoveryId,
             }),
         );
         let entry: Extract<
@@ -327,10 +317,9 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
             encodeNativeSessionCommand({
                 ...identity,
                 action: "fork",
-                entryId: entry.entryId,
+                sessionId: entry.sessionId,
                 kind: "native.session.request",
                 requestId: forkRequestId,
-                discoveryId,
             }),
         );
         let forkedSessionTarget: RealDaemonPeer["target"];
@@ -396,8 +385,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 commandId: forkedCommandId,
                 target: forkedSessionTarget,
                 agentId: "pi",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 attachments: [],
                 prompt: "Continue in the independent fork",
                 disposition: SessionPromptDisposition.Append,

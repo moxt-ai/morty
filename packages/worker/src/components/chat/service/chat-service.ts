@@ -68,16 +68,14 @@ export type ChatScope = {
 type NativeListInput = {
     readonly action: "list";
     readonly agentId: string;
-    readonly directoryId: string;
+    readonly directory: string;
     readonly cursor: string | null;
-    readonly discoveryId: string | null;
 };
 type NativeEntryInput = {
     readonly agentId: string;
-    readonly directoryId: string;
-    readonly discoveryId: string;
+    readonly directory: string;
 };
-type NativePreviewInput = Omit<NativeEntryInput, "discoveryId"> & { readonly sessionId: string };
+type NativePreviewInput = Omit<NativeEntryInput, never> & { readonly sessionId: string };
 type NewChatInput = {
     readonly agentRef: string;
     readonly conversationKey: string;
@@ -213,12 +211,12 @@ export class ChatService {
         return { runtimes: await this.#platform.chatRuntimes(scope.computerId, scope.signal) };
     };
 
-    readonly listDirectory = async (scope: ChatScope, directoryId: string) => {
+    readonly listDirectory = async (scope: ChatScope, directory: string) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        const listing = await this.#platform.listChatDirectory(scope.computerId, directoryId, scope.signal);
+        const listing = await this.#platform.listChatDirectory(scope.computerId, directory, scope.signal);
         return listing;
     };
 
@@ -315,7 +313,7 @@ export class ChatService {
                     {
                         ...session,
                         createdAt: new Date(session.createdAt).toISOString(),
-                        directoryId: details.directoryId,
+                        directory: details.directory,
                         directoryLabel: details.directoryLabel,
                         prompted: details.prompted,
                         target: { harness: details.agentId, sessionId: details.sessionId },
@@ -520,7 +518,7 @@ export class ChatService {
                         if (
                             recovered !== null &&
                             recovered.agentId === input.agentRef &&
-                            recovered.directoryId === input.workspaceRef
+                            recovered.directory === input.workspaceRef
                         ) {
                             await this.#chatSessions.save(
                                 scope.computerId,
@@ -563,7 +561,7 @@ export class ChatService {
 
                 computerId: scope.computerId,
                 agentRef: metadata.agentId,
-                workspaceRef: metadata.directoryId,
+                workspaceRef: metadata.directory,
             },
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
@@ -687,7 +685,7 @@ export class ChatService {
 
             {
                 agentId: agent.agentRef,
-                directoryId: "default",
+                directory: ".",
                 sessionId: sessionId,
             },
             scope.signal,
@@ -697,10 +695,9 @@ export class ChatService {
             scope.computerId,
             {
                 action: "import",
-                discoveryId: found.discoveryId,
                 agentId: agent.agentRef,
-                directoryId: entry.directoryId,
-                entryId: entry.entryId,
+                directory: entry.directory,
+                sessionId: entry.sessionId,
             },
             scope.signal,
         );
@@ -724,7 +721,7 @@ export class ChatService {
             { harness: input.agentId, sessionId: input.sessionId },
             {
                 agentId: input.agentId,
-                directoryId: input.directoryId,
+                directory: input.directory,
             },
             { cursor: null, eventLimit: 200 },
             scope.signal,
@@ -735,13 +732,13 @@ export class ChatService {
     readonly importNativeSession = async (
         scope: ChatScope,
         requestedComputerId: string,
-        entryId: string,
+        sessionId: string,
         input: NativeEntryInput,
     ) => {
         const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
         const result = await this.#platform.nativeSessions(
             scope.computerId,
-            { ...input, entryId, action: "import" },
+            { ...input, sessionId, action: "import" },
             scope.signal,
         );
         if (result.action !== "import") {
@@ -800,11 +797,7 @@ export class ChatService {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This chat belongs to a different computer.", 409);
         }
         await this.#requireRuntimeAgent(scope, input.agentRef);
-        await this.#platform.discoverChatAgentSettings(
-            scope.computerId,
-            { ...input, workspaceRef: "default" },
-            scope.signal,
-        );
+        await this.#platform.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
         const result = await this.#managedBots.configureBot(
             scope.userId,
             scope.botId,

@@ -149,7 +149,6 @@ it("Given future unroutable daemon variants, When the Relay receives them, Then 
                 kind: "native.session.result",
                 action: "future-action",
                 requestId: "native-1",
-                discoveryId: "",
             },
         ]) {
             daemon.socket.send(JSON.stringify(message));

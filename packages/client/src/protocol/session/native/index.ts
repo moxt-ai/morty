@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DIRECTORY_IDENTIFIER as directoryId, MAX_WORKSPACE_PATH_LENGTH } from "../../shared/directory.ts";
+import { DIRECTORY_PATH as directory, MAX_WORKSPACE_PATH_LENGTH } from "../../shared/directory.ts";
 import { identifierStringSchema as identifier } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
 import {
@@ -21,7 +21,6 @@ export const SESSION_HISTORY_MESSAGE_LIMIT = 1_000;
 
 const envelope = {
     requestId: identifier,
-    discoveryId: identifier,
 };
 const sessionInteractionSnapshotSchema = z
     .object({
@@ -95,8 +94,7 @@ const identity = {
     ...envelope,
     kind: z.literal(NATIVE_SESSION_REQUEST_KIND),
     agentId: identifier,
-    bindingId: identifier,
-    directoryId,
+    directory,
 };
 
 const nativeSessionRequestSchema = z.discriminatedUnion("action", [
@@ -122,7 +120,7 @@ const nativeSessionRequestSchema = z.discriminatedUnion("action", [
         .object({
             ...identity,
             action: z.enum(["import", "fork"]),
-            entryId: identifier,
+            sessionId: identifier,
         })
         .readonly(),
 ]);
@@ -150,7 +148,7 @@ const nativeSessionCommandSchema = z.discriminatedUnion("action", [
         .object({
             ...identity,
             action: z.enum(["import", "fork"]),
-            entryId: identifier,
+            sessionId: identifier,
         })
         .readonly(),
 ]);
@@ -158,10 +156,9 @@ export type NativeSessionCommand = z.infer<typeof nativeSessionCommandSchema>;
 
 const nativeSessionEntrySchema = z
     .object({
-        entryId: identifier,
         sessionId: identifier,
         title: z.string().max(500),
-        directoryId,
+        directory,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         updatedAt: z.iso.datetime({ offset: true }).nullable(),
     })

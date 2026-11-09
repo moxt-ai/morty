@@ -17,9 +17,8 @@ const prompt = (peer: RealDaemonPeer, commandId: string, text: string) =>
     encodeSessionPromptCommand({
         agentId: "controlled-acp",
         attachments: [],
-        bindingId: peer.bindingId,
         commandId,
-        directoryId: "default",
+        directory: ".",
         disposition: "append",
         kind: "session.prompt",
         prompt: text,
@@ -99,9 +98,8 @@ test("Given a running prompt, When clients append messages and steer a turn that
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
                         attachments: [],
-                        bindingId: peer.bindingId,
                         commandId: steer,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: "steer",
                         kind: "session.prompt",
                         prompt: "Use this in the same turn",

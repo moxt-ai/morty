@@ -150,10 +150,8 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
         );
         const identity = {
             agentId: "codex",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
             kind: "native.session.request",
-            discoveryId: crypto.randomUUID(),
         } as const;
         const resultFor = async (requestId: string): Promise<NativeSessionResult> => {
             for (;;) {
@@ -184,7 +182,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
             encodeNativeSessionCommand({
                 ...identity,
                 action: "import",
-                entryId: source.entryId,
+                sessionId: source.sessionId,
                 requestId: "image-import",
             }),
         );
@@ -202,9 +200,8 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "codex",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

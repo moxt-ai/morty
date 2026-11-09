@@ -54,7 +54,6 @@ describe("Session execution read contracts", () => {
         queuedCancellation: "before-start",
         interactionState: null,
         requestId: "request-execution-1",
-        discoveryId: "discovery-1",
         target: { harness: "claude", sessionId: "session-1" },
         turn: null,
     } as const;

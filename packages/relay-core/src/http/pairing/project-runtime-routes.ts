@@ -10,10 +10,9 @@ import {
     decodeSessionRestoreCommand,
     decodeWorkspaceListCommand,
     type Identifier,
-    isDirectoryIdentifier,
+    isDirectoryPath,
     isIdentifier,
-    MAX_DIRECTORY_IDENTIFIER_LENGTH,
-    RUNTIME_WORKSPACE_BINDING_ID,
+    MAX_WORKSPACE_PATH_LENGTH,
 } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import * as v from "valibot";
@@ -44,7 +43,7 @@ import {
 const identifier = v.custom<Identifier>(isIdentifier);
 const sessionIdentitySchema = v.strictObject({
     agentId: identifier,
-    directoryId: v.custom<string>(isDirectoryIdentifier),
+    directory: v.custom<string>(isDirectoryPath),
 });
 const sessionBindingSchema = v.strictObject(sessionBindingEntries);
 const createSessionSchema = v.strictObject({
@@ -236,7 +235,6 @@ export function createProjectRuntimeRoutes() {
             const command = decodeSessionCreateCommand(
                 JSON.stringify({
                     ...body,
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     kind: "session.create",
                     requestId: crypto.randomUUID(),
                 }),
@@ -259,7 +257,6 @@ export function createProjectRuntimeRoutes() {
                 const command = decodeSessionPrepareCommand(
                     JSON.stringify({
                         ...body,
-                        bindingId: "workspace",
                         kind: "session.prepare",
                         requestId: crypto.randomUUID(),
                         target: sessionTarget(context),
@@ -387,18 +384,18 @@ export function createProjectRuntimeRoutes() {
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = context.req.valid("json");
-                if (Object.keys(body).some((key) => key !== "model" && key !== "directoryId")) {
+                if (Object.keys(body).some((key) => key !== "model" && key !== "directory")) {
                     throw new PairingDirectoryError("invalid_request", "The request fields are invalid");
                 }
                 const model = body["model"] === undefined ? undefined : readString(body, "model", 500);
-                const directoryId =
-                    body["directoryId"] === undefined
+                const directory =
+                    body["directory"] === undefined
                         ? undefined
-                        : readString(body, "directoryId", MAX_DIRECTORY_IDENTIFIER_LENGTH);
+                        : readString(body, "directory", MAX_WORKSPACE_PATH_LENGTH);
                 const command = decodeAgentSettingsDiscoverCommand(
                     JSON.stringify({
                         agentId: validateIdentifier(context.req.param("agentId"), "agent_id"),
-                        ...(directoryId === undefined ? {} : { directoryId }),
+                        ...(directory === undefined ? {} : { directory }),
                         kind: "agent.settings.discover",
                         ...(model === undefined ? {} : { model }),
                         requestId: crypto.randomUUID(),
@@ -437,23 +434,16 @@ export function createProjectRuntimeRoutes() {
             assertRequiredKeys(
                 body,
                 body["action"] === "list"
-                    ? ["action", "agentId", "directoryId", "cursor", "discoveryId"]
+                    ? ["action", "agentId", "directory", "cursor"]
                     : body["action"] === "find"
-                      ? ["action", "agentId", "directoryId", "sessionId"]
-                      : ["action", "agentId", "directoryId", "entryId", "discoveryId"],
+                      ? ["action", "agentId", "directory", "sessionId"]
+                      : ["action", "agentId", "directory", "sessionId"],
             );
-            const { discoveryId: requestedDiscoveryId, ...input } = body;
-            const discoveryId =
-                (input["action"] === "list" && requestedDiscoveryId === null) || input["action"] === "find"
-                    ? crypto.randomUUID()
-                    : validateIdentifier(readString(body, "discoveryId"), "discovery_id");
             const command = decodeNativeSessionRequest(
                 JSON.stringify({
-                    ...input,
+                    ...body,
                     kind: "native.session.request",
                     requestId: crypto.randomUUID(),
-                    discoveryId,
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                 }),
             );
             const result = await context.env.services.runtimePairings.requestControl(
@@ -468,15 +458,14 @@ export function createProjectRuntimeRoutes() {
         })
         .post("/computers/:computerId/daemon/workspace", bodyParser<RelayHttpEnvironment>(), async (context) => {
             const body = context.req.valid("json");
-            assertRequiredKeys(body, ["directoryId"]);
+            assertRequiredKeys(body, ["directory"]);
             const view = body["view"];
             if (view !== undefined && view !== "metadata") {
                 throw new PairingDirectoryError("invalid_request", "The workspace view is invalid");
             }
             const command = decodeWorkspaceListCommand(
                 JSON.stringify({
-                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
-                    directoryId: readString(body, "directoryId", MAX_DIRECTORY_IDENTIFIER_LENGTH),
+                    directory: readString(body, "directory", MAX_WORKSPACE_PATH_LENGTH),
                     kind: "workspace.list",
                     requestId: crypto.randomUUID(),
                     ...(view === undefined ? {} : { view }),

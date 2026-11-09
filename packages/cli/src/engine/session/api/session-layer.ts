@@ -64,7 +64,7 @@ export interface SessionLayerOptions {
     readonly processes: AgentProcessPool;
     readonly turnActivity?: RuntimeTurnActivity;
     readonly onExecutionCountChange?: (count: number) => void;
-    readonly bindingId: string;
+
     readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly resolveAgent: ResolveAgent;
@@ -75,7 +75,7 @@ export interface SessionLayerOptions {
 
 /** Wires the session layer for one runtime: its stores, manager, turns, and native session browsing. */
 export function buildSessionLayer(options: SessionLayerOptions) {
-    const { bindingId, computerId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
+    const { computerId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
     const databases = channelSessionDatabasePaths(stateDirectory, computerId);
     const sessionDatabase = openAcpSessionDatabase(databases.sessions);
     let events: CachedSessionEventStore;
@@ -93,7 +93,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     const sessionStore = new SqliteSessionStore(new AcpSessionTable(sessionDatabase), events);
     const activeSessions = new SessionTurns(operations, options.turnActivity);
     const sessionCreations = new SessionCreations(new SessionCreationTable(sessionDatabase));
-    const directories = new WorkspaceDirectoryService(bindingId, defaultWorkspace);
+    const directories = new WorkspaceDirectoryService(defaultWorkspace);
     const manager = new SessionManager({
         observer: new SessionLayerObserver(
             (event) => {
@@ -129,7 +129,6 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         operations,
     );
     const nativeSessions = new NativeSessionService(
-        bindingId,
         resolveAgent,
         directories,
         manager,
@@ -141,11 +140,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
                     if (!sameNativeSession(command.target, request.target) || command.agentId !== request.agentId) {
                         return false;
                     }
-                    const cwd = await directories.resolve(
-                        command.bindingId,
-                        command.directoryId,
-                        requestOptions.signal,
-                    );
+                    const cwd = await directories.resolve(command.directory, requestOptions.signal);
                     return cwd === requestOptions.cwd;
                 },
                 (snapshot) => {

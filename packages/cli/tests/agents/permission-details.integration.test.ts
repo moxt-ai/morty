@@ -39,9 +39,8 @@ test.each(["allow_once", "reject_once"] as const)(
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "codex",
-                    bindingId: peer.bindingId,
                     commandId: randomUUID(),
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -78,12 +77,10 @@ test.each(["allow_once", "reject_once"] as const)(
                         encodeNativeSessionCommand({
                             action: "active-turn",
                             agentId: "codex",
-                            bindingId: peer.bindingId,
-                            directoryId: "default",
+                            directory: ".",
                             kind: "native.session.request",
                             requestId,
                             target: peer.target,
-                            discoveryId: randomUUID(),
                         }),
                     );
                     for (;;) {
@@ -160,9 +157,8 @@ test.each(["allow_once", "reject_once"] as const)(
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "claude",
-                        bindingId: peer.bindingId,
                         commandId: randomUUID(),
-                        directoryId: "default",
+                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
@@ -193,12 +189,10 @@ test.each(["allow_once", "reject_once"] as const)(
                             encodeNativeSessionCommand({
                                 action: "active-turn",
                                 agentId: "claude",
-                                bindingId: peer.bindingId,
-                                directoryId: "default",
+                                directory: ".",
                                 kind: "native.session.request",
                                 requestId,
                                 target: peer.target,
-                                discoveryId: randomUUID(),
                             }),
                         );
                         for (;;) {

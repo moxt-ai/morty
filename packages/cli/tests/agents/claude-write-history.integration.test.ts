@@ -94,8 +94,7 @@ test("Given Claude history contains an interrupted Write and completed Writes, W
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 cursor: null,
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",

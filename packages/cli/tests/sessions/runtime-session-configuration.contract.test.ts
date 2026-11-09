@@ -20,7 +20,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
             {
                 agentId: "claude",
                 configurations: [],
-                directoryId: "default",
+                directory: ".",
                 computerId: runtime.computerId,
                 operationId: crypto.randomUUID(),
             },
@@ -31,7 +31,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
             agentId: "claude",
             booleanValue: false,
             configId: "model",
-            directoryId: "default",
+            directory: ".",
             expectedConfigurationRevision: ready.configurationRevision,
             value: "test-large",
             valueType: "select" as const,

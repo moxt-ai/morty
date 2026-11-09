@@ -94,7 +94,7 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
         agentRef: "codex",
         configurations: [],
         conversationKey: "security-audit-owned",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     expect(opened.status).toBe(200);
     const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
@@ -188,7 +188,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     expect(
         (
             await fixture.request(`chat/bots/${fixture.botId}/workspace/directory`, {
-                directoryId: "default",
+                directory: ".",
             })
         ).status,
     ).toBe(200);
@@ -197,7 +197,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
         agentRef: setup.agentRef,
         configurations: [],
         conversationKey: "first-draft",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     expect(opened.status).toBe(200);
     const access = v.parse(
@@ -250,7 +250,7 @@ for (const { reason, ...configuration } of [
         const input = {
             agentRef: "configuration-test",
             conversationKey: "configuration-retry",
-            workspaceRef: "default",
+            workspaceRef: ".",
         };
         const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, {
             ...input,
@@ -306,7 +306,7 @@ test("Given the answer to a new conversation's Session creation is lost, When th
     if (cloud.network === null) {
         throw new Error("The scenario requires a real response-loss proxy");
     }
-    const input = { agentRef: "codex", conversationKey: "lost-creation", workspaceRef: "default", configurations: [] };
+    const input = { agentRef: "codex", conversationKey: "lost-creation", workspaceRef: ".", configurations: [] };
     const lost = cloud.network.interruptNextSessionCreation();
     const failed = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
     expect(await lost).toBeLessThan(300);
@@ -343,7 +343,7 @@ test("Given a completed creation operation, When its first-send settings are cha
     const input = {
         agentRef: "codex",
         conversationKey: "conflicting-creation",
-        workspaceRef: "default",
+        workspaceRef: ".",
         configurations: [],
     };
     const first = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
@@ -377,7 +377,7 @@ test("Given a new conversation whose Session creation never reached the Runtime,
     const input = {
         agentRef: "codex",
         conversationKey: "dropped-creation",
-        workspaceRef: "default",
+        workspaceRef: ".",
         configurations: [],
     };
     cloud.network.dropNextSessionCreation();
@@ -411,7 +411,7 @@ test("Given an Agent whose model decides its effort levels, When Chat starts a c
     const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
         agentRef: "dependent-settings-test",
         conversationKey: "effort-before-model",
-        workspaceRef: "default",
+        workspaceRef: ".",
         configurations: [
             { configId: "effort", valueType: "select", value: "low", booleanValue: false },
             { configId: "model", valueType: "select", value: "test-large", booleanValue: false },
@@ -443,7 +443,7 @@ test("Given dependent Agent settings, When applying a later selection changes an
     const response = await fixture.request(`chat/bots/${fixture.botId}/access`, {
         agentRef: "dependent-settings-test",
         conversationKey: "dependent-settings",
-        workspaceRef: "default",
+        workspaceRef: ".",
         configurations: [
             { configId: "model", valueType: "select", value: "test-large", booleanValue: false },
             { configId: "mode", valueType: "select", value: "plan", booleanValue: false },
@@ -475,7 +475,7 @@ for (const configured of [false, true]) {
             ).toBe(202);
         }
         const computerId = fixture.runtime.computerId;
-        const identity = { agentId: "codex", directoryId: "default" };
+        const identity = { agentId: "codex", directory: "." };
         // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
         // attributed to a nonexistent Runtime, entry, or discovery.
         const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
@@ -483,13 +483,13 @@ for (const configured of [false, true]) {
             AbortSignal.timeout(10_000),
         );
         const before = await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000));
-        const entry = { ...identity, computerId, directoryId: found.entry.directoryId };
+        const entry = { ...identity, computerId, directory: found.entry.directory };
         const paths = [
-            { path: "native-sessions", input: { ...entry, action: "list", cursor: null, discoveryId: null } },
-            { path: `native-session/${found.entry.entryId}`, input: { ...entry, sessionId } },
+            { path: "native-sessions", input: { ...entry, action: "list", cursor: null } },
+            { path: `native-session/${found.entry.sessionId}`, input: { ...entry } },
             {
-                path: `native-session/${found.entry.entryId}/import`,
-                input: { ...entry, discoveryId: found.discoveryId },
+                path: `native-session/${found.entry.sessionId}/import`,
+                input: { ...entry },
             },
             { path: "native-session-forks/fork-operation", input: { ...entry, sessionId } },
         ];
@@ -533,7 +533,7 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         agentRef: "claude-code",
         configurations: [],
         conversationKey: "unavailable-agent",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     expect(unavailable.status).toBe(409);
     expect(await unavailable.json()).toMatchObject({ error: { code: "AGENT_UNAVAILABLE" } });
@@ -542,7 +542,7 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         agentRef: "pi",
         configurations: [],
         conversationKey: "agent-mismatch",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     expect(opened.status).toBe(200);
     const access = v.parse(v.object({ agentRef: v.string(), target: targetSchema }), await opened.json());
@@ -565,25 +565,23 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, { computerId, agentRef: "codex" })).status).toBe(
         202,
     );
-    const identity = { computerId, agentId: "codex", directoryId: "default" };
+    const identity = { computerId, agentId: "codex", directory: "." };
     const listed = await fixture.request(`chat/bots/${fixture.botId}/native-sessions`, {
         ...identity,
         action: "list",
         cursor: null,
-        discoveryId: null,
     });
     expect(listed.status).toBe(200);
     const discovery = v.parse(
         v.object({
-            discoveryId: v.string(),
-            entries: v.array(v.object({ directoryId: v.string(), entryId: v.string() })),
+            entries: v.array(v.object({ directory: v.string(), sessionId: v.string() })),
         }),
         await listed.json(),
     );
-    const entry = v.parse(v.object({ directoryId: v.string(), entryId: v.string() }), discovery.entries[0]);
-    const entryId = entry.entryId;
-    const path = `chat/bots/${fixture.botId}/native-session/${entryId}/import`;
-    const input = { ...identity, directoryId: entry.directoryId, discoveryId: discovery.discoveryId };
+    const entry = v.parse(v.object({ directory: v.string(), sessionId: v.string() }), discovery.entries[0]);
+    const sessionId = entry.sessionId;
+    const path = `chat/bots/${fixture.botId}/native-session/${sessionId}/import`;
+    const input = { ...identity, directory: entry.directory };
     const first = await fixture.request(path, input);
     expect(first.status).toBe(200);
     const opened = v.parse(v.object({ ready: v.object({ target: targetSchema }) }), await first.json());
@@ -612,7 +610,7 @@ test("Given a managed Chat session is still running, When its owner archives it,
         agentRef: "codex",
         configurations: [],
         conversationKey: "busy-archive",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
     await fixture.runtime.client.turns.submitToRuntime(
@@ -620,7 +618,7 @@ test("Given a managed Chat session is still running, When its owner archives it,
         {
             agentId: "codex",
             content: "wait for steering",
-            directoryId: "default",
+            directory: ".",
             idempotencyKey: crypto.randomUUID(),
             attachments: [],
         },
@@ -650,7 +648,7 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
         agentRef: "codex",
         configurations: [],
         conversationKey: "idle-archive",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
 
@@ -703,7 +701,7 @@ for (const operation of ["access", "managed-session"]) {
             agentRef: "codex",
             configurations: [],
             conversationKey: "concurrent-archive",
-            workspaceRef: "default",
+            workspaceRef: ".",
         });
         const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
 
@@ -751,7 +749,7 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
         agentRef: "codex",
         configurations: [],
         conversationKey: "unavailable-close-archive",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     const { sessionId } = v.parse(v.object({ target: targetSchema }), await opened.json()).target;
     await fixture.runtime[Symbol.asyncDispose]();
@@ -789,7 +787,7 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         agentRef: "codex",
         configurations: [],
         conversationKey: "revoked-while-open",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     expect(opened.status).toBe(200);
     const access = v.parse(
@@ -841,7 +839,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         agentRef: "codex",
         configurations: [],
         conversationKey: "followed-while-revoked",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     const { target } = v.parse(v.object({ target: targetSchema }), await opened.json());
     const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
@@ -886,7 +884,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         {
             agentId: "codex",
             content: "Reply after revoke",
-            directoryId: "default",
+            directory: ".",
             idempotencyKey: crypto.randomUUID(),
             attachments: [],
         },
@@ -940,7 +938,7 @@ test("Given two browsers joined through links, When one disconnects the other br
         agentRef: "codex",
         configurations: [],
         conversationKey: "other-browser-window",
-        workspaceRef: "default",
+        workspaceRef: ".",
     });
     expect(opened.status).toBe(200);
     const window = v.parse(
@@ -1023,7 +1021,7 @@ test("Given an existing owned conversation, When a repeated start is refused, Th
             })
         ).status,
     ).toBe(202);
-    const input = { agentRef: "configuration-test", conversationKey: "audit-retry", workspaceRef: "default" };
+    const input = { agentRef: "configuration-test", conversationKey: "audit-retry", workspaceRef: "." };
     const started = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations: [] });
     expect(started.status).toBe(200);
     const { target } = v.parse(v.object({ target: targetSchema }), await started.json());

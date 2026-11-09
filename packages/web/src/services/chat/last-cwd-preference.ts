@@ -1,4 +1,4 @@
-import { isDirectoryIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
+import { isDirectoryPath, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import {
     centralLocalStorage,
     lastCwdEntry,
@@ -19,24 +19,22 @@ export function readRecentCwdPreferences(botId: string): readonly RecentCwdPrefe
 export function saveRecentCwdPreference(botId: string, directory: RecentCwdPreference): readonly RecentCwdPreference[] {
     const existing = readRecentCwdPreferences(botId) ?? [];
     if (
-        !isDirectoryIdentifier(directory.directoryId) ||
+        !isDirectoryPath(directory.directory) ||
         directory.directoryLabel.length === 0 ||
         directory.directoryLabel.length > MAX_WORKSPACE_PATH_LENGTH
     ) {
         return existing;
     }
-    const recent = [
-        directory,
-        ...existing.filter((preference) => preference.directoryId !== directory.directoryId),
-    ].slice(0, 10);
+    const recent = [directory, ...existing.filter((preference) => preference.directory !== directory.directory)].slice(
+        0,
+        10,
+    );
     centralLocalStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }
 
-export function forgetRecentCwdPreference(botId: string, directoryId: string): readonly RecentCwdPreference[] {
-    const recent = (readRecentCwdPreferences(botId) ?? []).filter(
-        (preference) => preference.directoryId !== directoryId,
-    );
+export function forgetRecentCwdPreference(botId: string, directory: string): readonly RecentCwdPreference[] {
+    const recent = (readRecentCwdPreferences(botId) ?? []).filter((preference) => preference.directory !== directory);
     centralLocalStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }
@@ -45,9 +43,9 @@ export function readLastCwdPreference(botId: string, computerId: string, agentRe
     return centralLocalStorage.read(lastCwdEntry(botId, computerId, agentRef));
 }
 
-export function saveLastCwdPreference(botId: string, computerId: string, agentRef: string, directoryId: string): void {
-    if (!isDirectoryIdentifier(directoryId)) {
+export function saveLastCwdPreference(botId: string, computerId: string, agentRef: string, directory: string): void {
+    if (!isDirectoryPath(directory)) {
         return;
     }
-    centralLocalStorage.write(lastCwdEntry(botId, computerId, agentRef), directoryId);
+    centralLocalStorage.write(lastCwdEntry(botId, computerId, agentRef), directory);
 }

@@ -42,8 +42,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                         commandId,
                         target: nativeId,
                         agentId: "claude",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
                         disposition: SessionPromptDisposition.Append,
@@ -134,9 +133,8 @@ test("Given a completed real Claude Session, When it is forked, Then its history
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "claude",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -180,14 +178,12 @@ test("Given a completed real Claude Session, When it is forked, Then its history
 
         const identity = {
             agentId: "claude",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
             kind: "native.session.request",
-            discoveryId: randomUUID(),
         } as const;
         const listRequestId = randomUUID();
         peer.send(encodeNativeSessionCommand({ ...identity, action: "list", cursor: null, requestId: listRequestId }));
-        let entryId: string;
+        let sessionId: string;
         for (;;) {
             const message = await peer.nextMessage();
             const kind = decodeMessageKind(message);
@@ -208,7 +204,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
             if (entry === undefined) {
                 throw new Error("Missing source native session");
             }
-            entryId = entry.entryId;
+            sessionId = entry.sessionId;
             break;
         }
         const requestId = randomUUID();
@@ -217,7 +213,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                 ...identity,
                 action: "fork",
                 requestId,
-                entryId,
+                sessionId,
             }),
         );
         let childTarget: NativeSessionTarget;

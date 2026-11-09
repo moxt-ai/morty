@@ -21,7 +21,6 @@ import type { NativeSessionService } from "../../../session/native/native-sessio
 import type { PromptLifecycle } from "../../../session/prompt/prompt-lifecycle.ts";
 import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
-import type { RuntimeConfig } from "../../config.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
 import type { RuntimeCommand } from "../definition.ts";
 import { reportOperationFailure, send } from "../transport.ts";
@@ -97,7 +96,6 @@ async function loadHistoryPage(
 async function executeSessionHistoryPageLoad(
     socket: WebSocket,
     command: ReturnType<typeof decodeSessionHistoryPageLoad>,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     diagnostics: RelayConnectionDiagnostics,
@@ -113,7 +111,7 @@ async function executeSessionHistoryPageLoad(
             throw new SessionError("session_not_found", "The Session was not found");
         }
         agentId = entry.agentId;
-        const resolved = await resolveSessionDirectory(directories, config.bindingId, entry.directoryId, signal);
+        const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const loadOptions = {
             ...(await resolveAgent(entry.agentId, signal, command.target)),
             cwd: resolved.cwd,
@@ -155,7 +153,6 @@ async function executeSessionHistoryPageLoad(
 async function executeSessionPreviewHistoryPageLoad(
     socket: WebSocket,
     command: ReturnType<typeof decodeSessionPreviewHistoryPageLoad>,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     diagnostics: RelayConnectionDiagnostics,
@@ -163,7 +160,7 @@ async function executeSessionPreviewHistoryPageLoad(
     signal: AbortSignal,
 ): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectory(directories, config.bindingId, command.directoryId, signal);
+        const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const loadOptions = {
             ...(await resolveAgent(command.agentId, signal, command.target)),
             cwd: resolved.cwd,
@@ -211,7 +208,6 @@ export const sessionHistoryPageLoadCommand: RuntimeCommand = {
         void executeSessionHistoryPageLoad(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.diagnostics,
@@ -232,7 +228,6 @@ export const previewHistoryPageLoadCommand: RuntimeCommand = {
         void executeSessionPreviewHistoryPageLoad(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.diagnostics,

@@ -122,8 +122,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
                 requestId,
                 operationId: randomUUID(),
                 agentId: "codex",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 configurations: [],
             }),
         );
@@ -139,9 +138,8 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "codex",
-                bindingId: config.bindingId,
                 commandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

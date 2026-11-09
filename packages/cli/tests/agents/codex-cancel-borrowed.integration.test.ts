@@ -72,10 +72,8 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             await entered.promise;
             const identity = {
                 agentId: "codex",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "native.session.request",
-                discoveryId: crypto.randomUUID(),
             } as const;
             const findId = randomUUID();
             peer.send(
@@ -96,7 +94,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
                     ...identity,
                     requestId: importId,
                     action: "import",
-                    entryId: found.entry.entryId,
+                    sessionId: found.entry.sessionId,
                 }),
             );
             const imported = await nativeResult(peer, importId);
@@ -107,9 +105,8 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "codex",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

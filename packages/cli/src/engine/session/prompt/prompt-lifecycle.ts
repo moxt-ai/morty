@@ -24,7 +24,7 @@ interface QueuedPromptRequest {
     readonly targetCommandId?: string;
     readonly context: {
         readonly agentId: string;
-        readonly directoryId: string;
+        readonly directory: string;
     };
 }
 
@@ -103,7 +103,7 @@ export class PromptLifecycle {
             disposition: command.disposition,
             context: {
                 agentId: command.agentId,
-                directoryId: command.directoryId,
+                directory: command.directory,
             },
             target: command.target,
             ...(command.disposition === SessionPromptDisposition.Steer

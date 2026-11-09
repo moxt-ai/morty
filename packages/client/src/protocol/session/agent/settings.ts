@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
+import { DIRECTORY_PATH } from "../../shared/directory.ts";
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodMessage as decode, encodeZodMessage as encode } from "../../shared/message-codec.ts";
 import { configValueSchema, SHORT_TEXT } from "../shared/index.ts";
@@ -52,7 +52,7 @@ const agentSettingsDiscoverCommandSchema = z
     .object({
         agentId: IDENTIFIER,
         // The directory whose project settings the Agent reads. Omitted means the default directory.
-        directoryId: DIRECTORY_IDENTIFIER.optional(),
+        directory: DIRECTORY_PATH.optional(),
         kind: z.literal(AGENT_SETTINGS_DISCOVER_KIND),
         model: z.string().min(1).max(500).optional(),
         requestId: IDENTIFIER,
@@ -67,7 +67,7 @@ const agentSettingsDiscoveredEventSchema = z
         agentName: z.string().max(255),
         agentVersion: z.string().max(128),
         // The directory actually inspected.
-        directoryId: DIRECTORY_IDENTIFIER,
+        directory: DIRECTORY_PATH,
         kind: z.literal(AGENT_SETTINGS_DISCOVERED_KIND),
         modelEffort: agentModelEffortSchema,
         requestId: IDENTIFIER,

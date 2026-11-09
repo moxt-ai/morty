@@ -6,7 +6,6 @@ import type { RuntimeCommand } from "../definition.ts";
 export function createAgentSettingsCommands(context: CommandContext): readonly RuntimeCommand[] {
     const handler = createAgentSettingsDiscoveryHandler({
         resolveAgent: context.resolveAgent,
-        config: context.config,
         directories: context.directories,
         diagnostics: context.diagnostics,
         sessions: context.sessions,

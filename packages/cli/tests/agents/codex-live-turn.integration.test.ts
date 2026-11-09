@@ -138,8 +138,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                 requestId: randomUUID(),
                 operationId: randomUUID(),
                 agentId: "codex",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 configurations: [],
             }),
         );
@@ -158,9 +157,8 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             const queuedCommandId = randomUUID();
             const originalPrompt = encodeSessionPromptCommand({
                 agentId: "codex",
-                bindingId: config.bindingId,
                 commandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -197,12 +195,10 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         encodeNativeSessionCommand({
                             action: "active-turn",
                             agentId: "codex",
-                            bindingId: config.bindingId,
-                            directoryId: `path-${Buffer.from(config.defaultWorkspace).toString("base64url")}`,
+                            directory: config.defaultWorkspace,
                             kind: "native.session.request",
                             requestId: "queued_snapshot",
                             target: sessionTarget,
-                            discoveryId: randomUUID(),
                         }),
                     );
                     continue;
@@ -284,9 +280,8 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         socket.send(
                             encodeSessionPromptCommand({
                                 agentId: "codex",
-                                bindingId: config.bindingId,
                                 commandId: queuedCommandId,
-                                directoryId: "default",
+                                directory: ".",
                                 disposition: SessionPromptDisposition.Append,
                                 attachments: [],
                                 kind: "session.prompt",
@@ -318,12 +313,10 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                                 encodeNativeSessionCommand({
                                     action: "active-turn",
                                     agentId: "codex",
-                                    bindingId: config.bindingId,
-                                    directoryId: "default",
+                                    directory: ".",
                                     kind: "native.session.request",
                                     requestId: randomUUID(),
                                     target: sessionTarget,
-                                    discoveryId: randomUUID(),
                                 }),
                             );
                         } else {

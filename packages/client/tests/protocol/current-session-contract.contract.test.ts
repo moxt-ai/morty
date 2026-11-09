@@ -40,7 +40,7 @@ it("Given Agent settings without the inspected directory, When a client decodes 
         },
     };
     expect(() => decodeAgentSettingsDiscoveredEvent(JSON.stringify(settings))).toThrow();
-    const current = { ...settings, directoryId: "default" };
+    const current = { ...settings, directory: "." };
     expect(decodeAgentSettingsDiscoveredEvent(JSON.stringify(current))).toEqual(current);
     const { unsupportedModelIds: _, ...retiredEffort } = current.modelEffort;
     expect(() =>
@@ -87,7 +87,7 @@ it("Given history holding a turn's lifecycle, When a client decodes it, Then the
 it("Given a session list entry without status, When a client decodes it, Then it rejects the retired entry", () => {
     const entry = {
         agentId: "agent-1",
-        directoryId: "default",
+        directory: ".",
         directoryLabel: "Workspace",
         prompted: false,
         sessionId: "session-1",
@@ -104,7 +104,7 @@ it("Given a session list entry without status, When a client decodes it, Then it
 it("Given a Session's metadata disagrees with its native pair, When it crosses the protocol boundary, Then the client rejects the conflicting identity", () => {
     const entry = {
         agentId: "claude",
-        directoryId: "default",
+        directory: ".",
         directoryLabel: "Workspace",
         prompted: false,
         sessionId: "native-1",

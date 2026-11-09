@@ -76,7 +76,7 @@ it("Given saved Codex threads, When its directory is listed through the in-proce
         expect(entry.title).toBe("Thread from the Codex CLI");
         expect(typeof entry.updatedAt).toBe("string");
         const opened = await f.service.execute(
-            { ...f.identity, action: "import", entryId: entry.entryId },
+            { ...f.identity, action: "import", sessionId: entry.sessionId },
             AbortSignal.timeout(30_000),
         );
         expect(opened.action).toBe("import");
@@ -140,7 +140,7 @@ it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
                 {
                     ...f.identity,
                     action,
-                    entryId: entry.entryId,
+                    sessionId: entry.sessionId,
                 },
                 AbortSignal.timeout(30_000),
             );

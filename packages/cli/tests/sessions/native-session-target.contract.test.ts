@@ -30,8 +30,9 @@ it("Given two harnesses create the same native ID, When I create and restore eac
             const ready = await runtime.client.sessions.create(
                 {
                     agentId: harness,
+
                     configurations: [],
-                    directoryId: "default",
+                    directory: ".",
                     computerId: runtime.computerId,
                     operationId: crypto.randomUUID(),
                 },
@@ -76,8 +77,9 @@ it("Given a harness announces its title during creation, When the caller creates
         const ready = await runtime.client.sessions.create(
             {
                 agentId: "claude",
+
                 configurations: [],
-                directoryId: "default",
+                directory: ".",
                 computerId: runtime.computerId,
                 operationId: crypto.randomUUID(),
             },
@@ -96,7 +98,7 @@ it("Given a harness announces its title during creation, When the caller creates
     }
 });
 
-it("Given two harnesses own the same native session ID, When a caller restores each harness/native pair, Then each restores only its selected harness and a different harness cannot select either", async () => {
+it("Given two harnesses own the same native session ID without prior discovery, When a caller imports and restores each native pair without a binding identity, Then each selects only its harness and a different harness cannot select either", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
     try {
@@ -122,29 +124,12 @@ it("Given two harnesses own the same native session ID, When a caller restores e
         );
         const imported = new Map<string, string>();
         for (const harness of ["claude", "codex"]) {
-            const workspace = { agentId: harness, directoryId: "default" };
-            const listing = await runtime.client.runtimes.nativeSessions(
-                {
-                    ...workspace,
-                    action: "list",
-                    cursor: null,
-                    discoveryId: null,
-                },
-                signal,
-            );
-            if (listing.action !== "list") {
-                throw new Error("Expected native session discovery");
-            }
-            const entry = listing.entries.find((entry) => entry.sessionId === sessionId);
-            if (entry === undefined) {
-                throw new Error("Missing the harness-owned native session");
-            }
+            const workspace = { agentId: harness, directory: "." };
             const opened = await runtime.client.runtimes.nativeSessions(
                 {
                     ...workspace,
                     action: "import",
-                    entryId: entry.entryId,
-                    discoveryId: listing.discoveryId,
+                    sessionId,
                 },
                 signal,
             );

@@ -7,7 +7,7 @@ import {
     encodeZodMessage,
     ProtocolMessageError,
     parseJson,
-    readDirectoryIdentifier,
+    readDirectoryPath,
     readIdentifier,
     readText,
 } from "../../shared/message-codec.ts";
@@ -42,9 +42,9 @@ type SessionPromptPlacement =
 
 export type SessionPromptCommand = {
     readonly agentId: string;
-    readonly bindingId: string;
+
     readonly commandId: string;
-    readonly directoryId: string;
+    readonly directory: string;
     readonly attachments: readonly PromptAttachment[];
     readonly kind: typeof SESSION_PROMPT_KIND;
     readonly prompt: string;
@@ -161,9 +161,8 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
 
     return {
         agentId: readIdentifier(value, "agentId"),
-        bindingId: readIdentifier(value, "bindingId"),
         commandId: readIdentifier(value, "commandId"),
-        directoryId: readDirectoryIdentifier(value, "directoryId"),
+        directory: readDirectoryPath(value, "directory"),
         attachments,
         kind: SESSION_PROMPT_KIND,
         prompt,

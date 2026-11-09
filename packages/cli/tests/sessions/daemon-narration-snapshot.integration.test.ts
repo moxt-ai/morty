@@ -183,8 +183,7 @@ describe("daemon narration delivery", () => {
                     requestId: crypto.randomUUID(),
                     operationId: crypto.randomUUID(),
                     agentId: agent.id,
-                    bindingId: config.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     configurations: [],
                 }),
             );
@@ -197,9 +196,8 @@ describe("daemon narration delivery", () => {
             }
             const prompt: SessionPromptCommand = {
                 agentId: agent.id,
-                bindingId: config.bindingId,
                 commandId: "narration_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

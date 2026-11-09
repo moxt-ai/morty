@@ -335,11 +335,11 @@ export function NativeSessionDialog({
                                                 {model.directory.entries.map((entry) => (
                                                     <button
                                                         type="button"
-                                                        key={entry.entryId}
+                                                        key={entry.sessionId}
                                                         aria-label={`${entry.displayTitle} ${entry.directoryLabel}`}
                                                         aria-pressed={
                                                             model.preview.kind !== "empty" &&
-                                                            model.preview.entry.entryId === entry.entryId
+                                                            model.preview.entry.sessionId === entry.sessionId
                                                         }
                                                         disabled={model.operation !== "idle"}
                                                         onClick={() => {
@@ -382,12 +382,12 @@ export function NativeSessionDialog({
                                             {model.directory.entries.map((entry) => (
                                                 <button
                                                     type="button"
-                                                    key={entry.entryId}
+                                                    key={entry.sessionId}
                                                     data-testid={dataTestId.localSessionEntry}
                                                     aria-label={entry.displayTitle}
                                                     aria-pressed={
                                                         model.preview.kind !== "empty" &&
-                                                        model.preview.entry.entryId === entry.entryId
+                                                        model.preview.entry.sessionId === entry.sessionId
                                                     }
                                                     disabled={model.operation !== "idle"}
                                                     onClick={() =>

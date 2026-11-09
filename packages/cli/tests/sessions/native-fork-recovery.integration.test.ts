@@ -54,9 +54,8 @@ test.each(["request", "result"] as const)(
             {
                 action: "list",
                 agentId: "claude",
-                directoryId: "default",
+                directory: ".",
                 cursor: null,
-                discoveryId: null,
             },
             signal,
         );
@@ -64,7 +63,7 @@ test.each(["request", "result"] as const)(
         const operationId = crypto.randomUUID();
         const input = {
             agentId: "claude",
-            directoryId: "default",
+            directory: ".",
             sessionId: "native-fork-source",
         };
         const fork = () => runtime.client.runtimes.forkNativeSession(operationId, input, signal);
@@ -109,8 +108,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         action: "list" as const,
         agentId: "claude",
         cursor: null,
-        directoryId: "default",
-        discoveryId: null,
+        directory: ".",
     };
     const directory = await runtime.client.runtimes.nativeSessions(listingInput, signal);
     if (directory.action !== "list" || directory.entries[0] === undefined) {
@@ -118,7 +116,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     }
     const body = JSON.stringify({
         agentId: "claude",
-        directoryId: "default",
+        directory: ".",
         sessionId: directory.entries[0].sessionId,
     });
     let loseNextResponse = true;
@@ -176,7 +174,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
             headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
             body: JSON.stringify({
                 agentId: "claude",
-                directoryId: "default",
+                directory: ".",
                 sessionId: "another-source",
             }),
             signal,

@@ -81,7 +81,7 @@ test("Given an execution Session has scoped environment, When other conversation
         await peer.prompt(seed, "seed-history");
         peer.send(
             encodeNativeSessionCommand({
-                ...peer.base("first-browser"),
+                ...peer.base(),
                 kind: NATIVE_SESSION_REQUEST_KIND,
                 requestId: "list-unscoped",
                 action: "list",
@@ -94,7 +94,7 @@ test("Given an execution Session has scoped environment, When other conversation
         }
         peer.send(
             encodeNativeSessionCommand({
-                ...peer.base("second-browser"),
+                ...peer.base(),
                 kind: NATIVE_SESSION_REQUEST_KIND,
                 requestId: "find-unscoped",
                 action: "find",
@@ -118,10 +118,10 @@ test("Given a shared native reader crashes while listing, When a fresh conversat
     signal,
 }) => {
     const peer = await runtimePeer(signal);
-    const list = async (sessionId: string, requestId: string) => {
+    const list = async (requestId: string) => {
         peer.send(
             encodeNativeSessionCommand({
-                ...peer.base(sessionId),
+                ...peer.base(),
                 kind: NATIVE_SESSION_REQUEST_KIND,
                 requestId,
                 action: "list",
@@ -135,7 +135,7 @@ test("Given a shared native reader crashes while listing, When a fresh conversat
     try {
         const seed = await peer.create();
         await peer.prompt(seed, "seed-history");
-        const original = await list("first-browser", "list-before-crash");
+        const original = await list("list-before-crash");
         if (
             original.kind !== "native.session.result" ||
             original.action !== "list" ||
@@ -144,12 +144,12 @@ test("Given a shared native reader crashes while listing, When a fresh conversat
             throw new Error("Expected the seeded native conversation");
         }
         await peer.crashNextNativeList();
-        expect(await list("first-browser", "list-that-crashes")).toMatchObject({
+        expect(await list("list-that-crashes")).toMatchObject({
             kind: "session.operation.failed",
             code: "session_operation_failed",
         });
         for (const sessionId of ["new-browser", "first-browser"]) {
-            const result = await list(sessionId, `retry-after-crash-${sessionId}`);
+            const result = await list(`retry-after-crash-${sessionId}`);
             expect(result).toMatchObject({
                 kind: "native.session.result",
                 action: "list",
@@ -177,7 +177,7 @@ test("Given native history, When it is imported, reopened and forked, Then execu
         await peer.restart("import-runtime");
         peer.send(
             encodeNativeSessionCommand({
-                ...peer.base("discovery"),
+                ...peer.base(),
                 kind: NATIVE_SESSION_REQUEST_KIND,
                 requestId: "native-list",
                 action: "list",
@@ -188,15 +188,15 @@ test("Given native history, When it is imported, reopened and forked, Then execu
         if (listed.action !== "list" || listed.entries[0] === undefined) {
             throw new Error("Expected the seeded native conversation");
         }
-        const entryId = listed.entries[0].entryId;
+        const sessionId = listed.entries[0].sessionId;
         const open = async (action: "import" | "fork", requestId: string) => {
             peer.send(
                 encodeNativeSessionCommand({
-                    ...peer.base("discovery"),
+                    ...peer.base(),
                     kind: NATIVE_SESSION_REQUEST_KIND,
                     requestId,
                     action,
-                    entryId,
+                    sessionId,
                 }),
             );
             const result = decodeNativeSessionResult(await peer.next(requestId, ["native.session.result"]));
@@ -231,12 +231,12 @@ test.for(["import", "fork"] as const)(
             const seed = await peer.create();
             await peer.prompt(seed, "seed-history");
             await peer.restart("competing-runtime");
-            const candidates: { agentId: string; entryId: string }[] = [];
+            const candidates: { agentId: string; sessionId: string }[] = [];
             for (const agentId of ["codex", "other-codex"]) {
                 const requestId = `list-${agentId}`;
                 peer.send(
                     encodeNativeSessionCommand({
-                        ...peer.base(`discovery-${agentId}`, agentId),
+                        ...peer.base(agentId),
                         kind: NATIVE_SESSION_REQUEST_KIND,
                         requestId,
                         action: "list",
@@ -247,18 +247,18 @@ test.for(["import", "fork"] as const)(
                 if (result.action !== "list" || result.entries[0] === undefined) {
                     throw new Error("Expected native history for each Agent");
                 }
-                candidates.push({ agentId, entryId: result.entries[0].entryId });
+                candidates.push({ agentId, sessionId: result.entries[0].sessionId });
             }
             const outcomes = await Promise.all(
-                candidates.map(async ({ agentId, entryId }) => {
+                candidates.map(async ({ agentId, sessionId }) => {
                     const requestId = `open-${agentId}`;
                     peer.send(
                         encodeNativeSessionCommand({
-                            ...peer.base(`discovery-${agentId}`, agentId),
+                            ...peer.base(agentId),
                             kind: NATIVE_SESSION_REQUEST_KIND,
                             requestId,
                             action,
-                            entryId,
+                            sessionId,
                         }),
                     );
                     const frame = await peer.next(requestId, ["native.session.result", "session.operation.failed"]);
@@ -294,10 +294,10 @@ test.for(["complete", "cancel"] as const)(
             }
             return agent;
         });
-        const list = (browser: string, requestId: string) => {
+        const list = (requestId: string) => {
             peer.send(
                 encodeNativeSessionCommand({
-                    ...peer.base(browser),
+                    ...peer.base(),
                     kind: NATIVE_SESSION_REQUEST_KIND,
                     requestId,
                     action: "list",
@@ -310,15 +310,14 @@ test.for(["complete", "cancel"] as const)(
             const seed = await peer.create();
             await peer.prompt(seed, "seed-history");
             holdNext = true;
-            const first = list("first-browser", "first-list");
+            const first = list("first-list");
             await entered.promise;
-            const second = list("second-browser", "second-list");
+            const second = list("second-list");
             if (outcome === "cancel") {
                 peer.send(
                     encodeNativeSessionCancel({
                         kind: "native.session.cancel",
                         requestId: "second-list",
-                        discoveryId: "second-browser",
                     }),
                 );
             }
@@ -337,11 +336,10 @@ test.for(["complete", "cancel"] as const)(
                           kind: "native.session.result",
                           action: "list",
                           requestId: "second-list",
-                          discoveryId: "second-browser",
                           entries: [{ sessionId: original.entries[0].sessionId }],
                       },
             );
-            expect(decodeNativeSessionResult(await list("second-browser", "fresh-list"))).toMatchObject({
+            expect(decodeNativeSessionResult(await list("fresh-list"))).toMatchObject({
                 action: "list",
                 entries: [{ sessionId: original.entries[0].sessionId }],
             });
@@ -506,10 +504,9 @@ await import(${JSON.stringify(agentPeer)});
     };
     const binding = (agentId = "codex") => ({
         agentId,
-        bindingId: config.bindingId,
-        directoryId: "default",
+        directory: ".",
     });
-    const base = (discoveryId: string, agentId = "codex") => ({ ...binding(agentId), discoveryId });
+    const base = (agentId = "codex") => ({ ...binding(agentId) });
     const readContexts = async (path: string) =>
         (await readFile(path, "utf8"))
             .trim()

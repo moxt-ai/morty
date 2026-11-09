@@ -36,9 +36,8 @@ test("Given Claude Code dispatches a subagent that runs tools, When the turn str
         peer.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: peer.bindingId,
                 commandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
