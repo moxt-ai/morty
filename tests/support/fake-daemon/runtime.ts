@@ -12,7 +12,9 @@ import * as v from "valibot";
 import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
+import type { RuntimeCredentials } from "../../../packages/cli/src/engine/runtime/connection/runtime-credentials.ts";
 import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
+import { memoryRuntimeCredentials } from "../../../packages/cli/tests/support/runtime-credentials.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
@@ -20,23 +22,20 @@ import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
 const runtimePairingSchema = v.object({
-    channelId: v.string(),
     pairingCode: v.string(),
-    pairingId: v.string(),
-    projectId: v.string(),
-    runtimeId: v.string(),
+    computerId: v.string(),
 });
 
 const runtimeClaimSchema = v.object({
-    channelId: v.string(),
+    computerId: v.string(),
     runtimeCredential: v.string(),
-    runtimeId: v.string(),
 });
 
 export interface ControlledRuntimeConnection {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly origin: string;
-    readonly runtimeCredential: string;
+    /** The Runtime's relay credential; it rotates on every connection and outlives restarts, as a saved one does. */
+    readonly credentials: RuntimeCredentials;
 }
 
 /** An Agent the controlled Runtime exposes. */
@@ -184,13 +183,17 @@ export async function connectControlledAgentRuntime(options: {
     await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
     const relayUrl = new URL("/morty/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-    relayUrl.searchParams.set("token", options.connection.runtimeCredential);
     // The Agents can change across restarts, as when the user installs another Agent on the machine.
     const configure = (behavior: ControlledAgentBehavior) => {
         const harness = createMortyFakeDaemon(behavior, workspace);
         const runtime = controlledRuntime(
             harness.agents,
-            { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
+            {
+                computerId: options.connection.computerId,
+                defaultWorkspace: workspace,
+                relayUrl,
+                credentials: options.connection.credentials,
+            },
             directory,
         );
         return { harness, runtime };
@@ -289,7 +292,7 @@ export async function createControlledAgentRuntime(options: {
     readonly behavior: ControlledAgentBehavior;
     readonly credential: string;
     readonly origin: string;
-    readonly projectId: string;
+    readonly computerId: string;
     readonly server: TestServerApp;
     readonly signal: AbortSignal;
 }) {
@@ -297,7 +300,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/projects/${options.projectId}/runtime-pairings`, {
+                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,
@@ -314,7 +317,7 @@ export async function createControlledAgentRuntime(options: {
         runtimeClaimSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
                     body: JSON.stringify({
                         agents: harness.catalog,
                         machineName: "Controlled Agent Runtime",
@@ -331,21 +334,21 @@ export async function createControlledAgentRuntime(options: {
     const connected = await connectControlledAgentRuntime({
         behavior: options.behavior,
         connection: {
-            channelId: claim.channelId,
+            computerId: claim.computerId,
             origin: options.origin,
-            runtimeCredential: claim.runtimeCredential,
+            credentials: memoryRuntimeCredentials(claim.runtimeCredential),
         },
         signal: options.signal,
     });
     const client = new MortyClient({
         credentialProvider: new StaticMortyCredentialProvider(options.credential),
         endpoint: options.origin,
-        projectId: pairing.projectId,
+        computerId: pairing.computerId,
         transport: { fetch: async (request: Request) => await options.server.request(request) },
     });
     return {
         ...connected,
         client,
-        runtimeId: claim.runtimeId,
+        computerId: claim.computerId,
     };
 }

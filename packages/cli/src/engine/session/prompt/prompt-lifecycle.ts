@@ -1,5 +1,7 @@
+import { NativeSessionMap, sameNativeSession } from "@morty-build/client/native-session";
 import type {
     ContentBlock,
+    NativeSessionTarget,
     PromptExecutionContext,
     QueuedPromptRequestEventLog,
     SessionCancelCommand,
@@ -18,12 +20,11 @@ interface QueuedPromptRequest {
     readonly commandId: string;
     readonly content: readonly ContentBlock[];
     readonly disposition?: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
     readonly targetCommandId?: string;
     readonly context: {
         readonly agentId: string;
         readonly directoryId: string;
-        readonly additionalDirectoryIds: readonly string[];
     };
 }
 
@@ -66,17 +67,25 @@ export class PromptLifecycle {
     readonly #sink: SessionEventSink;
     /** Terminal events held until their command's admission and execution state are released. */
     readonly #terminal = new Map<string, SessionLiveEvent>();
-    readonly #publications = new Map<string, SessionLiveEvent[]>();
+    readonly #publications = new NativeSessionMap<SessionLiveEvent[]>();
     readonly #queued = new Map<string, QueuedPromptRequest>();
     readonly #recordActiveTurn: (event: SessionLiveEvent) => void;
     readonly #executions: ExecutionProgress;
 
-    readonly #recordLifecycle: (sessionId: string, event: SessionEventPayload) => Promise<void>;
-    readonly #append: (sessionId: string, event: SessionEventPayload, recordedAt?: string) => SessionLiveEvent;
+    readonly #recordLifecycle: (sessionTarget: NativeSessionTarget, event: SessionEventPayload) => Promise<void>;
+    readonly #append: (
+        sessionTarget: NativeSessionTarget,
+        event: SessionEventPayload,
+        recordedAt?: string,
+    ) => SessionLiveEvent;
     constructor(
         sink: SessionEventSink,
-        recordLifecycle: (sessionId: string, event: SessionEventPayload) => Promise<void>,
-        append: (sessionId: string, event: SessionEventPayload, recordedAt?: string) => SessionLiveEvent,
+        recordLifecycle: (sessionTarget: NativeSessionTarget, event: SessionEventPayload) => Promise<void>,
+        append: (
+            sessionTarget: NativeSessionTarget,
+            event: SessionEventPayload,
+            recordedAt?: string,
+        ) => SessionLiveEvent,
         recordActiveTurn: (event: SessionLiveEvent) => void,
         executions: ExecutionProgress,
     ) {
@@ -95,9 +104,8 @@ export class PromptLifecycle {
             context: {
                 agentId: command.agentId,
                 directoryId: command.directoryId,
-                additionalDirectoryIds: command.additionalDirectoryIds,
             },
-            sessionId: command.sessionId,
+            target: command.target,
             ...(command.disposition === SessionPromptDisposition.Steer
                 ? { targetCommandId: command.targetCommandId }
                 : {}),
@@ -106,7 +114,7 @@ export class PromptLifecycle {
 
     /** The lifecycle metadata the Agent session records when it starts this claimed command. */
     readonly lifecycle = (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         commandId: string,
         attemptId: string,
         epoch: string,
@@ -120,7 +128,7 @@ export class PromptLifecycle {
         readonly targetCommandId?: string;
     } => {
         const request = this.#queued.get(commandId);
-        if (request?.sessionId === sessionId) {
+        if (request !== undefined && sameNativeSession(request.target, sessionTarget)) {
             return {
                 attemptId,
                 content: request.content,
@@ -136,13 +144,13 @@ export class PromptLifecycle {
 
     readonly record = (recorded: SessionLiveEvent): void => {
         this.#recordActiveTurn(recorded);
-        const sessionId = recorded.sessionId;
+        const sessionTarget = recorded.target;
         if (recorded.type === "lifecycle-metadata" && isPromptTerminal(recorded.payload)) {
             // Publish termination after prompt admission and execution state are settled.
             this.#terminal.set(recorded.payload.commandId, recorded);
-            const pending = this.#publications.get(sessionId) ?? [];
+            const pending = this.#publications.get(sessionTarget) ?? [];
             pending.push(recorded);
-            this.#publications.set(sessionId, pending);
+            this.#publications.set(sessionTarget, pending);
             return;
         }
         this.#publishInOrder(recorded);
@@ -150,7 +158,7 @@ export class PromptLifecycle {
 
     /** Publishes after the Session's held terminal events, so clients receive its events in order. */
     readonly #publishInOrder = (event: SessionLiveEvent): void => {
-        const pending = this.#publications.get(event.sessionId);
+        const pending = this.#publications.get(event.target);
         if (pending !== undefined) {
             pending.push(event);
         } else {
@@ -158,11 +166,11 @@ export class PromptLifecycle {
         }
     };
 
-    readonly publishTerminal = (sessionId: string, commandId: string): void => {
+    readonly publishTerminal = (sessionTarget: NativeSessionTarget, commandId: string): void => {
         const event = this.#terminal.get(commandId);
-        if (event?.sessionId === sessionId) {
+        if (event !== undefined && sameNativeSession(event.target, sessionTarget)) {
             this.#terminal.delete(commandId);
-            const pending = this.#publications.get(sessionId) ?? [];
+            const pending = this.#publications.get(sessionTarget) ?? [];
             while (pending.length > 0) {
                 const next = pending[0];
                 if (next === undefined) {
@@ -179,18 +187,18 @@ export class PromptLifecycle {
                 this.#sink.publish(next);
             }
             if (pending.length === 0) {
-                this.#publications.delete(sessionId);
+                this.#publications.delete(sessionTarget);
             }
         }
         this.#queued.delete(commandId);
     };
 
-    readonly recordOutcome = async (sessionId: string, event: SessionEventPayload): Promise<void> => {
+    readonly recordOutcome = async (sessionTarget: NativeSessionTarget, event: SessionEventPayload): Promise<void> => {
         if (event.type !== "lifecycle-metadata" || !("commandId" in event.payload)) {
             return;
         }
-        await this.#recordLifecycle(sessionId, event);
-        this.publishTerminal(sessionId, event.payload.commandId);
+        await this.#recordLifecycle(sessionTarget, event);
+        this.publishTerminal(sessionTarget, event.payload.commandId);
     };
 
     /**
@@ -198,36 +206,44 @@ export class PromptLifecycle {
      * status notifications do not take it for a new outcome, and it does not settle the receipt again. It keeps the
      * time the outcome was recorded.
      */
-    readonly restateOutcome = (sessionId: string, { event, recordedAt }: RestatedOutcome): void => {
+    readonly restateOutcome = (sessionTarget: NativeSessionTarget, { event, recordedAt }: RestatedOutcome): void => {
         if (event.type !== "lifecycle-metadata" || !("commandId" in event.payload)) {
             return;
         }
-        const restated = this.#append(sessionId, event, recordedAt);
+        const restated = this.#append(sessionTarget, event, recordedAt);
         this.#publishInOrder({
             ...restated,
             mortyMetadata: { ...restated.mortyMetadata, restated: true },
         });
     };
 
-    readonly queueChanged = async (sessionId: string, commandId: string): Promise<void> => {
-        await this.#recordLifecycle(sessionId, {
+    readonly queueChanged = async (sessionTarget: NativeSessionTarget, commandId: string): Promise<void> => {
+        await this.#recordLifecycle(sessionTarget, {
             type: "lifecycle-metadata",
             payload: { changedByCommandId: commandId, kind: "session.queue.changed" },
         });
     };
 
-    readonly completed = async (sessionId: string, commandId: string, stopReason: string): Promise<void> => {
+    readonly completed = async (
+        sessionTarget: NativeSessionTarget,
+        commandId: string,
+        stopReason: string,
+    ): Promise<void> => {
         const request = this.#queued.get(commandId);
-        if (request?.sessionId !== sessionId || this.#executions.isTerminalExecution(commandId, sessionId)) {
+        if (
+            request === undefined ||
+            !sameNativeSession(request.target, sessionTarget) ||
+            this.#executions.isTerminalExecution(commandId, sessionTarget)
+        ) {
             return;
         }
-        await this.#recordLifecycle(sessionId, {
+        await this.#recordLifecycle(sessionTarget, {
             type: "lifecycle-metadata",
             payload: {
                 kind: "prompt.completed",
                 commandId,
                 stopReason,
-                ...(this.#executions.hasStarted(commandId, sessionId) ? {} : { execution: "not-started" as const }),
+                ...(this.#executions.hasStarted(commandId, sessionTarget) ? {} : { execution: "not-started" as const }),
             },
         });
     };
@@ -238,28 +254,29 @@ export class PromptLifecycle {
      * event has already left the queue, and its abandonment must still settle it.
      */
     readonly failed = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         commandId: string,
         attemptId: string,
         code: string,
         message: string,
     ): Promise<void> => {
-        if (this.#executions.findUnsettledAttemptId(commandId, sessionId) === null) {
+        if (this.#executions.findUnsettledAttemptId(commandId, sessionTarget) === null) {
             return;
         }
-        await this.#recordLifecycle(sessionId, {
+        await this.#recordLifecycle(sessionTarget, {
             type: "lifecycle-metadata",
-            payload: this.#executions.hasStarted(commandId, sessionId)
+            payload: this.#executions.hasStarted(commandId, sessionTarget)
                 ? { kind: "prompt.failed", attemptId, commandId, code, message }
                 : { kind: "prompt.failed-before-start", commandId, code, message },
         });
     };
 
-    readonly promptRequestRecovery = (sessionId: string): PromptRequestRecovery => ({
+    readonly promptRequestRecovery = (sessionTarget: NativeSessionTarget): PromptRequestRecovery => ({
         queuedPromptRequests: [...this.#queued.values()]
             .filter(
                 (request) =>
-                    request.sessionId === sessionId && !this.#executions.hasStarted(request.commandId, sessionId),
+                    sameNativeSession(request.target, sessionTarget) &&
+                    !this.#executions.hasStarted(request.commandId, sessionTarget),
             )
             .map(({ commandId, content, disposition, targetCommandId }) => ({
                 commandId,
@@ -275,13 +292,13 @@ export async function settleAbandonedTurn(
     operations: ExecutionReceipts,
     cancellation: SessionCancelCommand,
 ): Promise<void> {
-    const cancelled = operations.recordCancellationBeforeAdmission(cancellation.commandId, cancellation.sessionId);
+    const cancelled = operations.recordCancellationBeforeAdmission(cancellation.commandId, cancellation.target);
     switch (cancelled.kind) {
         case "recorded":
-            await projection.recordOutcome(cancellation.sessionId, cancelled.outcome);
+            await projection.recordOutcome(cancellation.target, cancelled.outcome);
             return;
         case "restated":
-            projection.restateOutcome(cancellation.sessionId, cancelled.outcome);
+            projection.restateOutcome(cancellation.target, cancelled.outcome);
             return;
         case "expired":
             throw new SessionError(
@@ -291,17 +308,17 @@ export async function settleAbandonedTurn(
         case "unavailable":
             break;
     }
-    const attemptId = operations.findUnsettledAttemptId(cancellation.commandId, cancellation.sessionId);
+    const attemptId = operations.findUnsettledAttemptId(cancellation.commandId, cancellation.target);
     if (attemptId === null) {
         console.warn("Morty daemon ignored cancellation for an inactive turn");
         return;
     }
     await projection.failed(
-        cancellation.sessionId,
+        cancellation.target,
         cancellation.commandId,
         attemptId,
         "agent_execution_abandoned",
         "The local Agent execution was abandoned before it completed",
     );
-    projection.publishTerminal(cancellation.sessionId, cancellation.commandId);
+    projection.publishTerminal(cancellation.target, cancellation.commandId);
 }

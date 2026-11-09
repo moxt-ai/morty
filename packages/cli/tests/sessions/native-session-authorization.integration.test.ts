@@ -16,8 +16,7 @@ describe("native session authorization", () => {
                 await f.seed("Saved one");
                 await f.seed("Saved two");
                 await f.seed("Saved three");
-                await f.seed("Additional project", [outside]);
-                await f.seed("Other project", [], outside);
+                await f.seed("Other project", outside);
                 const entries: NativeSessionEntry[] = [];
                 let cursor: string | null = null;
                 do {
@@ -26,7 +25,6 @@ describe("native session authorization", () => {
                     cursor = page.nextCursor;
                 } while (cursor !== null);
                 expect(entries.map((entry) => entry.title).sort()).toEqual([
-                    "Additional project",
                     "Other project",
                     "Saved one",
                     "Saved three",
@@ -41,13 +39,12 @@ describe("native session authorization", () => {
                     action: "import",
                     directoryId: entry.directoryId,
                     entryId: entry.entryId,
-                    targetSessionId: "imported",
                 } satisfies NativeSessionCommand;
                 const first = await f.service.execute(command, new AbortController().signal);
                 expect(first).toMatchObject({
                     action: "import",
                     ready: {
-                        sessionId: "imported",
+                        target: { harness: f.agent.id, sessionId: entry.sessionId },
                         restored: true,
                         directoryId: entry.directoryId,
                         directoryLabel: entry.directoryLabel,
@@ -58,9 +55,9 @@ describe("native session authorization", () => {
                         },
                     },
                 });
-                expect(
-                    await f.service.execute({ ...command, targetSessionId: "duplicate" }, new AbortController().signal),
-                ).toMatchObject({ ready: { sessionId: "imported" } });
+                expect(await f.service.execute(command, new AbortController().signal)).toMatchObject({
+                    ready: { target: { harness: f.agent.id, sessionId: entry.sessionId } },
+                });
                 await expect(
                     f.service.execute({ ...command, entryId: "forged" }, new AbortController().signal),
                 ).rejects.toMatchObject({ code: "native_session_not_found" });
@@ -78,16 +75,16 @@ describe("native session authorization", () => {
         try {
             await f.seed("Earlier conversation");
             await f.seed("Another conversation");
-            const nativeSessionId = await f.seed("Current handoff conversation");
+            const sessionId = await f.seed("Current handoff conversation");
             const found = await f.service.execute(
-                { ...f.identity, action: "find", nativeSessionId },
+                { ...f.identity, action: "find", sessionId },
                 new AbortController().signal,
             );
             expect(found).toMatchObject({
                 action: "find",
                 entry: { title: "Current handoff conversation" },
             });
-            expect(found).toMatchObject({ entry: { nativeSessionId } });
+            expect(found).toMatchObject({ entry: { sessionId } });
             if (found.action !== "find") {
                 throw new Error("Expected a native session lookup");
             }
@@ -97,13 +94,12 @@ describe("native session authorization", () => {
                         ...f.identity,
                         action: "import",
                         entryId: found.entry.entryId,
-                        targetSessionId: "handoff-import",
                     },
                     new AbortController().signal,
                 ),
             ).resolves.toMatchObject({
                 action: "import",
-                ready: { sessionId: "handoff-import" },
+                ready: { target: { harness: f.agent.id, sessionId } },
             });
         } finally {
             await f.close();
@@ -119,7 +115,7 @@ describe("native session authorization", () => {
             await mkdir(inside);
             await mkdir(outside);
             await symlink(inside, alias);
-            await f.seed("Moving roots", [alias]);
+            await f.seed("Moving workspace", alias);
             const entry = (await f.list()).entries[0];
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
@@ -128,12 +124,12 @@ describe("native session authorization", () => {
             await symlink(outside, alias);
             await expect(
                 f.service.execute(
-                    { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: "import-target" },
+                    { ...f.identity, directoryId: entry.directoryId, action: "import", entryId: entry.entryId },
                     new AbortController().signal,
                 ),
             ).rejects.toMatchObject({ code: "native_session_target_changed" });
             expect((await readdir(f.native)).filter((name) => name.endsWith(".json"))).toHaveLength(1);
-            expect((await f.list()).entries).toEqual([expect.objectContaining({ title: "Moving roots" })]);
+            expect((await f.list()).entries).toEqual([expect.objectContaining({ title: "Moving workspace" })]);
         } finally {
             await f.close();
         }
@@ -145,8 +141,11 @@ describe("native session authorization", () => {
             const ready = await f.sessions.prepareSession({
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
-                sessionId: "browser",
+                target: await f.sessions.createNativeSession({
+                    agent: f.agent,
+                    cwd: f.workspace,
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
             expect(ready.capabilities).toMatchObject({

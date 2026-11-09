@@ -63,15 +63,15 @@ export function describeRelayFailure(failure: unknown): Readonly<Record<string, 
 export class RelayConnectionDiagnostics {
     #lastSkippedLogAt = Number.NEGATIVE_INFINITY;
     #skippedCount = 0;
-    readonly #channelId: string;
+    readonly #computerId: string;
     readonly #localLog: RuntimeDiagnosticLog;
     #lastClosedEpoch = 0;
     #lastFailedEpoch = 0;
     readonly #relayOrigin: string;
     readonly #route: Readonly<Record<string, string>>;
 
-    constructor(channelId: string, relayUrl: URL, localLog: RuntimeDiagnosticLog) {
-        this.#channelId = channelId;
+    constructor(computerId: string, relayUrl: URL, localLog: RuntimeDiagnosticLog) {
+        this.#computerId = computerId;
         this.#localLog = localLog;
         this.#relayOrigin = relayUrl.origin;
         this.#route = describeEnvironmentProxyRoute(relayUrl);
@@ -183,7 +183,7 @@ export class RelayConnectionDiagnostics {
         this.#localLog.record(
             `Morty daemon diagnostic ${JSON.stringify({
                 timestamp: new Date().toISOString(),
-                channelId: this.#channelId,
+                computerId: this.#computerId,
                 event,
                 requestId,
                 ...recordedDetails,
@@ -194,7 +194,7 @@ export class RelayConnectionDiagnostics {
     readonly #record = (event: string, details: Readonly<Record<string, string>>, warning: boolean): void => {
         const encoded = JSON.stringify({
             timestamp: new Date().toISOString(),
-            channelId: this.#channelId,
+            computerId: this.#computerId,
             event,
             ...details,
         });

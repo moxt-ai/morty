@@ -2,13 +2,14 @@ import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import type {
     AgentSettingsDiscoverCommand,
     AgentSettingsDiscoveredEvent,
+    NativeSessionTarget,
     WorkspaceEntriesEvent,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
 import { decodeNativeSessionCancel } from "@morty-build/client/protocol";
 import type { DurableObjectContext } from "../../di/create-durable-object-dependencies.ts";
-import type { ProjectScope as Scope } from "../../entity/do/session.ts";
-import { ProjectScope } from "../../entity/do/session.ts";
+import type { ComputerScope as Scope } from "../../entity/do/session.ts";
+import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
 import {
@@ -24,27 +25,23 @@ import type { NativeSessionForks } from "./native-session-forks.ts";
 export interface LocalSessionOperations extends SessionRuntimeOperations {
     readonly forkNativeSession: (
         scope: Scope,
-        runtimeId: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => ReturnType<NativeSessionForks["fork"]>;
     readonly requestWorkspace: (
         scope: Scope,
-        runtimeId: string,
         command: WorkspaceListCommand,
         signal: AbortSignal,
     ) => Promise<WorkspaceEntriesEvent>;
     readonly requestAgentSettings: (
         scope: Scope,
-        runtimeId: string,
         command: AgentSettingsDiscoverCommand,
         signal: AbortSignal,
     ) => Promise<AgentSettingsDiscoveredEvent>;
     readonly openPublicSessionEvents: (
         scope: Scope,
-        runtimeId: string,
-        sessionId: string,
+        target: NativeSessionTarget,
         credential: {
             readonly credentialId: string;
             readonly signingKeyId: string;
@@ -55,33 +52,23 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
     ) => Promise<Response>;
 }
 
-export function createLocalSessionOperations(
-    cx: DurableObjectContext,
-    projectId: string,
-    runtimeId: string,
-): LocalSessionOperations {
-    const checkTarget = (requestedProject: string, requestedRuntime: string) => {
+export function createLocalSessionOperations(cx: DurableObjectContext, computerId: string): LocalSessionOperations {
+    const checkTarget = (requestedComputer: string) => {
         const current = cx.services.connections.current();
-        if (requestedProject !== projectId || requestedRuntime !== runtimeId || current?.runtimeId !== runtimeId) {
+        if (requestedComputer !== computerId || current?.computerId !== computerId) {
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
         const daemon = cx.gateways.peers.sockets().find(({ identity }) => identity.role === "daemon");
-        if (daemon !== undefined && daemon.identity.projectId !== projectId) {
+        if (daemon !== undefined && daemon.identity.computerId !== computerId) {
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
     };
-    const connect = async (requestId: string, sessionId: string, signal: AbortSignal) => {
+    const connect = async (requestId: string, target: NativeSessionTarget | undefined, signal: AbortSignal) => {
         signal.throwIfAborted();
         await cx.services.runtime.expireSilentDaemons();
-        return cx.gateways.requests.open(requestId, sessionId, async (socket, message) => {
+        return cx.gateways.requests.open(requestId, target, async (socket, message) => {
             if (!signal.aborted) {
-                await cx.services.runtime.receiveOperation(
-                    new ProjectScope(projectId),
-                    runtimeId,
-                    socket,
-                    message,
-                    signal,
-                );
+                await cx.services.runtime.receiveOperation(new ComputerScope(computerId), socket, message, signal);
                 return;
             }
             // The caller has left, but native query cancellation must still reach the daemon.
@@ -99,8 +86,7 @@ export function createLocalSessionOperations(
             );
             try {
                 await cx.services.runtime.receiveOperation(
-                    new ProjectScope(projectId),
-                    runtimeId,
+                    new ComputerScope(computerId),
                     socket,
                     message,
                     cleanup.signal,
@@ -110,50 +96,45 @@ export function createLocalSessionOperations(
             }
         });
     };
-    const requestProjectScopeControl: SessionRuntimeOperations["requestProjectScopeControl"] = async (
+    const requestComputerScopeControl: SessionRuntimeOperations["requestComputerScopeControl"] = async (
         scope,
-        requestedRuntime,
         command,
         signal,
     ) => {
-        checkTarget(scope.projectId, requestedRuntime);
-        const sessionId = "sessionId" in command ? command.sessionId : "";
-        const socket = await connect(runtimeControlRequestId(command), sessionId, signal);
+        checkTarget(scope.computerId);
+        const target = "target" in command ? command.target : undefined;
+        const socket = await connect(runtimeControlRequestId(command), target, signal);
         return await requestRuntimeControl(socket, command, signal);
     };
     return {
-        forkNativeSession: async (scope, requestedRuntime, operationId, input, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
-            return await cx.services.nativeForks.fork(
-                scope,
-                requestedRuntime,
-                operationId,
-                input,
-                requestProjectScopeControl,
+        forkNativeSession: async (scope, operationId, input, signal) => {
+            checkTarget(scope.computerId);
+            return await cx.services.nativeForks.fork(scope, operationId, input, requestComputerScopeControl, signal);
+        },
+        requestWorkspace: async (scope, command, signal) => {
+            checkTarget(scope.computerId);
+            return await requestRuntimeWorkspace(await connect(command.requestId, undefined, signal), command, signal);
+        },
+        requestAgentSettings: async (scope, command, signal) => {
+            checkTarget(scope.computerId);
+            return await requestRuntimeAgentSettings(
+                await connect(command.requestId, undefined, signal),
+                command,
                 signal,
             );
         },
-        requestWorkspace: async (scope, requestedRuntime, command, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
-            return await requestRuntimeWorkspace(await connect(command.requestId, "", signal), command, signal);
-        },
-        requestAgentSettings: async (scope, requestedRuntime, command, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
-            return await requestRuntimeAgentSettings(await connect(command.requestId, "", signal), command, signal);
-        },
-        openPublicSessionEvents: async (scope, requestedRuntime, sessionId, credential, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+        openPublicSessionEvents: async (scope, sessionTarget, credential, signal) => {
+            checkTarget(scope.computerId);
             signal.throwIfAborted();
             await cx.services.runtime.expireSilentDaemons();
-            checkTarget(scope.projectId, requestedRuntime);
-            if (!cx.services.runtime.isOnline(runtimeId)) {
+            checkTarget(scope.computerId);
+            if (!cx.services.runtime.isOnline(computerId)) {
                 throw new PairingDirectoryError("runtime_offline", "The Runtime is offline");
             }
             return cx.gateways.peers.accept({
                 role: "viewer",
-                projectId,
-                runtimeId,
-                sessionFilter: sessionId,
+                computerId,
+                sessionFilter: sessionTarget,
                 expiresAt: credential.expiresAt,
                 credential: {
                     credentialId: credential.credentialId,
@@ -162,10 +143,10 @@ export function createLocalSessionOperations(
                 },
             }).response;
         },
-        requestProjectScopeControl,
-        readProjectSessionFile: async (scope, requestedRuntime, command, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
-            const socket = await connect(command.requestId, command.sessionId, signal);
+        requestComputerScopeControl,
+        readProjectSessionFile: async (scope, command, signal) => {
+            checkTarget(scope.computerId);
+            const socket = await connect(command.requestId, command.target, signal);
             try {
                 const stream = await requestRuntimeFile(socket, command, signal);
                 cx.utilities.waitUntil(stream.finished);
@@ -175,9 +156,9 @@ export function createLocalSessionOperations(
                 throw cause;
             }
         },
-        writeProjectSessionContent: async (scope, requestedRuntime, command, body, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
-            const socket = await connect(command.requestId, command.sessionId, signal);
+        writeProjectSessionContent: async (scope, command, body, signal) => {
+            checkTarget(scope.computerId);
+            const socket = await connect(command.requestId, command.target, signal);
             try {
                 return await requestRuntimeContentWrite(socket, command, body, signal);
             } catch (cause) {

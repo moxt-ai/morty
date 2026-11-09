@@ -44,11 +44,10 @@ test.each([
                     encodeSessionPrepareCommand({
                         kind: "session.prepare",
                         requestId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     }),
                 );
                 for (;;) {

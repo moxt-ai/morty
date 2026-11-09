@@ -51,7 +51,7 @@ export function createNativeSessionCommands(context: CommandContext): readonly R
                         send(socket, { entries, kind: SESSION_LISTED_KIND, requestId: message.requestId });
                     })
                     .catch((error: unknown) => {
-                        reportOperationFailure(socket, message.requestId, "", error);
+                        reportOperationFailure(socket, message.requestId, undefined, error);
                     });
             },
         },
@@ -62,12 +62,12 @@ export function createNativeSessionCommands(context: CommandContext): readonly R
                     throw new Error("Command kind mismatch");
                 }
                 void nativeSessions
-                    .querySessions(message.sessionIds, signal)
+                    .querySessions(message.targets, signal)
                     .then((entries) => {
                         send(socket, { entries, kind: SESSION_QUERIED_KIND, requestId: message.requestId });
                     })
                     .catch((error: unknown) => {
-                        reportOperationFailure(socket, message.requestId, "", error);
+                        reportOperationFailure(socket, message.requestId, undefined, error);
                     });
             },
         },

@@ -76,8 +76,7 @@ releases, local state and browser links are unsupported; install and pair again
 using the setup prompt above. Morty does not adopt `.mobius` state or operate
 Moxt services. Agent-owned conversation history remains on the machine.
 
-`npx --yes @morty-build/cli uninstall` stops Morty and removes its managed executables;
-it retains local identity, pairings, workspaces, and Agent history.
+`npx --yes @morty-build/cli@latest stop` stops Morty and retains your pairing and Agent history.
 
 ## Known limitations
 
@@ -119,11 +118,8 @@ it retains local identity, pairings, workspaces, and Agent history.
   browser opens a sharing link, Morty keeps the city and country Cloudflare locates
   the connection in, so you can recognize your devices. It does not store IP
   addresses.
-- **Morty owns its installation and updates.** Setup installs the exact Morty release
-  (`@morty-build/cli`) into a persistent user directory. Run
-  `npx --yes @morty-build/cli update` to install and activate a newer release, or
-  `npx --yes @morty-build/cli status` to compare the installed and running versions.
-  Updates preserve pairings and Agent history. They do not operate a Moxt service.
+- **Restart to update Morty.** Run `npx --yes @morty-build/cli@latest restart`
+  to launch the current release. Use `status` to see the CLI and daemon versions.
 - **The website counts page views and setup steps, and reports errors.** morty.build
   sends page views to Google Analytics and errors to Sentry. Both receive page paths
   without query strings, so session IDs are not included, and Sentry events have user,

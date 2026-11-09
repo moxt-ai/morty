@@ -21,8 +21,8 @@ import { startTestPlatform } from "./test-platform.ts";
 export const AUTH_TIME = new Date("2026-09-07T00:00:00.000Z");
 export const APP_ORIGIN = "http://localhost:5173";
 
-export function accountRequest(token?: string, projectId?: string): Request {
-    return new Request(`${APP_ORIGIN}/morty/api${projectId === undefined ? "" : `/projects/${projectId}`}/session`, {
+export function accountRequest(token?: string, computerId?: string): Request {
+    return new Request(`${APP_ORIGIN}/morty/api${computerId === undefined ? "" : `/computers/${computerId}`}/session`, {
         headers: token === undefined ? {} : { Authorization: `Bearer ${token}` },
     });
 }
@@ -75,7 +75,9 @@ export async function createIdentityFixture(options: IdentityFixtureOptions = {}
 /** Call in beforeAll so each suite run rebuilds its inputs, including watch reruns. */
 export async function prepareIdentityFixture(options: IdentityFixtureOptions = {}) {
     const bundle = await build({
-        entryPoints: [options.workerEntryPoint ?? fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
+        entryPoints: [
+            options.workerEntryPoint ?? fileURLToPath(new URL("./credential-storage-worker.ts", import.meta.url)),
+        ],
         bundle: true,
         external: ["cloudflare:*", "node:*"],
         format: "esm",
@@ -113,7 +115,6 @@ async function startIdentityFixture(
                 const listener = new URL(appOrigin);
                 const baseConfiguration = {
                     APP_ORIGIN: appOrigin,
-                    MORTY_SERVICE_ID: platform.appId,
                     MORTY_SERVICE_SECRET: platform.appCredential,
                     MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,
                 };
@@ -124,9 +125,12 @@ async function startIdentityFixture(
                     bindings: baseConfiguration,
                     compatibilityDate: "2026-09-07",
                     compatibilityFlags: ["nodejs_compat"],
-                    durableObjects: miniflareDurableObjects(
-                        options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
-                    ),
+                    durableObjects: {
+                        ...miniflareDurableObjects(
+                            options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
+                        ),
+                        COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
+                    },
                     modules: true,
                     r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
                     // Suites create many independent visitors through one local test process.
@@ -157,14 +161,14 @@ async function startIdentityFixture(
         const { baseConfiguration, cloudflare, ready, runtimeOptions } = await startChatWorker();
         try {
             let cloudBindings = await cloudflare.getBindings();
-            let projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+            let computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
             const chatProjects = {
-                idFromName: (name: string) => projectObjects.idFromName(name),
+                idFromName: (name: string) => computerObjects.idFromName(name),
                 get: (
-                    id: ReturnType<typeof projectObjects.idFromName>,
-                    options?: Parameters<typeof projectObjects.get>[1],
+                    id: ReturnType<typeof computerObjects.idFromName>,
+                    options?: Parameters<typeof computerObjects.get>[1],
                 ) => {
-                    const object = projectObjects.get(id, options);
+                    const object = computerObjects.get(id, options);
                     return {
                         fetch: async (request: Request) => {
                             const response = await object.fetch(request.url, {
@@ -188,7 +192,7 @@ async function startIdentityFixture(
                 ...baseConfiguration,
                 APP_ORIGIN: appOrigin,
                 ASSETS: { fetch: () => Promise.resolve(new Response()) },
-                CHAT_PROJECTS: chatProjects,
+                COMPUTER_RELAY: chatProjects,
             });
             /** Restarts the Worker with the changed deployment settings, keeping its storage. */
             const reconfigure = async () => {
@@ -196,7 +200,7 @@ async function startIdentityFixture(
                     convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
                 );
                 cloudBindings = await cloudflare.getBindings();
-                projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
             };
             const createAnonymousUser = async () => {
                 const response = await worker.fetch(
@@ -209,7 +213,7 @@ async function startIdentityFixture(
                 );
                 expect(response.status).toBe(201);
                 return v.parse(
-                    v.object({ token: v.string(), userId: v.string(), projectId: v.string() }),
+                    v.object({ token: v.string(), userId: v.string(), computerId: v.string() }),
                     await response.json(),
                 );
             };
@@ -233,10 +237,6 @@ async function startIdentityFixture(
                 },
                 changePlatformOrigin: async (origin: string) => {
                     baseConfiguration.MORTY_RELAY_URL = origin;
-                    await reconfigure();
-                },
-                changeServiceId: async (serviceId: string) => {
-                    baseConfiguration.MORTY_SERVICE_ID = serviceId;
                     await reconfigure();
                 },
                 close: async () => {

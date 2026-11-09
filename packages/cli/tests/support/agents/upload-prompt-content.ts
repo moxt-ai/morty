@@ -32,7 +32,7 @@ export async function uploadPromptContent(
             mediaType: input.mediaType,
             name: input.name,
             requestId,
-            sessionId: peer.sessionId,
+            target: peer.target,
         }),
     );
     const ready = await peer.nextMessage();
@@ -50,7 +50,7 @@ export async function uploadPromptContent(
         );
         sequence += 1;
     }
-    peer.send(encodeContentCommitCommand({ kind: "content.commit", requestId, sessionId: peer.sessionId }));
+    peer.send(encodeContentCommitCommand({ kind: "content.commit", requestId, target: peer.target }));
     const available = await peer.nextMessage();
     if (
         decodeMessageKind(available) !== "content.available" ||

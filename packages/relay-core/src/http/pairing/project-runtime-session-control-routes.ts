@@ -23,35 +23,43 @@ function validated<TSchema extends v.GenericSchema>(schema: TSchema, value: unkn
 
 /** Session operations on the Runtime this request names, authorized by its project credential for each operation. */
 export function sessionControl(context: Context<RelayHttpEnvironment>): SessionControl {
-    const projectId = validated(identifier, context.req.param("projectId"));
-    const runtimeId = validated(identifier, context.req.param("runtimeId"));
+    const computerId = validated(identifier, context.req.param("computerId"));
     const token = bearerToken(context.req.raw);
     return new SessionControl(
         async (command, permission) =>
             await context.env.services.runtimePairings.requestOperationControl(
-                projectId,
-                runtimeId,
+                computerId,
                 token,
                 command,
                 permission,
                 context.req.raw.signal,
             ),
-        validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),
+        sessionTarget(context),
     );
+}
+
+export function sessionTarget(context: Context<RelayHttpEnvironment>) {
+    return {
+        harness: validateIdentifier(context.req.param("harness") ?? "", "harness"),
+        sessionId: validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),
+    };
 }
 
 export function createProjectRuntimeSessionControlRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
-        .post("/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/turns/:turnId/cancel", async (context) => {
-            const turnId = validateIdentifier(context.req.param("turnId"), "turn_id");
-            const { stopReason } = await sessionControl(context).cancelTurn(turnId);
-            context.header("Cache-Control", "no-store");
-            return context.json({ turnId, stopReason });
-        })
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/turns/:turnId/cancel-before-start",
+            "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/turns/:turnId/cancel",
+            async (context) => {
+                const turnId = validateIdentifier(context.req.param("turnId"), "turn_id");
+                const { stopReason } = await sessionControl(context).cancelTurn(turnId);
+                context.header("Cache-Control", "no-store");
+                return context.json({ turnId, stopReason });
+            },
+        )
+        .post(
+            "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/turns/:turnId/cancel-before-start",
             async (context) => {
                 const turnId = validateIdentifier(context.req.param("turnId"), "turn_id");
                 await sessionControl(context).withdrawTurn(turnId);
@@ -60,7 +68,7 @@ export function createProjectRuntimeSessionControlRoutes() {
             },
         )
         .put(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/turns/:turnId/disposition",
+            "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/turns/:turnId/disposition",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 decodeSessionRequest(turnSteerRequest, context.req.valid("json"));
@@ -71,7 +79,7 @@ export function createProjectRuntimeSessionControlRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/interactions/:interactionId/responses",
+            "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/interactions/:interactionId/responses",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = decodeSessionRequest(interactionResponseRequest, context.req.valid("json"));
@@ -81,7 +89,7 @@ export function createProjectRuntimeSessionControlRoutes() {
                 return context.json({ accepted: true });
             },
         )
-        .get("/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/events-v2", async (context) => {
+        .get("/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/events-v2", async (context) => {
             const cursor = context.req.query("cursor");
             const events = await sessionControl(context).liveEvents({
                 cursor:

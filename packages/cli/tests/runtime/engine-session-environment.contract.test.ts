@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     decodeDaemonToServiceMessage,
+    encodeSessionCreateCommand,
     encodeSessionPrepareCommand,
+    type NativeSessionTarget,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
 } from "@morty-build/client/protocol";
@@ -13,6 +15,7 @@ import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 test.for(["saved", "provided"] as const)(
     "Given an embedded Engine with a %s connection, When successive loops prepare concurrent Sessions with and without scoped environments, Then Agent children receive only their own loop and Session identity",
@@ -24,11 +27,13 @@ test.for(["saved", "provided"] as const)(
         const executable = join(directory, "codex.mjs");
         const reports = join(directory, "environments.jsonl");
         await mkdir(workspace);
+        await mkdir(join(directory, "threads"));
         await writeFile(reports, "");
         await writeFile(
             executable,
             `#!${process.execPath}
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 if (process.argv.includes("--version")) {
     process.stdout.write("codex-cli 0.154.0\\n");
@@ -38,15 +43,22 @@ let thread = 0;
 createInterface({ input: process.stdin }).on("line", (line) => {
     const request = JSON.parse(line);
     if (request.id === undefined) return;
-    if (request.method === "thread/start") {
+    if (request.method === "thread/start" || request.method === "thread/resume") {
         appendFileSync(${JSON.stringify(reports)}, JSON.stringify({
             context: process.env.MORTY_TEST_SESSION_CONTEXT,
             base: process.env.MORTY_TEST_BASE,
         }) + "\\n");
     }
+    const id = request.method === "thread/start" ? "environment-thread-" + process.pid + "-" + ++thread : request.params?.threadId;
+    if (request.method === "thread/start") writeFileSync(join(${JSON.stringify(join(directory, "threads"))}, id), "");
+    if (request.method === "thread/resume" && !existsSync(join(${JSON.stringify(join(directory, "threads"))}, id))) {
+        process.stdout.write(JSON.stringify({ id: request.id, error: { code: -32602, message: "Unknown thread" } }) + "\\n");
+        return;
+    }
     const result = request.method === "thread/start"
-        ? { thread: { id: "environment-thread-" + process.pid + "-" + ++thread } }
-        : request.method === "model/list" ? { data: [], nextCursor: null } : {};
+        ? { thread: { id } }
+        : request.method === "thread/resume" ? { thread: { id, turns: [] } }
+        : request.method === "model/list" || request.method === "thread/turns/list" ? { data: [], nextCursor: null } : {};
     process.stdout.write(JSON.stringify({ id: request.id, result }) + "\\n");
 });
 `,
@@ -82,13 +94,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         try {
             const saved = await engine.getConnectionManager().save(
                 {
-                    appId: "environment-app",
-                    channelId: "environment-channel",
+                    computerId: "environment-channel",
                     defaultWorkspace: workspace,
-                    pairingId: "environment-pairing",
                     relayOrigin: new URL(origin),
                     runtimeCredential: "r".repeat(43),
-                    runtimeId: "environment-runtime",
                 },
                 signal,
             );
@@ -98,13 +107,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                     : {
                           kind,
                           connection: {
-                              channelId: saved.channelId,
+                              computerId: saved.computerId,
                               defaultWorkspace: workspace,
                               relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                              runtimeCredential: saved.runtimeCredential,
+                              credentials: memoryRuntimeCredentials(saved.credentials.current),
                           },
                       };
             const expected: { readonly context: string; readonly base: string }[] = [];
+            const targets: NativeSessionTarget[] = [];
             for (const scope of ["first-loop", "second-loop", undefined]) {
                 const shutdown = new AbortController();
                 const loopSignal = AbortSignal.any([signal, shutdown.signal]);
@@ -115,8 +125,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                     ...(scope === undefined
                         ? {}
                         : {
-                              sessionEnvironment: ({ sessionId, agentId }) => ({
-                                  MORTY_TEST_SESSION_CONTEXT: JSON.stringify({ scope, sessionId, agentId }),
+                              sessionEnvironment: (target) => ({
+                                  MORTY_TEST_SESSION_CONTEXT: JSON.stringify({ scope, ...target }),
                               }),
                           }),
                 });
@@ -136,7 +146,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                 throw new Error(message.message);
                             }
                             if (message.kind === "session.ready") {
-                                ready.add(message.sessionId);
+                                ready.add(message.target.sessionId);
+                                if (scope === "first-loop") {
+                                    targets.push(message.target);
+                                }
                             }
                             if (ready.size === 2) {
                                 return;
@@ -144,23 +157,33 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                         }
                     };
                     const prepared = receive();
-                    for (const sessionId of ["session-a", "session-b"]) {
+                    for (const index of [0, 1]) {
+                        const target = targets[index];
                         socket.send(
-                            encodeSessionPrepareCommand({
-                                kind: "session.prepare",
-                                requestId: `prepare-${sessionId}`,
-                                sessionId,
-                                agentId: "codex",
-                                bindingId: "workspace",
-                                directoryId: "default",
-                                additionalDirectoryIds: [],
-                            }),
+                            target === undefined
+                                ? encodeSessionCreateCommand({
+                                      kind: "session.create",
+                                      requestId: crypto.randomUUID(),
+                                      operationId: crypto.randomUUID(),
+                                      agentId: "codex",
+                                      bindingId: "workspace",
+                                      directoryId: "default",
+                                      configurations: [],
+                                  })
+                                : encodeSessionPrepareCommand({
+                                      kind: "session.prepare",
+                                      requestId: crypto.randomUUID(),
+                                      target,
+                                      agentId: "codex",
+                                      bindingId: "workspace",
+                                      directoryId: "default",
+                                  }),
                         );
                         expected.push({
                             context:
-                                scope === undefined
+                                scope === undefined || target === undefined
                                     ? "unscoped"
-                                    : JSON.stringify({ scope, sessionId, agentId: "codex" }),
+                                    : JSON.stringify({ scope, ...target }),
                             base: "launch-environment",
                         });
                     }

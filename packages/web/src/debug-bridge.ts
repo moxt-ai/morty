@@ -1,5 +1,7 @@
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
+
 export interface MortyDebugSession {
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
     readonly blocks: () => readonly unknown[];
 }
 

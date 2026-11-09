@@ -71,15 +71,14 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
     peer.send(
         JSON.stringify({
             action: "active-turn",
-            additionalDirectoryIds: [],
             agentId: "controlled-acp",
             bindingId: peer.bindingId,
             deliveryCommandId: commandId,
             directoryId: "default",
             kind: "native.session.request",
             requestId,
-            sessionId: peer.sessionId,
-            targetSessionId: peer.sessionId,
+            discoveryId: crypto.randomUUID(),
+            target: peer.target,
         }),
     );
     for (;;) {
@@ -96,7 +95,6 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
 
 const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string) =>
     encodeSessionPromptCommand({
-        additionalDirectoryIds: [],
         agentId: "controlled-acp",
         attachments: [],
         bindingId: peer.bindingId,
@@ -105,7 +103,7 @@ const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string) 
         disposition: "append",
         kind: "session.prompt",
         prompt,
-        sessionId: peer.sessionId,
+        target: peer.target,
     });
 
 const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
@@ -113,7 +111,7 @@ const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
         JSON.stringify({
             kind: "session.cancel-before-start",
             requestId: crypto.randomUUID(),
-            sessionId: peer.sessionId,
+            target: peer.target,
             commandId,
         }),
     );
@@ -184,13 +182,12 @@ for (const admission of ["before-admission", "queued"] as const) {
                             JSON.stringify({
                                 kind: "session.cancel-before-start",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 commandId: id,
                             }),
                         );
                     const prompt = (id: string, text: string) =>
                         encodeSessionPromptCommand({
-                            additionalDirectoryIds: [],
                             agentId: "controlled-acp",
                             attachments: [],
                             bindingId: peer.bindingId,
@@ -199,7 +196,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                             disposition: "append",
                             kind: "session.prompt",
                             prompt: text,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         });
                     const original = prompt(commandId, "This command was already cancelled");
                     if (admission === "queued") {
@@ -243,7 +240,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                             JSON.stringify({
                                 kind: "session.cancel",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 commandId: "running-hold",
                             }),
                         );

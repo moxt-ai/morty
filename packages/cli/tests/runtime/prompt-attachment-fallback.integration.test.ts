@@ -65,7 +65,6 @@ test("Given unsupported attachments, When a prompt has text, Then the daemon del
                     const commandId = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            additionalDirectoryIds: [],
                             agentId: "controlled-acp",
                             attachments,
                             bindingId: peer.bindingId,
@@ -74,7 +73,7 @@ test("Given unsupported attachments, When a prompt has text, Then the daemon del
                             disposition: SessionPromptDisposition.Append,
                             kind: "session.prompt",
                             prompt,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     return finish(commandId);

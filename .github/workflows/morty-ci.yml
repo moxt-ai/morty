@@ -17,7 +17,7 @@ concurrency:
 jobs:
   # Markdown cannot change tests or the release archive's behavior. The policy in
   # markdown-policy.yml keeps Markdown changes in their own pull requests, and the
-  # main release chain always runs the complete pipeline.
+  # main release chain runs the complete pipeline for commits without an accepted archive.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -47,6 +47,8 @@ jobs:
     uses: ./.github/workflows/morty-pipeline.yml
     with:
       markdown-only: ${{ needs.changes.outputs.markdown-only == 'true' }}
+      # The merge queue commit becomes main unchanged; main releases its accepted archive.
+      release: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main' }}
     permissions:
       contents: read
       actions: read

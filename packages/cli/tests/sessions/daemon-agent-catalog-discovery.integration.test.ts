@@ -15,7 +15,7 @@ import {
     decodeSessionOperationFailedEvent,
     decodeSessionReadyEvent,
     encodeAgentCatalogDiscoverCommand,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     MORTY_API_PREFIX,
 } from "@morty-build/client/protocol";
 import { listen, port, sendText } from "@morty-build/platform-test-support/websocket";
@@ -28,6 +28,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -74,7 +75,6 @@ process.argv.push(
     "--agent-version", version,
     "--no-load-session",
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -202,7 +202,7 @@ interface CatalogRelay {
     readonly waitForCatalogPutCountAtLeast: (n: number) => Promise<void>;
     readonly close: () => Promise<void>;
     readonly socket: Promise<Duplex>;
-    readonly url: (channelId: string) => URL;
+    readonly url: (computerId: string) => URL;
 }
 
 /** Accepts the daemon WebSocket and records every catalog publication, like the real Relay would. */
@@ -293,9 +293,8 @@ async function createCatalogRelay(): Promise<CatalogRelay> {
             return gate;
         },
         socket: socketReady.promise,
-        url: (channelId: string) => {
-            const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/${channelId}/daemon`);
-            relayUrl.searchParams.set("token", "d".repeat(43));
+        url: (computerId: string) => {
+            const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/${computerId}/daemon`);
             return relayUrl;
         },
         waitForCatalogPutCountAtLeast: (n: number) => {
@@ -345,7 +344,12 @@ test("Given the daemon started before an Agent was installed, When the Relay req
         throw new Error(`Expected exactly one ready Agent, got: ${JSON.stringify(inventory.discoveries)}`);
     }
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
-        { channelId: "channel_catalog", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            computerId: "channel_catalog",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         inventory.readyAgents(),
         new RuntimeLocalContext(stateDirectory, environment),
         null,
@@ -427,7 +431,12 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         throw new Error(`Expected exactly one ready Agent, got: ${JSON.stringify(inventory.discoveries)}`);
     }
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
-        { channelId: "channel_catalog_race", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            computerId: "channel_catalog_race",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         inventory.readyAgents(),
         new RuntimeLocalContext(stateDirectory, environment),
         null,
@@ -458,14 +467,14 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         const prepareRequestId = "prepare-racing-catalog-discovery";
         sendText(
             socket,
-            encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
+            encodeSessionCreateCommand({
                 agentId: "controlled-acp",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: prepareRequestId,
-                sessionId: "session-catalog-discovery-race",
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
 
@@ -540,7 +549,12 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
     }
     const resolverDiscovered = Promise.withResolvers<void>();
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
-        { channelId: "channel_catalog_reply", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            computerId: "channel_catalog_reply",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         inventory.readyAgents(),
         new RuntimeLocalContext(stateDirectory, environment),
         null,
@@ -579,14 +593,14 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         const prepareRequestId = "prepare-discovery-reply-snapshot";
         sendText(
             socket,
-            encodeSessionPrepareCommand({
-                additionalDirectoryIds: [],
+            encodeSessionCreateCommand({
                 agentId: "controlled-acp",
                 bindingId: config.bindingId,
                 directoryId: "default",
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: prepareRequestId,
-                sessionId: "session-catalog-discovery-reply",
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
         // Complete the resolver's probe before releasing the publication's HTTP response.

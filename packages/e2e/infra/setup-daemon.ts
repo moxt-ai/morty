@@ -6,14 +6,14 @@ import {
     connectControlledAgentRuntime,
     createMortyFakeDaemon,
 } from "../../../tests/support/fake-daemon/runtime.ts";
+import type { RuntimeCredentials } from "../../cli/src/engine/runtime/connection/runtime-credentials.ts";
+import { memoryRuntimeCredentials } from "../../cli/tests/support/runtime-credentials.ts";
 import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{
-    app_id: string;
     connection_id: string;
-    runtime_id: string;
-    channel_id: string;
+    computer_id: string;
     credential: string;
     origin: string;
 }>;
@@ -41,6 +41,8 @@ type DaemonRelease = "outdated" | "latest";
 /** Setup CLI test port backed by the production daemon and a controlled Agent harness. */
 export class ControlledSetupRuntime implements SetupRuntime {
     readonly #saved = new Map<string, Connection>();
+    /** Each saved connection's relay credential, which rotates on every connection like the daemon's saved one. */
+    readonly #credentials = new Map<string, RuntimeCredentials>();
     readonly #active = new Map<string, Awaited<ReturnType<typeof connectControlledAgentRuntime>>>();
     readonly #failed = Promise.withResolvers<never>();
     readonly failure = this.#failed.promise;
@@ -87,10 +89,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify(
-                    Array.from(this.#saved.values(), ({ app_id, connection_id, runtime_id }) => ({
-                        app_id,
+                    Array.from(this.#saved.values(), ({ connection_id, computer_id }) => ({
                         connection_id,
-                        runtime_id,
+                        computer_id,
                     })),
                 ),
             );
@@ -140,7 +141,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
         const origin = option("--url");
         const daemon = createMortyFakeDaemon(this.#options);
-        const claim = await jsonRequest(origin, `/morty/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
+        const claim = await jsonRequest(origin, `/morty/api/v1/pairings/${option("--computer")}/redeem`, {
             body: {
                 agents: daemon.catalog,
                 machineName: this.#machineName,
@@ -150,14 +151,13 @@ export class ControlledSetupRuntime implements SetupRuntime {
             signal,
         });
         const connection: Connection = {
-            app_id: text(claim["appId"], "App ID"),
-            channel_id: text(claim["channelId"], "Channel ID"),
+            computer_id: text(claim["computerId"], "Channel ID"),
             connection_id: crypto.randomUUID(),
-            runtime_id: text(claim["runtimeId"], "Runtime ID"),
             credential: text(claim["runtimeCredential"], "Runtime credential"),
             origin,
         };
         this.#saved.set(connection.connection_id, connection);
+        this.#credentials.set(connection.connection_id, memoryRuntimeCredentials(connection.credential));
         await this.#connect(connection, signal);
         return result;
     };
@@ -264,18 +264,32 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const daemon = await connectControlledAgentRuntime({
             behavior: this.#options,
             connection: {
-                channelId: connection.channel_id,
+                computerId: connection.computer_id,
                 origin: connection.origin,
-                runtimeCredential: connection.credential,
+                credentials: this.#savedCredentials(connection.connection_id),
             },
             signal: new AbortController().signal,
         });
         this.#active.set(connection.connection_id, daemon);
         void daemon.failure.catch((error: unknown) => {
-            if (this.#active.get(connection.connection_id) === daemon) {
-                this.#failed.reject(error);
+            if (this.#active.get(connection.connection_id) !== daemon) {
+                return;
             }
+            // Like the manager's daemon, a revoked Runtime stops its own connection and the others keep running.
+            if (Reflect.get(Object(error), "code") === "runtime_relay_revoked") {
+                this.#active.delete(connection.connection_id);
+                return;
+            }
+            this.#failed.reject(error);
         });
+    }
+
+    #savedCredentials(connectionId: string): RuntimeCredentials {
+        const credentials = this.#credentials.get(connectionId);
+        if (credentials === undefined) {
+            throw new Error("The saved connection has no Runtime credential");
+        }
+        return credentials;
     }
 
     readonly disconnect = async (): Promise<void> => {
@@ -308,6 +322,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly forgetConnections = async (): Promise<void> => {
         await this.disconnect();
         this.#saved.clear();
+        this.#credentials.clear();
     };
 
     readonly continueReply = async (prompt: string, plan: HarnessReplyPlan): Promise<void> => {

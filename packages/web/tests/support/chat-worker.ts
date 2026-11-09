@@ -18,7 +18,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         ...(loseTurnResponses ? { loseTurnResponses: true as const } : {}),
         ...(delayExecutionReads ? { delayExecutionReads: true as const } : {}),
         platformAllowedOrigins: new Set(["*"]),
-        workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
+        workerEntryPoint: resolve(process.cwd(), "../worker/tests/support/credential-storage-worker.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
     const origin = cloud.origin;
@@ -37,7 +37,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
             v.object({
                 token: v.string(),
                 userId: v.string(),
-                projectId: v.string(),
+                computerId: v.string(),
                 bot: v.object({ botId: v.string() }),
             }),
             await identityResponse.json(),
@@ -54,10 +54,10 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
         const botId = identity.bot.botId;
         const transport = new WebSocketApiTransport(origin, clock);
         transport.open();
-        const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
-            const runtime = await cloud.connectAgent(identity.projectId, agents, nativeSessionIds);
-            const setup = await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
-                runtimeId: runtime.runtimeId,
+        const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
+            const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
+            const setup = await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
+                computerId: runtime.computerId,
                 agentRef: agents[0]?.id ?? "codex",
             });
             if (setup.status !== 202) {
@@ -68,21 +68,23 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 continueReply: runtime.continueReply,
                 /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
-                    await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
+                    await runtime.client.sessions.close(
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        new AbortController().signal,
+                    );
                 },
                 /** Applies another client's explicit model edit through the public Platform contract. */
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
                     const snapshot = await runtime.client.sessions.readConfiguration(
-                        runtime.runtimeId,
-                        sessionId,
+                        runtime.computerId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         signal,
                     );
                     await runtime.client.sessions.updateConfiguration(
-                        runtime.runtimeId,
-                        sessionId,
+                        runtime.computerId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         {
-                            additionalDirectoryIds: [],
                             agentId: agents[0]?.id ?? "codex",
                             booleanValue: false,
                             configId: "model",
@@ -97,10 +99,8 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
-                        runtime.runtimeId,
-                        sessionId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         {
-                            additionalDirectoryIds: [],
                             agentId: agents[0]?.id ?? "codex",
                             attachments: [],
                             content,
@@ -125,14 +125,26 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                 /** Renames a Session through the Platform, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
-                        runtime.runtimeId,
-                        sessionId,
+                        runtime.computerId,
+                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
                         title,
                         new AbortController().signal,
                     );
                 },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
+                /** Revokes the Runtime through the Platform, as the Relay does when its credential was reused. */
+                revoke: async (): Promise<void> => {
+                    const response = await cloud.platformRequest(
+                        new Request(`https://platform.test/morty/api/v1/computers/${identity.computerId}/pairing`, {
+                            method: "DELETE",
+                            headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
+                        }),
+                    );
+                    if (response.status !== 204) {
+                        throw new Error(`Could not revoke the test Runtime: ${response.status}`);
+                    }
+                },
                 writeFiles: runtime.writeFiles,
             };
         };
@@ -142,16 +154,16 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
             executionNetwork: cloud.executionNetwork,
             connectAgent: async (
                 agent: ControlledAgent = { id: "claude", label: "Codex" },
-                nativeSessionIds?: ReadonlySet<string>,
-            ) => await connect([agent], nativeSessionIds),
-            connectAgents: async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) =>
-                await connect(agents, nativeSessionIds),
+                sessionIds?: ReadonlySet<string>,
+            ) => await connect([agent], sessionIds),
+            connectAgents: async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) =>
+                await connect(agents, sessionIds),
             connectRuntime: async () => {
-                const runtime = await cloud.connectAgent(identity.projectId);
-                return { failure: runtime.failure, runtimeId: runtime.runtimeId };
+                const runtime = await cloud.connectAgent(identity.computerId);
+                return { failure: runtime.failure, computerId: runtime.computerId };
             },
             createTransferUrl: async () => {
-                const response = await request(`projects/${identity.projectId}/identity/transfers`, {});
+                const response = await request(`computers/${identity.computerId}/identity/transfers`, {});
                 if (response.status !== 201) {
                     throw new Error(`Could not create a transfer link: ${response.status} ${await response.text()}`);
                 }
@@ -163,7 +175,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                     signal.throwIfAborted();
                     return identity.token;
                 },
-                projectId: identity.projectId,
+                computerId: identity.computerId,
             },
             origin,
             transport,

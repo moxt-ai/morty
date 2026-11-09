@@ -18,12 +18,13 @@ Moxt resources, credentials, local state and release channels remain independent
 
 ## Cloud deployment
 
-The Morty Cloud workflow builds a checksummed portable artifact, validates its
-source revision and pinned destination, then archives it. Pull requests build
-without deployment secrets. Ordinary production publication is owned by the
-Morty CLI workflow after a merge to main; a separate cloud workflow must never
-automatically deploy a competing build. Manual cloud operations are limited to
-service credential provisioning and recovery of an accepted archived release.
+The release pipeline builds the checksummed portable cloud artifact together with
+the CLI archive, validates its source revision and pinned destination, then
+archives it. Pull requests build without deployment secrets. Ordinary production
+publication is owned by the Morty CLI workflow after a merge to main; a separate
+cloud workflow must never automatically deploy a competing build. The Morty Cloud
+workflow only runs manual cloud operations: service credential provisioning and
+recovery of an accepted archived release.
 
 The `morty-production` deployment environment supplies `CLOUDFLARE_API_TOKEN` and
 `MORTY_SERVICE_SECRET` individually. The latter authenticates Morty's internal
@@ -57,13 +58,33 @@ owner or rotate the environment's service credential through storage operations.
 
 ## Automatic release sequence
 
-After each merge to main, the release workflow runs the complete source validation,
-security scan and browser acceptance. It then assigns a stable patch version,
-builds one CLI archive and its matching cloud artifact, and tests the archive on
-every supported OS/Node combination before publishing it. npm publication and
-registry integrity verification precede production deployment. Only successful
-production health and artifact checks allow creation of the source tag and GitHub
-Release. Pull requests exercise the gates without publication credentials.
+Build each release once. The merge queue runs the complete source validation,
+security scan and browser acceptance on the exact commit that main becomes. It
+assigns that commit's stable patch version, builds one CLI archive and its matching
+cloud artifact, and tests the archive on every supported OS/Node combination. Pull
+requests exercise the same gates without publication credentials, testing the
+archive on Linux across the supported Node versions; the merge queue adds macOS
+and Windows before anything reaches main.
+
+Release only the newest main commit, and only when it changes something other than
+Markdown since the production release. An older commit's changes ship with the
+newest one instead of queueing a release of their own, and a Markdown-only change
+publishes nothing. The release workflow publishes the archive the merge queue
+accepted instead of rebuilding and retesting the same source; a commit without an
+accepted archive is built and validated by the release workflow before
+publication.
+
+Expose a release only after production verified it. The release deploys the cloud
+Workers first and verifies production health, assets and Session access. If any
+check fails, it restores the Workers to the versions that served before the
+release and stops, leaving npm `latest` and the hosted setup unchanged. Only a
+verified cloud deployment allows npm publication, which moves `latest`. The hosted
+setup installs `latest`, so it is replaced only after the registry serves the
+accepted archive. Only the completed chain allows creation of the source tag and
+GitHub Release. Until publication completes, the new Workers serve the previous
+CLI and setup, which the compatibility contract already requires. Database
+migrations are applied before the Workers and are never reversed, so a migration
+must remain compatible with the Workers a failed release restores.
 
 Release versions are derived from a committed stable-version baseline and the
 number of first-parent main commits since its recorded source revision. The same
@@ -82,8 +103,10 @@ release tag. Build and deployment records bind version, source revision and
 archive integrity; GitHub Release assets retain the accepted artifacts beyond
 Actions artifact retention.
 
-Every failed gate stops dependent stages. npm and Cloudflare are independent
-systems, so a deployment failure after npm publication cannot undo publication;
+Every failed gate stops dependent stages. When the automatic Worker restoration
+itself fails, the job reports it and production keeps the unverified Workers until
+recovery; npm and the hosted setup remain unchanged. npm and Cloudflare are
+independent systems, so a failure after npm publication cannot undo publication;
 it leaves an incomplete release with no final GitHub Release. Inspect the failing
 job, correct the operational cause, and rerun failed jobs with the original
 artifacts. Do not unpublish or repack that version. If code changes are necessary,

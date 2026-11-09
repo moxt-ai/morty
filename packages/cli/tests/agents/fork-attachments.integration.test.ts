@@ -50,7 +50,6 @@ test.each(["pi", "claude", "codex"] as const)(
                   : new CodexAgentSpecification();
         await withRealDaemon(specification, agent.environment, async (peer) => {
             const identity = {
-                additionalDirectoryIds: [],
                 agentId,
                 bindingId: peer.bindingId,
                 directoryId: "default",
@@ -71,7 +70,7 @@ test.each(["pi", "claude", "codex"] as const)(
                     ...identity,
                     kind: "session.prompt",
                     commandId: randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     disposition: SessionPromptDisposition.Append,
                     attachments,
                     prompt: "Keep the attached text and image in this conversation, without using tools",
@@ -80,22 +79,25 @@ test.each(["pi", "claude", "codex"] as const)(
             await finish(peer);
             const source = await nativeSource(peer, agentId, agent.environment["CLAUDE_CONFIG_DIR"]);
             for (let index = 0; index < 2; index++) {
-                const childId = randomUUID();
                 const requestId = randomUUID();
                 peer.send(
                     encodeNativeSessionCommand({
                         ...identity,
                         kind: "native.session.request",
-                        sessionId: peer.sessionId,
+                        discoveryId: source.discoveryId,
                         requestId,
                         action: "fork",
                         entryId: source.entryId,
-                        targetSessionId: childId,
                     }),
                 );
-                expect(await nativeResult(peer, requestId)).toMatchObject({ action: "fork", targetSessionId: childId });
+                const fork = await nativeResult(peer, requestId);
+                if (fork.action !== "fork") {
+                    throw new Error("Expected native fork");
+                }
+                const childTarget = fork.target;
+                expect(childTarget.sessionId).not.toBe(peer.target.sessionId);
                 for (let reload = 0; reload < 2; reload++) {
-                    const chunks = await history(peer, childId);
+                    const chunks = await history(peer, childTarget);
                     const links = chunks.flatMap((chunk) =>
                         chunk.content.type === "resource_link" ? [chunk.content] : [],
                     );
@@ -106,12 +108,12 @@ test.each(["pi", "claude", "codex"] as const)(
                         );
                     const link = links.find((content) => content.name === "original-notes.txt");
                     if (link !== undefined) {
-                        expect(await download(peer, childId, link.uri)).toEqual(resource);
+                        expect(await download(peer, childTarget, link.uri)).toEqual(resource);
                     }
                     const secondLink = links.find((content) => content.name === "second notes.txt");
                     expect.soft(secondLink).toBeDefined();
                     if (secondLink !== undefined) {
-                        expect(await download(peer, childId, secondLink.uri)).toEqual(secondResource);
+                        expect(await download(peer, childTarget, secondLink.uri)).toEqual(secondResource);
                     }
                     const images = chunks.flatMap((chunk) =>
                         chunk.content.type === "external_image" ? [chunk.content] : [],
@@ -119,7 +121,7 @@ test.each(["pi", "claude", "codex"] as const)(
                     const imageKey = createHash("sha256").update(image).digest("hex");
                     expect.soft(images).toContainEqual(expect.objectContaining({ imageKey, mimeType: "image/png" }));
                     if (images.some((content) => content.imageKey === imageKey)) {
-                        expect(await download(peer, childId, `morty-content:image:${imageKey}`)).toEqual(image);
+                        expect(await download(peer, childTarget, `morty-content:image:${imageKey}`)).toEqual(image);
                     }
                     expect(
                         chunks.some(
@@ -133,7 +135,7 @@ test.each(["pi", "claude", "codex"] as const)(
                         ...identity,
                         kind: "session.prompt",
                         commandId: randomUUID(),
-                        sessionId: childId,
+                        target: childTarget,
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         prompt: `Independent fork ${index}, reply without tools`,
@@ -141,7 +143,7 @@ test.each(["pi", "claude", "codex"] as const)(
                 );
                 await finish(peer);
             }
-            const original = await history(peer, peer.sessionId);
+            const original = await history(peer, peer.target);
             expect(
                 original.some(
                     (chunk) => chunk.content.type === "text" && chunk.content.text.includes("Independent fork"),
@@ -201,12 +203,11 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: peer.bindingId,
                     directoryId: "default",
                     kind: "native.session.request",
-                    sessionId: peer.sessionId,
+                    discoveryId: randomUUID(),
                     requestId,
                     action: "list",
                     cursor: null,
@@ -216,9 +217,9 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             if (listed.action !== "list") {
                 throw new Error("Expected native session list");
             }
-            const source = listed.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId));
+            const source = listed.entries.find((entry) => entry.sessionId === peer.target.sessionId);
             if (source !== undefined) {
-                return source;
+                return { ...source, discoveryId: listed.discoveryId };
             }
             if (watcher === undefined) {
                 throw new Error("Missing source Session");
@@ -234,7 +235,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
     }
 }
 
-async function history(peer: RealDaemonPeer, sessionId: string) {
+async function history(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]) {
     const requestId = randomUUID();
     peer.send(
         encodeSessionHistoryPageLoad({
@@ -242,7 +243,7 @@ async function history(peer: RealDaemonPeer, sessionId: string) {
             eventLimit: 100,
             kind: "session.live-history.v2.page.load",
             requestId,
-            sessionId,
+            target: sessionTarget,
         }),
     );
     for (;;) {
@@ -264,9 +265,15 @@ async function history(peer: RealDaemonPeer, sessionId: string) {
     }
 }
 
-async function download(peer: RealDaemonPeer, sessionId: string, path: string): Promise<Buffer> {
+async function download(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], path: string): Promise<Buffer> {
     peer.send(
-        encodeFileReadCommand({ kind: "file.read", maxBytes: 2_000_000, path, requestId: randomUUID(), sessionId }),
+        encodeFileReadCommand({
+            kind: "file.read",
+            maxBytes: 2_000_000,
+            path,
+            requestId: randomUUID(),
+            target: sessionTarget,
+        }),
     );
     const chunks: Buffer[] = [];
     for (;;) {

@@ -68,7 +68,6 @@ test.each(["foreground", "background"] as const)(
                     const commandId = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             bindingId: peer.bindingId,
                             commandId,
@@ -77,7 +76,7 @@ test.each(["foreground", "background"] as const)(
                             attachments: [],
                             kind: "session.prompt",
                             prompt: text,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             ...(text === "Start the gated command"
                                 ? {
                                       sessionConfigurations: [
@@ -105,7 +104,7 @@ test.each(["foreground", "background"] as const)(
                         kind: "session.cancel",
                         requestId: crypto.randomUUID(),
                         commandId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -155,7 +154,7 @@ test.each(["foreground", "background"] as const)(
                     encodeSessionHistoryPageLoad({
                         kind: "session.live-history.v2.page.load",
                         requestId: randomUUID(),
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         cursor: null,
                         eventLimit: 200,
                     }),

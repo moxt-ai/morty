@@ -9,7 +9,6 @@ import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
 import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
-import runtimeRelease from "../../cli/package.json" with { type: "json" };
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import { claimMortyState } from "../../local-state/src/ownership.ts";
 import worker from "../src/application.ts";
@@ -17,7 +16,7 @@ import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
 // Exercise the package-runner boundary, including the production argument prefix.
 async function writeNpxFixture(bin: string, body: string): Promise<void> {
-    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@morty-build/cli@${runtimeRelease.version}'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
+    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@morty-build/cli@latest'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
     if (process.platform === "win32") {
         const directory = join(bin, "node_modules", "npm", "bin");
         await mkdir(directory, { recursive: true });
@@ -84,18 +83,18 @@ type SavedReplacement =
 /** The saved setup state of a ready identity, in the representation setup writes. */
 function savedSetupState(
     origin: string,
-    identity: { readonly userId: string; readonly token: string; readonly projectId: string },
+    identity: { readonly userId: string; readonly token: string; readonly computerId: string },
     replacement: SavedReplacement = { kind: "unchanged" },
 ) {
     return JSON.stringify({
-        version: 1,
+        version: 2,
         base_url: origin,
         identity: {
             kind: "ready",
             user_id: identity.userId,
             user_token: identity.token,
-            project_id: identity.projectId,
-            unbound_runtime_id: null,
+            project_id: identity.computerId,
+            pairing: { kind: "none" },
             replacement,
         },
     });
@@ -140,11 +139,11 @@ test.each([
                     replacementState === "unknown"
                         ? previous
                         : v.parse(
-                              v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
+                              v.object({ userId: v.string(), computerId: v.string(), token: v.string() }),
                               await (
                                   await worker.fetch(
                                       new Request(
-                                          `${fixture.origin}/morty/api/projects/${previous.projectId}/management/project/replacement`,
+                                          `${fixture.origin}/morty/api/computers/${previous.computerId}/management/computer/replacement`,
                                           { method: "POST", headers: { authorization: `Bearer ${previous.token}` } },
                                       ),
                                       fixture.environment(fixture.origin),
@@ -159,7 +158,7 @@ test.each([
                         current,
                         replacementState === "unknown"
                             ? { kind: "unknown" }
-                            : { kind: "revoked", previous: { kind: "retired", project_id: previous.projectId } },
+                            : { kind: "revoked", previous: { kind: "retired", project_id: previous.computerId } },
                     ),
                     { mode: 0o600 },
                 );
@@ -236,7 +235,7 @@ test.each([
     },
 );
 
-test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as const)(
+test.each(["missing", "unlaunchable"] as const)(
     "Given a %s local dependency, When setup checks the Morty executable, Then it fails before creating an identity and reports recovery instructions",
     async (failure) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-preflight-"));
@@ -247,19 +246,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
         try {
             if (failure !== "missing") {
                 const entry = join(bin, "broken.mjs");
-                await writeFile(
-                    entry,
-                    failure === "unlaunchable"
-                        ? "await using = ;"
-                        : `import ${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)};`,
-                );
-                if (failure === "npm-unlaunchable") {
-                    await writeFile(
-                        join(bin, process.platform === "win32" ? "npm.cmd" : "npm"),
-                        process.platform === "win32" ? "@exit /b 42\r\n" : `#!${process.execPath}\nprocess.exit(42);\n`,
-                        { mode: 0o700 },
-                    );
-                }
+                await writeFile(entry, "await using = ;");
                 await writeNpxFixture(bin, `await import(${JSON.stringify(pathToFileURL(entry).href)});`);
             }
             let output = "";
@@ -321,7 +308,7 @@ test("Given a local workspace and a private state directory, When setup creates 
     await mkdir(bin);
     await writeNpxFixture(
         bin,
-        `if (process.argv[2] === "install") process.argv.splice(3, 2, "--archive", ${JSON.stringify(fileURLToPath(new URL(`../../../.release/morty-build-cli-${runtimeRelease.version}.tgz`, import.meta.url)))}); await import(${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+        `await import(${JSON.stringify(new URL("../../../packages/cli/dist/cli.js", import.meta.url).href)});`,
     );
     const runner = join(directory, "setup.mjs");
     await writeFile(
@@ -458,15 +445,15 @@ test.runIf(process.platform !== "win32")(
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
         const state =
             process.platform === "darwin"
-                ? join(directory, "Library", "Application Support", "Morty", "v2")
-                : join(directory, ".local", "state", "morty", "v2");
+                ? join(directory, "Library", "Application Support", "Morty", "v3")
+                : join(directory, ".local", "state", "morty", "v3");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
         const bin = join(directory, "bin");
         await mkdir(bin);
         await writeNpxFixture(
             bin,
-            `if (process.argv[2] === "install") process.argv.splice(3, 2, "--archive", ${JSON.stringify(fileURLToPath(new URL(`../../../.release/morty-build-cli-${runtimeRelease.version}.tgz`, import.meta.url)))}); await import(${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+            `await import(${JSON.stringify(new URL("../../../packages/cli/dist/cli.js", import.meta.url).href)});`,
         );
         const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
@@ -550,7 +537,7 @@ for (const [failure, scenario] of starterFailures) {
             const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
-                const runtime = await fixture.connectAgent(identity.projectId);
+                const runtime = await fixture.connectAgent(identity.computerId);
                 const request = async (path: string, body?: object) => {
                     const response = await fetch(`${fixture.origin}/morty/api/${path}`, {
                         method: body === undefined ? "GET" : "POST",
@@ -563,16 +550,15 @@ for (const [failure, scenario] of starterFailures) {
                 };
                 const { botId } = v.parse(
                     v.object({ botId: v.string() }),
-                    await request(`projects/${identity.projectId}/management/bot`),
+                    await request(`computers/${identity.computerId}/management/bot`),
                 );
-                await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
-                    runtimeId: runtime.runtimeId,
+                await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
+                    computerId: runtime.computerId,
                     agentRef: "codex",
                 });
                 await runtime.disconnect();
                 const connection = {
-                    app_id: fixture.baseConfiguration.MORTY_SERVICE_ID,
-                    runtime_id: runtime.runtimeId,
+                    computer_id: runtime.computerId,
                     connection_id: "managed-test-connection",
                 };
                 await writeFile(join(state, "config.json"), savedSetupState(fixture.origin, identity), {
@@ -895,7 +881,7 @@ async function setupMachine(
             paths.workspace,
             "--harness",
             run.harness ?? "settings-test",
-            ...(run.replaceProject === undefined ? [] : ["--replace-project", run.replaceProject]),
+            ...(run.replaceProject === undefined ? [] : ["--replace-computer", run.replaceProject]),
             ...(run.sessionArgument === null ? [] : ["--session-id", run.sessionArgument ?? "native-upgrade-project"]),
         ],
         {
@@ -1031,7 +1017,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect(redeemed.status).toBe(200);
         const browser = v.parse(v.object({ token: v.string() }), await redeemed.json());
         const session = async () =>
-            await fetch(`${paths.origin}/morty/api/projects/${config.project_id}/session`, {
+            await fetch(`${paths.origin}/morty/api/computers/${config.project_id}/session`, {
                 headers: { authorization: `Bearer ${browser.token}` },
                 signal: AbortSignal.timeout(10000),
             });
@@ -1045,7 +1031,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect(blocked.events.at(-1)).toMatchObject({
                 error: {
                     code: "PROJECT_REPLACEMENT_REQUIRED",
-                    replacement: { projectId: config.project_id, reason: "managed_runtime_missing" },
+                    replacement: { computerId: config.project_id, reason: "managed_runtime_missing" },
                 },
             });
             expect((await session()).status).toBe(200);
@@ -1055,10 +1041,10 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
         expect(approved.code, JSON.stringify(approved.events)).toBe(0);
         expect(approved.events).toContainEqual(
-            expect.objectContaining({ status: "replacement_access_revoked", previousProjectId: config.project_id }),
+            expect.objectContaining({ status: "replacement_access_revoked", previousComputerId: config.project_id }),
         );
         expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
-        const retired = await fetch(`${paths.origin}/morty/api/projects/${config.project_id}/session`, {
+        const retired = await fetch(`${paths.origin}/morty/api/computers/${config.project_id}/session`, {
             headers: { authorization: `Bearer ${config.user_token}` },
             signal: AbortSignal.timeout(10000),
         });
@@ -1076,7 +1062,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
         expect(stale.code).toBe(1);
         expect(stale.events.at(-1)).toMatchObject({
-            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { projectId: current.project_id } },
+            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { computerId: current.project_id } },
         });
     });
 });
@@ -1095,13 +1081,13 @@ test("Given an approved replacement request times out, When setup is retried wit
         });
         expect(uncertain.code).toBe(1);
         expect(uncertain.events.at(-1)).toMatchObject({
-            error: { replacementAccess: { kind: "unknown", previousProjectId: config.project_id } },
+            error: { replacementAccess: { kind: "unknown", previousComputerId: config.project_id } },
         });
         const retry = await setupMachine(runtime, paths);
         expect(retry.events.at(-1)).toMatchObject({
             error: {
                 code: "PROJECT_REPLACEMENT_REQUIRED",
-                replacementAccess: { kind: "unknown", previousProjectId: config.project_id },
+                replacementAccess: { kind: "unknown", previousComputerId: config.project_id },
             },
         });
         const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
@@ -1119,7 +1105,7 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
             v.looseObject({ identity: v.record(v.string(), v.unknown()) }),
             JSON.parse(await readFile(configPath, "utf8")),
         );
-        const projectId = v.parse(v.string(), config.identity["project_id"]);
+        const computerId = v.parse(v.string(), config.identity["project_id"]);
         // A previous run recorded its intent, but was interrupted before it could record the response.
         await writeFile(
             configPath,
@@ -1131,12 +1117,12 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
         expect(blocked.events.at(-1)).toMatchObject({
             error: {
                 code: "PROJECT_REPLACEMENT_REQUIRED",
-                replacement: { projectId, reason: "replacement_result_unknown" },
+                replacement: { computerId, reason: "replacement_result_unknown" },
                 replacementAccess: { kind: "unknown" },
             },
         });
         expect(blocked.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
-        expect((await setupMachine(runtime, paths, undefined, { replaceProject: projectId })).code).toBe(0);
+        expect((await setupMachine(runtime, paths, undefined, { replaceProject: computerId })).code).toBe(0);
     });
 });
 
@@ -1160,7 +1146,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
             expect(stopped.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
             expect(stopped.events.at(-1)).toMatchObject({
                 error: {
-                    replacementAccess: { kind: "revoked", previousProjectId: config.project_id, setupReady: false },
+                    replacementAccess: { kind: "revoked", previousComputerId: config.project_id, setupReady: false },
                 },
             });
 
@@ -1198,7 +1184,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
             v.object({ identity: v.record(v.string(), v.unknown()) }),
             JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
         );
-        expect(saved.identity).toMatchObject({ unbound_runtime_id: null });
+        expect(saved.identity).toMatchObject({ pairing: { kind: "none" } });
         expect(saved.identity).not.toHaveProperty("agent_ref");
 
         const rerun = await setupMachine(runtime, paths);
@@ -1208,7 +1194,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
     });
 });
 
-test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
+test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials, the local credential included, fail while the replacement setup saved and another machine remain usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-"));
     const configurationDirectory = join(directory, "state");
     await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
@@ -1219,14 +1205,14 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         const other = await fixture.createAnonymousUser();
         const configuration = savedSetupState(fixture.origin, owner);
         await writeFile(join(configurationDirectory, "config.json"), configuration, { mode: 0o600 });
-        const request = (projectId: string, path: string, token: string, method = "GET") =>
-            fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
+        const request = (computerId: string, path: string, token: string, method = "GET") =>
+            fetch(`${fixture.origin}/morty/api/computers/${computerId}${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}` },
                 signal,
             });
-        const share = async (projectId: string, token: string) => {
-            const response = await request(projectId, "/identity/transfers", token, "POST");
+        const share = async (computerId: string, token: string) => {
+            const response = await request(computerId, "/identity/transfers", token, "POST");
             expect(response.status).toBe(201);
             return v.parse(v.object({ url: v.string() }), await response.json()).url;
         };
@@ -1240,7 +1226,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 }),
                 fixture.environment(fixture.origin),
             );
-        const links = [await share(owner.projectId, owner.token), await share(owner.projectId, owner.token)];
+        const links = [await share(owner.computerId, owner.token), await share(owner.computerId, owner.token)];
         const tokens: string[] = [];
         for (const link of links) {
             const response = await redeem(link);
@@ -1248,13 +1234,22 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             tokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
         }
         const remote = v.parse(v.string(), tokens[0]);
-        const recovery = await request(owner.projectId, "/identity/recovery-token", owner.token, "POST");
+        const recovery = await request(owner.computerId, "/identity/recovery-token", owner.token, "POST");
         expect(recovery.status).toBe(201);
         const recoveryToken = v.parse(v.object({ token: v.string() }), await recovery.json()).token;
         for (const token of [remote, recoveryToken]) {
-            expect((await request(owner.projectId, "/identity/revoke-all-access", token, "POST")).status).toBe(403);
+            const refused = await fetch(
+                `${fixture.origin}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`,
+                {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                    body: JSON.stringify({ successor: `morty_anon_v1_${"A".repeat(43)}` }),
+                    signal,
+                },
+            );
+            expect(refused.status).toBe(403);
         }
-        const otherLink = await share(other.projectId, other.token);
+        const otherLink = await share(other.computerId, other.token);
         const mismatchEvents: Readonly<Record<string, unknown>>[] = [];
         expect(
             await runSetup(["revoke-all-access", "--base-url", "http://127.0.0.1:1"], {
@@ -1277,17 +1272,21 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: (event) => events.push(event),
             }),
         ).toBe(0);
-        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: owner.projectId });
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: owner.computerId });
+        const successor = (await savedIdentity(configurationDirectory)).user_token;
         expect(JSON.stringify(events)).not.toContain(owner.token);
+        expect(JSON.stringify(events)).not.toContain(successor);
         for (const link of links) {
             expect((await redeem(link)).status).toBe(410);
         }
-        for (const token of [...tokens, recoveryToken]) {
-            expect((await request(owner.projectId, "/session", token)).status).toBe(401);
-            expect((await request(owner.projectId, "/identity/transfers", token, "POST")).status).toBe(401);
+        for (const token of [...tokens, recoveryToken, owner.token]) {
+            expect((await request(owner.computerId, "/session", token)).status).toBe(401);
+            expect((await request(owner.computerId, "/identity/transfers", token, "POST")).status).toBe(401);
         }
-        expect(await readFile(join(configurationDirectory, "config.json"), "utf8")).toBe(configuration);
-        expect((await request(owner.projectId, "/session", owner.token)).status).toBe(200);
+        expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
+            JSON.parse(savedSetupState(fixture.origin, { ...owner, token: successor })),
+        );
+        expect((await request(owner.computerId, "/session", successor)).status).toBe(200);
         expect((await redeem(otherLink)).status).toBe(200);
         expect(
             await runSetup(["revoke-all-access", "--base-url", fixture.origin], {
@@ -1296,14 +1295,16 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: () => undefined,
             }),
         ).toBe(0);
-        expect((await redeem(await share(owner.projectId, owner.token))).status).toBe(200);
+        const replacedAgain = (await savedIdentity(configurationDirectory)).user_token;
+        expect((await request(owner.computerId, "/session", successor)).status).toBe(401);
+        expect((await redeem(await share(owner.computerId, replacedAgain))).status).toBe(200);
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
     }
 }, 30000);
 
-test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and the current identity stays usable", async () => {
+test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and only the replacement of the current identity setup saved opens the current one", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
     const configurationDirectory = join(directory, "state");
     await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
@@ -1311,16 +1312,16 @@ test("Given setup replaced the Project but stopped before ending the previous id
     const signal = AbortSignal.timeout(30000);
     try {
         const previous = await fixture.createAnonymousUser();
-        const request = (projectId: string, path: string, token: string, method = "GET") =>
-            fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
+        const request = (computerId: string, path: string, token: string, method = "GET") =>
+            fetch(`${fixture.origin}/morty/api/computers/${computerId}${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}` },
                 signal,
             });
-        const replaced = await request(previous.projectId, "/management/project/replacement", previous.token, "POST");
+        const replaced = await request(previous.computerId, "/management/computer/replacement", previous.token, "POST");
         expect(replaced.status).toBe(201);
         const current = v.parse(
-            v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
+            v.object({ userId: v.string(), computerId: v.string(), token: v.string() }),
             await replaced.json(),
         );
         // What setup saved before it stopped: the successor's identity, with the previous one still to end.
@@ -1328,11 +1329,11 @@ test("Given setup replaced the Project but stopped before ending the previous id
             join(configurationDirectory, "config.json"),
             savedSetupState(fixture.origin, current, {
                 kind: "revoked",
-                previous: { kind: "pending", project_id: previous.projectId, user_token: previous.token },
+                previous: { kind: "pending", project_id: previous.computerId, user_token: previous.token },
             }),
             { mode: 0o600 },
         );
-        expect((await request(previous.projectId, "/session", previous.token)).status).toBe(200);
+        expect((await request(previous.computerId, "/session", previous.token)).status).toBe(200);
 
         const events: Readonly<Record<string, unknown>>[] = [];
         const code = await runSetup(["revoke-all-access"], {
@@ -1342,19 +1343,75 @@ test("Given setup replaced the Project but stopped before ending the previous id
         });
         expect(code, JSON.stringify(events)).toBe(0);
 
-        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: current.projectId });
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: current.computerId });
         expect(JSON.stringify(events)).not.toContain(previous.token);
-        expect((await request(previous.projectId, "/session", previous.token)).status).toBe(401);
-        expect((await request(previous.projectId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
-        expect((await request(current.projectId, "/session", current.token)).status).toBe(200);
+        expect((await request(previous.computerId, "/session", previous.token)).status).toBe(401);
+        expect((await request(previous.computerId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
+        const successor = (await savedIdentity(configurationDirectory)).user_token;
+        expect((await request(current.computerId, "/session", current.token)).status).toBe(401);
+        expect((await request(current.computerId, "/session", successor)).status).toBe(200);
         expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
             JSON.parse(
-                savedSetupState(fixture.origin, current, {
-                    kind: "revoked",
-                    previous: { kind: "retired", project_id: previous.projectId },
-                }),
+                savedSetupState(
+                    fixture.origin,
+                    { ...current, token: successor },
+                    {
+                        kind: "revoked",
+                        previous: { kind: "retired", project_id: previous.computerId },
+                    },
+                ),
             ),
         );
+    } finally {
+        await fixture.close();
+        await rm(directory, { recursive: true, force: true });
+    }
+}, 30000);
+
+test("Given the reply to revoking all access was lost after the Worker replaced the local credential, When the user revokes all access again, Then setup keeps the successor it saved and the earlier credential stays revoked", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-retry-"));
+    const configurationDirectory = join(directory, "state");
+    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
+    const fixture = await createIdentityFixture();
+    const signal = AbortSignal.timeout(30000);
+    try {
+        const owner = await fixture.createAnonymousUser();
+        const successor = `morty_anon_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
+        // What setup saved before the request whose reply was lost.
+        const saved = JSON.parse(savedSetupState(fixture.origin, owner));
+        saved.identity.credential_rotation = { successor_token: successor };
+        await writeFile(join(configurationDirectory, "config.json"), JSON.stringify(saved), { mode: 0o600 });
+        const session = (token: string) =>
+            fetch(`${fixture.origin}/morty/api/computers/${owner.computerId}/session`, {
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const lost = await fetch(
+            `${fixture.origin}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`,
+            {
+                method: "POST",
+                headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ successor }),
+                signal,
+            },
+        );
+        expect(lost.status).toBe(200);
+        expect((await session(owner.token)).status).toBe(401);
+
+        const events: Readonly<Record<string, unknown>>[] = [];
+        const code = await runSetup(["revoke-all-access"], {
+            state: configurationDirectory,
+            signal,
+            emit: (event) => events.push(event),
+        });
+        expect(code, JSON.stringify(events)).toBe(0);
+
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: owner.computerId });
+        expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
+            JSON.parse(savedSetupState(fixture.origin, { ...owner, token: successor })),
+        );
+        expect((await session(successor)).status).toBe(200);
+        expect((await session(owner.token)).status).toBe(401);
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });

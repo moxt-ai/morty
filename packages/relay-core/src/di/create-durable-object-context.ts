@@ -19,7 +19,7 @@ export function createDurableObjectContext(
         readonly notifications?: SessionStatusNotifications;
     },
 ) {
-    applyDurableObjectMigrations(state.storage, runtimeConnectionDurableObjectMigrations);
+    applyDurableObjectMigrations(state.storage, runtimeConnectionDurableObjectMigrations, "connections/");
     return createDurableObjectDependencies({
         doDatabase: options.doDatabase ?? new DurableObjectSqlDatabase(state.storage),
         storages: {

@@ -98,7 +98,7 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
     const url = new URL(path, window.location.origin);
     url.searchParams.set(
         "identity",
-        encodeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId }),
+        encodeIdentityScope({ botId: identity.botId, computerId: identity.computerId, userId: identity.userId }),
     );
     return url;
 }
@@ -143,7 +143,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             const chat = new BotChatApi({
                 fetchRequest,
                 origin: window.location.origin,
-                projectId: identity.projectId,
+                computerId: identity.computerId,
                 // The access this browser holds: another tab may have replaced the one this link issued.
                 getToken: async () => storedToken(identity.userId) ?? identity.token,
                 replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
@@ -161,8 +161,8 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             set({
                 diagnostics: {
                     botId: identity.botId,
-                    sessionId: null,
-                    nativeSessionId: handoff.sessionId,
+                    harness: handoff.harness,
+                    sessionId: handoff.sessionId,
                     read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
                     readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
                 },
@@ -175,7 +175,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 signal.throwIfAborted();
                 saveLastCwdPreference(
                     identity.botId,
-                    configuration.runtime.runtimeId,
+                    configuration.runtime.computerId,
                     handoff.harness,
                     directory.directoryId,
                 );
@@ -195,12 +195,13 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 );
                 if (!visited) {
                     centralSessionStorage.write(
-                        sessionWelcomeEntry(identity.botId, session.result.ready.sessionId),
+                        sessionWelcomeEntry(identity.botId, session.result.ready.target),
                         "pending",
                     );
                 }
                 const destination = identityDestination("/chat", identity);
-                destination.searchParams.set("sessionId", session.result.ready.sessionId);
+                destination.searchParams.set("harness", session.result.ready.agentId);
+                destination.searchParams.set("sessionId", session.entry.sessionId);
                 window.location.replace(destination);
             } catch (cause) {
                 if (signal.aborted) {
@@ -279,14 +280,14 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     // to its Project. Validate only the explicit scope, or a remembered
                     // scope for this exact Project when the old link has no scope.
                     if (cause instanceof IdentityApiError && cause.code === "TRANSFER_UNAVAILABLE") {
-                        const projectId = transferCodeProject(state.code);
+                        const computerId = transferCodeProject(state.code);
                         const explicit = readIdentityScope();
                         const scopes = hasIdentityScope()
                             ? explicit === null
                                 ? []
                                 : [explicit]
                             : rememberedComputers().map((computer) => computer.scope);
-                        const matching = scopes.filter((scope) => scope.projectId === projectId);
+                        const matching = scopes.filter((scope) => scope.computerId === computerId);
                         const visited = new Set<string>();
                         try {
                             for (const scope of matching) {

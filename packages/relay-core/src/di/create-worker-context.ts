@@ -1,6 +1,6 @@
 import type { ChannelGateway } from "../gateway/channel-gateway.ts";
 import type { ProjectAccessAuthorizer } from "../gateway/project-access-authorizer.ts";
-import type { ProjectApplicationResolver } from "../infra/project-application-resolver.ts";
+import type { MachineAccountDirectory } from "../infra/machine-account-directory.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.ts";
 import type { LocalSessionOperations } from "../service/channel/local-session-operations.ts";
@@ -12,7 +12,7 @@ export interface WorkerRuntimeGateways {
 }
 
 export function createWorkerContext(options: {
-    readonly applications: ProjectApplicationResolver;
+    readonly applications: MachineAccountDirectory;
     readonly authorization: ProjectAccessAuthorizer;
     readonly stores: ProjectStoreResolver;
     readonly identityStores: readonly ProjectStore[];
@@ -25,7 +25,7 @@ export function createWorkerContext(options: {
         config: { apiPrefix: options.apiPrefix },
         stores: options.stores,
         identityStores: options.identityStores,
-        projectApplications: options.applications,
+        machineAccounts: options.applications,
         projects: options.projects,
         logger: console,
         gateways: {

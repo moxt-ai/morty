@@ -281,6 +281,48 @@
             "when": 1794156583354,
             "tag": "0051_key_project_mapping_by_owner",
             "breakpoints": true
+        },
+        {
+            "idx": 52,
+            "version": "6",
+            "when": 1794192631784,
+            "tag": "0052_keep_one_machine_per_identity",
+            "breakpoints": true
+        },
+        {
+            "idx": 53,
+            "version": "6",
+            "when": 1794192640739,
+            "tag": "0053_machine_keyed_by_owner",
+            "breakpoints": true
+        },
+        {
+            "idx": 54,
+            "version": "6",
+            "when": 1794198150210,
+            "tag": "0054_machine_ownership",
+            "breakpoints": true
+        },
+        {
+            "idx": 55,
+            "version": "6",
+            "when": 1794201285355,
+            "tag": "0055_drop_machine_instructions",
+            "breakpoints": true
+        },
+        {
+            "idx": 56,
+            "version": "6",
+            "when": 1794208946048,
+            "tag": "0056_computer_authorization",
+            "breakpoints": true
+        },
+        {
+            "idx": 57,
+            "version": "6",
+            "when": 1794213579583,
+            "tag": "0057_elite_dexter_bennett",
+            "breakpoints": true
         }
     ]
 }

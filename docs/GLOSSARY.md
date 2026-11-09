@@ -12,6 +12,8 @@ Morty owns its browser application, local Runtime and internal cloud services.
 This glossary describes their authorization and ownership boundaries. For
 user-facing behavior, start with the [usage guide](GUIDE.md).
 
+A computer in the switcher is a machine account this browser remembers. Switching follows that account’s URL and loads its own credentials and conversation. The Relay and Web protocols call its routing and authorization scope a Project. The database stores the machine account and its grants directly.
+
 ## How the main concepts relate
 
 ```text
@@ -160,10 +162,12 @@ versus a **Native Session** owned by the Agent.
 
 ### Native Session entry
 
-A discovery result representing one Agent-owned conversation in a particular
-workspace. Its entry ID is an opaque handle for the current discovery operation,
-not a conversation identity. Refreshing the directory can produce a new discovery
-context, so stale entries must not authorize later operations.
+A discovery result describing one Agent-owned conversation in a particular
+workspace, identified by its harness and harness-owned Session ID. Discovery is
+not an authorization grant: opening or forking a conversation resolves its current
+metadata and authorizes its directories locally, without requiring an earlier
+listing or a process-local discovery handle. Pairing authorizes the Computer;
+requests do not carry an additional workspace binding identity.
 
 ### Open / import
 
@@ -189,16 +193,16 @@ must not automatically start another fork.
 Fork is a capability, not a fallback implementation for import. If the Agent cannot
 fork reliably, Morty must report that limitation rather than simulate success.
 
-### Discovery handles and Native Session identity
+### Session identity
 
-- A **Session entry ID** selects an item returned by native-session discovery.
-- A **Native Session ID** identifies the Agent-owned conversation and is also the
-  identity Morty uses for its established conversation and execution scope.
+The harness-owned **Session ID**, together with the harness on the selected
+Computer, identifies the conversation for discovery and subsequent operations.
+Morty does not assign an additional Session entry identity or conversation ID.
 
-Native identity must be scoped by Project, Runtime, and Agent. Neither a native
-identity nor a discovery handle replaces validation and authorization at the local
-execution boundary. Request and operation identities track pending work and
-recovery, not separate conversations.
+Native identity must be scoped by Project, Runtime, and Agent. A native identity
+does not replace validation and authorization at the local execution boundary.
+Request and operation identities track pending work and recovery, not separate
+conversations.
 
 ### History
 

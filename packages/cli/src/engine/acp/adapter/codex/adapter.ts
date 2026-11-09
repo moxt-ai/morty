@@ -16,9 +16,14 @@ import type {
     NativeSessionQuery,
     SessionEventPage,
 } from "../../native-history/preview-contract.ts";
-import { nativeSessionIdSchema } from "../../protocol/native-session.ts";
+import { sessionIdSchema } from "../../protocol/native-session.ts";
 import { AcpExecutionConnections } from "../execution-connections.ts";
-import { createdNativeSessionId, normalizeOpenedSession, sessionWorkspace } from "../lifecycle-output.ts";
+import {
+    createdSessionId,
+    normalizeOpenedSession,
+    sessionCreationResponse,
+    sessionWorkspace,
+} from "../lifecycle-output.ts";
 import { findNativeSession } from "../native-session-lookup.ts";
 import { openPreviewEventCache, type PreviewEventCache } from "../preview-event-cache.ts";
 import { AgentQueryProcesses } from "../query-processes.ts";
@@ -49,11 +54,11 @@ export class CodexAdapter implements Adapter {
         this.#agent = agent;
         this.#dependencies = dependencies;
         this.#contentExternalizer = {
-            update: async (sessionId, update, signal) => {
+            update: async (sessionTarget, update, signal) => {
                 signal.throwIfAborted();
                 const prepared = prepareCodexToolUpdate(update);
                 signal.throwIfAborted();
-                return await dependencies.contentExternalizer.update(sessionId, prepared, signal);
+                return await dependencies.contentExternalizer.update(sessionTarget, prepared, signal);
             },
         };
         this.#connector = new AcpSessionConnector(this.#contentExternalizer, fitCodexToolEvent);
@@ -74,7 +79,8 @@ export class CodexAdapter implements Adapter {
                   ...params,
                   scope: {
                       ...params.scope,
-                      externalizeUpdate: (update, signal) => externalize(prepareCodexToolUpdate(update), signal),
+                      externalizeUpdate: (sessionId, update, signal) =>
+                          externalize(sessionId, prepareCodexToolUpdate(update), signal),
                   },
               };
     };
@@ -82,16 +88,19 @@ export class CodexAdapter implements Adapter {
     readonly createSession: Adapter["createSession"] = (params) =>
         this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
             const { connection } = execution;
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(methods.agent.session.new, sessionWorkspace(params.scope), {
-                    cancellationSignal: signal,
-                }),
-                "ACP agent exited while starting a session",
+            const response: unknown = await sessionCreationResponse(
+                connection.race(
+                    connection.connection.agent.request(methods.agent.session.new, sessionWorkspace(params.scope), {
+                        cancellationSignal: signal,
+                    }),
+                    "ACP agent exited while starting a session",
+                    signal,
+                ),
                 signal,
             );
-            const nativeSessionId = createdNativeSessionId(response);
-            this.#executionConnections.bind(execution, nativeSessionId);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            const sessionId = createdSessionId(response);
+            this.#executionConnections.bind(execution, sessionId);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly forkSession: Adapter["forkSession"] = (params) =>
         this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
@@ -101,43 +110,43 @@ export class CodexAdapter implements Adapter {
                     methods.agent.session.fork,
                     {
                         ...sessionWorkspace(params.scope),
-                        sessionId: nativeSessionIdSchema.parse(params.sourceNativeSessionId),
+                        sessionId: sessionIdSchema.parse(params.sourceSessionId),
                     },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited while forking a session",
                 signal,
             );
-            const nativeSessionId = createdNativeSessionId(response);
-            this.#executionConnections.bind(execution, nativeSessionId);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            const sessionId = createdSessionId(response);
+            this.#executionConnections.bind(execution, sessionId);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly openSession: Adapter["openSession"] = (params) =>
         this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
             const { connection } = execution;
-            const nativeSessionId = nativeSessionIdSchema.parse(params.nativeSessionId);
-            this.#executionConnections.bind(execution, nativeSessionId);
+            const sessionId = sessionIdSchema.parse(params.sessionId);
+            this.#executionConnections.bind(execution, sessionId);
             const response: unknown = await connection.race(
                 connection.connection.agent.request(
                     methods.agent.session.resume,
-                    { ...sessionWorkspace(params.scope), sessionId: nativeSessionId },
+                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited while resuming a session",
                 signal,
             );
             this.#recordTurnOwnership(connection, response);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) =>
         this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
             const { connection } = execution;
-            const nativeSessionId = nativeSessionIdSchema.parse(params.nativeSessionId);
-            this.#executionConnections.bind(execution, nativeSessionId);
+            const sessionId = sessionIdSchema.parse(params.sessionId);
+            this.#executionConnections.bind(execution, sessionId);
             const response: unknown = await connection.race(
                 connection.connection.agent.request(
                     methods.agent.session.load,
-                    { ...sessionWorkspace(params.scope), sessionId: nativeSessionId },
+                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited while loading a session",
@@ -145,7 +154,7 @@ export class CodexAdapter implements Adapter {
             );
             await connection.race(connection.events.drained(), "ACP agent exited while loading a session", signal);
             this.#recordTurnOwnership(connection, response);
-            return normalizeOpenedSession(execution, nativeSessionId, response, signal);
+            return normalizeOpenedSession(execution, sessionId, response, signal);
         });
     readonly cancel: Adapter["cancel"] = async (params) => {
         const connection = this.#executionConnections.connection(params);
@@ -180,8 +189,8 @@ export class CodexAdapter implements Adapter {
         this.#executionConnections.configureSession(...args);
     readonly listSessions: Adapter["listSessions"] = async ({ query, cursor }) =>
         await this.#queryProcesses.listNativeSessions(query, cursor);
-    readonly findSession: Adapter["findSession"] = ({ query, nativeSessionId, budget }) =>
-        findNativeSession(this.listSessions, query, nativeSessionId, budget);
+    readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
+        findNativeSession(this.listSessions, query, sessionId, budget);
     readonly close = async (): Promise<void> => {
         await runCleanup(
             () => this.#queryProcesses.close(),
@@ -196,9 +205,9 @@ export class CodexAdapter implements Adapter {
     }): Promise<SessionEventPage> => {
         const { agent, cwd } = query;
         const signal = AbortSignal.any([query.signal, AbortSignal.timeout(60_000)]);
-        const sessionId = request.nativeSessionId;
+        const target = { harness: agent.id, sessionId: request.sessionId };
         signal.throwIfAborted();
-        nativeSessionIdSchema.parse(request.nativeSessionId);
+        sessionIdSchema.parse(request.sessionId);
         if (agent.id !== "codex") {
             throw new AcpExecutionError(
                 "The Codex adapter cannot preview history for another agent.",
@@ -245,12 +254,16 @@ export class CodexAdapter implements Adapter {
                 await client.initialize(signal);
                 return await replayCodexHistory(
                     client,
-                    request.nativeSessionId,
+                    request.sessionId,
                     async (update) => {
                         const externalized =
                             query.externalizeUpdate === undefined
-                                ? await this.#contentExternalizer.update(sessionId, update, signal)
-                                : await query.externalizeUpdate(prepareCodexToolUpdate(update), signal);
+                                ? await this.#contentExternalizer.update(target, update, signal)
+                                : await query.externalizeUpdate(
+                                      request.sessionId,
+                                      prepareCodexToolUpdate(update),
+                                      signal,
+                                  );
                         for (const event of externalized.events) {
                             events.push({
                                 type: "acp",
@@ -266,11 +279,11 @@ export class CodexAdapter implements Adapter {
             async (runtime) => await runtime.closeProcess(),
         );
         const generationId = createHash("sha256")
-            .update(request.nativeSessionId)
+            .update(request.sessionId)
             .update("\0")
             .update(JSON.stringify(events))
             .digest("hex");
-        this.#previewCache.events.materialize(sessionId, generationId, events);
-        return this.#previewCache.events.page(sessionId, request.eventLimit, request.cursor);
+        this.#previewCache.events.materialize(target, generationId, events);
+        return this.#previewCache.events.page(target, request.eventLimit, request.cursor);
     };
 }

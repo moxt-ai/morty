@@ -43,14 +43,14 @@ test("Given real Pi creates a session containing an SVG file, When a remote clie
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="orange"/></svg>';
         await writeFile(join(peer.workspace, "picture.svg"), svg);
-        const sessionId = await prepareNewRealSession(peer, "pi");
+        const sessionTarget = await prepareNewRealSession(peer, "pi");
         peer.send(
             encodeFileReadCommand({
                 kind: "file.read",
                 maxBytes: 4096,
                 path: "picture.svg",
                 requestId: "read-svg",
-                sessionId,
+                target: sessionTarget,
             }),
         );
         const chunks: Buffer[] = [];

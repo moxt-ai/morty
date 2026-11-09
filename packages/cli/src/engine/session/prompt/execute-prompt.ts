@@ -4,7 +4,7 @@ import { operationErrorCode, operationErrorMessage } from "../../infra/operation
 import type { ReportFailure, ResolveAgent } from "../api/session-api.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import type { PromptDispatch } from "../turn/active-turn.ts";
-import { resolveSessionDirectories } from "../workspace/resolve-session-directories.ts";
+import { resolveSessionDirectory } from "../workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import { agentForSessionConfiguration, applyCompleteSessionConfiguration } from "./apply-session-configuration.ts";
 import { PromptArtifactError, type ReadPromptArtifact, resolvePromptArtifacts } from "./prompt-artifacts.ts";
@@ -46,22 +46,16 @@ export async function executePrompt({
     cancellationRequested,
 }: ExecutePromptOptions): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectories(
-            directories,
-            command.bindingId,
-            command.directoryId,
-            command.additionalDirectoryIds,
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(directories, command.bindingId, command.directoryId, signal);
         const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(
             command.agentId,
             signal,
-            command.sessionId,
+            command.target,
         );
         const dispatch = await waitForSessionAdmission(signal);
         // A steering prompt joins an execution the Agent already holds. Check before preparing, so a steer can never
         // replace or reconfigure the process an admitted prompt is still preparing.
-        if (dispatch.kind === "steer" && !sessions.acceptsSteering(command.sessionId, dispatch.targetCommandId)) {
+        if (dispatch.kind === "steer" && !sessions.acceptsSteering(command.target, dispatch.targetCommandId)) {
             throw new AcpExecutionError("The steering target is unavailable", {}, "steering_target_unavailable");
         }
         const appliedSettings =
@@ -74,10 +68,9 @@ export async function executePrompt({
         const preparation = {
             adapter,
             ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-            additionalDirectories: resolved.additionalDirectories,
             agent: executionAgent,
             cwd: resolved.cwd,
-            sessionId: command.sessionId,
+            target: command.target,
             signal,
             recovery,
         };
@@ -95,15 +88,14 @@ export async function executePrompt({
                 executionAgent,
                 adapter,
                 resolved.cwd,
-                resolved.additionalDirectories,
                 command.commandId,
-                command.sessionId,
+                command.target,
                 signal,
             );
             prepared = await sessions.prepareExecutionSession(preparation);
         }
         signal.throwIfAborted();
-        const lifecycle = eventProjection.lifecycle(command.sessionId, command.commandId, attemptId, epoch, dispatch);
+        const lifecycle = eventProjection.lifecycle(command.target, command.commandId, attemptId, epoch, dispatch);
         const attachments = await resolvePromptArtifacts(readArtifact, command.attachments, signal);
         const skipped = command.attachments.length - attachments.images.length - attachments.resources.length;
         if (skipped > 0) {
@@ -121,7 +113,6 @@ export async function executePrompt({
             await sessions.steerPrompt({
                 adapter,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-                additionalDirectories: resolved.additionalDirectories,
                 agent: executionAgent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,
@@ -129,7 +120,7 @@ export async function executePrompt({
                 lifecycle,
                 prompt: command.prompt,
                 resources: attachments.resources,
-                sessionId: command.sessionId,
+                target: command.target,
                 signal,
                 targetCommandId: dispatch.targetCommandId,
             });
@@ -139,7 +130,6 @@ export async function executePrompt({
                 adapter,
                 cancellationRequested,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-                additionalDirectories: resolved.additionalDirectories,
                 agent: executionAgent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,
@@ -147,17 +137,17 @@ export async function executePrompt({
                 lifecycle,
                 prompt: command.prompt,
                 resources: attachments.resources,
-                sessionId: command.sessionId,
+                target: command.target,
                 signal,
                 recovery,
             });
             stopReason = result.stopReason;
         }
 
-        await eventProjection.completed(command.sessionId, command.commandId, stopReason);
+        await eventProjection.completed(command.target, command.commandId, stopReason);
     } catch (error) {
         if (signal.aborted && cancellationRequested()) {
-            await eventProjection.completed(command.sessionId, command.commandId, "cancelled");
+            await eventProjection.completed(command.target, command.commandId, "cancelled");
             return;
         }
         const code = operationErrorCode(error);
@@ -166,7 +156,7 @@ export async function executePrompt({
             code === "session_operation_failed"
                 ? "The local agent could not complete the request"
                 : operationErrorMessage(error);
-        await eventProjection.failed(command.sessionId, command.commandId, attemptId, failureCode, failureMessage);
+        await eventProjection.failed(command.target, command.commandId, attemptId, failureCode, failureMessage);
         // The daemon runs detached with its stdio ignored, so a failure recorded
         // only here would leave no trace for a later bug report. The local log is
         // the durable copy; the in-band failure event above stays the live signal.
@@ -180,7 +170,7 @@ export async function executePrompt({
             agentId: command.agentId,
             code: failureCode,
             commandId: command.commandId,
-            sessionId: command.sessionId,
+            sessionId: command.target.sessionId,
         });
         console.error("Morty daemon command failed", error);
     }

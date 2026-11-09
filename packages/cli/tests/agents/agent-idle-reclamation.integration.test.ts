@@ -16,7 +16,7 @@ import { CodexAgentSpecification } from "../../src/engine/agent/specification/ve
 import { ClaudeFixture } from "../support/agents/claude.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { waitForAgentFile, writeObservedAgentLauncher } from "../support/agents/observed-process.ts";
-import { prepareNewRealSession, type RealDaemonPeer, withRealDaemon } from "../support/agents/real-daemon.ts";
+import { type RealDaemonPeer, withRealDaemon } from "../support/agents/real-daemon.ts";
 import { IdleTimeoutTimer } from "../support/idle-timeout-timer.ts";
 import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
@@ -46,8 +46,8 @@ test.each(["codex", "claude"] as const)(
                 agentId === "codex" ? new CodexAgentSpecification() : new ClaudeCodeAgentSpecification(),
                 { ...agent.environment, [agentId === "codex" ? "MORTY_CODEX_PATH" : "MORTY_CLAUDE_PATH"]: launcher },
                 async (peer) => {
-                    const sessionId = await prepareNewRealSession(peer, agentId);
-                    await prompt(peer, agentId, sessionId, "Remember ORIGINAL_BEFORE_IDLE and reply without tools");
+                    const sessionTarget = peer.target;
+                    await prompt(peer, agentId, sessionTarget, "Remember ORIGINAL_BEFORE_IDLE and reply without tools");
                     const retained = (await readdir(processes)).filter((name) => name.endsWith(".process"));
                     expect(retained).toHaveLength(1);
                     const original = retained[0];
@@ -65,11 +65,10 @@ test.each(["codex", "claude"] as const)(
                             kind: "native.session.request",
                             action: "list",
                             requestId: crypto.randomUUID(),
-                            sessionId: "idle-recovery-browser",
+                            discoveryId: "idle-recovery-browser",
                             agentId,
                             bindingId: peer.bindingId,
                             directoryId: "default",
-                            additionalDirectoryIds: [],
                             cursor: null,
                         }),
                     );
@@ -80,12 +79,12 @@ test.each(["codex", "claude"] as const)(
                             throw new Error(message);
                         }
                         if (kind === "native.session.result") {
-                            expect(message).toContain(sessionId);
+                            expect(message).toContain(sessionTarget.sessionId);
                             break;
                         }
                     }
                     const readers = (await readdir(processes)).filter((name) => name.endsWith(".process"));
-                    await prompt(peer, agentId, sessionId, "Continue AFTER_IDLE_RECOVERY without tools");
+                    await prompt(peer, agentId, sessionTarget, "Continue AFTER_IDLE_RECOVERY without tools");
                     const resumed = (await readdir(processes)).filter((name) => name.endsWith(".process"));
                     expect(resumed).toHaveLength(readers.length + 1);
                     expect(resumed).toEqual(expect.arrayContaining(readers));
@@ -94,7 +93,7 @@ test.each(["codex", "claude"] as const)(
                         encodeSessionHistoryPageLoad({
                             kind: "session.live-history.v2.page.load",
                             requestId: crypto.randomUUID(),
-                            sessionId,
+                            target: sessionTarget,
                             cursor: null,
                             eventLimit: 200,
                         }),
@@ -127,17 +126,21 @@ test.each(["codex", "claude"] as const)(
     },
 );
 
-async function prompt(peer: RealDaemonPeer, agentId: string, sessionId: string, text: string): Promise<void> {
+async function prompt(
+    peer: RealDaemonPeer,
+    agentId: string,
+    sessionTarget: RealDaemonPeer["target"],
+    text: string,
+): Promise<void> {
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
             kind: "session.prompt",
             commandId,
-            sessionId,
+            target: sessionTarget,
             agentId,
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
             attachments: [],
             prompt: text,
             disposition: SessionPromptDisposition.Append,

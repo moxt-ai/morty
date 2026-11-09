@@ -58,7 +58,6 @@ export const nativeMetadata = new Map<
     string,
     {
         readonly cwd: string;
-        readonly additionalDirectories: readonly string[];
         readonly title: string;
     }
 >();
@@ -164,17 +163,10 @@ export function readPersistedState(sessionId: string): ControlledSessionState {
     const mode = Reflect.get(decoded, "mode");
     const cwd = Reflect.get(decoded, "cwd");
     const title = Reflect.get(decoded, "title");
-    const additional = Reflect.get(decoded, "additionalDirectories");
-    if (
-        typeof cwd === "string" &&
-        typeof title === "string" &&
-        Array.isArray(additional) &&
-        additional.every((value): value is string => typeof value === "string")
-    ) {
+    if (typeof cwd === "string" && typeof title === "string") {
         nativeMetadata.set(sessionId, {
             cwd,
             title,
-            additionalDirectories: additional,
         });
     }
     if (

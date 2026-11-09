@@ -51,21 +51,20 @@ export function createPlatformControlApplication() {
         )
         .use("*", createBrowserCors(["GET", "POST"], ["authorization", "content-type"]))
         .get("/health", (context) => context.json({ service: "morty-relay", status: "ok" }))
-        .get("/v1/projects/:projectId/storage-placement", (context) =>
+        .get("/v1/computers/:computerId/storage-placement", (context) =>
             context.json(
-                context.env.control.resolveProjectPlacement(path(context.req.param("projectId")), context.var.signal),
+                context.env.control.resolveProjectPlacement(path(context.req.param("computerId")), context.var.signal),
             ),
         )
         .post(
-            "/v1/apps/:appId/projects",
+            "/v1/machine-accounts",
             bodyParser(createProjectBody),
             authenticateWith(appCredentialAuthentication),
             async (context) => {
                 const value = context.req.valid("json");
                 return context.json(
-                    await context.env.control.provisionAppProject(
+                    await context.env.control.provisionMachineAccount(
                         context.var.principal,
-                        path(context.req.param("appId")),
                         value.displayName,
                         value.idempotencyKey,
                         value.clientReference,

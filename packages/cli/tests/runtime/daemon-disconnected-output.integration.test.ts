@@ -3,15 +3,19 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentConnection, agent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionHistoryPageLoaded,
     decodeSessionPreviewHistoryPageLoaded,
+    decodeSessionReadyEvent,
+    encodeSessionCreateCommand,
     encodeSessionHistoryPageLoad,
     encodeSessionPreviewHistoryPageLoad,
     encodeSessionPromptCommand,
     encodeWorkspaceListCommand,
+    type NativeSessionTarget,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     SESSION_EVENT_BATCH_MAX_SIZE,
@@ -30,6 +34,7 @@ import { RuntimeTurnActivity } from "../../src/engine/session/turn/runtime-turn-
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 // Failure modes exercised through the production daemon and its real WebSocket transport:
 // - a disconnect discards a batch whose delivery timer has not fired;
@@ -238,9 +243,9 @@ class RelayPeer {
     };
 }
 
-function answer(events: readonly SessionLiveEvent[], sessionId: string): string {
+function answer(events: readonly SessionLiveEvent[], sessionTarget: NativeSessionTarget): string {
     return events
-        .filter((event) => event.sessionId === sessionId)
+        .filter((event) => sameNativeSession(event.target, sessionTarget))
         .map((event) =>
             event.type === "acp" &&
             event.payload.sessionUpdate === "agent_message_chunk" &&
@@ -277,9 +282,10 @@ async function startRuntime() {
     const activity = new RuntimeTurnActivity();
     const config = createRuntimeConfig(
         {
-            channelId: "disconnected-output",
+            computerId: "disconnected-output",
             defaultWorkspace: workspace,
-            relayUrl: new URL(`ws://127.0.0.1:${port(http).toString()}/daemon?token=${"r".repeat(43)}`),
+            relayUrl: new URL(`ws://127.0.0.1:${port(http).toString()}/daemon`),
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
         },
         [
             new AcpAgentDefinition(
@@ -316,22 +322,43 @@ async function startRuntime() {
         producer,
         timer,
         nextPeer,
-        prompt: async (peer: RelayPeer, sessionId: string): Promise<ControlledTurn> => {
+        prompt: async (
+            peer: RelayPeer,
+            label: string,
+        ): Promise<ControlledTurn & { readonly sessionTarget: NativeSessionTarget }> => {
             peer.socket.send(
-                encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
+                encodeSessionCreateCommand({
+                    kind: "session.create",
+                    requestId: crypto.randomUUID(),
+                    operationId: crypto.randomUUID(),
                     agentId: "controlled",
                     bindingId: config.bindingId,
-                    commandId: `command-${sessionId}`,
+                    directoryId: "default",
+                    configurations: [],
+                }),
+            );
+            let created = await peer.next();
+            while (decodeMessageKind(created) !== "session.ready") {
+                if (decodeMessageKind(created) === "session.operation.failed") {
+                    throw new Error(created);
+                }
+                created = await peer.next();
+            }
+            const sessionTarget = decodeSessionReadyEvent(created).target;
+            peer.socket.send(
+                encodeSessionPromptCommand({
+                    agentId: "controlled",
+                    bindingId: config.bindingId,
+                    commandId: `command-${label}`,
                     directoryId: "default",
                     disposition: "append",
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Finish the reply while the network is disconnected",
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
-            return await producer.nextTurn();
+            return { ...(await producer.nextTurn()), sessionTarget };
         },
         /** Stops the daemon and starts it again on the same state, returning its first Relay connection. */
         restart: async (): Promise<RelayPeer> => {
@@ -440,7 +467,7 @@ test.each([
         runtime.initial.socket.send(
             encodeSessionHistoryPageLoad({
                 kind: "session.live-history.v2.page.load",
-                sessionId: "reasoning-history",
+                target: turn.sessionTarget,
                 requestId: "reasoning-history-page",
                 cursor: null,
                 eventLimit: 50,
@@ -509,12 +536,11 @@ test.each([
         }
         runtime.initial.socket.send(
             encodeSessionPreviewHistoryPageLoad({
-                additionalDirectoryIds: [],
                 agentId: "controlled",
                 bindingId: runtime.bindingId,
                 directoryId: "default",
                 kind: "session.preview-history.page.load",
-                sessionId: nativeThought.payload.messageId,
+                target: { harness: "controlled", sessionId: nativeThought.payload.messageId },
                 requestId: "reasoning-native-preview",
                 cursor: null,
                 eventLimit: 50,
@@ -571,7 +597,7 @@ test("Given oversized reasoning chunks, When the daemon streams them to the Rela
         { content: { type: "text", text: "x".repeat(24 * 1024) }, meta: undefined },
         { content: { type: "text", text: `prefix${"y".repeat(24 * 1024)}` }, meta: undefined },
     ]);
-    expect(answer(runtime.initial.events, "reasoning-tail")).toBe(oversized);
+    expect(answer(runtime.initial.events, turn.sessionTarget)).toBe(oversized);
 });
 
 test.each([true, false])(
@@ -583,7 +609,7 @@ test.each([true, false])(
         if (flushed) {
             await turn.write("Reply prefix; ");
             pending.run();
-            while (answer(runtime.initial.events, "tail-session") !== "Reply prefix; ") {
+            while (answer(runtime.initial.events, turn.sessionTarget) !== "Reply prefix; ") {
                 await runtime.initial.next();
             }
         }
@@ -601,7 +627,7 @@ test.each([true, false])(
         const resumed = await reconnect;
         await resumed.barrier();
         const events = [...runtime.initial.events, ...resumed.events];
-        expect(answer(events, "tail-session")).toBe("Reply prefix; the final 161 characters remain available.");
+        expect(answer(events, turn.sessionTarget)).toBe("Reply prefix; the final 161 characters remain available.");
         expect(new Set(events.map((event) => event.eventId)).size).toBe(events.length);
         expect(
             events.filter((event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed"),
@@ -659,14 +685,14 @@ test("Given concurrent Sessions produce an offline burst, When the Runtime recon
     retry.run();
     const resumed = await reconnect;
     await resumed.barrier();
-    expect(answer(resumed.events, "burst-first")).toBe(expected.join(""));
-    expect(answer(resumed.events, "burst-second")).toBe(large.repeat(3));
+    expect(answer(resumed.events, first.sessionTarget)).toBe(expected.join(""));
+    expect(answer(resumed.events, second.sessionTarget)).toBe(large.repeat(3));
     expect(resumed.batches.length).toBeGreaterThan(1);
     expect(resumed.batches.every((batch) => batch.count <= SESSION_EVENT_BATCH_MAX_SIZE)).toBe(true);
     expect(resumed.batches.every((batch) => batch.bytes <= 1024 * 1024)).toBe(true);
-    for (const sessionId of ["burst-first", "burst-second"]) {
+    for (const sessionTarget of [first.sessionTarget, second.sessionTarget]) {
         const positions = resumed.events
-            .filter((event) => event.sessionId === sessionId)
+            .filter((event) => sameNativeSession(event.target, sessionTarget))
             .map((event) => Number(event.position));
         expect(positions).toEqual([...positions].sort((left, right) => left - right));
     }
@@ -692,7 +718,7 @@ test("Given an outage exhausts the bounded output buffer, When the Relay reconne
     retry.run();
     const resumed = await reconnect;
     await resumed.barrier();
-    const offlineAnswer = answer(resumed.events, "bounded-session");
+    const offlineAnswer = answer(resumed.events, turn.sessionTarget);
     expect(offlineAnswer.length).toBeGreaterThan(0);
     expect(resumed.batches.reduce((bytes, batch) => bytes + batch.bytes, 0)).toBeLessThanOrEqual(32 * 1024 * 1024);
     await turn.write("streaming continues after the outage");
@@ -700,7 +726,7 @@ test("Given an outage exhausts the bounded output buffer, When the Relay reconne
     await runtime.activity.whenIdle(runtime.cancellation.signal);
     (await runtime.timer.next(100)).run();
     await resumed.barrier();
-    expect(answer(resumed.events, "bounded-session")).toBe(`${offlineAnswer}streaming continues after the outage`);
+    expect(answer(resumed.events, turn.sessionTarget)).toBe(`${offlineAnswer}streaming continues after the outage`);
     expect(
         resumed.events.filter(
             (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed",

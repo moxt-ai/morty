@@ -47,7 +47,7 @@ test("Given two remembered computers, When I return and then switch, Then the la
     const firstSession = await startConversation(first, "Work on computer A");
     const firstScope = encodeIdentityScope({
         botId: first.botId,
-        projectId: first.identity.projectId,
+        computerId: first.identity.computerId,
         userId: first.userId,
     });
     await first.close();
@@ -55,7 +55,7 @@ test("Given two remembered computers, When I return and then switch, Then the la
     const secondSession = await startConversation(second, "Work on computer B");
     const secondScope = encodeIdentityScope({
         botId: second.botId,
-        projectId: second.identity.projectId,
+        computerId: second.identity.computerId,
         userId: second.userId,
     });
     window.location.href = `${second.origin}/chat`;
@@ -296,7 +296,7 @@ test("Given a remembered computer, When I connect another computer, Then setup r
 async function revokeAccess(app: TestApp): Promise<void> {
     const signal = AbortSignal.timeout(10_000);
     const response = await app.transport.fetch(
-        new Request(`${app.origin}/morty/api/projects/${app.identity.projectId}/identity/v1/local-credential`, {
+        new Request(`${app.origin}/morty/api/computers/${app.identity.computerId}/identity/v1/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${await app.identity.getToken(signal)}` },
             signal,
@@ -493,7 +493,7 @@ test("Given saved access for the same computer, When an old native handoff link 
 }, async () => {
     const app = await createTestApp({ agent: { id: "pi", label: "Pi" }, connectAgent: true });
     await startConversation(app, "Keep the issued grant");
-    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=morty_transfer_v1.${app.identity.projectId}.${"a".repeat(43)}`;
+    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=morty_transfer_v1.${app.identity.computerId}.${"a".repeat(43)}`;
     const continued = await app.reload();
     await continued.waitForView(() =>
         expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),
@@ -512,7 +512,7 @@ test("Given another saved computer, When a transfer link cannot be redeemed, The
             kind: "continue",
             harness: "pi",
             sessionId: "missing-session",
-            code: (application) => `morty_transfer_v1.${application.identity.projectId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.computerId}.${"a".repeat(43)}`,
         },
     });
     await other.waitForView(() =>
@@ -536,14 +536,17 @@ test("Given the remembered conversation was closed elsewhere, When I return, The
     const signal = AbortSignal.timeout(10_000);
     const archived = await app.transport.fetch(
         new Request(
-            `${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/managed-session/archive`,
+            `${app.origin}/morty/api/chat/computers/${app.identity.computerId}/bots/${app.botId}/managed-session/archive`,
             {
                 method: "POST",
                 headers: {
                     authorization: `Bearer ${await app.identity.getToken(signal)}`,
                     "content-type": "application/json",
                 },
-                body: JSON.stringify({ sessionId }),
+                body: JSON.stringify({
+                    harness: new URL(explicit).searchParams.get("harness"),
+                    sessionId: sessionId,
+                }),
                 signal,
             },
         ),
@@ -580,7 +583,7 @@ test("Given a computer I keep using, When ten more computers are saved in this b
         const shared = await createTestApp({ page: { kind: "share" } });
         const scope = encodeIdentityScope({
             botId: shared.botId,
-            projectId: shared.identity.projectId,
+            computerId: shared.identity.computerId,
             userId: shared.userId,
         });
         await shared.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).toBe(scope));
@@ -696,20 +699,20 @@ test("Given a computer whose remembered conversation was closed elsewhere, When 
     const closedSession = await startConversation(first, "Closed on another device");
     const firstScope = encodeIdentityScope({
         botId: first.botId,
-        projectId: first.identity.projectId,
+        computerId: first.identity.computerId,
         userId: first.userId,
     });
     const signal = AbortSignal.timeout(10_000);
     const archived = await first.transport.fetch(
         new Request(
-            `${first.origin}/morty/api/chat/projects/${first.identity.projectId}/bots/${first.botId}/managed-session/archive`,
+            `${first.origin}/morty/api/chat/computers/${first.identity.computerId}/bots/${first.botId}/managed-session/archive`,
             {
                 method: "POST",
                 headers: {
                     authorization: `Bearer ${await first.identity.getToken(signal)}`,
                     "content-type": "application/json",
                 },
-                body: JSON.stringify({ sessionId: closedSession }),
+                body: JSON.stringify({ harness: "claude", sessionId: closedSession }),
                 signal,
             },
         ),
@@ -748,14 +751,14 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
     const signal = AbortSignal.timeout(10_000);
     const archived = await first.transport.fetch(
         new Request(
-            `${first.origin}/morty/api/chat/projects/${first.identity.projectId}/bots/${first.botId}/managed-session/archive`,
+            `${first.origin}/morty/api/chat/computers/${first.identity.computerId}/bots/${first.botId}/managed-session/archive`,
             {
                 method: "POST",
                 headers: {
                     authorization: `Bearer ${await first.identity.getToken(signal)}`,
                     "content-type": "application/json",
                 },
-                body: JSON.stringify({ sessionId: closedSession }),
+                body: JSON.stringify({ harness: "claude", sessionId: closedSession }),
                 signal,
             },
         ),
@@ -769,7 +772,7 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
     );
     const firstScope = encodeIdentityScope({
         botId: first.botId,
-        projectId: first.identity.projectId,
+        computerId: first.identity.computerId,
         userId: first.userId,
     });
     const firstLink = await second.waitForView(() => {

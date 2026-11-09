@@ -185,8 +185,7 @@ async function exercise(count) {
                     script: await bundle("packages/platform-test-support/src/platform-worker-entry.ts"),
                     compatibilityDate: "2026-09-03",
                     durableObjects: {
-                        RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                        PROJECT_RELAY: { className: "ProjectDO", useSQLite: true },
+                        COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                     },
                     d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
                     r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
@@ -232,15 +231,15 @@ async function exercise(count) {
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const credential = app.defaultCredential.credential;
         const project = await api(
-            `/dashboard/v1/apps/${app.appId}/projects`,
+            `/dashboard/v1/machine-accounts`,
             "POST",
             { displayName: "Pressure", idempotencyKey: "pressure", locationHint: "apac" },
             undefined,
             201,
         );
-        const base = `/v1/projects/${project.projectId}`;
-        const pairing = await api(`${base}/runtime-pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
-        const claimed = await api(`/v1/runtime-pairings/${pairing.pairingId}/redeem`, "POST", {
+        const base = `/v1/computers/${project.computerId}`;
+        const pairing = await api(`${base}/pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
+        const claimed = await api(`/v1/pairings/${pairing.computerId}/redeem`, "POST", {
             pairingCode: pairing.pairingCode,
             agents: [],
             machineName: "Isolated pressure test",
@@ -248,11 +247,10 @@ async function exercise(count) {
         });
         const relay = new URL(`${origin}/morty/api/v1/runtimes/connect`);
         relay.protocol = "ws:";
-        relay.searchParams.set("token", claimed.runtimeCredential);
         const connectionStates = [];
         child = fork(
             join(here, "runtime-process.mjs"),
-            [state, pairing.channelId, relay.href, controlPath, repository],
+            [state, pairing.computerId, relay.href, claimed.runtimeCredential, controlPath, repository],
             {
                 env: { PATH: process.env.PATH, HOME: join(state, "home") },
                 stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -279,7 +277,7 @@ async function exercise(count) {
         });
         stage("connecting Runtime");
         await check(() => connectionStates.includes("online"), "Runtime online");
-        const hostUrl = new URL(`${origin}/morty/api${base}/runtimes/${claimed.runtimeId}/host`);
+        const hostUrl = new URL(`${origin}/morty/api${base}/daemon/host`);
         hostUrl.protocol = "ws:";
         host = new WebSocket(hostUrl, { headers: { authorization: `Bearer ${credential}` } });
         const live = new Map();
@@ -343,7 +341,6 @@ async function exercise(count) {
                                 bindingId: "workspace",
                                 agentId: "pressure-agent",
                                 directoryId: "default",
-                                additionalDirectoryIds: [],
                                 sessionId: `pressure-${offset + index}`,
                             }),
                         );
@@ -396,7 +393,6 @@ async function exercise(count) {
                     agentId: "pressure-agent",
                     bindingId: "workspace",
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     disposition: "append",
                     prompt: `${phase}|${sessionId}`,
                     attachments: [],

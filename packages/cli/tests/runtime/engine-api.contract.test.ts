@@ -7,11 +7,13 @@ import {
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
+    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { MortyRuntimeEngine } from "../../src/exports/engine.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 it("Given an explicit data directory, When a host constructs Engine and reopens its store, Then construction has no side effects and saved connections survive", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-api-"));
@@ -24,13 +26,10 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
         expect(engine.getConnectionManager()).toBe(store);
         const connection = await store.save(
             {
-                appId: "embedded_app",
-                channelId: "embedded_channel",
+                computerId: "embedded_channel",
                 defaultWorkspace: join(directory, "workspace"),
-                pairingId: "embedded_pairing",
                 relayOrigin: new URL("https://relay.example.com/"),
                 runtimeCredential: "a".repeat(43),
-                runtimeId: "embedded_runtime",
             },
             signal,
         );
@@ -91,7 +90,7 @@ it("Given first-use initialization is pending, When its owner and one waiter can
     }
 });
 
-it("Given a fresh Engine data directory, When a host concurrently saves connections on first use, Then every connection belongs to the same readable installation", async () => {
+it("Given a fresh Engine data directory, When a host concurrently saves connections on first use, Then only one complete pairing becomes active", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-concurrent-"));
     const signal = AbortSignal.timeout(5_000);
     try {
@@ -103,27 +102,27 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
             Array.from({ length: 32 }, (_, index) =>
                 manager.save(
                     {
-                        appId: "concurrent_app",
-                        channelId: `concurrent_channel_${index}`,
+                        computerId: `concurrent_channel_${index}`,
                         defaultWorkspace: join(directory, "workspace"),
-                        pairingId: `concurrent_pairing_${index}`,
                         relayOrigin: new URL("https://relay.example.com/"),
                         runtimeCredential: "a".repeat(43),
-                        runtimeId: `concurrent_runtime_${index}`,
                     },
                     signal,
                 ),
             ),
         );
+        const saved = await manager.list(signal);
+        expect(saved).toHaveLength(1);
+        expect(
+            results.some(
+                (result) => result.status === "fulfilled" && result.value.connectionId === saved[0]?.connectionId,
+            ),
+        ).toBe(true);
         for (const result of results) {
             if (result.status === "rejected") {
-                throw result.reason;
+                expect(result.reason).toMatchObject({ code: "pairing_busy" });
             }
-            expect(await manager.read(result.value.connectionId, signal)).toEqual(result.value);
         }
-        const saved = await manager.list(signal);
-        expect(saved).toHaveLength(32);
-        expect(new Set(saved.map((connection) => connection.installationId)).size).toBe(1);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -147,11 +146,12 @@ it("Given installation initialization fails, When the host fixes the data direct
     }
 });
 
-it("Given saved and provided connections with opaque credentials, When a host serves and cancels successive loops, Then both publish their Agent directory and disconnect before completion without saving the provided connection", async () => {
+it("Given saved and provided connections with opaque credentials, When a host serves and cancels successive loops, Then both publish their Agent directory, disconnect before completion without saving the provided connection, and the saved connection presents the successor it saved next time", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-loop-"));
     const catalogs: unknown[] = [];
     const requests: string[] = [];
     const authorizations: (string | undefined)[] = [];
+    const successors: (string | undefined)[] = [];
     const http = createServer((request, response) => {
         let body = "";
         request.setEncoding("utf8");
@@ -169,6 +169,8 @@ it("Given saved and provided connections with opaque credentials, When a host se
     relay.on("connection", (socket, request) => {
         requests.push(request.url ?? "");
         authorizations.push(request.headers.authorization);
+        const successor = request.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER];
+        successors.push(typeof successor === "string" ? successor : undefined);
         socket.once("close", () => disconnected.resolve());
         if (revoke) {
             socket.close(1008, "Runtime revoked");
@@ -198,13 +200,10 @@ it("Given saved and provided connections with opaque credentials, When a host se
         const manager = engine.getConnectionManager();
         const saved = await manager.save(
             {
-                appId: "loop_app",
-                channelId: "loop_channel",
+                computerId: "loop_channel",
                 defaultWorkspace: join(directory, "workspace"),
-                pairingId: "loop_pairing",
                 relayOrigin: new URL(origin),
                 runtimeCredential: "a".repeat(73),
-                runtimeId: "loop_runtime",
             },
             deadline,
         );
@@ -213,10 +212,10 @@ it("Given saved and provided connections with opaque credentials, When a host se
             {
                 kind: "provided",
                 connection: {
-                    channelId: "provided_channel",
+                    computerId: "provided_channel",
                     defaultWorkspace: saved.defaultWorkspace,
                     relayUrl: `ws://127.0.0.1:${port(http)}/morty/api/v1/runtimes/connect`,
-                    runtimeCredential: "b".repeat(73),
+                    credentials: memoryRuntimeCredentials("b".repeat(73)),
                 },
             },
         ] as const;
@@ -244,13 +243,18 @@ it("Given saved and provided connections with opaque credentials, When a host se
         expect(authorizations).toEqual([`Bearer ${"a".repeat(73)}`, `Bearer ${"b".repeat(73)}`]);
         expect(catalogs).toHaveLength(2);
         expect(catalogs).toEqual([expect.objectContaining({ agents: [] }), expect.objectContaining({ agents: [] })]);
-        expect(await manager.list(deadline)).toEqual([saved]);
+        const [savedSuccessor] = successors;
+        expect(savedSuccessor).toMatch(/^[A-Za-z0-9_-]{73}$/u);
+        expect(await manager.list(deadline)).toEqual([
+            { ...saved, credentials: { current: savedSuccessor, successor: null } },
+        ]);
 
         revoke = true;
         await expect(engine.runLoop({ connection: connections[0], signal: deadline })).rejects.toMatchObject({
             code: "runtime_relay_revoked",
         });
         await disconnected.promise;
+        expect(authorizations.at(-1)).toBe(`Bearer ${savedSuccessor}`);
     } finally {
         for (const socket of relay.clients) {
             socket.terminate();

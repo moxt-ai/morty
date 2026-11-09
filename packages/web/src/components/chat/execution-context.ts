@@ -9,7 +9,13 @@ export interface ExecutionContext {
     readonly directory: string | null;
     readonly directoryName: string;
     readonly directoryPlaceholder: string;
-    readonly computerStatus: "Online" | "Offline" | "Checking availability" | "Status unavailable" | "Not paired";
+    readonly computerStatus:
+        | "Online"
+        | "Offline"
+        | "Checking availability"
+        | "Status unavailable"
+        | "Not paired"
+        | "Disconnected for security";
     readonly lastConfirmed: string | null;
     readonly available: boolean;
     readonly feedback: ConnectionFeedback;
@@ -47,6 +53,12 @@ export type ConnectionFeedback =
       }
     | {
           readonly kind: "failed";
+          readonly title: string;
+          readonly description: string;
+      }
+    /** The computer needs its owner to act on it; nothing in the browser can restore it. */
+    | {
+          readonly kind: "action-required";
           readonly title: string;
           readonly description: string;
       }

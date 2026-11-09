@@ -9,17 +9,21 @@ import { logger } from "../infra/logger.ts";
 import { RuntimeStatus } from "../service/channel/channel.ts";
 import type { ChannelGateway } from "./channel-gateway.ts";
 
-const INTERNAL_CHANNEL_ID_HEADER = "x-morty-channel-id";
 const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-morty-host-credential-id";
 const INTERNAL_HOST_CREDENTIAL_KIND_HEADER = "x-morty-host-credential-kind";
-const INTERNAL_RUNTIME_ID_HEADER = "x-morty-runtime-id";
 const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-morty-session-access-revoked-through";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
 
-    constructor(cx: { readonly gateways: { readonly runtimeRelay: DurableObjectNamespace } }) {
-        this.#namespace = cx.gateways.runtimeRelay;
+    readonly #local: ((computerId: string, request: Request) => Promise<Response>) | undefined;
+
+    constructor(
+        namespace: DurableObjectNamespace,
+        local?: (computerId: string, request: Request) => Promise<Response>,
+    ) {
+        this.#local = local;
+        this.#namespace = namespace;
     }
 
     readonly acceptDaemon = async (
@@ -34,6 +38,13 @@ export class CloudflareChannelRuntime implements ChannelGateway {
             new Request(endpoint, { headers: request.headers, method: request.method, signal }),
             signal,
         );
+    };
+
+    readonly refuseRevokedDaemon = (): Response => {
+        const pair = new WebSocketPair();
+        pair[1].accept();
+        pair[1].close(1008, "Runtime revoked");
+        return new Response(null, { status: 101, webSocket: pair[0] });
     };
 
     readonly acceptHost = async (
@@ -52,13 +63,13 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     readonly disconnectHost = async (access: ChannelHostCredential, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         const headers = new Headers();
-        headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
+
         headers.set(INTERNAL_HOST_CREDENTIAL_ID_HEADER, access.credentialId);
-        headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
+
         const response = await this.fetchRuntime(
             access,
             new Request(
-                `https://runtime.internal/projects/${encodeURIComponent(access.projectId)}/host-credentials/revoke`,
+                `https://runtime.internal/computers/${encodeURIComponent(access.computerId)}/host-credentials/revoke`,
                 {
                     headers,
                     method: "DELETE",
@@ -76,11 +87,10 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     readonly disconnectRuntime = async (access: VerifiedChannelAccess, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         const headers = new Headers();
-        headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
-        headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
+
         const response = await this.fetchRuntime(
             access,
-            new Request(`https://runtime.internal/projects/${encodeURIComponent(access.projectId)}/runtime/revoke`, {
+            new Request(`https://runtime.internal/computers/${encodeURIComponent(access.computerId)}/runtime/revoke`, {
                 headers,
                 method: "DELETE",
                 signal,
@@ -94,8 +104,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     readonly disconnectSessionViewers = async (
-        projectId: string,
-        runtimeId: string,
+        computerId: string,
         revokedThrough: number,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -103,8 +112,8 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         const headers = new Headers();
         headers.set(INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER, String(revokedThrough));
         const response = await this.fetchRuntime(
-            { projectId, runtimeId },
-            new Request(`https://runtime.internal/projects/${encodeURIComponent(projectId)}/session-viewers/revoke`, {
+            { computerId },
+            new Request(`https://runtime.internal/computers/${encodeURIComponent(computerId)}/session-viewers/revoke`, {
                 headers,
                 method: "DELETE",
                 signal,
@@ -148,22 +157,23 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     ): Promise<Response> => {
         signal.throwIfAborted();
         const headers = new Headers(request.headers);
-        headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
-        headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
+
         const endpoint = new URL(request.url);
-        endpoint.pathname = `/projects/${encodeURIComponent(access.projectId)}${endpoint.pathname}`;
+        endpoint.pathname = `/computers/${encodeURIComponent(access.computerId)}${endpoint.pathname}`;
         const forwarded = new Request(endpoint, { method: request.method, headers, signal });
         return await this.fetchRuntime(access, forwarded, signal);
     };
 
     private readonly fetchRuntime = async (
-        access: Pick<VerifiedChannelAccess, "projectId" | "runtimeId"> & { readonly channelId?: string },
+        access: Pick<VerifiedChannelAccess, "computerId" | "computerId"> & { readonly computerId?: string },
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
-        const objectId = this.#namespace.idFromName(access.runtimeId);
+        const objectId = this.#namespace.idFromName(access.computerId);
         try {
-            const response = await this.#namespace.get(objectId).fetch(request.url, request);
+            const response = await (this.#local === undefined
+                ? this.#namespace.get(objectId).fetch(request.url, request)
+                : this.#local(access.computerId, request));
             signal.throwIfAborted();
             return response;
         } catch (error) {
@@ -171,11 +181,9 @@ export class CloudflareChannelRuntime implements ChannelGateway {
                 {
                     ...requestLogContext(request),
                     event: "runtime_relay_request_failed",
-                    durableObjectClass: "RuntimeRelay",
+                    durableObjectClass: "ComputerRelay",
                     durableObjectId: objectId.toString(),
-                    projectId: access.projectId,
-                    channelId: access.channelId,
-                    runtimeId: access.runtimeId,
+                    computerId: access.computerId,
                     err: error,
                 },
                 "Runtime Relay request failed",

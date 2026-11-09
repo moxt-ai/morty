@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { identifierStringSchema } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 const SESSION_ACCESS_PATTERN = /^msession_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]+)_([A-Za-z0-9_-]{43})$/u;
 
@@ -8,10 +9,10 @@ const claimsSchema = z
     .object({
         expiresAtEpochMilliseconds: z.number().int().nonnegative(),
         issuedAtEpochMilliseconds: z.number().int().nonnegative(),
-        projectId: identifierStringSchema,
+        computerId: identifierStringSchema,
         purpose: z.literal("session-access"),
-        runtimeId: identifierStringSchema,
-        sessionId: identifierStringSchema,
+
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 

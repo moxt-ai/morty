@@ -57,6 +57,13 @@
             "when": 1793353639685,
             "tag": "0007_drop_runtime_revocations",
             "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "6",
+            "when": 1794208945751,
+            "tag": "0008_computer_authorization",
+            "breakpoints": true
         }
     ]
 }

@@ -1,1 +1,1 @@
-export { default, ProjectDO, RuntimeRelay } from "../../relay/src/worker.ts";
+export { ComputerRelay, default } from "../../relay/src/worker.ts";

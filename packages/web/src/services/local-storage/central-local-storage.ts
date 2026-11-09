@@ -159,9 +159,9 @@ export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
 const directoryIdSchema = v.custom<string>(isDirectoryIdentifier, "Invalid directory identifier");
 const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_WORKSPACE_PATH_LENGTH));
 
-export const lastCwdEntry = (botId: string, runtimeId: string, agentRef: string): LocalStorageEntry<string> =>
+export const lastCwdEntry = (botId: string, computerId: string, agentRef: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:last-cwd:", botId, runtimeId, agentRef),
+        key: scopedKey("morty:last-cwd:", botId, computerId, agentRef),
         schema: directoryIdSchema,
     });
 
@@ -218,7 +218,11 @@ export function readableCredential(userId: string, token: unknown): string | nul
 const computerDestinationSchema = v.pipe(
     v.variant("kind", [
         v.object({ kind: v.literal("home") }),
-        v.object({ kind: v.literal("session"), sessionId: v.custom<string>(isIdentifier) }),
+        v.object({
+            kind: v.literal("session"),
+            harness: v.custom<string>(isIdentifier),
+            sessionId: v.custom<string>(isIdentifier),
+        }),
     ]),
     v.readonly(),
 );
@@ -257,9 +261,9 @@ export function readableComputer(value: unknown): RememberedComputer | null {
 // ---------------------------------------------------------------------------
 
 /** When the latest device this browser was told about joined the Project; later joins are new to it. */
-export const linkedDevicesSeenEntry = (projectId: string): LocalStorageEntry<string> =>
+export const linkedDevicesSeenEntry = (computerId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:linked-devices-seen:v1:", projectId),
+        key: scopedKey("morty:linked-devices-seen:v1:", computerId),
         schema: v.pipe(v.string(), v.isoTimestamp()),
     });
 
@@ -273,9 +277,9 @@ export interface AccessAcknowledgement {
 }
 
 /** What the user was already told about this browser's access, so it is not repeated for the same access. */
-export const accessAcknowledgedEntry = (projectId: string): LocalStorageEntry<AccessAcknowledgement> =>
+export const accessAcknowledgedEntry = (computerId: string): LocalStorageEntry<AccessAcknowledgement> =>
     jsonLocalStorageEntry({
-        key: scopedKey("morty:access-acknowledged:v1:", projectId),
+        key: scopedKey("morty:access-acknowledged:v1:", computerId),
         schema: v.object({
             expiresAt: v.pipe(v.string(), v.isoTimestamp()),
             through: v.picklist(["joined", "ending"]),

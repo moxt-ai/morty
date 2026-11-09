@@ -17,7 +17,7 @@ import {
     decodeSessionReadyEvent,
     encodeAgentSettingsDiscoverCommand,
     encodeNativeSessionCommand,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     encodeSessionPreviewHistoryPageLoad,
     MORTY_API_PREFIX,
     NATIVE_SESSION_REQUEST_KIND,
@@ -33,6 +33,7 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runti
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -104,7 +105,6 @@ process.argv.push(
     "--agent-version", version,
     "--no-load-session",
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",
@@ -299,7 +299,6 @@ test.for([
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         const environment = {
             MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             PATH: `${binDirectory}:${process.env["PATH"] ?? ""}`,
@@ -317,7 +316,12 @@ test.for([
             throw new Error(`Controlled agent was not discovered: ${JSON.stringify(inventory.unavailable)}`);
         }
         const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
-            { channelId: "channel_alpha", defaultWorkspace: workspace, relayUrl },
+            {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                computerId: "channel_alpha",
+                defaultWorkspace: workspace,
+                relayUrl,
+            },
             agentId === "codex"
                 ? new RuntimeAgentDependencies(inventory.readyAgents())
                 : new RuntimeAgentDependencies(inventory.readyAgents(), acpAdapters),
@@ -343,14 +347,14 @@ test.for([
             const frames = new ClientFrames(await socketReady.promise);
             sendText(
                 await socketReady.promise,
-                encodeSessionPrepareCommand({
-                    additionalDirectoryIds: [],
+                encodeSessionCreateCommand({
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    kind: "session.prepare",
+                    kind: "session.create",
                     requestId: "prepare-before-agent-upgrade",
-                    sessionId: "conversation-before-upgrade",
+                    operationId: crypto.randomUUID(),
+                    configurations: [],
                 }),
             );
             expect(await nextCommandOutcome(frames, "prepare-before-agent-upgrade")).toMatchObject({
@@ -361,13 +365,12 @@ test.for([
                 sendText(
                     await socketReady.promise,
                     encodeNativeSessionCommand({
-                        additionalDirectoryIds: [],
                         agentId,
                         bindingId: config.bindingId,
                         directoryId: "default",
                         kind: NATIVE_SESSION_REQUEST_KIND,
                         requestId: "browse-before-agent-upgrade",
-                        sessionId: "native-browser",
+                        discoveryId: "native-browser",
                         action: "list",
                         cursor: null,
                     }),
@@ -378,20 +381,19 @@ test.for([
                 });
             }
             const prepareRequestId = "prepare-after-agent-upgrade";
-            const upgradedSessionId = "draft-agent-upgrade-new-conversation";
             await unlink(link);
             await symlink(secondLauncher, link);
 
             sendText(
                 await socketReady.promise,
-                encodeSessionPrepareCommand({
-                    additionalDirectoryIds: [],
+                encodeSessionCreateCommand({
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    kind: "session.prepare",
+                    kind: "session.create",
                     requestId: prepareRequestId,
-                    sessionId: upgradedSessionId,
+                    operationId: crypto.randomUUID(),
+                    configurations: [],
                 }),
             );
             const prepared = await nextCommandOutcome(frames, prepareRequestId);
@@ -400,7 +402,7 @@ test.for([
             );
             expect(prepared).toMatchObject({
                 kind: "session.ready",
-                ready: { agentVersion: "1.1.0", sessionId: upgradedSessionId },
+                ready: { agentVersion: "1.1.0", target: { harness: agentId, sessionId: expect.any(String) } },
             });
 
             const settingsRequestId = "settings-after-agent-upgrade";
@@ -421,13 +423,12 @@ test.for([
             sendText(
                 await socketReady.promise,
                 encodeNativeSessionCommand({
-                    additionalDirectoryIds: [],
                     agentId,
                     bindingId: config.bindingId,
                     directoryId: "default",
                     kind: NATIVE_SESSION_REQUEST_KIND,
                     requestId: "browse-after-agent-upgrade",
-                    sessionId: "native-browser",
+                    discoveryId: "native-browser",
                     action: "list",
                     cursor: null,
                 }),
@@ -441,13 +442,12 @@ test.for([
                 sendText(
                     await socketReady.promise,
                     encodeSessionPreviewHistoryPageLoad({
-                        additionalDirectoryIds: [],
                         agentId,
                         bindingId: config.bindingId,
                         directoryId: "default",
                         kind: "session.preview-history.page.load",
                         requestId: "preview-after-agent-upgrade",
-                        sessionId: "saved-thread",
+                        target: { harness: agentId, sessionId: "saved-thread" },
                         eventLimit: 100,
                         cursor: null,
                     }),

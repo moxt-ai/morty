@@ -89,25 +89,21 @@ export class MortyAppCredentialProvider extends StaticMortyCredentialProvider {
 }
 
 export class MortyPlatformProject {
-    readonly appId: string;
     readonly clientReference: string;
     readonly createdAt: string;
     readonly deletedAt: string;
     readonly displayName: string;
     readonly lifecycle: string;
-    readonly projectId: string;
-    readonly tenantId: string;
+    readonly computerId: string;
     readonly updatedAt: string;
 
     constructor(value: Readonly<Record<string, unknown>>) {
-        this.appId = identifier(value, "appId");
         this.clientReference = identifier(value, "clientReference");
         this.createdAt = timestamp(value, "createdAt");
         this.deletedAt = timestamp(value, "deletedAt");
         this.displayName = string(value, "displayName", 120);
         this.lifecycle = string(value, "lifecycle", 32);
-        this.projectId = identifier(value, "projectId");
-        this.tenantId = identifier(value, "tenantId");
+        this.computerId = identifier(value, "computerId");
         this.updatedAt = timestamp(value, "updatedAt");
     }
 }
@@ -130,14 +126,13 @@ export class MortyPlatformAppClient {
     }
 
     readonly createProject = async (
-        appId: string,
         request: MortyCreatePlatformProjectRequest,
         signal: AbortSignal,
     ): Promise<MortyPlatformProject> =>
         new MortyPlatformProject(
             record(
                 await this.#executor.post(
-                    `dashboard/v1/apps/${encodeURIComponent(requestedIdentifier(appId, "App identifier"))}/projects`,
+                    "dashboard/v1/machine-accounts",
                     {
                         clientReference: requestedIdentifier(request.clientReference, "Project client reference"),
                         displayName: requestedDisplayName(request.displayName),
@@ -151,4 +146,4 @@ export class MortyPlatformAppClient {
         );
 }
 
-export { runtimeRequestTarget } from "./transport/runtime-request-target.ts";
+export { computerRequestTarget } from "./transport/computer-request-target.ts";

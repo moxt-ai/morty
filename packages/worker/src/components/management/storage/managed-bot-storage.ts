@@ -16,7 +16,7 @@ const listedBotSchema = v.pipe(
     v.object({
         botId: identifier,
         displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
-        runtimeId: v.nullable(identifier),
+        computerId: v.nullable(identifier),
     }),
     v.readonly(),
 );
@@ -39,16 +39,16 @@ export class ManagedBotStorage {
         return database;
     };
 
-    /** The user's Machines, oldest first. */
-    readonly listBots = async (userId: string, signal: AbortSignal): Promise<readonly ListedManagedBot[]> => {
+    /** The Machine of this Project's owner, if it has one. */
+    readonly readMachine = async (userId: string, signal: AbortSignal): Promise<ListedManagedBot | null> => {
         signal.throwIfAborted();
-        const result = await this.#requireDatabase()
-            .select({ botId: managedBot.botId, displayName: managedBot.displayName, runtimeId: managedBot.runtimeId })
+        const row = await this.#requireDatabase()
+            .select({ botId: managedBot.botId, displayName: managedBot.displayName, computerId: managedBot.computerId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
-            .orderBy(managedBot.createdAt, managedBot.botId);
+            .get();
         signal.throwIfAborted();
-        return v.parse(v.array(listedBotSchema), result);
+        return row === undefined ? null : v.parse(listedBotSchema, row);
     };
 
     readonly ownsBot = async (userId: string, botId: string, signal: AbortSignal): Promise<boolean> => {
@@ -69,7 +69,6 @@ export class ManagedBotStorage {
     ): Promise<
         | (ManagedBot & {
               readonly configuration: BotConfiguration | null;
-              readonly instructions: string;
           })
         | null
     > => {
@@ -78,8 +77,7 @@ export class ManagedBotStorage {
             .select({
                 botId: managedBot.botId,
                 displayName: managedBot.displayName,
-                runtimeId: managedBot.runtimeId,
-                instructions: managedBot.instructions,
+                computerId: managedBot.computerId,
             })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
@@ -93,10 +91,10 @@ export class ManagedBotStorage {
         return {
             ...bot,
             configuration: configuration.success ? configuration.output : null,
-            instructions: row.instructions,
         };
     };
 
+    /** Configures the Agent on the computer that owns this chat. */
     readonly configureBot = async (
         userId: string,
         botId: string,
@@ -109,12 +107,12 @@ export class ManagedBotStorage {
         const database = this.#requireDatabase();
         const result = await database
             .update(managedBot)
-            .set({ runtimeId: value.runtimeId, updatedAt: now })
+            .set({ computerId: value.computerId, updatedAt: now })
             .where(
                 and(
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
-                    or(isNull(managedBot.runtimeId), eq(managedBot.runtimeId, value.runtimeId)),
+                    or(isNull(managedBot.computerId), eq(managedBot.computerId, value.computerId)),
                 ),
             )
             .run();
@@ -123,7 +121,7 @@ export class ManagedBotStorage {
             return "configured";
         }
         const current = await database
-            .select({ runtimeId: managedBot.runtimeId })
+            .select({ computerId: managedBot.computerId })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
             .get();
@@ -131,37 +129,39 @@ export class ManagedBotStorage {
         if (current === undefined) {
             return "not-found";
         }
-        return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "not-found";
+        return current.computerId !== null && current.computerId !== value.computerId
+            ? "runtime-mismatch"
+            : "not-found";
     };
 
-    readonly saveClaim = async (userId: string, bot: ManagedBot, now: number, signal: AbortSignal): Promise<void> => {
-        const value = v.parse(managedBotSchema, bot);
+    /**
+     * Gives the owner `machine` unless it already has a Machine, and returns the owner's Machine either way: the owner
+     * is the key, so a repeated or concurrent claim never adds a second one.
+     */
+    readonly claimMachine = async (
+        userId: string,
+        machine: ManagedBot,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<ListedManagedBot> => {
+        const value = v.parse(managedBotSchema, machine);
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(managedBot)
-            .values({
-                userId,
-                botId: value.botId,
-                displayName: value.displayName,
-                createdAt: now,
-                updatedAt: now,
-            })
-            .onConflictDoUpdate({
-                target: managedBot.botId,
-                set: { displayName: value.displayName, updatedAt: now },
-                setWhere: eq(managedBot.userId, userId),
-            })
+            .values({ userId, botId: value.botId, displayName: value.displayName, createdAt: now, updatedAt: now })
+            .onConflictDoNothing({ target: managedBot.userId })
             .run();
-        signal.throwIfAborted();
-        if (!(await this.ownsBot(userId, value.botId, signal))) {
-            throw new ManagementStorageError("BOT_ALREADY_CLAIMED", "This bot is already owned by another user.");
+        const claimed = await this.readMachine(userId, signal);
+        if (claimed === null) {
+            throw new ManagementStorageError("DATABASE_UNAVAILABLE", "The Machine could not be stored.");
         }
+        return claimed;
     };
 }
 
 class ManagementStorageError extends Error implements HttpError {
-    readonly code: "BOT_ALREADY_CLAIMED" | "DATABASE_UNAVAILABLE";
-    constructor(code: "BOT_ALREADY_CLAIMED" | "DATABASE_UNAVAILABLE", message: string) {
+    readonly code: "DATABASE_UNAVAILABLE";
+    constructor(code: "DATABASE_UNAVAILABLE", message: string) {
         super(message);
         this.code = code;
         this.name = "ManagementStorageError";
@@ -169,6 +169,6 @@ class ManagementStorageError extends Error implements HttpError {
 
     readonly toHttpJson: HttpError["toHttpJson"] = () => ({
         body: { error: { code: this.code, message: this.message } },
-        status: this.code === "BOT_ALREADY_CLAIMED" ? 409 : 503,
+        status: 503,
     });
 }

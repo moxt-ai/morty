@@ -2,9 +2,9 @@ export { createMortyApplication, notFoundResponse } from "./app.ts";
 export { createDurableObjectContext } from "./di/create-durable-object-context.ts";
 export type { RelayContext } from "./di/create-relay-dependencies.ts";
 export { createWorkerContext, type WorkerRuntimeGateways } from "./di/create-worker-context.ts";
-export { RuntimeRelay } from "./durable-objects/runtime-relay.ts";
+export { RelaySockets } from "./durable-objects/relay-sockets.ts";
 export * from "./entity/authentication/project-authentication.ts";
-export { ProjectScope, SessionRuntimeError } from "./entity/do/session.ts";
+export { ComputerScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { type HttpError, type HttpErrorJson, isHttpError, toHttpError } from "./entity/http-error.ts";
 export {
     ACCESS_GRANT_LIFETIME_MILLISECONDS,
@@ -21,7 +21,7 @@ export {
     hashSecret,
     LinkedChannelDevice,
     MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    MAX_RUNTIMES_PER_PROJECT,
+    MAX_DAEMONS_PER_COMPUTER,
     MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
     normalizePairingCode,
     PAIRING_LIFETIME_MILLISECONDS,
@@ -45,6 +45,7 @@ export { CloudflareChannelRuntime } from "./gateway/cloudflare-channel-runtime.t
 export type { ChannelGateway } from "./gateway/index.ts";
 export type { ProjectAccessAuthorizer, ProjectCredentialAuthority } from "./gateway/project-access-authorizer.ts";
 export type { SessionRuntimeOperations } from "./gateway/session-runtime-operations.ts";
+export { runtimeConnectionDurableObjectMigrations } from "./generated/runtime-connection-do-migrations.ts";
 export { errorMiddleware, rethrowHonoError } from "./http/middleware/error-middleware.ts";
 export { requestTimeoutMiddleware } from "./http/middleware/request-timeout-middleware.ts";
 export {
@@ -66,7 +67,7 @@ export { D1DatabaseAdapter } from "./infra/d1-database.ts";
 export type { DoSqlDatabase } from "./infra/do-sql-database.ts";
 export { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "./infra/durable-object-sql-database.ts";
 export { logger } from "./infra/logger.ts";
-export type { ProjectApplicationResolver } from "./infra/project-application-resolver.ts";
+export type { MachineAccountDirectory } from "./infra/machine-account-directory.ts";
 export type {
     ProjectStorageContext,
     ProjectStorageDirectory,

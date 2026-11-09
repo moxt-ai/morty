@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     AGENT_SETTINGS_DISCOVER_KIND,
     AGENT_SETTINGS_DISCOVERED_KIND,
@@ -13,9 +14,12 @@ import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionOperationFailedEvent,
+    decodeSessionReadyEvent,
     encodeAgentSettingsDiscoverCommand,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     SESSION_EVENT_KIND,
     type SessionLiveEvent,
     type SessionPromptCommand,
@@ -28,6 +32,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -104,6 +109,36 @@ class TerminalSessionResult {
 
 const bufferedSessionEvents = new WeakMap<ClientFrames, SessionLiveEvent[]>();
 
+async function createSession(
+    socket: Duplex,
+    frames: ClientFrames,
+    agentId: string,
+    bindingId: string,
+): Promise<NativeSessionTarget> {
+    sendText(
+        socket,
+        encodeSessionCreateCommand({
+            kind: "session.create",
+            requestId: crypto.randomUUID(),
+            operationId: crypto.randomUUID(),
+            agentId,
+            bindingId,
+            directoryId: "default",
+            configurations: [],
+        }),
+    );
+    for (;;) {
+        const message = await frames.next();
+        const kind = decodeMessageKind(message);
+        if (kind === "session.operation.failed") {
+            throw new Error(message);
+        }
+        if (kind === "session.ready") {
+            return decodeSessionReadyEvent(message).target;
+        }
+    }
+}
+
 function _readStringField(value: unknown, field: string): string {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return "";
@@ -114,7 +149,7 @@ function _readStringField(value: unknown, field: string): string {
 
 async function readTerminalSessionResult(
     frames: ClientFrames,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     commandId = "",
     includeAcpText = true,
 ): Promise<TerminalSessionResult> {
@@ -127,7 +162,11 @@ async function readTerminalSessionResult(
             const message = await frames.next();
             if (decodeMessageKind(message) === "session.operation.failed") {
                 const failure = decodeSessionOperationFailedEvent(message);
-                if (failure.sessionId === sessionId && (commandId === "" || failure.requestId === commandId)) {
+                if (
+                    failure.target !== undefined &&
+                    sameNativeSession(failure.target, sessionTarget) &&
+                    (commandId === "" || failure.requestId === commandId)
+                ) {
                     return new TerminalSessionResult("failed", text, failure.code, "");
                 }
             }
@@ -137,7 +176,7 @@ async function readTerminalSessionResult(
             events = [...decodeSessionEventEnvelope(message).events];
         }
         for (const [index, event] of events.entries()) {
-            if (event.sessionId !== sessionId) {
+            if (!sameNativeSession(event.target, sessionTarget)) {
                 continue;
             }
             if (event.type === "acp") {
@@ -165,7 +204,11 @@ async function readTerminalSessionResult(
         }
     }
 }
-async function readCommandActivity(frames: ClientFrames, sessionId: string, _commandId: string): Promise<void> {
+async function readCommandActivity(
+    frames: ClientFrames,
+    sessionTarget: NativeSessionTarget,
+    _commandId: string,
+): Promise<void> {
     for (;;) {
         const message = await frames.next();
         if (decodeMessageKind(message) !== SESSION_EVENT_KIND) {
@@ -174,7 +217,7 @@ async function readCommandActivity(frames: ClientFrames, sessionId: string, _com
         if (
             decodeSessionEventEnvelope(message).events.some(
                 (event) =>
-                    event.sessionId === sessionId &&
+                    sameNativeSession(event.target, sessionTarget) &&
                     event.type === "acp" &&
                     (event.payload.sessionUpdate === "tool_call" || event.payload.sessionUpdate === "tool_call_update"),
             )
@@ -238,7 +281,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         const agent = new AcpAgentDefinition(
             "codex",
             "Codex",
@@ -257,9 +299,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -337,7 +380,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         // The Agent withholds reasoning effort for its default model, so a
         // session that never switches models must still learn that model's
         // capability instead of offering no effort control at all.
@@ -361,9 +403,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -451,7 +494,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         const agent = new AcpAgentDefinition(
             "controlled-acp",
             "Controlled ACP",
@@ -472,9 +514,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -564,7 +607,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         // A Pi user with one configured non-reasoning model: the model cannot be
         // switched and no effort is offered, so discovery must still succeed.
         const agent = new AcpAgentDefinition(
@@ -593,9 +635,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -676,7 +719,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         const agent = new AcpAgentDefinition(
             "controlled-acp",
             "Controlled ACP",
@@ -697,9 +739,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -783,7 +826,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         // The Agent reveals reasoning effort only for test-large, so the settings
         // snapshot that names it cannot match a Session parked on test-small.
         const agent = new AcpAgentDefinition(
@@ -809,9 +851,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -822,10 +865,9 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionId = "steered_configured_conversation";
+            const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: runningCommandId,
@@ -841,10 +883,10 @@ describe("daemon session configuration boundary", () => {
                     { booleanValue: true, configId: "fast_mode", value: "", valueType: "boolean" },
                     { booleanValue: false, configId: "mode", value: "code", valueType: "select" },
                 ],
-                sessionId,
+                target: sessionTarget,
             };
             sendText(socket, encodeSessionPromptCommand(runningPrompt));
-            await readCommandActivity(frames, sessionId, runningCommandId);
+            await readCommandActivity(frames, sessionTarget, runningCommandId);
 
             const steeringPrompt: SessionPromptCommand = {
                 ...runningPrompt,
@@ -857,9 +899,14 @@ describe("daemon session configuration boundary", () => {
 
             // The steering Turn is accepted and then injected into the running
             // Turn, so only the running Turn carries the Agent's reply.
-            const steeringResult = await readTerminalSessionResult(frames, sessionId, steeringPrompt.commandId, false);
+            const steeringResult = await readTerminalSessionResult(
+                frames,
+                sessionTarget,
+                steeringPrompt.commandId,
+                false,
+            );
             expect(steeringResult).toMatchObject({ kind: "completed", text: "" });
-            const runningResult = await readTerminalSessionResult(frames, sessionId, runningCommandId);
+            const runningResult = await readTerminalSessionResult(frames, sessionTarget, runningCommandId);
             expect(runningResult.kind).toBe("completed");
             expect(runningResult.text).toContain("Steered: focus on the requested fix");
         } finally {
@@ -909,7 +956,6 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        relayUrl.searchParams.set("token", "d".repeat(43));
         // This Agent exposes reasoning effort for every model, so the live Session holds the
         // effort the running Turn configured and a steering Turn naming another one drifts
         // from it instead of naming a setting the Session does not expose at all.
@@ -931,9 +977,10 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -944,10 +991,9 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionId = "steered_drifted_settings_conversation";
+            const sessionTarget = await createSession(socket, frames, agent.id, config.bindingId);
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: runningCommandId,
@@ -960,10 +1006,10 @@ describe("daemon session configuration boundary", () => {
                     { booleanValue: false, configId: "model", value: "test-small", valueType: "select" },
                     { booleanValue: false, configId: "reasoning_effort", value: "high", valueType: "select" },
                 ],
-                sessionId,
+                target: sessionTarget,
             };
             sendText(socket, encodeSessionPromptCommand(runningPrompt));
-            await readCommandActivity(frames, sessionId, runningCommandId);
+            await readCommandActivity(frames, sessionTarget, runningCommandId);
 
             // Steering cannot reconfigure a running Agent, so the member's newer effort
             // reaches this Turn as a snapshot the live Session does not hold yet.
@@ -982,9 +1028,14 @@ describe("daemon session configuration boundary", () => {
 
             // The steering Turn is accepted and then injected into the running
             // Turn, so only the running Turn carries the Agent's reply.
-            const steeringResult = await readTerminalSessionResult(frames, sessionId, steeringPrompt.commandId, false);
+            const steeringResult = await readTerminalSessionResult(
+                frames,
+                sessionTarget,
+                steeringPrompt.commandId,
+                false,
+            );
             expect(steeringResult).toMatchObject({ kind: "completed", code: "", text: "" });
-            const runningResult = await readTerminalSessionResult(frames, sessionId, runningCommandId);
+            const runningResult = await readTerminalSessionResult(frames, sessionTarget, runningCommandId);
             expect(runningResult.kind).toBe("completed");
             expect(runningResult.text).toContain("Steered: focus on the requested fix");
         } finally {

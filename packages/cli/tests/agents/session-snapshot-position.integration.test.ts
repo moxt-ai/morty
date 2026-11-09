@@ -51,7 +51,7 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                   : new CodexAgentSpecification();
         try {
             await withRealDaemon(specification, agent.environment, async (peer) => {
-                const sessionId = await prepareNewRealSession(peer, agentId);
+                const sessionTarget = await prepareNewRealSession(peer, agentId);
                 holdResponse = true;
                 const observed: SessionLiveEvent[] = [];
                 const readPage = async (limit: number, cursor: string | null = null) => {
@@ -60,7 +60,7 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                         encodeSessionHistoryPageLoad({
                             kind: "session.live-history.v2.page.load",
                             requestId,
-                            sessionId,
+                            target: sessionTarget,
                             eventLimit: limit,
                             cursor,
                         }),
@@ -86,12 +86,11 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                 peer.send(
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
-                        sessionId,
+                        target: sessionTarget,
                         commandId,
                         agentId,
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         prompt: "Reply with the requested answer.",
                         attachments: [],
                         disposition: SessionPromptDisposition.Append,

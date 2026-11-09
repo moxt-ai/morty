@@ -37,20 +37,19 @@ def fail(operation, status, body):
     raise ValueError(f'{operation} failed (HTTP {status}, code {code})')
 
 
-def verify(origin, app_id, app_credential, root_key, revision):
+def verify(origin, app_credential, root_key, revision):
     # Retained historical rows need not satisfy the current routing contract. Provision through the
     # supported boundary, with a stable identity so retries reuse one dedicated verification Project.
-    status, project = request(origin + '/dashboard/v1/apps/' + app_id + '/projects', app_credential, {
+    status, project = request(origin + '/dashboard/v1/machine-accounts', app_credential, {
         'displayName': 'Deployment verification', 'idempotencyKey': 'deployment-verification',
         'clientReference': 'deployment-verification', 'locationHint': 'wnam',
     })
     if status != 201:
         fail('Verification Project provisioning', status, project)
-    project_id = project['projectId']
+    computer_id = project['computerId']
     session_id = 'deployment-' + revision[:12]
-    runtime_id = 'deployment-verification'
-    status, access = request(origin + '/v1/projects/' + project_id + '/sessions/' + session_id + '/access-credentials', app_credential, {
-        'expiresInSeconds': 60, 'runtimeId': runtime_id,
+    status, access = request(origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/access-credentials', app_credential, {
+        'expiresInSeconds': 60,
     })
     if status != 201:
         fail('Production Session issuance', status, access)
@@ -66,10 +65,10 @@ def verify(origin, app_id, app_credential, root_key, revision):
     encoded_signature = base64.urlsafe_b64encode(hmac.digest(key, signed, 'sha256')).rstrip(b'=').decode()
     if not hmac.compare_digest(signature, encoded_signature):
         raise ValueError('Production Session signature does not match the configured signing secret')
-    # The Session credential selects RuntimeRelay; the Runtime verifies it before answering this public route.
-    verify_url = origin + '/v1/projects/' + project_id + '/sessions/' + session_id + '/live-event-subscription-target'
+    # The Session credential selects ComputerRelay; the Runtime verifies it before answering this public route.
+    verify_url = origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/live-event-subscription-target'
     status, selected = request(verify_url, credential)
-    if status != 200 or selected.get('projectId') != project_id or selected.get('runtimeId') != runtime_id:
+    if status != 200 or selected.get('computerId') != computer_id:
         fail('Production Runtime verification', status, selected)
     stored_digest = hashlib.sha256(app_credential.encode()).hexdigest().encode()
     forged = signed.decode() + '_' + base64.urlsafe_b64encode(hmac.digest(stored_digest, signed, 'sha256')).rstrip(b'=').decode()
@@ -82,7 +81,7 @@ def verify(origin, app_id, app_credential, root_key, revision):
 def main():
     target = read(ROOT / 'deployment/targets.json')['environments']['production']
     evidence = verify(
-        target['platform_origin'] + '/morty/api', target['app_id'], os.environ['MORTY_SERVICE_SECRET'],
+        target['platform_origin'] + '/morty/api', os.environ['MORTY_SERVICE_SECRET'],
         os.environ['MORTY_SESSION_SIGNING_SECRET'].encode(), os.environ['EXPECTED_REVISION'],
     )
     (ROOT / 'session-access-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')

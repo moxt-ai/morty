@@ -10,6 +10,7 @@ import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 interface ProbeOptions {
     readonly scenario:
@@ -115,7 +116,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     const shutdown = new AbortController();
     const loopSignal = AbortSignal.any([signal, shutdown.signal]);
     const engine = new MortyRuntimeEngine({
-        engineDataDir: join(directory, "installations", "probe-app"),
+        engineDataDir: join(directory, "machine"),
         agentLaunchEnvironment: {
             PATH: "",
             MORTY_CODEX_PATH: agent,
@@ -130,13 +131,10 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     });
     const saved = await engine.getConnectionManager().save(
         {
-            appId: "probe-app",
-            channelId: "output-drain",
+            computerId: "output-drain",
             defaultWorkspace: workspace,
-            pairingId: "probe-pairing",
             relayOrigin: new URL(`http://127.0.0.1:${port(http)}`),
             runtimeCredential: "r".repeat(43),
-            runtimeId: "probe-runtime",
         },
         signal,
     );
@@ -146,10 +144,10 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
             : {
                   kind: "provided",
                   connection: {
-                      channelId: saved.channelId,
+                      computerId: saved.computerId,
                       defaultWorkspace: workspace,
                       relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                      runtimeCredential: saved.runtimeCredential,
+                      credentials: memoryRuntimeCredentials(saved.credentials.current),
                   },
               };
     const execution = engine.runLoop({
@@ -312,20 +310,20 @@ test.for([
                 await request(
                     socket,
                     {
-                        kind: "session.prepare",
+                        kind: "session.create",
                         requestId: "prepare-after-output-drain",
-                        sessionId: "output-drain-session",
+                        operationId: crypto.randomUUID(),
+                        configurations: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     },
                     peer.signal,
                 ),
             ).toMatchObject({
                 kind: "session.ready",
                 requestId: "prepare-after-output-drain",
-                sessionId: "output-drain-session",
+                target: { harness: "codex", sessionId: expect.any(String) },
                 agentVersion: "codex-cli 0.154.0",
             });
         } finally {
@@ -389,7 +387,7 @@ test.for([
                     attempt: "1",
                     timeoutMilliseconds: expected.source === "acp_readiness" ? "60000" : "10000",
                     timestamp: "2026-10-29T00:00:00.000Z",
-                    channelId: "output-drain",
+                    computerId: "output-drain",
                 }),
             );
             expect(report.entries).toContainEqual(

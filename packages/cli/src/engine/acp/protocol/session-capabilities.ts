@@ -12,7 +12,6 @@ function hasTrueChildField(value: unknown, childKey: string, fieldKey: string): 
 
 export function unsupportedSessionCapabilities(): SessionCapabilities {
     return Object.freeze({
-        additionalDirectories: false,
         audioPrompt: false,
         closeSession: false,
         deleteSession: false,
@@ -33,7 +32,6 @@ export function normalizeAcpCapabilities(initialized: InitializeResponse): Sessi
     const session = capabilities.sessionCapabilities;
     const prompt = capabilities.promptCapabilities;
     return Object.freeze({
-        additionalDirectories: session?.additionalDirectories != null,
         audioPrompt: prompt?.audio === true,
         closeSession: session?.close != null,
         deleteSession: session?.delete != null,

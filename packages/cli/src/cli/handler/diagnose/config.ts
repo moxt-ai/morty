@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { readPrivateProbeConfiguration } from "../../../storage/diagnostics/relay-probe-files.ts";
 
-const pairing = z.object({ pairingId: z.string().min(1).max(128), pairingCode: z.string().min(1).max(128) }).readonly();
+const pairing = z
+    .object({ computerId: z.string().min(1).max(128), pairingCode: z.string().min(1).max(128) })
+    .readonly();
 const configuration = z.object({ relayOrigin: z.url(), direct: pairing, proxy: pairing }).readonly();
 export type RelayProbeConfiguration = z.infer<typeof configuration>;
 export type RelayProbeRole = "direct" | "proxy";
@@ -20,7 +22,7 @@ export async function readProbeConfiguration(path: string, signal: AbortSignal):
     if (!parsed.success) {
         throw new RelayProbeError(
             "probe_config_invalid",
-            "Expected relayOrigin and direct/proxy pairingId and pairingCode",
+            "Expected relayOrigin and direct/proxy computerId and pairingCode",
         );
     }
     const config = parsed.data;
@@ -39,7 +41,10 @@ export async function readProbeConfiguration(path: string, signal: AbortSignal):
             "relayOrigin must use HTTPS (or loopback HTTP), without credentials or query parameters",
         );
     }
-    if (config.direct.pairingId === config.proxy.pairingId || config.direct.pairingCode === config.proxy.pairingCode) {
+    if (
+        config.direct.computerId === config.proxy.computerId ||
+        config.direct.pairingCode === config.proxy.pairingCode
+    ) {
         throw new RelayProbeError("probe_pairings_reused", "Direct and proxy probes require distinct, unused pairings");
     }
     return config;

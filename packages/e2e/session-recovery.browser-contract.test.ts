@@ -428,12 +428,13 @@ test("Given a live Session stream with stalled requests, when foreground hints p
     // The stalled tunnel cannot carry the SDK's 20-second ping, so it is dropped once that ping goes unanswered for
     // 10 seconds and the Session continues on a new connection.
     await page.clock.runFor(30000);
-    await page.clock.runFor(15000);
+    // The replacement handshake and authorization use real network I/O. Let retry timers run while those finish.
+    await page.clock.resume();
+    await expect.poll(() => connections).toBeGreaterThan(before);
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Keep this draft on the live connection.");
     await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(1);
-    expect(connections).toBeGreaterThan(before);
     network.resumeSessionRequests();
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(

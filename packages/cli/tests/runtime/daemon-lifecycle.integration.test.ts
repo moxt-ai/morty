@@ -13,9 +13,8 @@ import { WebSocketServer } from "ws";
 
 import cliPackage from "../../package.json" with { type: "json" };
 import { controlSocketPath } from "../../src/daemon/control/local-client.ts";
-import { openMortyCliInstallation, openMortyControlInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
 import type { InstallationDirectory } from "../../src/engine/storage/installation/installation-files.ts";
-import { installWorkspaceDaemonRelease, workspaceDaemonEnvironment } from "../support/installed-daemon-release.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -34,19 +33,15 @@ describe("Morty daemon lifecycle", () => {
             const workspace = join(directory, "workspace");
             await mkdir(workspace);
             const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
-            await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
             const signal = AbortSignal.timeout(30_000);
-            const installation = await openMortyCliInstallation(signal, environment);
-            const channelId = "channel_start_failure";
+            const installation = await openMortyInstallation(signal, environment);
+            const computerId = "channel_start_failure";
             await installation.saveConnection(
                 {
-                    appId: "app_failure",
-                    channelId,
+                    computerId,
                     defaultWorkspace: workspace,
-                    pairingId: "",
                     relayOrigin: new URL("http://127.0.0.1:1"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_failure",
                 },
                 signal,
             );
@@ -56,14 +51,14 @@ describe("Morty daemon lifecycle", () => {
             } else {
                 const sessions = join(installation.stateDirectory, "sessions");
                 await mkdir(sessions, { recursive: true });
-                const hash = createHash("sha256").update(channelId).digest("hex");
+                const hash = createHash("sha256").update(computerId).digest("hex");
                 await writeFile(join(sessions, `${hash}.sqlite`), "invalid SQLite database");
             }
             try {
                 const result = await runCli(["start"], environment, signal);
                 expect(result.code).toBe(1);
                 expect(result.stdout).not.toContain("Morty daemon is running.");
-                const control = await openMortyControlInstallation(signal, environment);
+                const control = await openMortyInstallation(signal, environment);
                 await expect(readFile(join(control.stateDirectory, "worker.lock"))).rejects.toMatchObject({
                     code: "ENOENT",
                 });
@@ -76,7 +71,6 @@ describe("Morty daemon lifecycle", () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-start-"));
         temporaryDirectories.push(stateRoot);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
-        await installWorkspaceDaemonRelease(stateRoot);
 
         try {
             const started = await runCli(["start"], environment, AbortSignal.timeout(60_000));
@@ -102,7 +96,7 @@ describe("Morty daemon lifecycle", () => {
         const result = await runCli(["pair", "list"], environment, deadline);
         expect(result.code).toBe(0);
         expect(result.stdout).not.toContain("Starting morty");
-        const control = await openMortyControlInstallation(deadline, environment);
+        const control = await openMortyInstallation(deadline, environment);
         await expect(readFile(join(control.stateDirectory, "manager.lock"))).rejects.toMatchObject({
             code: "ENOENT",
         });
@@ -112,12 +106,12 @@ describe("Morty daemon lifecycle", () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-quit-"));
         temporaryDirectories.push(stateRoot);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
-        await installWorkspaceDaemonRelease(stateRoot);
         const deadline = AbortSignal.timeout(60_000);
         let heldConnection: Socket | undefined;
         try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            const control = await openMortyControlInstallation(deadline, environment);
+            const started = await runCli(["start"], environment, deadline);
+            expect(started.code, started.stderr).toBe(0);
+            const control = await openMortyInstallation(deadline, environment);
             heldConnection = await holdControlConnection(control.stateDirectory, deadline);
             expect(await runCli(["quit"], environment, deadline)).toEqual({
                 code: 0,
@@ -137,53 +131,40 @@ describe("Morty daemon lifecycle", () => {
 });
 
 describe("Morty pairing lifecycle", () => {
-    it("Given two saved pairings in one working daemon, When one is stopped and removed, Then the other stays available", async () => {
+    it("Given a paired machine, When its connection is stopped and removed, Then the daemon releases its pairing", async () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-pairing-lifecycle-"));
         temporaryDirectories.push(stateRoot);
         const executableDirectory = join(stateRoot, "empty-path");
         const workspace = join(stateRoot, "workspace");
-        await installWorkspaceDaemonRelease(stateRoot);
         await Promise.all([mkdir(executableDirectory), mkdir(workspace)]);
-        const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot, PATH: executableDirectory };
+        const environment = {
+            ...process.env,
+            MORTY_STATE_DIRECTORY: join(stateRoot, "morty"),
+            PATH: executableDirectory,
+        };
         const deadline = AbortSignal.timeout(60_000);
         const relay = await startRelay();
-        const installation = await openMortyCliInstallation(deadline, environment);
-        const control = await openMortyControlInstallation(deadline, environment);
+        const installation = await openMortyInstallation(deadline, environment);
+        const control = await openMortyInstallation(deadline, environment);
         const connection = await installation.saveConnection(
             {
-                appId: "app_test",
-                channelId: "channel_test",
+                computerId: "computer_test",
                 defaultWorkspace: workspace,
-                pairingId: "",
                 relayOrigin: relay.origin,
                 runtimeCredential: "a".repeat(43),
-                runtimeId: "runtime_test",
             },
             deadline,
         );
 
-        const second = await installation.saveConnection(
-            {
-                appId: "app_test2",
-                channelId: "channel_test2",
-                defaultWorkspace: workspace,
-                pairingId: "",
-                relayOrigin: relay.origin,
-                runtimeCredential: "b".repeat(43),
-                runtimeId: "runtime_test2",
-            },
-            deadline,
-        );
         try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
+            const started = await runCli(["start"], environment, deadline);
+            expect(started.code, started.stderr).toBe(0);
             const initiallyListed = await runCli(["pair", "list"], environment, deadline);
             expect(initiallyListed.code).toBe(0);
             expect(initiallyListed.stdout).toContain("| connection_id");
-            expect(initiallyListed.stdout).not.toContain("channel_id");
+            expect(initiallyListed.stdout).toContain("computer_id");
             expect(initiallyListed.stdout).toContain(connection.connectionId);
-            expect(initiallyListed.stdout).toContain("app_test");
 
-            expect(initiallyListed.stdout).toContain(second.connectionId);
             const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
             const outputPath = join(stateRoot, "pairings.json");
             await writeFile(outputPath, "", { mode: 0o600 });
@@ -191,16 +172,8 @@ describe("Morty pairing lifecycle", () => {
             expect(listedAsJson).toEqual({ code: 0, stderr: "", stdout: "" });
             expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual([
                 {
-                    app_id: "app_test",
                     connection_id: connection.connectionId,
-                    runtime_id: "runtime_test",
-                    status: "active",
-                    workspace,
-                },
-                {
-                    app_id: "app_test2",
-                    connection_id: second.connectionId,
-                    runtime_id: "runtime_test2",
+                    computer_id: "computer_test",
                     status: "active",
                     workspace,
                 },
@@ -243,16 +216,6 @@ describe("Morty pairing lifecycle", () => {
 
             const listedRemoved = await runCli(["pair", "list"], environment, deadline);
             expect(listedRemoved.stdout).not.toContain(connection.connectionId);
-            expect(listedRemoved.stdout).toContain(second.connectionId);
-            await expect(readFile(join(control.stateDirectory, "manager.lock"))).rejects.toMatchObject({
-                code: "ENOENT",
-            });
-            const stoppedOffline = await runCli(
-                ["pair", "stop", "--connection", second.connectionId],
-                environment,
-                deadline,
-            );
-            expect(stoppedOffline.code).toBe(0);
             await expect(readFile(join(control.stateDirectory, "manager.lock"))).rejects.toMatchObject({
                 code: "ENOENT",
             });
@@ -359,7 +322,7 @@ async function runCli(
     signal: AbortSignal,
 ): Promise<{ readonly code: number | null; readonly stderr: string; readonly stdout: string }> {
     const child = spawn(process.execPath, [resolve(import.meta.dirname, "../../dist/cli.js"), ...arguments_], {
-        env: workspaceDaemonEnvironment(environment),
+        env: environment,
         signal,
         stdio: ["ignore", "pipe", "pipe"],
     });

@@ -8,7 +8,7 @@ async function openFirstSession() {
     const app = await createTestApp({
         agent: { id: "pi", label: "Pi" },
         connectAgent: true,
-        nativeSessionIds: new Set([sessionId]),
+        sessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
     });
     await app.waitForView(() => expect(window.location.pathname).toBe("/chat"));

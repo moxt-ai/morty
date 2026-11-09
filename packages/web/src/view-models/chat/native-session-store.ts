@@ -16,7 +16,7 @@ type NativeSessionDirectory =
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
-          readonly runtimeId: string;
+          readonly computerId: string;
           readonly discoveryId: string;
           readonly agentRef: string;
           readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
@@ -47,7 +47,7 @@ type ForkIntent = {
 };
 
 export interface NativeSessionStore {
-    /** The agent tab the user chose, by `runtimeId:agentRef`; the tabs themselves come from the Runtime configuration. */
+    /** The agent tab the user chose, by `computerId:agentRef`; the tabs themselves come from the Runtime configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -73,10 +73,13 @@ export interface NativeSessionStore {
 /** Linked native entries use the same current Session titles as the sidebar, without caching a presentation. */
 export function nativeSessionPresentation(model: NativeSessionStore, sessions: readonly ManagedChatSession[]) {
     const present = (entry: NativeSessionEntry) => {
-        // Several Morty Sessions can link to one native session; prefer the most recently updated one.
-        const linked = sessions
-            .filter((session) => entry.mortySessionIds.includes(session.id) && session.title.trim().length > 0)
-            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id));
+        const linked = sessions.filter(
+            (session) =>
+                model.directory.kind === "ready" &&
+                session.target.harness === model.directory.agentRef &&
+                session.target.sessionId === entry.sessionId &&
+                session.title.trim().length > 0,
+        );
         return { ...entry, displayTitle: linked[0]?.title ?? (entry.title || "Untitled session") };
     };
     return {
@@ -109,7 +112,7 @@ function relistMatch(
     }
     return (
         entries.find((entry) => entry.entryId === previewed.entryId) ??
-        entries.find((entry) => entry.nativeSessionId === previewed.nativeSessionId) ??
+        entries.find((entry) => entry.sessionId === previewed.sessionId) ??
         entries.find((entry) => entry.title === previewed.title && entry.directoryId === previewed.directoryId)
     );
 }
@@ -185,12 +188,11 @@ export const createNativeSessionStore = (
                 set({ selected });
                 const result = await requests.nativeSessions(
                     botId,
-                    agent.runtimeId,
+                    agent.computerId,
                     {
                         action: "list",
                         agentId: agent.agentRef,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         cursor: null,
                         discoveryId: null,
                     },
@@ -204,8 +206,8 @@ export const createNativeSessionStore = (
                 set({
                     directory: {
                         kind: "ready",
-                        runtimeId: agent.runtimeId,
-                        discoveryId: result.sessionId,
+                        computerId: agent.computerId,
+                        discoveryId: result.discoveryId,
                         agentRef: agent.agentRef,
                         capabilities: result.capabilities,
                         entries,
@@ -246,7 +248,7 @@ export const createNativeSessionStore = (
                     : directory.kind === "agent-unavailable"
                       ? `agent-unavailable:${selected}`
                       : directory.kind === "ready"
-                        ? `ready:${harnessValue(directory.runtimeId, directory.agentRef)}`
+                        ? `ready:${harnessValue(directory.computerId, directory.agentRef)}`
                         : directory.kind === "loading"
                           ? directory.listing
                           : null;
@@ -275,13 +277,12 @@ export const createNativeSessionStore = (
             try {
                 const content = await requests.nativeSession(
                     botId,
-                    directory.runtimeId,
+                    directory.computerId,
                     {
                         agentId: directory.agentRef,
                         directoryId: entry.directoryId,
-                        additionalDirectoryIds: entry.additionalDirectories.map((item) => item.directoryId),
                         entryId: entry.entryId,
-                        nativeSessionId: entry.nativeSessionId,
+                        sessionId: entry.sessionId,
                     },
                     signal,
                 );
@@ -319,11 +320,10 @@ export const createNativeSessionStore = (
                 const input = {
                     agentId: directory.agentRef,
                     directoryId: preview.entry.directoryId,
-                    additionalDirectoryIds: preview.entry.additionalDirectories.map((item) => item.directoryId),
-                    nativeSessionId: preview.entry.nativeSessionId,
+                    sessionId: preview.entry.sessionId,
                 };
                 const retained = get().forkIntent;
-                const target = JSON.stringify([directory.runtimeId, input]);
+                const target = JSON.stringify([directory.computerId, input]);
                 const forkIntent =
                     retained !== null && retained.target === target
                         ? retained
@@ -335,22 +335,19 @@ export const createNativeSessionStore = (
                     action === "fork"
                         ? await requests.forkNativeSession(
                               botId,
-                              directory.runtimeId,
+                              directory.computerId,
                               forkIntent.operationId,
                               input,
                               signal,
                           )
                         : await requests.nativeSessions(
                               botId,
-                              directory.runtimeId,
+                              directory.computerId,
                               {
                                   action,
                                   discoveryId: directory.discoveryId,
                                   agentId: directory.agentRef,
                                   directoryId: preview.entry.directoryId,
-                                  additionalDirectoryIds: preview.entry.additionalDirectories.map(
-                                      (item) => item.directoryId,
-                                  ),
                                   entryId: preview.entry.entryId,
                               },
                               signal,
@@ -387,12 +384,11 @@ export const createNativeSessionStore = (
             try {
                 const result = await requests.nativeSessions(
                     botId,
-                    directory.runtimeId,
+                    directory.computerId,
                     {
                         action: "list",
                         agentId: directory.agentRef,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         cursor: directory.nextCursor,
                         discoveryId: directory.discoveryId,
                     },

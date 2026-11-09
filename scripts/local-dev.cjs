@@ -475,6 +475,14 @@ async function prepare(options) {
             PLATFORM_CONFIG,
         ]);
 
+        log("provisioning local Morty service");
+        const { provisionLocalService } = await import("./provision-local-service.ts");
+        const { appId, appSecret } = await provisionLocalService(
+            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
+            platformPersist,
+            AbortSignal.timeout(60_000),
+        );
+
         log("starting Platform fixture");
         const platformPid = await startProcess(
             "platform",
@@ -482,6 +490,12 @@ async function prepare(options) {
                 "dev",
                 "--config",
                 PLATFORM_CONFIG,
+                "--var",
+                `APP_ORIGIN:${chatOrigin}`,
+                "--var",
+                `MORTY_RELAY_URL:${platformOrigin}`,
+                "--var",
+                `MORTY_SERVICE_SECRET:${appSecret}`,
                 "--ip",
                 "127.0.0.1",
                 "--port",
@@ -501,14 +515,6 @@ async function prepare(options) {
             90_000,
             "Platform health",
             { pid: platformPid, logPath: platformLog },
-        );
-
-        log("provisioning local Morty service");
-        const { provisionLocalService } = await import("./provision-local-service.ts");
-        const { appId, appSecret } = await provisionLocalService(
-            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
-            platformPersist,
-            AbortSignal.timeout(60_000),
         );
 
         if (options.build !== false) {
@@ -536,7 +542,6 @@ async function prepare(options) {
 
         const variables = {
             APP_ORIGIN: chatOrigin,
-            MORTY_SERVICE_ID: appId,
             MORTY_SERVICE_SECRET: appSecret,
             MORTY_RELAY_URL: platformOrigin,
         };
@@ -655,10 +660,6 @@ async function installLocalCli(stack) {
         );
         controller.signal.throwIfAborted();
         const entry = path.join(prefix, "node_modules", "@morty-build", "cli", "dist", "cli.js");
-        await run(process.execPath, [entry, "install", "--archive", tarball], {
-            ...options,
-            env: { ...process.env, MORTY_STATE_DIRECTORY: path.join(stack.stateDir, "morty") },
-        });
         return entry;
     } finally {
         process.removeListener("SIGINT", cancel);
@@ -757,7 +758,7 @@ async function setup(options) {
 
     const deadline = Date.now() + SETUP_READY_TIMEOUT_MILLISECONDS;
     let ready = null;
-    let runtimeId = null;
+    let computerId = null;
     let reusedConnectionId = null;
     for (;;) {
         const records = fs
@@ -771,15 +772,15 @@ async function setup(options) {
             fail(`setup failed: ${JSON.stringify(failure.error)}`);
         }
         const reused = records.findLast((record) => record !== null && record.status === "runtime_reused");
-        if (reused !== undefined && reused !== null && typeof reused.runtimeId === "string") {
-            runtimeId = reused.runtimeId;
+        if (reused !== undefined && reused !== null && typeof reused.computerId === "string") {
+            computerId = reused.computerId;
             if (typeof reused.connectionId === "string") {
                 reusedConnectionId = reused.connectionId;
             }
         }
         const paired = records.findLast((record) => record !== null && record.status === "runtime_paired");
-        if (paired !== undefined && paired !== null && typeof paired.runtimeId === "string") {
-            runtimeId = paired.runtimeId;
+        if (paired !== undefined && paired !== null && typeof paired.computerId === "string") {
+            computerId = paired.computerId;
         }
         const completed = records.findLast((record) => record !== null && record.status === "ready");
         if (completed !== undefined && completed !== null) {
@@ -797,7 +798,7 @@ async function setup(options) {
             `the setup runtime did not report ready within ${SETUP_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${setupLog}`,
         );
     }
-    if (runtimeId === null) {
+    if (computerId === null) {
         fail("the setup runtime did not report its Runtime ID");
     }
     const handoffUrl = typeof ready.url === "string" ? ready.url : "";
@@ -825,11 +826,7 @@ async function setup(options) {
                 fail("Morty returned an invalid connection list");
             }
             const connection = listed.find(
-                (item) =>
-                    item !== null &&
-                    typeof item === "object" &&
-                    item.app_id === stack.appId &&
-                    item.runtime_id === runtimeId,
+                (item) => item !== null && typeof item === "object" && item.computer_id === computerId,
             );
             if (
                 connection === undefined ||

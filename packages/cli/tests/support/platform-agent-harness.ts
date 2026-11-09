@@ -13,14 +13,12 @@ import {
     fakeAgentHarnessCapabilities,
 } from "./agent-harness.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "./controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "./runtime-credentials.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
 const runtimePairingSchema = v.object({
-    pairingId: v.string(),
-    projectId: v.string(),
-    runtimeId: v.string(),
-    channelId: v.string(),
+    computerId: v.string(),
     pairingCode: v.string(),
 });
 
@@ -38,11 +36,11 @@ function fakeAgentHarnessCatalog(definitions: readonly FakeAgentHarnessDefinitio
 export async function createFakeAgentHarnessRuntime(options: {
     readonly credential: string;
     readonly harnesses?: readonly FakeAgentHarnessDefinition[];
-    readonly nativeSessionIds?: ReadonlySet<string>;
+    readonly sessionIds?: ReadonlySet<string>;
     readonly origin: string;
     readonly relayOrigin?: string;
     readonly runtimeOptions?: RunRuntimeOptions;
-    readonly projectId: string;
+    readonly computerId: string;
     readonly server: TestServerApp;
     readonly signal: AbortSignal;
 }) {
@@ -55,11 +53,10 @@ export async function createFakeAgentHarnessRuntime(options: {
     try {
         await Promise.all([mkdir(workspace), mkdir(harnessState)]);
         await Promise.all(
-            [...(options.nativeSessionIds ?? [])].map(async (sessionId) =>
+            [...(options.sessionIds ?? [])].map(async (sessionId) =>
                 writeFile(
                     join(harnessState, `${encodeURIComponent(sessionId)}.json`),
                     JSON.stringify({
-                        additionalDirectories: [],
                         cwd: workspace,
                         fastMode: false,
                         history: [],
@@ -77,7 +74,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             runtimePairingSchema,
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/projects/${options.projectId}/runtime-pairings`, {
+                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
                         body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                         headers: {
                             authorization: `Bearer ${options.credential}`,
@@ -93,7 +90,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             v.object({ runtimeCredential: v.string() }),
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                    new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
                         body: JSON.stringify({
                             agents: fakeAgentHarnessCatalog(harnesses),
                             machineName: "Controlled Agent harness",
@@ -109,10 +106,14 @@ export async function createFakeAgentHarnessRuntime(options: {
         );
         const relayUrl = new URL(mortyApiPath("/v1/runtimes/connect"), options.relayOrigin ?? options.origin);
         relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-        relayUrl.searchParams.set("token", claim.runtimeCredential);
         const localContext = new RuntimeLocalContext(directory, process.env);
         const config = createRuntimeConfig(
-            { channelId: pairing.channelId, defaultWorkspace: workspace, relayUrl },
+            {
+                credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+                computerId: pairing.computerId,
+                defaultWorkspace: workspace,
+                relayUrl,
+            },
             harnesses.map((definition) => fakeAgentHarness(definition, harnessState)),
             localContext,
         );
@@ -147,7 +148,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         }
         const client = new MortyClient({
             endpoint: options.origin,
-            projectId: pairing.projectId,
+            computerId: pairing.computerId,
             credentialProvider: new StaticMortyCredentialProvider(options.credential),
             transport: { fetch: async (request: Request) => await options.server.request(request) },
         });
@@ -155,7 +156,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         return {
             client,
             failure,
-            runtimeId: pairing.runtimeId,
+            computerId: pairing.computerId,
             [Symbol.asyncDispose]: async () => {
                 if (disposed) {
                     return;

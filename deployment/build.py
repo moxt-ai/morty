@@ -52,7 +52,7 @@ def main():
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
-    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['platform_origin'], 'MORTY_SERVICE_ID': spec['app_id']}
+    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['platform_origin']}
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_SETUP_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
     env.update(MORTY_WORKER_CONFIG=str(generated / 'morty.json'), MORTY_APP_ORIGIN=spec['morty_origin'], MORTY_ASSET_ORIGIN=spec['asset_origin'])
@@ -62,13 +62,17 @@ def main():
     run(['pnpm', 'exec', 'vite', 'build', '--outDir', str(release)], env=env)
     platform = overlay(ROOT / 'packages/relay/wrangler.jsonc', environment)
     platform.update(name=spec['platform'], main=str(ROOT / 'deployment/platform-entry.mjs'))
-    platform['migrations'].append({'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']})
-    platform['migrations'].append({'tag': 'morty-retire-migration-control-20261106', 'deleted_classes': ['MigrationControl']})
+    # These production-only tags shipped immediately after the runtime browser transport.
+    insert_at = next(i for i, migration in enumerate(platform['migrations']) if migration['tag'] == 'platform-runtime-browser-transport') + 1
+    platform['migrations'][insert_at:insert_at] = [
+        {'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']},
+        {'tag': 'morty-retire-migration-control-20261106', 'deleted_classes': ['MigrationControl']},
+    ]
     platform['compatibility_flags'] = list(dict.fromkeys(platform.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     platform['d1_databases'] = [{'binding': 'PLATFORM_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]
-    platform['vars'] = {'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
-    platform['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
+    platform['vars'] = {**morty['vars'], 'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
+    platform['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET', 'MORTY_SERVICE_SECRET']}
     platform.pop('assets', None)
     for label, config in [('platform', platform)]:
         write(generated / (label + '.json'), config)

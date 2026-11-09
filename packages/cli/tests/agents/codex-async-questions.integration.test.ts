@@ -40,11 +40,10 @@ test("Given a real Codex model that asks the user a question while it keeps work
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId,
-                sessionId: peer.sessionId,
+                target: peer.target,
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt,
                 disposition: SessionPromptDisposition.Append,
@@ -76,7 +75,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
             encodeSessionHistoryPageLoad({
                 kind: "session.live-history.v2.page.load",
                 requestId: randomUUID(),
-                sessionId: peer.sessionId,
+                target: peer.target,
                 cursor: null,
                 eventLimit: 100,
             }),
@@ -95,7 +94,6 @@ test("Given a real Codex model that asks the user a question while it keeps work
         // Previewing the saved Codex thread replays it from Codex itself.
         const identity = {
             agentId: "codex",
-            additionalDirectoryIds: [],
             bindingId: peer.bindingId,
             directoryId: "default",
         } as const;
@@ -103,22 +101,21 @@ test("Given a real Codex model that asks the user a question while it keeps work
             encodeNativeSessionCommand({
                 ...identity,
                 kind: "native.session.request",
-                sessionId: peer.sessionId,
+                discoveryId: randomUUID(),
                 requestId: "list",
                 action: "list",
                 cursor: null,
             }),
         );
-        let nativeSessionId = "";
-        while (nativeSessionId === "") {
+        let sessionId = "";
+        while (sessionId === "") {
             const message = await peer.nextMessage();
             if (decodeMessageKind(message) === "native.session.result") {
                 const result = decodeNativeSessionResult(message);
                 if (result.action === "list") {
-                    nativeSessionId =
-                        result.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId))
-                            ?.nativeSessionId ?? "";
-                    expect(nativeSessionId).not.toBe("");
+                    sessionId =
+                        result.entries.find((entry) => entry.sessionId === peer.target.sessionId)?.sessionId ?? "";
+                    expect(sessionId).not.toBe("");
                 }
             }
         }
@@ -129,7 +126,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 eventLimit: 100,
                 kind: "session.preview-history.page.load",
                 requestId: randomUUID(),
-                sessionId: nativeSessionId,
+                target: { harness: "codex", sessionId },
             }),
         );
         for (;;) {

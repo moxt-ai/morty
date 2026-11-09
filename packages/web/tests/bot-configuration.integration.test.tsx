@@ -309,15 +309,10 @@ test("Given a paired Bot with cached agent settings, When a user filters its mod
     await created.waitForView(() => expect(created.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
-test("Given multiple Runtimes share a Project, When a user configures a paired Bot, Then only its Runtime harnesses are listed", {
+test("Given a paired computer, When a user opens Agent configuration, Then its harnesses appear once and unavailable harnesses are disabled", {
     timeout: 30_000,
 }, async () => {
-    const created = await createTestApp({
-        connectAgent: true,
-        prepare: async (application) => {
-            await application.connectRuntime();
-        },
-    });
+    const created = await createTestApp({ connectAgent: true });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
     await Promise.race([waitForConnection(created, "connected"), failure]);
 

@@ -1,12 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { type FileHandle, link, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { type FileHandle, link, mkdir, open, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { isNodeError } from "../../util/node-error.ts";
 
 // Engine data lives beneath its explicitly selected data directory. `current.json`
-// points at the current installation, whose directory keeps one file per saved connection in
-// `connections/` and one index file per relay channel in `channels/`.
+// selects the installation containing the daemon state and its single pairing.
 
 const MAXIMUM_FILE_BYTES = 16 * 1024;
 
@@ -21,19 +20,6 @@ export type InstallationDirectory = z.infer<typeof installationDirectorySchema>;
 
 export function installationDirectory(engineDataDir: string, installationId: string): InstallationDirectory {
     return installationDirectorySchema.parse(join(engineDataDir, installationId));
-}
-
-export function connectionDirectory(installationDirectory: string): string {
-    return join(installationDirectory, "connections");
-}
-
-export function connectionFilePath(connectionDirectory: string, connectionId: string): string {
-    return join(connectionDirectory, `${connectionId}.json`);
-}
-
-/** Channel index files are named by a hash, so a channel ID never becomes part of a path. */
-export function channelIndexFilePath(installationDirectory: string, channelId: string): string {
-    return join(installationDirectory, "channels", `mci_${createHash("sha256").update(channelId).digest("hex")}.json`);
 }
 
 export type InstallationFileRead =
@@ -62,6 +48,10 @@ export async function readInstallationFile(path: string): Promise<InstallationFi
 }
 
 /** Replaces a file atomically with owner-only permissions, creating its directory when it is missing. */
+/**
+ * Replaces a file with `text` durably: the new content reaches the disk before it replaces the old, and the rename
+ * reaches the disk before this returns. A credential the Relay has already rotated must survive a crash or power loss.
+ */
 export async function writeInstallationFile(path: string, text: string, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     const directory = dirname(path);
@@ -69,12 +59,32 @@ export async function writeInstallationFile(path: string, text: string, signal: 
     try {
         await mkdir(directory, { mode: 0o700, recursive: true });
         signal.throwIfAborted();
-        await writeFile(temporaryPath, text, { flag: "wx", mode: 0o600 });
+        const file = await open(temporaryPath, "wx", 0o600);
+        try {
+            await file.writeFile(text);
+            await file.sync();
+        } finally {
+            await file.close();
+        }
         signal.throwIfAborted();
         await rename(temporaryPath, path);
+        await syncDirectory(directory);
     } catch (cause) {
         await unlink(temporaryPath).catch(() => undefined);
         throw cause;
+    }
+}
+
+/** Flushes a rename in `directory`. Windows cannot open a directory to flush it; NTFS journals the rename itself. */
+async function syncDirectory(directory: string): Promise<void> {
+    if (process.platform === "win32") {
+        return;
+    }
+    const handle = await open(directory, "r");
+    try {
+        await handle.sync();
+    } finally {
+        await handle.close();
     }
 }
 
@@ -90,10 +100,6 @@ export async function createInstallationFile(path: string, text: string): Promis
     } finally {
         await rm(temporaryPath, { force: true });
     }
-}
-
-export async function listInstallationFiles(directory: string): Promise<readonly string[]> {
-    return await readdir(directory);
 }
 
 export async function removeInstallationFile(path: string): Promise<void> {

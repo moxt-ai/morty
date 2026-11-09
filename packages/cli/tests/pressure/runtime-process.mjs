@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
-const [state, channelId, relay, control, sourceRoot] = process.argv.slice(2);
+const [state, computerId, relay, runtimeCredential, control, sourceRoot] = process.argv.slice(2);
 const { AcpAgentDefinition } = await import(
     pathToFileURL(join(sourceRoot, "packages/cli/src/engine/acp/agent/agent-definition.ts"))
 );
@@ -11,6 +11,9 @@ const { createRuntimeConfig, RuntimeLocalContext } = await import(
 );
 const { RuntimeLoop } = await import(
     pathToFileURL(join(sourceRoot, "packages/cli/src/engine/runtime/runtime-loop.ts"))
+);
+const { memoryRuntimeCredentials } = await import(
+    pathToFileURL(join(sourceRoot, "packages/cli/tests/support/runtime-credentials.ts"))
 );
 const { ControlledAcpConnection } = await import(
     pathToFileURL(join(sourceRoot, "packages/cli/tests/support/agents/controlled-acp-connection.ts"))
@@ -36,7 +39,12 @@ const agent = new AcpAgentDefinition(
     "1.0.0",
 );
 const config = createRuntimeConfig(
-    { channelId, defaultWorkspace: join(state, "workspace"), relayUrl: new URL(relay) },
+    {
+        computerId,
+        defaultWorkspace: join(state, "workspace"),
+        relayUrl: new URL(relay),
+        credentials: memoryRuntimeCredentials(runtimeCredential),
+    },
     [agent],
     new RuntimeLocalContext(state, { PATH: process.env.PATH, HOME: join(state, "home") }),
 );

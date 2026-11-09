@@ -64,6 +64,27 @@
             "when": 1793412835285,
             "tag": "0008_remove_control_host_leases",
             "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "6",
+            "when": 1794195345487,
+            "tag": "0009_machine_identity",
+            "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "6",
+            "when": 1794200661590,
+            "tag": "0010_rotate_runtime_daemon_credentials",
+            "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "6",
+            "when": 1794208949476,
+            "tag": "0011_computer_authorization",
+            "breakpoints": true
         }
     ]
 }

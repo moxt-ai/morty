@@ -230,7 +230,7 @@ export const createDraftControlsStore = (
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
-            saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, directory.directoryId);
+            saveLastCwdPreference(botId, selected.computerId, selected.agentRef, directory.directoryId);
             return saveRecentCwdPreference(botId, {
                 directoryId: directory.directoryId,
                 directoryLabel: directory.directoryLabel,
@@ -389,7 +389,7 @@ export const createDraftControlsStore = (
                 }
                 const defaultCwd = await requests.directory(botId, "default", operation.signal);
                 operation.signal.throwIfAborted();
-                const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
+                const savedDirectoryId = readLastCwdPreference(botId, selected.computerId, selected.agentRef);
                 let cwd = defaultCwd;
                 if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
                     try {
@@ -505,7 +505,7 @@ export const createDraftControlsStore = (
                     selectedAgent !== null &&
                     connectedChatRuntimeAgents(configuration.runtime).some(
                         (agent) =>
-                            agent.runtimeId === selectedAgent.runtimeId && agent.agentRef === selectedAgent.agentRef,
+                            agent.computerId === selectedAgent.computerId && agent.agentRef === selectedAgent.agentRef,
                     );
                 if (offered && (settings.kind === "ready" || settings.kind === "refreshing")) {
                     await refreshSettings(settings, true, signal);

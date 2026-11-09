@@ -16,11 +16,10 @@ test("Given an owned Codex session, When Codex changes collaboration mode during
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId: randomUUID(),
-                sessionId: peer.sessionId,
+                target: peer.target,
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Enter Plan mode",
                 disposition: SessionPromptDisposition.Append,

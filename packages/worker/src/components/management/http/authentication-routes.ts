@@ -1,17 +1,18 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
-import { projectObject } from "../../../gateway/project-object-routing.ts";
+import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser, optionalBodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
 import {
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
     deviceAccessDurations,
+    localCredentialToken,
 } from "../entity/authentication/credential.ts";
 import { clientLocationHeader, decodeClientLocation } from "../entity/client-location.ts";
+import { anonymousCreationKey } from "../entity/computer-bootstrap.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -34,6 +35,13 @@ const transferInput = v.pipe(
         device: v.optional(v.pipe(v.string(), v.trim(), v.regex(/^[^\p{C}]{1,80}$/u))),
         /** A browser-held secret naming this redemption, so repeating it after a lost reply returns the same access. */
         redemptionKey: v.optional(v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u))),
+    }),
+    v.readonly(),
+);
+const revokeAllAccessInput = v.pipe(
+    v.strictObject({
+        /** The local credential that replaces the caller's; setup saved it before sending this request. */
+        successor: localCredentialToken,
     }),
     v.readonly(),
 );
@@ -104,10 +112,10 @@ export function createAuthenticationRoutes() {
                 signal,
                 input.locationHint ?? projectLocationHint(request),
             );
-            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
-                new Request("https://project.internal/__project/bootstrap", {
+            const response = await computerObject(context.env.config.bindings, project.computerId).fetch(
+                new Request("https://computer.internal/__computer/bootstrap", {
                     body: JSON.stringify({
-                        project,
+                        computer: project,
                         userId,
                         origin: { kind: "created", creationKey: input.creationKey },
                     }),
@@ -212,32 +220,37 @@ export function createAuthenticationRoutes() {
                 return json(identity);
             },
         )
-        .post("/identity/revoke-all-access", async (context) => {
-            const result = await context.env.services.authentication.revokeAllAccess(
-                context.get("bearerToken"),
-                context.req.raw.signal,
-            );
-            switch (result.kind) {
-                case "revoked":
-                    if (result.sessionAccess.kind === "unconfirmed") {
-                        context.env.logger.warn(
-                            { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
-                            "Revoked access did not reach the Session credentials already issued",
+        .post(
+            "/identity/revoke-all-access",
+            bodyParser<ManagementHttpEnvironment, typeof revokeAllAccessInput>(revokeAllAccessInput),
+            async (context) => {
+                const result = await context.env.services.authentication.revokeAllAccess(
+                    context.get("bearerToken"),
+                    context.req.valid("json").successor,
+                    context.req.raw.signal,
+                );
+                switch (result.kind) {
+                    case "revoked":
+                        if (result.sessionAccess.kind === "unconfirmed") {
+                            context.env.logger.warn(
+                                { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
+                                "Revoked access did not reach the Session credentials already issued",
+                            );
+                        }
+                        return json({ status: "access_revoked", sessionAccess: result.sessionAccess.kind }, 200, {
+                            "Cache-Control": "no-store",
+                        });
+                    case "unauthenticated":
+                        throw new ManagementError("UNAUTHENTICATED", "Local identity is required.", 401);
+                    case "forbidden":
+                        throw new ManagementError(
+                            "LOCAL_IDENTITY_REQUIRED",
+                            "Use the original identity saved on the machine to revoke all access.",
+                            403,
                         );
-                    }
-                    return json({ status: "access_revoked", sessionAccess: result.sessionAccess.kind }, 200, {
-                        "Cache-Control": "no-store",
-                    });
-                case "unauthenticated":
-                    throw new ManagementError("UNAUTHENTICATED", "Local identity is required.", 401);
-                case "forbidden":
-                    throw new ManagementError(
-                        "LOCAL_IDENTITY_REQUIRED",
-                        "Use the original identity saved on the machine to revoke all access.",
-                        403,
-                    );
-            }
-        })
+                }
+            },
+        )
         .delete("/identity/v1/other-browser-access", async (context) => {
             const result = await context.env.services.authentication.endOtherBrowserAccess(
                 context.get("bearerToken"),

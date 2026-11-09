@@ -5,11 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionOperationFailedEvent,
+    decodeSessionReadyEvent,
     encodeRuntimeLivenessReadyEvent,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     encodeWorkspaceListCommand,
     MORTY_API_PREFIX,
@@ -37,6 +40,7 @@ import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtim
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { type ScheduledTask, systemTimer, type Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("../sessions/fixtures/acp-peer.ts", import.meta.url));
@@ -311,8 +315,9 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "heartbeat-channel",
+                computerId: "heartbeat-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/heartbeat-channel/daemon`,
                 ),
@@ -453,8 +458,9 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "runtime-revoked-channel",
+                computerId: "runtime-revoked-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/runtime-revoked-channel/daemon`,
                 ),
@@ -606,8 +612,9 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "liveness-channel",
+                computerId: "liveness-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/liveness-channel/daemon`,
                 ),
@@ -643,7 +650,7 @@ describe("daemon relay connection liveness", () => {
                 JSON.stringify({
                     kind: "session.future.changed",
                     requestId: "future-changed-request",
-                    sessionId: "session-1",
+                    target: { harness: "claude", sessionId: "session-1" },
                 }),
             );
             writeServerTextFrame(
@@ -660,7 +667,7 @@ describe("daemon relay connection liveness", () => {
             expect(decodeSessionOperationFailedEvent((await frames.next()).text)).toMatchObject({
                 code: "unsupported_operation",
                 requestId: "future-changed-request",
-                sessionId: "session-1",
+                target: { harness: "claude", sessionId: "session-1" },
             });
             expect(decodeMessageKind((await frames.next()).text)).toBe(WORKSPACE_ENTRIES_KIND);
 
@@ -762,8 +769,9 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "unsupported-channel",
+                computerId: "unsupported-channel",
                 relayUrl: new URL(
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/unsupported-channel/daemon`,
                 ),
@@ -791,7 +799,7 @@ describe("daemon relay connection liveness", () => {
                 JSON.stringify({
                     kind: "session.future.read",
                     requestId: "future-read-request",
-                    sessionId: "future-session",
+                    target: { harness: "claude", sessionId: "future-session" },
                 }),
             );
             // The unknown command must not disturb the connection: a known command
@@ -943,23 +951,6 @@ describe("daemon relay connection liveness", () => {
                     }),
                 );
             }
-            if (daemonSockets.length === 1 || daemonSockets.length === 3) {
-                writeServerTextFrame(
-                    socket,
-                    encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
-                        agentId: "codex",
-                        bindingId: "workspace",
-                        commandId: daemonSockets.length === 1 ? "reconciliation-command" : "fresh-command",
-                        directoryId: "default",
-                        disposition: "append",
-                        attachments: [],
-                        kind: SESSION_PROMPT_KIND,
-                        prompt: "broadcast without viewers",
-                        sessionId: daemonSockets.length === 1 ? "reconciliation-session" : "fresh-session",
-                    }),
-                );
-            }
             upgradeWaiters.shift()?.();
         });
         await listen(relay);
@@ -983,10 +974,11 @@ describe("daemon relay connection liveness", () => {
         process.env["no_proxy"] = "127.0.0.1,localhost";
         const config = createRuntimeConfig(
             {
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
                 defaultWorkspace,
-                channelId: "reconciliation-channel",
+                computerId: "reconciliation-channel",
                 relayUrl: new URL(
-                    `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/reconciliation-channel/daemon?token=reconciliation-secret`,
+                    `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/reconciliation-channel/daemon`,
                 ),
             },
             new RuntimeAgentDependencies([
@@ -1024,7 +1016,52 @@ describe("daemon relay connection liveness", () => {
             if (firstSocket === undefined) {
                 throw new Error("Test relay did not retain the first connection");
             }
-            const initialEvents: SessionLiveEvent[] = [];
+            const startSession = async (socket: Duplex, frames: ClientFrameQueue, commandId: string) => {
+                writeServerTextFrame(
+                    socket,
+                    encodeSessionCreateCommand({
+                        kind: "session.create",
+                        requestId: commandId,
+                        operationId: commandId,
+                        agentId: "codex",
+                        bindingId: "workspace",
+                        directoryId: "default",
+                        configurations: [],
+                    }),
+                );
+                const events: SessionLiveEvent[] = [];
+                for (;;) {
+                    const frame = await frames.next();
+                    const kind = decodeMessageKind(frame.text);
+                    if (kind === "session.operation.failed") {
+                        throw new Error(frame.text);
+                    }
+                    if (kind === SESSION_EVENT_KIND) {
+                        events.push(...decodeSessionEventEnvelope(frame.text).events);
+                    }
+                    if (kind !== "session.ready") {
+                        continue;
+                    }
+                    const sessionTarget = decodeSessionReadyEvent(frame.text).target;
+                    writeServerTextFrame(
+                        socket,
+                        encodeSessionPromptCommand({
+                            kind: SESSION_PROMPT_KIND,
+                            commandId,
+                            target: sessionTarget,
+                            agentId: "codex",
+                            bindingId: "workspace",
+                            directoryId: "default",
+                            disposition: "append",
+                            attachments: [],
+                            prompt: "broadcast without viewers",
+                        }),
+                    );
+                    return { sessionTarget, events };
+                }
+            };
+            const first = await startSession(firstSocket, firstFrame, "reconciliation-command");
+            const initialEvents = first.events;
             while (
                 !initialEvents.some(
                     (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed",
@@ -1062,7 +1099,6 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         commandId: `live-command-${turn}`,
@@ -1071,7 +1107,7 @@ describe("daemon relay connection liveness", () => {
                         attachments: [],
                         kind: SESSION_PROMPT_KIND,
                         prompt: "keep broadcasting",
-                        sessionId: "reconciliation-session",
+                        target: first.sessionTarget,
                     }),
                 );
                 let terminal = false;
@@ -1127,6 +1163,11 @@ describe("daemon relay connection liveness", () => {
             if (freshFrames === undefined) {
                 throw new Error("Test relay did not observe the restarted daemon");
             }
+            const freshSocket = daemonSockets[2];
+            if (freshSocket === undefined) {
+                throw new Error("Missing fresh daemon connection");
+            }
+            const fresh = await startSession(freshSocket, freshFrames, "fresh-command");
             let freshFrame = await freshFrames.next();
             if (decodeMessageKind(freshFrame.text) === RUNTIME_HEARTBEAT_KIND) {
                 freshFrame = await freshFrames.next();
@@ -1134,11 +1175,11 @@ describe("daemon relay connection liveness", () => {
             while (decodeMessageKind(freshFrame.text) !== SESSION_EVENT_KIND) {
                 freshFrame = await freshFrames.next();
             }
-            const freshEvents = [...decodeSessionEventEnvelope(freshFrame.text).events];
+            const freshEvents = [...fresh.events, ...decodeSessionEventEnvelope(freshFrame.text).events];
             while (
                 !freshEvents.some(
                     (event) =>
-                        event.sessionId === "fresh-session" &&
+                        sameNativeSession(event.target, fresh.sessionTarget) &&
                         event.type === "lifecycle-metadata" &&
                         event.payload.kind === "prompt.requested",
                 )
@@ -1151,7 +1192,7 @@ describe("daemon relay connection liveness", () => {
             // A restart retains terminal facts, while no earlier content or admission is replayed.
             expect(
                 freshEvents
-                    .filter((event) => event.sessionId !== "fresh-session")
+                    .filter((event) => !sameNativeSession(event.target, fresh.sessionTarget))
                     .every((event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed"),
             ).toBe(true);
             expect(freshEvents).toEqual(

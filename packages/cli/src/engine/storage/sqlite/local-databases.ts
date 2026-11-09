@@ -10,8 +10,8 @@ export interface ChannelSessionDatabasePaths {
 }
 
 /** Each relay channel keeps its saved sessions and its spilled session events in its own files. */
-export function channelSessionDatabasePaths(stateDirectory: string, channelId: string): ChannelSessionDatabasePaths {
-    const channelHash = createHash("sha256").update(channelId).digest("hex");
+export function channelSessionDatabasePaths(stateDirectory: string, computerId: string): ChannelSessionDatabasePaths {
+    const channelHash = createHash("sha256").update(computerId).digest("hex");
     return {
         events: join(stateDirectory, "sessions", `${channelHash}.events.sqlite`),
         sessions: join(stateDirectory, "sessions", `${channelHash}.sqlite`),

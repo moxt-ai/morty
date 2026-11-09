@@ -28,11 +28,10 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                 encodeSessionPromptCommand({
                     kind: "session.prompt",
                     commandId,
-                    sessionId: sourceSessionId,
+                    target: sourceSessionId,
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     attachments: [],
                     prompt: `Question ${turn}: answer without using tools`,
                     disposition: SessionPromptDisposition.Append,
@@ -59,12 +58,11 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
             }
         }
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
             kind: "native.session.request",
-            sessionId: sourceSessionId,
+            discoveryId: randomUUID(),
         } as const;
         const resultFor = async (requestId: string): Promise<NativeSessionResult> => {
             for (;;) {
@@ -88,32 +86,33 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
         if (directory.action !== "list") {
             throw new Error("Expected native directory");
         }
-        const source = directory.entries.find((entry) => entry.mortySessionIds.includes(sourceSessionId));
+        const source = directory.entries.find((entry) => entry.sessionId === sourceSessionId.sessionId);
         if (source === undefined) {
             throw new Error("Missing source conversation");
         }
         const forkId = randomUUID();
-        const targetSessionId = randomUUID();
         peer.send(
             encodeNativeSessionCommand({
                 ...identity,
                 action: "fork",
                 entryId: source.entryId,
-                targetSessionId,
                 requestId: forkId,
             }),
         );
         const forked = await resultFor(forkId);
+        if (forked.action !== "fork") {
+            throw new Error("Expected native fork");
+        }
         expect(forked).toMatchObject({
             action: "fork",
-            targetSessionId,
-            ready: { restored: true, sessionId: targetSessionId },
+            target: forked.target,
+            ready: { restored: true, target: forked.target },
         });
         const historyId = randomUUID();
         peer.send(
             encodeSessionHistoryPageLoad({
                 kind: "session.live-history.v2.page.load",
-                sessionId: targetSessionId,
+                target: forked.target,
                 requestId: historyId,
                 cursor: null,
                 eventLimit: 10,
@@ -148,7 +147,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
             encodeSessionPromptCommand({
                 ...identity,
                 kind: "session.prompt",
-                sessionId: targetSessionId,
+                target: forked.target,
                 commandId: continuedId,
                 prompt: "Continue this fork without using tools",
                 attachments: [],

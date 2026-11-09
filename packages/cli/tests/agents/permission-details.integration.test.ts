@@ -38,7 +38,6 @@ test.each(["allow_once", "reject_once"] as const)(
         await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
@@ -47,7 +46,7 @@ test.each(["allow_once", "reject_once"] as const)(
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     sessionConfigurations: [
                         { configId: "mode", valueType: "select", value: "read-only", booleanValue: false },
                     ],
@@ -78,14 +77,13 @@ test.each(["allow_once", "reject_once"] as const)(
                     peer.send(
                         encodeNativeSessionCommand({
                             action: "active-turn",
-                            additionalDirectoryIds: [],
                             agentId: "codex",
                             bindingId: peer.bindingId,
                             directoryId: "default",
                             kind: "native.session.request",
                             requestId,
-                            sessionId: peer.sessionId,
-                            targetSessionId: peer.sessionId,
+                            target: peer.target,
+                            discoveryId: randomUUID(),
                         }),
                     );
                     for (;;) {
@@ -108,7 +106,7 @@ test.each(["allow_once", "reject_once"] as const)(
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             interactionId: permission.interactionId,
                             optionId: option.optionId,
                             outcome: "selected",
@@ -161,7 +159,6 @@ test.each(["allow_once", "reject_once"] as const)(
             await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, async (peer) => {
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         commandId: randomUUID(),
@@ -170,7 +167,7 @@ test.each(["allow_once", "reject_once"] as const)(
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         sessionConfigurations: [
                             { configId: "mode", valueType: "select", value: "default", booleanValue: false },
                         ],
@@ -195,14 +192,13 @@ test.each(["allow_once", "reject_once"] as const)(
                         peer.send(
                             encodeNativeSessionCommand({
                                 action: "active-turn",
-                                additionalDirectoryIds: [],
                                 agentId: "claude",
                                 bindingId: peer.bindingId,
                                 directoryId: "default",
                                 kind: "native.session.request",
                                 requestId,
-                                sessionId: peer.sessionId,
-                                targetSessionId: peer.sessionId,
+                                target: peer.target,
+                                discoveryId: randomUUID(),
                             }),
                         );
                         for (;;) {
@@ -228,7 +224,7 @@ test.each(["allow_once", "reject_once"] as const)(
                             encodeSessionPermissionRespondCommand({
                                 kind: "session.permission.respond",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 interactionId: permission.interactionId,
                                 optionId: option.optionId,
                                 outcome: "selected",

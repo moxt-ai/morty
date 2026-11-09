@@ -44,16 +44,16 @@ test("Given effort was chosen before the model it depends on, When the conversat
                 MORTY_FAKE_ACP_STATE_DIRECTORY: directory,
             },
             async (peer) => {
-                const sessionId = await prepareNewRealSession(peer, "controlled-acp");
-                await prompt(peer, sessionId);
-                let revision = await configure(peer, sessionId, "model", "test-large", "");
-                revision = await configure(peer, sessionId, "reasoning_effort", "high", revision);
+                const sessionTarget = await prepareNewRealSession(peer, "controlled-acp");
+                await prompt(peer, sessionTarget);
+                let revision = await configure(peer, sessionTarget, "model", "test-large", "");
+                revision = await configure(peer, sessionTarget, "reasoning_effort", "high", revision);
                 // Trying another model and returning makes the model the latest edit.
-                revision = await configure(peer, sessionId, "model", "test-small", revision);
-                await configure(peer, sessionId, "model", "test-large", revision);
+                revision = await configure(peer, sessionTarget, "model", "test-small", revision);
+                await configure(peer, sessionTarget, "model", "test-large", revision);
 
-                await close(peer, sessionId);
-                expect(await prepare(peer, sessionId)).toEqual(
+                await close(peer, sessionTarget);
+                expect(await prepare(peer, sessionTarget)).toEqual(
                     expect.arrayContaining([
                         expect.objectContaining({ id: "model", currentValue: "test-large" }),
                         expect.objectContaining({ id: "reasoning_effort", currentValue: "high" }),
@@ -76,11 +76,11 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
                 MORTY_FAKE_ACP_STATE_DIRECTORY: directory,
             },
             async (peer) => {
-                const sessionId = await prepareNewRealSession(peer, "controlled-acp");
-                await configure(peer, sessionId, "model", "test-large", "");
+                const sessionTarget = await prepareNewRealSession(peer, "controlled-acp");
+                await configure(peer, sessionTarget, "model", "test-large", "");
 
                 await peer.restart();
-                expect(await prepare(peer, sessionId)).toEqual(
+                expect(await prepare(peer, sessionTarget)).toEqual(
                     expect.arrayContaining([expect.objectContaining({ id: "model", currentValue: "test-large" })]),
                 );
             },
@@ -91,13 +91,12 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
 });
 
 const identity = (peer: RealDaemonPeer) => ({
-    additionalDirectoryIds: [],
     agentId: "controlled-acp",
     bindingId: peer.bindingId,
     directoryId: "default",
 });
 
-async function prompt(peer: RealDaemonPeer, sessionId: string): Promise<void> {
+async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {
     peer.send(
         encodeSessionPromptCommand({
             ...identity(peer),
@@ -106,7 +105,7 @@ async function prompt(peer: RealDaemonPeer, sessionId: string): Promise<void> {
             disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt: "Start the conversation",
-            sessionId,
+            target: sessionTarget,
         }),
     );
     for (;;) {
@@ -120,9 +119,11 @@ async function prompt(peer: RealDaemonPeer, sessionId: string): Promise<void> {
     }
 }
 
-async function prepare(peer: RealDaemonPeer, sessionId: string) {
+async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]) {
     const requestId = crypto.randomUUID();
-    peer.send(encodeSessionPrepareCommand({ ...identity(peer), kind: "session.prepare", requestId, sessionId }));
+    peer.send(
+        encodeSessionPrepareCommand({ ...identity(peer), kind: "session.prepare", requestId, target: sessionTarget }),
+    );
     for (;;) {
         const message = await nextMessage(peer, "session.ready");
         const ready = decodeSessionReadyEvent(message);
@@ -135,12 +136,12 @@ async function prepare(peer: RealDaemonPeer, sessionId: string) {
 /** Changes one setting as the Web does and returns the revision the next change must name. */
 async function configure(
     peer: RealDaemonPeer,
-    sessionId: string,
+    sessionTarget: RealDaemonPeer["target"],
     configId: string,
     value: string,
     expectedRevision: string,
 ): Promise<string> {
-    const revision = expectedRevision.length > 0 ? expectedRevision : await currentRevision(peer, sessionId);
+    const revision = expectedRevision.length > 0 ? expectedRevision : await currentRevision(peer, sessionTarget);
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionConfigureCommand({
@@ -150,7 +151,7 @@ async function configure(
             expectedConfigurationRevision: revision,
             kind: "session.configure",
             requestId,
-            sessionId,
+            target: sessionTarget,
             value,
             valueType: "select",
         }),
@@ -163,9 +164,11 @@ async function configure(
     }
 }
 
-async function currentRevision(peer: RealDaemonPeer, sessionId: string): Promise<string> {
+async function currentRevision(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<string> {
     const requestId = crypto.randomUUID();
-    peer.send(encodeSessionPrepareCommand({ ...identity(peer), kind: "session.prepare", requestId, sessionId }));
+    peer.send(
+        encodeSessionPrepareCommand({ ...identity(peer), kind: "session.prepare", requestId, target: sessionTarget }),
+    );
     for (;;) {
         const ready = decodeSessionReadyEvent(await nextMessage(peer, "session.ready"));
         if (ready.requestId === requestId) {
@@ -174,9 +177,9 @@ async function currentRevision(peer: RealDaemonPeer, sessionId: string): Promise
     }
 }
 
-async function close(peer: RealDaemonPeer, sessionId: string): Promise<void> {
+async function close(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {
     const requestId = crypto.randomUUID();
-    peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId, sessionId }));
+    peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId, target: sessionTarget }));
     await nextMessage(peer, "session.closed");
 }
 

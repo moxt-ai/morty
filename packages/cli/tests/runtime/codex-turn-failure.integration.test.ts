@@ -19,11 +19,10 @@ test("Given Codex fails a turn with a reason, When a member's prompt runs throug
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId,
-                sessionId: peer.sessionId,
+                target: peer.target,
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Do the work",
                 disposition: SessionPromptDisposition.Append,

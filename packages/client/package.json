@@ -9,7 +9,8 @@
         "./channel": "./src/channel.ts",
         "./platform": "./src/platform.ts",
         "./server": "./src/server.ts",
-        "./protocol": "./src/protocol/index.ts"
+        "./protocol": "./src/protocol/index.ts",
+        "./native-session": "./src/native-session.ts"
     },
     "engines": {
         "node": ">=20.19.0"
@@ -29,8 +30,8 @@
         "zod": "^4.6.7"
     },
     "devDependencies": {
-        "@types/node": "^24.13.5",
-        "happy-dom": "21.0.4"
+        "@types/node": "catalog:",
+        "happy-dom": "catalog:"
     },
     "sideEffects": false,
     "license": "Apache-2.0",

@@ -6,6 +6,7 @@ import {
     type MortyTransportSessionEvent,
     WsTransport,
 } from "@morty-build/client";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeAgentSettingsDiscoveredEvent,
     decodeMessageKind,
@@ -19,6 +20,7 @@ import {
     type Identifier,
     isDirectoryIdentifier,
     isIdentifier,
+    type NativeSessionTarget,
     SESSION_CLOSE_NOTICE_KIND,
     type SessionCloseNoticeEvent,
     type SessionConfigOption,
@@ -32,17 +34,17 @@ import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-ca
 import { CloudApiError, ManagementApi, runtimeBindingUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
+const nativeSessionTargetSchema = v.pipe(v.strictObject({ harness: identifier, sessionId: identifier }), v.readonly());
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
-        projectId: identifier,
-        sessionId: identifier,
+        computerId: identifier,
+        target: nativeSessionTargetSchema,
         credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         ready: v.unknown(),
         agentRef: identifier,
         workspaceRef: v.custom<string>(isDirectoryIdentifier),
-        instructions: v.pipe(v.string(), v.maxLength(100000)),
     }),
     v.readonly(),
 );
@@ -63,15 +65,14 @@ const managedSessionStatusSchema = v.variant("kind", [
 const managedSessionSchema = v.pipe(
     v.object({
         createdAt: v.pipe(v.string(), v.isoTimestamp()),
-        id: identifier,
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
         directoryId: v.string(),
-        additionalDirectoryIds: v.array(v.string()),
-        projectId: identifier,
+        computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
+        target: nativeSessionTargetSchema,
         status: managedSessionStatusSchema,
         userId: identifier,
     }),
@@ -82,7 +83,9 @@ export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
 const managedSessionStatusesFollowingSchema = v.object({
     sessions: v.literal("owned"),
-    statuses: v.array(v.pipe(v.object({ sessionId: identifier, status: managedSessionStatusSchema }), v.readonly())),
+    statuses: v.array(
+        v.pipe(v.object({ target: nativeSessionTargetSchema, status: managedSessionStatusSchema }), v.readonly()),
+    ),
 });
 /** Current statuses precede changes for every owned Session, including Sessions created after subscription. */
 export type ManagedSessionEvent =
@@ -90,14 +93,14 @@ export type ManagedSessionEvent =
           readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
           readonly sessions: "owned";
           readonly statuses: readonly {
-              readonly sessionId: string;
+              readonly target: NativeSessionTarget;
               readonly status: ManagedChatSession["status"];
           }[];
       }
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
-    runtimeId: identifier,
+    computerId: identifier,
     machineName: v.string(),
     online: v.boolean(),
     agents: v.array(
@@ -116,7 +119,7 @@ const networkDiagnosticSchema = v.strictObject({
 });
 export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
 export type ChatAgentSelection = {
-    readonly runtimeId: Identifier;
+    readonly computerId: Identifier;
     readonly machineName: string;
     readonly agentRef: Identifier;
     readonly label: string;
@@ -124,7 +127,7 @@ export type ChatAgentSelection = {
 export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
     return runtime.online
         ? runtime.agents.map((agent) => ({
-              runtimeId: runtime.runtimeId,
+              computerId: runtime.computerId,
               machineName: runtime.machineName,
               ...agent,
           }))
@@ -144,31 +147,26 @@ export type ConversationActiveTurn =
     | { readonly kind: "idle" }
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string };
 const sessionAccessSchema = v.object({
-    sessionId: identifier,
-    projectId: identifier,
+    target: nativeSessionTargetSchema,
+    computerId: identifier,
     credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });
 const localSessionEntrySchema = v.object({
-    entryId: identifier,
-    mortySessionIds: v.array(identifier),
-    nativeSessionId: identifier,
+    sessionId: identifier,
     title: v.string(),
     directoryId: v.string(),
     directoryLabel: v.string(),
-    additionalDirectories: v.array(v.object({ directoryId: v.string(), name: v.string() })),
     updatedAt: v.nullable(v.string()),
 });
 const managedSdkSessionSchema = v.object({
     agentRef: identifier,
-    instructions: v.string(),
     ready: v.unknown(),
     entry: localSessionEntrySchema,
 });
 const localSessionSchema = v.object({
     agentRef: identifier,
-    instructions: v.string(),
     result: v.unknown(),
     entry: localSessionEntrySchema,
 });
@@ -280,7 +278,7 @@ class BrowserSessionTransport implements MortyHttpTransport, MortyLiveEventTrans
 export class BotChatApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
-    readonly #projectId: string;
+    readonly #computerId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #credentialRejected: (() => void) | undefined;
@@ -294,7 +292,7 @@ export class BotChatApi {
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
-        readonly projectId: string;
+        readonly computerId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         /**
          * The access that replaced `rejected`, once whoever replaces it has finished, or null when nothing did. A
@@ -309,7 +307,7 @@ export class BotChatApi {
         readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
-        this.#projectId = v.parse(identifier, options.projectId);
+        this.#computerId = v.parse(identifier, options.computerId);
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#replacedToken = options.replacedToken;
@@ -329,11 +327,8 @@ export class BotChatApi {
     readonly close = (): void => {
         this.#sessionTransport.close();
     };
-    readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
-        v.parse(
-            accessSchema,
-            await this.#request(botId, "access", { conversationId: v.parse(identifier, conversationId) }, parent),
-        );
+    readonly access = async (botId: string, parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
+        v.parse(accessSchema, await this.#request(botId, "access", v.parse(nativeSessionTargetSchema, target), parent));
     readonly daemonDiagnostics = async (botId: string, signal: AbortSignal) =>
         decodeRuntimeDiagnosticsResult(
             JSON.stringify(await this.#request(botId, "daemon-diagnostics", undefined, signal)),
@@ -367,22 +362,18 @@ export class BotChatApi {
         title = "Untitled session",
     ) => ({
         agentRef: access.agentRef,
-        instructions: access.instructions,
         result: {
             action: "conversation" as const,
             access,
             activeTurn,
-            targetSessionId: access.sessionId,
+            target: access.target,
             ready: decodeSessionReadyEvent(JSON.stringify(access.ready)),
         },
         entry: {
-            entryId: access.sessionId,
-            mortySessionIds: [access.sessionId],
-            nativeSessionId: access.sessionId,
+            sessionId: access.target.sessionId,
             title,
             directoryId: access.workspaceRef,
             directoryLabel,
-            additionalDirectories: [],
             updatedAt: null,
         },
     });
@@ -403,7 +394,7 @@ export class BotChatApi {
         await this.#subscribe(
             new Request(
                 new URL(
-                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
+                    `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
                     this.#origin,
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
@@ -426,32 +417,26 @@ export class BotChatApi {
             },
         );
     };
-    readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal) =>
+    readonly archiveManagedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) =>
         v.parse(
             v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),
-            await this.#request(
-                botId,
-                "managed-session/archive",
-                { sessionId: v.parse(identifier, sessionId) },
-                signal,
-            ),
+            await this.#request(botId, "managed-session/archive", v.parse(nativeSessionTargetSchema, target), signal),
         );
-    readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
+    readonly managedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) => {
         const stored = v.parse(
             managedSdkSessionSchema,
-            await this.#request(botId, "managed-session", { sessionId }, signal),
+            await this.#request(botId, "managed-session", v.parse(nativeSessionTargetSchema, target), signal),
         );
         const ready = decodeSessionReadyEvent(JSON.stringify(stored.ready));
-        if (ready.sessionId !== sessionId) {
+        if (ready.agentId !== target.harness || stored.entry.sessionId !== target.sessionId) {
             throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
         }
         return {
             agentRef: stored.agentRef,
-            instructions: stored.instructions,
             entry: stored.entry,
             result: {
                 action: "managed" as const,
-                targetSessionId: sessionId,
+                target: ready.target,
                 ready,
             },
         };
@@ -525,7 +510,7 @@ export class BotChatApi {
     };
     /** Resolves once the Machine's Runtime binding differs from the binding this client last read. */
     readonly waitForRuntimeBindingChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#projectId, botId), "GET", parent);
+        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#computerId, botId), "GET", parent);
     readonly waitForRuntimeConfigurationChange = async (
         botId: string,
         parent: AbortSignal,
@@ -533,7 +518,7 @@ export class BotChatApi {
     ): Promise<void> =>
         await this.#waitForResourceChange(
             new URL(
-                `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
+                `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
                 this.#origin,
             ),
             "POST",
@@ -547,9 +532,9 @@ export class BotChatApi {
         );
     readonly forkNativeSession = async (
         botId: string,
-        runtimeId: string,
+        computerId: string,
         operationId: string,
-        input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[2],
+        input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[1],
         signal: AbortSignal,
     ) =>
         decodeNativeSessionResult(
@@ -557,7 +542,7 @@ export class BotChatApi {
                 await this.#request(
                     botId,
                     `native-session-forks/${encodeURIComponent(operationId)}`,
-                    { ...input, runtimeId },
+                    { ...input, computerId },
                     signal,
                 ),
             ),
@@ -565,13 +550,13 @@ export class BotChatApi {
 
     readonly nativeSessions = async (
         botId: string,
-        runtimeId: string,
-        input: Parameters<MortyClient["runtimes"]["nativeSessions"]>[1],
+        computerId: string,
+        input: Parameters<MortyClient["runtimes"]["nativeSessions"]>[0],
         signal: AbortSignal,
     ) => {
         if (input.action === "list") {
             return decodeNativeSessionResult(
-                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
+                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, computerId }, signal)),
             );
         }
         if (input.action !== "import") {
@@ -586,7 +571,7 @@ export class BotChatApi {
                 await this.#request(
                     botId,
                     `native-session/${encodeURIComponent(v.parse(identifier, entryId))}/${action}`,
-                    { ...identity, runtimeId },
+                    { ...identity, computerId },
                     signal,
                 ),
             ),
@@ -594,13 +579,12 @@ export class BotChatApi {
     };
     readonly nativeSession = async (
         botId: string,
-        runtimeId: string,
+        computerId: string,
         input: {
             readonly entryId: string;
             readonly agentId: string;
             readonly directoryId: string;
-            readonly additionalDirectoryIds: readonly string[];
-            readonly nativeSessionId: string;
+            readonly sessionId: string;
         },
         signal: AbortSignal,
     ) => {
@@ -609,7 +593,7 @@ export class BotChatApi {
             await this.#request(
                 botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, entryId))}`,
-                { ...identity, runtimeId },
+                { ...identity, computerId },
                 signal,
             ),
         );
@@ -617,7 +601,7 @@ export class BotChatApi {
 
     readonly connectSession = async (
         botId: string,
-        sessionId: string,
+        target: NativeSessionTarget,
         signal: AbortSignal,
         initialAccess?: ChatAccess,
     ): Promise<MortyClient> => {
@@ -629,7 +613,7 @@ export class BotChatApi {
                         await this.#request(
                             botId,
                             "session-access",
-                            { sessionId: v.parse(identifier, sessionId) },
+                            v.parse(nativeSessionTargetSchema, target),
                             parent,
                         ),
                     );
@@ -644,13 +628,13 @@ export class BotChatApi {
         };
         let access = initialAccess ?? (await readAccess(signal));
         const endpoint = sessionEndpoint(access.endpoint);
-        const projectId = access.projectId;
-        if (access.sessionId !== sessionId) {
+        const computerId = access.computerId;
+        if (!sameNativeSession(access.target, target)) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
         return new MortyClient({
             endpoint,
-            projectId,
+            computerId,
             operationTimeoutMilliseconds: 120000,
             maxStreamReconnectAttempts: 0,
             transport: this.#sessionTransport,
@@ -661,8 +645,8 @@ export class BotChatApi {
                     }
                     if (
                         sessionEndpoint(access.endpoint) !== endpoint ||
-                        access.projectId !== projectId ||
-                        access.sessionId !== sessionId
+                        access.computerId !== computerId ||
+                        !sameNativeSession(access.target, target)
                     ) {
                         throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session changed.");
                     }
@@ -698,7 +682,7 @@ export class BotChatApi {
             this.#fetchRequest(
                 new Request(
                     new URL(
-                        `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
                         this.#origin,
                     ),
                     {

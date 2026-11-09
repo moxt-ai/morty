@@ -10,6 +10,10 @@ on:
         description: The change touches only Markdown, so only static checks and the security scan apply.
         type: boolean
         default: false
+      release:
+        description: Build the release candidate for this main commit, carrying its release version and tested on every supported OS.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -151,6 +155,8 @@ jobs:
         if: steps.archive.outputs.restored != 'true'
       - name: Assign the stable version
         if: steps.archive.outputs.restored != 'true'
+        env:
+          MORTY_RELEASE_CANDIDATE: ${{ inputs.release }}
         run: node scripts/prepare-release.mjs
       - run: pnpm build:cli
         if: steps.archive.outputs.restored != 'true'
@@ -180,7 +186,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Pull requests cover every supported Node version on Linux; release
+        # candidates, which the merge queue gates main on, add macOS and Windows.
+        os: ${{ fromJSON(inputs.release && '["ubuntu-latest", "macos-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
         node: ['22.19.0', '24.20.0', '22', '24']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25

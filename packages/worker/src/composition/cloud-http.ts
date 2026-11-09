@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { createChatApplication } from "../components/chat/http/index.ts";
 import { createManagementApplication } from "../components/management/http/index.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
-import { cloudProjectContext } from "../middleware/project-context.ts";
+import { cloudComputerContext } from "../middleware/computer-context.ts";
 import type { ApplicationContext } from "./application-context.ts";
 
 type CloudHttpEnvironment = {
@@ -11,12 +11,12 @@ type CloudHttpEnvironment = {
 };
 
 const managementApplication = createManagementApplication();
-const projectManagementApplication = createManagementApplication("/morty/api/projects/:projectId");
+const projectManagementApplication = createManagementApplication("/morty/api/computers/:computerId");
 const chatApplication = createChatApplication();
 
 export const cloudRoutes = new Hono<CloudHttpEnvironment>()
-    .use("*", cloudProjectContext)
-    .all("/projects/:projectId/*", (context) =>
+    .use("*", cloudComputerContext)
+    .all("/computers/:computerId/*", (context) =>
         projectManagementApplication.fetch(context.req.raw, context.var.dependencies),
     )
     .all("/chat", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies))
@@ -30,49 +30,47 @@ export const cloudRoutes = new Hono<CloudHttpEnvironment>()
 
 export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
     .post("/identity/anonymous-users", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/projects/:projectId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/projects/:projectId/management/bot", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/projects/:projectId/management/bots/:botId/runtime-binding", (context) =>
+    .get("/computers/:computerId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/computers/:computerId/management/bot", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/computers/:computerId/management/bots/:botId/runtime-binding", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .get("/projects/:projectId/management/project", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .post("/projects/:projectId/management/project/replacement", (context) =>
+    .get("/computers/:computerId/management/computer", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/computers/:computerId/management/computer/replacement", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/projects/:projectId/management/runtime-pairings", (context) =>
+    .post("/computers/:computerId/management/pairing", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/computers/:computerId/management/pairing", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/computers/:computerId/identity/transfers", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/computers/:computerId/identity/devices", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/computers/:computerId/identity/revoke-all-access", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .get("/projects/:projectId/management/runtime-pairings/:pairingId", (context) =>
+    .post("/computers/:computerId/identity/recovery-token", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/projects/:projectId/identity/transfers", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/projects/:projectId/identity/devices", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .post("/projects/:projectId/identity/revoke-all-access", (context) =>
+    .delete("/computers/:computerId/identity/v1/browser-access", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/projects/:projectId/identity/recovery-token", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .delete("/projects/:projectId/identity/v1/browser-access", (context) =>
+    .delete("/computers/:computerId/identity/v1/devices/:deviceId", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .delete("/projects/:projectId/identity/v1/devices/:deviceId", (context) =>
+    .delete("/computers/:computerId/identity/v1/other-browser-access", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .delete("/projects/:projectId/identity/v1/other-browser-access", (context) =>
+    .delete("/computers/:computerId/identity/v1/recovery-credential", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .delete("/projects/:projectId/identity/v1/recovery-credential", (context) =>
+    .delete("/computers/:computerId/identity/v1/local-credential", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .delete("/projects/:projectId/identity/v1/local-credential", (context) =>
+    .post("/chat/computers/:computerId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/chat/computers/:computerId/bots/:botId/setup/runtimes", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/chat/projects/:projectId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .post("/chat/projects/:projectId/bots/:botId/setup/runtimes", (context) =>
+    .post("/chat/computers/:computerId/bots/:botId/workspace", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/chat/projects/:projectId/bots/:botId/workspace", (context) =>
-        cloudRoutes.fetch(context.req.raw, context.env),
-    )
-    .post("/chat/projects/:projectId/bots/:botId/agent-settings", (context) =>
+    .post("/chat/computers/:computerId/bots/:botId/agent-settings", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     );

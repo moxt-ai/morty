@@ -34,18 +34,16 @@ class Inbox {
 
 // @no-uc: Runtime transport regression. HTTP native queries must not multiply live-event egress.
 it("isolates native query replies from live fanout across hibernation and daemon disconnect", async () => {
-    const runtimeId = `fanout-${crypto.randomUUID()}`;
-    const projectId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(projectId, runtimeId);
-    const relay = env.RUNTIME_RELAY.getByName(runtimeId);
+    const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    await registerRuntimeFixture(computerId);
+    const relay = env.COMPUTER_RELAY.getByName(computerId);
     const clients: WebSocket[] = [];
     const connect = async (path: string) => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
-        const response = await relay.fetch(`https://runtime.internal/projects/${projectId}/${path}`, {
+        const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
-                "x-morty-channel-id": "fanout-channel",
-                "x-morty-runtime-id": runtimeId,
+
                 "x-morty-host-credential-id": "apc_fanout",
                 "x-morty-host-credential-kind": "project",
             },
@@ -64,7 +62,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
         const daemon = await connect("daemon");
         const viewer = await connect("host");
         expect(await viewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
-        const sessionViewer = await connect("host?sessionId=session-7");
+        const sessionViewer = await connect("host?harness=claude&sessionId=session-7");
         expect(await sessionViewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
         const queries = await Promise.all(
             Array.from({ length: 16 }, async (_, index) => {
@@ -85,7 +83,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
                             position: "1",
                             recordedAt: "2026-10-20T12:54:00.000Z",
                             sessionGenerationId: `generation-${index}`,
-                            sessionId: `session-${index}`,
+                            target: { harness: "claude", sessionId: `session-${index}` },
                             type: "acp",
                             payload: {
                                 sessionUpdate: "agent_message_chunk",
@@ -99,7 +97,9 @@ it("isolates native query replies from live fanout across hibernation and daemon
         for (let index = 0; index < 25; index += 1) {
             expect(await viewer.inbox.next()).toMatchObject({ kind: "session.event.v2" });
         }
-        expect(await sessionViewer.inbox.next()).toMatchObject({ events: [{ sessionId: "session-7" }] });
+        expect(await sessionViewer.inbox.next()).toMatchObject({
+            events: [{ target: { harness: "claude", sessionId: "session-7" } }],
+        });
         expect(sessionViewer.inbox.received.filter((message) => message["kind"] === "session.event.v2")).toHaveLength(
             1,
         );
@@ -110,12 +110,13 @@ it("isolates native query replies from live fanout across hibernation and daemon
         ).toEqual(Array(16).fill(0));
 
         for (const sessionId of ["session-8", "session-7"]) {
-            daemon.socket.send(JSON.stringify({ kind: "session.status.changed", sessionId, status: { kind: "idle" } }));
-            expect(await viewer.inbox.next()).toMatchObject({ kind: "session.status.changed", sessionId });
+            const target = { harness: "claude", sessionId: sessionId };
+            daemon.socket.send(JSON.stringify({ kind: "session.status.changed", target, status: { kind: "idle" } }));
+            expect(await viewer.inbox.next()).toMatchObject({ kind: "session.status.changed", target });
         }
         expect(await sessionViewer.inbox.next()).toMatchObject({
             kind: "session.status.changed",
-            sessionId: "session-7",
+            target: { harness: "claude", sessionId: "session-7" },
         });
 
         await evictDurableObject(relay, { webSockets: "hibernate" });
@@ -123,7 +124,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
             encodeSessionEventEnvelope({
                 kind: "session.event.v2",
                 events: ["session-7", "session-8"].map((sessionId) => ({
-                    sessionId,
+                    target: { harness: "claude", sessionId: sessionId },
                     eventId: `after-hibernation-${sessionId}`,
                     position: "2",
                     recordedAt: "2026-10-21T00:00:00.000Z",
@@ -137,16 +138,21 @@ it("isolates native query replies from live fanout across hibernation and daemon
             }),
         );
         expect(await viewer.inbox.next()).toMatchObject({
-            events: [{ sessionId: "session-7" }, { sessionId: "session-8" }],
+            events: [
+                { target: { harness: "claude", sessionId: "session-7" } },
+                { target: { harness: "claude", sessionId: "session-8" } },
+            ],
         });
-        expect(await sessionViewer.inbox.next()).toMatchObject({ events: [{ sessionId: "session-7" }] });
+        expect(await sessionViewer.inbox.next()).toMatchObject({
+            events: [{ target: { harness: "claude", sessionId: "session-7" } }],
+        });
         const reply = (requestId: string) =>
             encodeNativeSessionResult({
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId,
-                sessionId: "session-7",
-                targetSessionId: "session-7",
+                discoveryId: requestId,
+                target: { harness: "claude", sessionId: "session-7" },
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
@@ -163,20 +169,17 @@ it("isolates native query replies from live fanout across hibernation and daemon
             encodeSessionOperationFailedEvent({
                 kind: "session.operation.failed",
                 requestId: "query-8",
-                sessionId: "session-8",
+                target: { harness: "claude", sessionId: "session-8" },
                 code: "native_session_busy",
                 message: "Another native session operation is running",
             }),
         );
         expect(await viewer.inbox.next()).toMatchObject({ kind: "session.operation.failed", requestId: "query-8" });
-        await expect
-            .poll(() => queries[8]?.inbox.received.at(-1), { timeout: 1_000 })
-            .toMatchObject({
-                kind: "session.operation.failed",
-                requestId: "query-8",
-                code: "native_session_busy",
-            });
-        expect(await queries[8]?.inbox.next()).toMatchObject({ code: "native_session_busy" });
+        expect(await queries[8]?.inbox.next()).toMatchObject({
+            kind: "session.operation.failed",
+            requestId: "query-8",
+            code: "native_session_busy",
+        });
 
         queries[7]?.socket.close(1000, "Query complete");
         daemon.socket.send(reply("query-7"));
@@ -192,16 +195,14 @@ it("isolates native query replies from live fanout across hibernation and daemon
 });
 
 it("Given a host connection without credential kind, When it reaches the service boundary, Then it is rejected instead of inferred as a channel credential", async () => {
-    const runtimeId = `kind-${crypto.randomUUID()}`;
-    const projectId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(projectId, runtimeId);
-    const response = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
-        `https://runtime.internal/projects/${projectId}/host`,
+    const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    await registerRuntimeFixture(computerId);
+    const response = await env.COMPUTER_RELAY.getByName(computerId).fetch(
+        `https://runtime.internal/computers/${computerId}/host`,
         {
             headers: {
                 Upgrade: "websocket",
-                "x-morty-channel-id": "kind-channel",
-                "x-morty-runtime-id": runtimeId,
+
                 "x-morty-host-credential-id": "retired-host",
             },
         },

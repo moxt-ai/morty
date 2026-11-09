@@ -71,12 +71,11 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             );
             await entered.promise;
             const identity = {
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
                 kind: "native.session.request",
-                sessionId: peer.sessionId,
+                discoveryId: crypto.randomUUID(),
             } as const;
             const findId = randomUUID();
             peer.send(
@@ -84,7 +83,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
                     ...identity,
                     requestId: findId,
                     action: "find",
-                    nativeSessionId: thread.id,
+                    sessionId: thread.id,
                 }),
             );
             const found = await nativeResult(peer, findId);
@@ -98,14 +97,15 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
                     requestId: importId,
                     action: "import",
                     entryId: found.entry.entryId,
-                    targetSessionId: peer.sessionId,
                 }),
             );
-            expect((await nativeResult(peer, importId)).action).toBe("import");
+            const imported = await nativeResult(peer, importId);
+            if (imported.action !== "import") {
+                throw new Error("Expected native import");
+            }
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     commandId,
@@ -114,7 +114,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "This queued instruction must be withdrawn",
-                    sessionId: peer.sessionId,
+                    target: imported.target,
                 }),
             );
             await queued.promise;
@@ -127,7 +127,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
                     commandId,
-                    sessionId: peer.sessionId,
+                    target: imported.target,
                 }),
             );
             for (;;) {

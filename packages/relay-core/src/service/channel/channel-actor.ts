@@ -1,3 +1,4 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     AGENT_CATALOG_DISCOVER_KIND,
     AGENT_CATALOG_DISCOVERED_KIND,
@@ -29,6 +30,8 @@ import {
     decodeSessionCloseCommand,
     decodeSessionConfigReadCommand,
     decodeSessionConfigureCommand,
+    decodeSessionCreateCommand,
+    decodeSessionCreationReadCommand,
     decodeSessionElicitationRespondCommand,
     decodeSessionHistoryPageLoad,
     decodeSessionListCommand,
@@ -49,15 +52,16 @@ import {
     FILE_END_KIND,
     FILE_FAILED_KIND,
     FILE_READ_KIND,
-    isIdentifier,
     NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
     NATIVE_SESSION_RESULT_KIND,
     type NativeSessionCommand,
+    type NativeSessionTarget,
     ProtocolMessageError,
     RUNTIME_PING_KIND,
     RUNTIME_PONG_KIND,
     RUNTIME_STATUS_KIND,
+    readNativeSessionTarget,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
     SESSION_CLOSE_KIND,
@@ -67,6 +71,8 @@ import {
     SESSION_CONFIG_READ_RESULT_KIND,
     SESSION_CONFIG_UPDATED_KIND,
     SESSION_CONFIGURE_KIND,
+    SESSION_CREATE_KIND,
+    SESSION_CREATION_READ_KIND,
     SESSION_ELICITATION_RESPOND_KIND,
     SESSION_EVENT_KIND,
     SESSION_HISTORY_PAGE_LOAD_KIND,
@@ -132,7 +138,7 @@ function knownChunk(value: unknown, skipped: () => void) {
 export type HistoryRequestKind = "live" | "preview";
 
 export interface ChannelSocket {
-    readonly sessionFilter?: string | undefined;
+    readonly sessionFilter?: NativeSessionTarget | undefined;
     readonly close: (code: number, reason: string) => void;
     readonly consumeAgentSettingsDiscovery: (requestId: string, agentId: string) => boolean;
     readonly consumeAgentSettingsDiscoveryFailure: (requestId: string) => boolean;
@@ -149,13 +155,13 @@ export interface ChannelSocket {
 export interface ChannelPeers {
     readonly viewers: () => readonly {
         readonly socket: ChannelSocket;
-        readonly sessionId: string;
+        readonly target: NativeSessionTarget;
         readonly expiresAt: number;
     }[];
     readonly operations: () => readonly {
         readonly socket: ChannelSocket;
         readonly requestId: string;
-        readonly sessionId: string;
+        readonly target: NativeSessionTarget | undefined;
     }[];
     readonly daemons: () => readonly ChannelSocket[];
     readonly hosts: () => readonly ChannelSocket[];
@@ -178,8 +184,7 @@ export class ChannelActor {
                 event: "relay_message_skipped",
                 reason,
                 skippedCount: this.#skippedCount,
-                runtimeId: this.#runtimeId,
-                projectId: this.#projectId,
+                computerId: this.#computerId,
             },
             "Relay skipped unsupported input",
         );
@@ -187,23 +192,21 @@ export class ChannelActor {
         this.#skippedCount = 0;
     };
     readonly #peers: ChannelPeers;
-    readonly #projectId: string;
-    readonly #runtimeId: string;
+    readonly #computerId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
-        readonly config: { readonly projectId: string; readonly runtimeId: string };
+        readonly config: { readonly computerId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
-        const { projectId, runtimeId } = cx.config;
+        const { computerId } = cx.config;
         const { peers, notifications } = cx.gateways;
         this.#peers = peers;
-        this.#projectId = projectId;
-        this.#runtimeId = runtimeId;
-        this.#liveEvents = new SessionLiveEventRelay(projectId, runtimeId, peers, notifications);
+        this.#computerId = computerId;
+        this.#liveEvents = new SessionLiveEventRelay(computerId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {
@@ -218,7 +221,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online: this.hasOnlineDaemon(),
-                runtimeId: this.#runtimeId,
+                computerId: this.#computerId,
             }),
         );
         return Promise.resolve();
@@ -258,9 +261,9 @@ export class ChannelActor {
                     this.recordSkipped("unsupported_daemon_envelope");
                     return;
                 }
-                const sessionId: unknown = Reflect.get(value, "sessionId");
+                const parsed = readNativeSessionTarget(Reflect.get(value, "target"));
                 const kind: unknown = Reflect.get(value, "kind");
-                if (typeof kind !== "string" || kind.length === 0 || kind.length > 64 || !isIdentifier(sessionId)) {
+                if (typeof kind !== "string" || kind.length === 0 || kind.length > 64 || parsed === null) {
                     this.recordSkipped("unroutable_daemon_message");
                     return;
                 }
@@ -272,11 +275,16 @@ export class ChannelActor {
                         ...this.#peers.hosts(),
                         ...this.#peers
                             .operations()
-                            .filter((route) => route.requestId === requestId && route.sessionId === sessionId)
+                            .filter(
+                                (route) =>
+                                    route.requestId === requestId &&
+                                    route.target !== undefined &&
+                                    sameNativeSession(route.target, parsed),
+                            )
                             .map((route) => route.socket),
                     ],
                     encoded,
-                    sessionId,
+                    parsed,
                 );
                 return;
             }
@@ -289,8 +297,8 @@ export class ChannelActor {
             if (kind === SESSION_INFO_UPDATED_KIND) {
                 this.broadcast(
                     this.#peers.hosts(),
-                    JSON.stringify({ ...JSON.parse(wire), projectId: this.#projectId }),
-                    message.sessionId,
+                    JSON.stringify({ ...JSON.parse(wire), computerId: this.#computerId }),
+                    message.target,
                 );
                 return;
             }
@@ -312,7 +320,7 @@ export class ChannelActor {
                             .map(({ socket }) => socket),
                     ],
                     wire,
-                    message.sessionId,
+                    "target" in message ? message.target : undefined,
                 );
                 return;
             }
@@ -343,7 +351,8 @@ export class ChannelActor {
                     wire,
                 );
             }
-            this.broadcast(this.#peers.hosts(), wire, "sessionId" in message ? message.sessionId : undefined);
+            const target = readNativeSessionTarget("target" in message ? message.target : undefined);
+            this.broadcast(this.#peers.hosts(), wire, target ?? undefined);
         } catch (error) {
             if (signal.aborted) {
                 throw error;
@@ -417,7 +426,17 @@ export class ChannelActor {
             }
             if (kind === SESSION_PREPARE_KIND) {
                 const command = decodeSessionPrepareCommand(message);
-                this.forwardControl(socket, command, command.requestId, command.sessionId, command, message);
+                this.forwardControl(socket, command, command.requestId, command.target, command, message);
+                return;
+            }
+            if (kind === SESSION_CREATE_KIND) {
+                const command = decodeSessionCreateCommand(message);
+                this.forwardControl(socket, command, command.requestId, undefined, command, message);
+                return;
+            }
+            if (kind === SESSION_CREATION_READ_KIND) {
+                const command = decodeSessionCreationReadCommand(message);
+                this.forwardControl(socket, command, command.requestId, undefined, command, message);
                 return;
             }
             if (kind === AGENT_SETTINGS_DISCOVER_KIND) {
@@ -428,7 +447,14 @@ export class ChannelActor {
             if (kind === NATIVE_SESSION_REQUEST_KIND) {
                 const request = decodeNativeSessionRequest(message);
                 const command: NativeSessionCommand = decodeNativeSessionCommand(message);
-                this.forwardControl(socket, command, request.requestId, request.sessionId, request, message);
+                this.forwardControl(
+                    socket,
+                    command,
+                    request.requestId,
+                    request.action === "active-turn" ? request.target : undefined,
+                    request,
+                    message,
+                );
                 return;
             }
             if (kind === SESSION_HISTORY_PAGE_LOAD_KIND) {
@@ -447,26 +473,19 @@ export class ChannelActor {
             }
             if (kind === SESSION_PERMISSION_RESPOND_KIND) {
                 const command = decodeSessionPermissionRespondCommand(message);
-                this.forwardControl(socket, command, command.interactionId, command.sessionId, command, message);
+                this.forwardControl(socket, command, command.interactionId, command.target, command, message);
                 return;
             }
             if (kind === SESSION_ELICITATION_RESPOND_KIND) {
                 const command = decodeSessionElicitationRespondCommand(message);
-                this.forwardControl(socket, command, command.interactionId, command.sessionId, command, message);
+                this.forwardControl(socket, command, command.interactionId, command.target, command, message);
                 return;
             }
             const control = this.validateHostControl(kind, message);
             if (control === null) {
                 return;
             }
-            this.forwardControl(
-                socket,
-                control.message,
-                control.requestId,
-                control.sessionId,
-                control.message,
-                message,
-            );
+            this.forwardControl(socket, control.message, control.requestId, control.target, control.message, message);
         } catch (error) {
             if (signal.aborted) {
                 throw error;
@@ -540,7 +559,7 @@ export class ChannelActor {
     ): {
         readonly message: ServiceToDaemonMessage;
         readonly requestId: string;
-        readonly sessionId: string;
+        readonly target: NativeSessionTarget | undefined;
     } | null => {
         switch (kind) {
             case NATIVE_SESSION_REQUEST_KIND: {
@@ -550,83 +569,83 @@ export class ChannelActor {
             }
             case NATIVE_SESSION_CANCEL_KIND: {
                 const command = decodeNativeSessionCancel(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             case SESSION_CANCEL_BEFORE_START_KIND: {
                 const command = decodeSessionCancelBeforeStartCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_CANCEL_KIND: {
                 const command = decodeSessionCancelCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_PROMPT_DISPOSITION_KIND: {
                 const command = decodeSessionPromptDispositionCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case WORKSPACE_LIST_KIND: {
                 const command = decodeWorkspaceListCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: "" };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             case AGENT_CATALOG_DISCOVER_KIND: {
                 const command = decodeAgentCatalogDiscoverCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: "" };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             case SESSION_QUERY_KIND: {
                 const command = decodeSessionQueryCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: "" };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             case SESSION_RESTORE_KIND: {
                 const command = decodeSessionRestoreCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_CLOSE_KIND: {
                 const command = decodeSessionCloseCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_LIST_KIND: {
                 const command = decodeSessionListCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: "" };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             case SESSION_CONFIGURE_KIND: {
                 const command = decodeSessionConfigureCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_CONFIG_READ_KIND: {
                 const command = decodeSessionConfigReadCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_RENAME_KIND: {
                 const command = decodeSessionRenameCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_PERMISSION_RESPOND_KIND: {
                 const command = decodeSessionPermissionRespondCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_ELICITATION_RESPOND_KIND: {
                 const command = decodeSessionElicitationRespondCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case FILE_READ_KIND: {
                 const command = decodeFileReadCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case CONTENT_WRITE_KIND: {
                 const command = decodeContentWriteCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case CONTENT_COMMIT_KIND: {
                 const command = decodeContentCommitCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, target: command.target };
             }
             case "runtime.diagnostics.read": {
                 const command = decodeRuntimeDiagnosticsRequest(message);
-                return { message: command, requestId: command.requestId, sessionId: "" };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             case RUNTIME_PING_KIND: {
                 const command = decodeRuntimePingCommand(message);
-                return { message: command, requestId: command.requestId, sessionId: "" };
+                return { message: command, requestId: command.requestId, target: undefined };
             }
             default:
                 return null;
@@ -637,7 +656,7 @@ export class ChannelActor {
         socket: ChannelSocket,
         message: ServiceToDaemonMessage,
         requestId: string,
-        sessionId: string,
+        target: NativeSessionTarget | undefined,
         broadcastMessage: ServiceToDaemonMessage = message,
         encoded?: string,
     ): void => {
@@ -648,7 +667,7 @@ export class ChannelActor {
                     kind: SESSION_OPERATION_FAILED_KIND,
                     message: "The local runtime is offline",
                     requestId,
-                    sessionId: sessionId.length === 0 ? "runtime" : sessionId,
+                    ...(target === undefined ? {} : { target }),
                 }),
             );
             return;
@@ -658,7 +677,7 @@ export class ChannelActor {
             broadcastMessage === message && encoded !== undefined
                 ? encoded
                 : encodeServiceToDaemonMessage(broadcastMessage),
-            sessionId.length === 0 ? undefined : sessionId,
+            target,
         );
     };
 
@@ -670,7 +689,7 @@ export class ChannelActor {
                     kind: SESSION_OPERATION_FAILED_KIND,
                     message: "The local runtime is offline",
                     requestId: command.commandId,
-                    sessionId: command.sessionId,
+                    target: command.target,
                 }),
             );
         }
@@ -814,17 +833,21 @@ export class ChannelActor {
                 ...this.#peers.operations().map(({ socket }) => socket),
                 ...this.#peers.nativeRequests().map(({ socket }) => socket),
             ],
-            encodeRuntimeStatusEvent({
-                kind: RUNTIME_STATUS_KIND,
-                online,
-                runtimeId: this.#runtimeId,
-            }),
+            encodeRuntimeStatusEvent({ kind: RUNTIME_STATUS_KIND, online, computerId: this.#computerId }),
         );
     };
 
-    private readonly broadcast = (sockets: readonly ChannelSocket[], message: string, sessionId?: string): void => {
+    private readonly broadcast = (
+        sockets: readonly ChannelSocket[],
+        message: string,
+        target?: NativeSessionTarget,
+    ): void => {
         for (const socket of sockets) {
-            if (sessionId !== undefined && socket.sessionFilter !== undefined && socket.sessionFilter !== sessionId) {
+            if (
+                target !== undefined &&
+                socket.sessionFilter !== undefined &&
+                !sameNativeSession(socket.sessionFilter, target)
+            ) {
                 continue;
             }
             if (socket.isOpen()) {

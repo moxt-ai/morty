@@ -18,10 +18,9 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { prepareNewRealSession, type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prompt: string) =>
+const submit = (peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], commandId: string, prompt: string) =>
     peer.send(
         encodeSessionPromptCommand({
-            additionalDirectoryIds: [],
             agentId: "controlled-acp",
             attachments: [],
             bindingId: peer.bindingId,
@@ -30,7 +29,7 @@ const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prom
             disposition: "append",
             kind: "session.prompt",
             prompt,
-            sessionId,
+            target: sessionTarget,
         }),
     );
 
@@ -62,13 +61,16 @@ const timeline = (page: NativeSessionEvents): readonly string[] =>
         return "commandId" in event.payload ? [`${event.payload.kind} ${event.payload.commandId}`] : [];
     });
 
-async function historyPage(peer: RealDaemonPeer, sessionId: string): Promise<NativeSessionEvents> {
+async function historyPage(
+    peer: RealDaemonPeer,
+    sessionTarget: RealDaemonPeer["target"],
+): Promise<NativeSessionEvents> {
     const requestId = randomUUID();
     peer.send(
         encodeSessionHistoryPageLoad({
             kind: "session.live-history.v2.page.load",
             requestId,
-            sessionId,
+            target: sessionTarget,
             eventLimit: 1_000,
             cursor: null,
         }),
@@ -98,15 +100,15 @@ test("Given a failed turn and a completed turn, When a client reads the replayed
             async (peer) => {
                 const failed = randomUUID();
                 const completed = randomUUID();
-                const sessionId = await prepareNewRealSession(peer, "controlled-acp");
+                const sessionTarget = await prepareNewRealSession(peer, "controlled-acp");
                 // The failed prompt retires the Agent process, so the history read after it replays the Agent's own
                 // transcript, which holds no command identity.
-                submit(peer, sessionId, failed, "fail with model unavailable");
+                submit(peer, sessionTarget, failed, "fail with model unavailable");
                 await liveUntil(peer, terminal(failed));
-                submit(peer, sessionId, completed, "The request completes");
+                submit(peer, sessionTarget, completed, "The request completes");
                 await liveUntil(peer, terminal(completed));
 
-                const page = await historyPage(peer, sessionId);
+                const page = await historyPage(peer, sessionTarget);
 
                 // The replayed history holds each turn's lifecycle around the user message its Agent recorded, and
                 // each ending where its turn ended.
@@ -148,8 +150,8 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
             async (peer) => {
                 const turn = randomUUID();
                 const steering = randomUUID();
-                const sessionId = await prepareNewRealSession(peer, "controlled-acp");
-                submit(peer, sessionId, turn, "wait for steering");
+                const sessionTarget = await prepareNewRealSession(peer, "controlled-acp");
+                submit(peer, sessionTarget, turn, "wait for steering");
                 await liveUntil(
                     peer,
                     (event) =>
@@ -157,7 +159,7 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
                         event.payload.kind === "prompt.started" &&
                         event.payload.commandId === turn,
                 );
-                submit(peer, sessionId, steering, "Apply the steering instruction");
+                submit(peer, sessionTarget, steering, "Apply the steering instruction");
                 await liveUntil(
                     peer,
                     (event) => event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed",
@@ -168,7 +170,7 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
                         disposition: "steer",
                         kind: SESSION_PROMPT_DISPOSITION_KIND,
                         requestId: crypto.randomUUID(),
-                        sessionId,
+                        target: sessionTarget,
                     }),
                 );
                 // The steering prompt and the turn it joined settle in either order.
@@ -182,7 +184,7 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
                     return settled.size === 2;
                 });
 
-                const page = await historyPage(peer, sessionId);
+                const page = await historyPage(peer, sessionTarget);
 
                 // The steering joins the running turn: its lifecycle follows the turn's start, and the turn ends last.
                 const order = timeline(page);

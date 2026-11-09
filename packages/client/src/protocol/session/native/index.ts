@@ -9,6 +9,7 @@ import {
 import { sessionReadyEventSchema } from "../lifecycle/index.ts";
 import { promptAttachmentSchema } from "../prompt/commands.ts";
 import { sessionCapabilitiesSchema } from "../shared/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const NATIVE_SESSION_REQUEST_KIND = "native.session.request";
 export const NATIVE_SESSION_RESULT_KIND = "native.session.result";
@@ -20,7 +21,7 @@ export const SESSION_HISTORY_MESSAGE_LIMIT = 1_000;
 
 const envelope = {
     requestId: identifier,
-    sessionId: identifier,
+    discoveryId: identifier,
 };
 const sessionInteractionSnapshotSchema = z
     .object({
@@ -93,7 +94,6 @@ export type LastTurnOutcome = z.infer<typeof lastTurnOutcomeSchema>;
 const identity = {
     ...envelope,
     kind: z.literal(NATIVE_SESSION_REQUEST_KIND),
-    additionalDirectoryIds: z.array(directoryId).max(16).readonly(),
     agentId: identifier,
     bindingId: identifier,
     directoryId,
@@ -107,10 +107,10 @@ const nativeSessionRequestSchema = z.discriminatedUnion("action", [
             // Asks the Runtime for this command's delivery alongside the execution snapshot. It is not
             // named `commandId`, which routes a request as the command it names.
             deliveryCommandId: identifier.optional(),
-            targetSessionId: identifier,
+            target: nativeSessionTargetSchema,
         })
         .readonly(),
-    z.object({ ...identity, action: z.literal("find"), nativeSessionId: identifier }).readonly(),
+    z.object({ ...identity, action: z.literal("find"), sessionId: identifier }).readonly(),
     z
         .object({
             ...identity,
@@ -123,7 +123,6 @@ const nativeSessionRequestSchema = z.discriminatedUnion("action", [
             ...identity,
             action: z.enum(["import", "fork"]),
             entryId: identifier,
-            targetSessionId: identifier,
         })
         .readonly(),
 ]);
@@ -136,10 +135,10 @@ const nativeSessionCommandSchema = z.discriminatedUnion("action", [
             // Asks the Runtime for this command's delivery alongside the execution snapshot. It is not
             // named `commandId`, which routes a request as the command it names.
             deliveryCommandId: identifier.optional(),
-            targetSessionId: identifier,
+            target: nativeSessionTargetSchema,
         })
         .readonly(),
-    z.object({ ...identity, action: z.literal("find"), nativeSessionId: identifier }).readonly(),
+    z.object({ ...identity, action: z.literal("find"), sessionId: identifier }).readonly(),
     z
         .object({
             ...identity,
@@ -152,7 +151,6 @@ const nativeSessionCommandSchema = z.discriminatedUnion("action", [
             ...identity,
             action: z.enum(["import", "fork"]),
             entryId: identifier,
-            targetSessionId: identifier,
         })
         .readonly(),
 ]);
@@ -161,16 +159,11 @@ export type NativeSessionCommand = z.infer<typeof nativeSessionCommandSchema>;
 const nativeSessionEntrySchema = z
     .object({
         entryId: identifier,
-        mortySessionIds: z.array(identifier).max(500).readonly(),
-        nativeSessionId: identifier,
+        sessionId: identifier,
         title: z.string().max(500),
         directoryId,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         updatedAt: z.iso.datetime({ offset: true }).nullable(),
-        additionalDirectories: z
-            .array(z.object({ directoryId, name: z.string().min(1).max(255) }).readonly())
-            .max(16)
-            .readonly(),
     })
     .readonly();
 export type NativeSessionEntry = z.infer<typeof nativeSessionEntrySchema>;
@@ -184,7 +177,7 @@ const nativeSessionResultSchema = z.discriminatedUnion("action", [
         .object({
             ...resultEnvelope,
             action: z.literal("active-turn"),
-            targetSessionId: identifier,
+            target: nativeSessionTargetSchema,
             queued: z
                 .array(
                     z
@@ -197,6 +190,15 @@ const nativeSessionResultSchema = z.discriminatedUnion("action", [
                 )
                 .readonly(),
             turn: activeTurnSnapshotSchema.nullable(),
+            // The whole execution read covers this prefix of the Session event log.
+            // Older Runtimes and relays omit it; callers retain the unversioned behavior.
+            executionPosition: z
+                .object({
+                    sessionGenerationId: identifier,
+                    throughPosition: z.string().regex(/^(0|[1-9][0-9]*)$/),
+                })
+                .readonly()
+                .optional(),
             // Null when this Runtime has no retained Session for the requested identity.
             interactionState: sessionInteractionSnapshotSchema.nullable(),
             // Present only when the request named a command.
@@ -227,7 +229,7 @@ const nativeSessionResultSchema = z.discriminatedUnion("action", [
         .object({
             ...resultEnvelope,
             action: z.enum(["import", "fork"]),
-            targetSessionId: identifier,
+            target: nativeSessionTargetSchema,
             ready: sessionReadyEventSchema,
             title: z.string().max(500),
         })

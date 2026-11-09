@@ -1,11 +1,10 @@
+import type { HeldRuntimeCredentials } from "./runtime-credentials.ts";
+
 export interface RuntimeConnectionInput {
-    readonly appId: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly defaultWorkspace: string;
-    readonly pairingId: string;
     readonly relayOrigin: URL;
     readonly runtimeCredential: string;
-    readonly runtimeId: string;
 }
 
 export type RuntimeConnectionActivation = "active" | "stopped";
@@ -14,38 +13,29 @@ export type RuntimeConnectionActivation = "active" | "stopped";
 export class VerifiedRuntimeConnection {
     readonly kind = "verified";
     readonly activation: RuntimeConnectionActivation;
-    readonly appId: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly connectionId: string;
     readonly defaultWorkspace: string;
     readonly installationId: string;
-    readonly pairingId: string;
     readonly relayOrigin: URL;
-    readonly runtimeCredential: string;
-
-    readonly runtimeId: string;
+    /** The credential state saved with this pairing; live users read it through the installation store. */
+    readonly credentials: HeldRuntimeCredentials;
 
     constructor(
         activation: RuntimeConnectionActivation,
-        appId: string,
         installationId: string,
         connectionId: string,
-        channelId: string,
+        computerId: string,
         defaultWorkspace: string,
-        pairingId: string,
         relayOrigin: URL,
-        runtimeCredential: string,
-        runtimeId: string,
+        credentials: HeldRuntimeCredentials,
     ) {
         this.activation = activation;
-        this.appId = appId;
-        this.channelId = channelId;
+        this.computerId = computerId;
         this.connectionId = connectionId;
         this.defaultWorkspace = defaultWorkspace;
         this.installationId = installationId;
-        this.pairingId = pairingId;
         this.relayOrigin = relayOrigin;
-        this.runtimeCredential = runtimeCredential;
-        this.runtimeId = runtimeId;
+        this.credentials = credentials;
     }
 }

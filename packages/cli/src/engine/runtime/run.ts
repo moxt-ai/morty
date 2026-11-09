@@ -1,5 +1,5 @@
 import { styleText } from "node:util";
-import type { RuntimeUpgradeResult } from "@morty-build/client/protocol";
+import type { NativeSessionTarget, RuntimeUpgradeResult } from "@morty-build/client/protocol";
 import { createRuntimeAdapterRegistry } from "../agent/runtime-agents.ts";
 import { buildSessionLayer } from "../session/api/session-layer.ts";
 import { LocalExternalContentStore } from "../session/content/external-content-store.ts";
@@ -97,7 +97,7 @@ export async function runRuntime(
     const signal = AbortSignal.any([parentSignal, shutdown.signal]);
     const stateDirectory = config.localContext.stateDirectory;
     const diagnostics = new RelayConnectionDiagnostics(
-        config.channelId,
+        config.computerId,
         config.relayUrl,
         new RuntimeDiagnosticLog(stateDirectory, {
             ...(options.processLogsDirectory === undefined
@@ -112,12 +112,12 @@ export async function runRuntime(
     const { adapters, externalizeSessionUpdate } = createRuntimeAdapterRegistry(
         config.adapters,
         processes,
-        (sessionId, content, contentSignal) => externalContent.put({ ...content, sessionId, signal: contentSignal }),
+        (target, content, contentSignal) => externalContent.put({ ...content, target, signal: contentSignal }),
         externalContent.linkedResources,
     );
-    const resolveAgent = async (agentId: string, resolveSignal: AbortSignal, sessionId?: string) => {
+    const resolveAgent = async (agentId: string, resolveSignal: AbortSignal, target?: NativeSessionTarget) => {
         const catalogAgent = await resolveCatalogAgent(config, agentId, resolveSignal);
-        const environment = sessionId === undefined ? undefined : config.sessionEnvironment?.({ sessionId, agentId });
+        const environment = target === undefined ? undefined : config.sessionEnvironment?.(target);
         const agent =
             environment === undefined
                 ? catalogAgent
@@ -132,7 +132,7 @@ export async function runRuntime(
         processes,
         ...(options.turnActivity === undefined ? {} : { turnActivity: options.turnActivity }),
         bindingId: config.bindingId,
-        channelId: config.channelId,
+        computerId: config.computerId,
         defaultWorkspace: config.defaultWorkspace,
         resolveAgent,
         sink: publisher,
@@ -148,6 +148,7 @@ export async function runRuntime(
         nativeSessions,
         operations,
         sessionStore,
+        sessionCreations,
     } = layer;
     let connectionEpoch = 0;
     let connectionAnnounced = false;
@@ -197,6 +198,7 @@ export async function runRuntime(
                     resolveAgent,
                     directories,
                     sessions: agentRuntime,
+                    sessionCreations,
                     nativeSessions,
                     operations,
                     publisher,
@@ -236,6 +238,7 @@ export async function runRuntime(
         await runCleanup(
             () => catalogPublication,
             () => nativeSessions.close(),
+            () => sessionCreations.settle(),
             () => agentRuntime.close(),
             () => adapters.close(),
             () => sessionStore.close(),

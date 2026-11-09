@@ -5,7 +5,7 @@ import {
     decodeMessageKind,
     decodeSessionReadyEvent,
     decodeSessionsQueriedEvent,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     encodeSessionQueryCommand,
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
@@ -44,20 +44,20 @@ async function reply(peer: RealDaemonPeer, kind: string, requestId: string): Pro
     }
 }
 
-async function prepare(peer: RealDaemonPeer, sessionId: string, directoryId: string): Promise<void> {
+async function createSession(peer: RealDaemonPeer, directoryId: string): Promise<RealDaemonPeer["target"]> {
     const requestId = crypto.randomUUID();
     peer.send(
-        encodeSessionPrepareCommand({
-            additionalDirectoryIds: [],
+        encodeSessionCreateCommand({
             agentId: NATIVE_AGENT_ID,
             bindingId: peer.bindingId,
             directoryId,
-            kind: "session.prepare",
+            kind: "session.create",
             requestId,
-            sessionId,
+            operationId: crypto.randomUUID(),
+            configurations: [],
         }),
     );
-    expect(decodeSessionReadyEvent(await reply(peer, "session.ready", requestId)).requestId).toBe(requestId);
+    return decodeSessionReadyEvent(await reply(peer, "session.ready", requestId)).target;
 }
 
 test("Given a Session whose directory was deleted, When a client queries it with other Sessions, Then every Session is described with its recorded directory", async () => {
@@ -71,20 +71,18 @@ test("Given a Session whose directory was deleted, When a client queries it with
             specification,
             { MORTY_TEST_CONTROLLED_QUERY_PATH: process.execPath },
             async (peer) => {
-                const kept = crypto.randomUUID();
-                const orphaned = crypto.randomUUID();
-                await prepare(peer, kept, "default");
-                await prepare(peer, orphaned, deletedDirectoryId);
+                const kept = await createSession(peer, "default");
+                const orphaned = await createSession(peer, deletedDirectoryId);
                 await rm(deleted, { recursive: true, force: true });
 
                 const requestId = crypto.randomUUID();
-                peer.send(
-                    encodeSessionQueryCommand({ kind: "session.query", requestId, sessionIds: [kept, orphaned] }),
-                );
+                peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId, targets: [kept, orphaned] }));
                 const { entries } = decodeSessionsQueriedEvent(await reply(peer, "session.queried", requestId));
 
-                expect(entries.map((entry) => entry.sessionId).sort()).toEqual([kept, orphaned].sort());
-                expect(entries.find((entry) => entry.sessionId === orphaned)?.directoryId).toBe(deletedDirectoryId);
+                expect(entries.map((entry) => entry.target)).toEqual(expect.arrayContaining([kept, orphaned]));
+                expect(entries.find((entry) => entry.target.sessionId === orphaned.sessionId)?.directoryId).toBe(
+                    deletedDirectoryId,
+                );
             },
         );
     } finally {

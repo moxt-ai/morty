@@ -35,7 +35,6 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
             const steeringPrompt = "Use the recovered steering requirement";
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     commandId: activeCommandId,
@@ -44,13 +43,12 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     attachments: [],
                     kind: "session.prompt",
                     prompt: fakeProviderPrompts.twoTools,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             await activeEntered.promise;
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     commandId: steeringCommandId,
@@ -59,7 +57,7 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     attachments: [],
                     kind: "session.prompt",
                     prompt: steeringPrompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {
@@ -80,7 +78,7 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     disposition: SessionPromptDisposition.Steer,
                     kind: "session.prompt.disposition",
                     requestId: crypto.randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {
@@ -130,7 +128,7 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     eventLimit: 50,
                     kind: "session.live-history.v2.page.load",
                     requestId,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {
@@ -153,7 +151,16 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                             event.payload.messageId === steeringMessageId,
                     ),
                 ).toBe(true);
-                expect(recovered.events.events.events.every((event) => event.type === "acp")).toBe(true);
+                expect(recovered.events.events.events).toContainEqual(
+                    expect.objectContaining({
+                        type: "lifecycle-metadata",
+                        payload: expect.objectContaining({
+                            kind: "prompt.requested",
+                            commandId: steeringCommandId,
+                            disposition: "steer",
+                        }),
+                    }),
+                );
                 break;
             }
         });
@@ -189,7 +196,6 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
             const prompt = (commandId: string, text = `Reply to ${commandId}`): void =>
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         commandId,
@@ -198,7 +204,7 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
                         attachments: [],
                         kind: "session.prompt",
                         prompt: text,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
 
@@ -227,7 +233,7 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
                     eventLimit: 1,
                     kind: "session.live-history.v2.page.load",
                     requestId,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {
@@ -251,7 +257,7 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
                             eventLimit: 1,
                             kind: "session.live-history.v2.page.load",
                             requestId: olderRequestId,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     for (;;) {
@@ -284,7 +290,11 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
                         event.eventId,
                     );
                 }
-                expect(historyEvents.every((event) => event.type === "acp")).toBe(true);
+                expect(
+                    historyEvents.filter(
+                        (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.requested",
+                    ),
+                ).toHaveLength(2);
                 expect(historyEvents.map((event) => event.eventId)).toEqual(
                     historyEvents.map((event) => event.eventId).toSorted(),
                 );
@@ -333,11 +343,10 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         prompt: `Reply to ${commandId}`,
                         disposition: SessionPromptDisposition.Append,
@@ -371,7 +380,7 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                     eventLimit: 25,
                     kind: "session.live-history.v2.page.load",
                     requestId: randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {
@@ -391,7 +400,7 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                 encodeSessionCancelCommand({
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     commandId: cancelled,
                 }),
             );

@@ -3,7 +3,6 @@ import type {
     ProjectPermission,
     RuntimeAccessContext,
 } from "../../entity/authentication/project-authentication.ts";
-import type { ProjectScope } from "../../entity/do/session.ts";
 import type {
     AgentDescriptor,
     ChannelDescriptor,
@@ -20,40 +19,42 @@ import type {
     VerifiedChannelAccess,
 } from "../../entity/pairing/pairing.ts";
 export interface PairingOperations {
-    readonly authorizeDaemon: (channelId: string, token: string, signal: AbortSignal) => Promise<RuntimeAccessContext>;
-    readonly authorizeRuntimeCredential: (token: string, signal: AbortSignal) => Promise<RuntimeAccessContext>;
-    readonly authorizeHost: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
-    readonly authorizeProjectRuntimeHost: (
-        projectId: string,
-        runtimeId: string,
+    /**
+     * Rotates a daemon credential to the successor the daemon saved. A reused credential has already ended the
+     * Runtime's access when this returns; the caller closes its connections.
+     */
+    readonly rotateRuntimeCredential: (
+        token: string,
+        successor: string,
+        signal: AbortSignal,
+    ) => Promise<
+        { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
+    >;
+    readonly authorizeHost: (computerId: string, token: string, signal: AbortSignal) => Promise<ChannelHostCredential>;
+    readonly authorizePairedHost: (
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<ProjectCredentialHostAccess>;
     readonly authorizeProject: (
-        projectId: string,
+        computerId: string,
         token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<ProjectAccessContext>;
-    readonly authorizeProjectRuntime: (
-        projectId: string,
-        runtimeId: string,
+    readonly authorizePairing: (
+        computerId: string,
         token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
-    readonly authorizeProjectScopeRuntime: (
-        scope: ProjectScope,
-        runtimeId: string,
-        signal: AbortSignal,
-    ) => Promise<VerifiedChannelAccess>;
     readonly createChannelAccessGrant: (
-        channelId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<CreatedChannelAccessGrant>;
     readonly createBrowserCredential: (
-        projectId: string,
+        computerId: string,
         token: string,
         lifetimeMilliseconds: number,
         signal: AbortSignal,
@@ -62,27 +63,28 @@ export interface PairingOperations {
     // the original identity, secrets, and deadline, including after expiration
     // or revocation. A failed response may follow a commit; retry the same key.
     readonly createProjectRuntimePairing: (
-        projectId: string,
+        computerId: string,
         token: string,
         idempotencyKey: string,
         signal: AbortSignal,
     ) => Promise<CreatedRuntimePairing>;
     readonly listLinkedChannelDevices: (
-        channelId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<readonly LinkedChannelDevice[]>;
     readonly listProjectRuntimes: (
-        projectId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<readonly ChannelDescriptor[]>;
-    readonly readChannel: (channelId: string, token: string, signal: AbortSignal) => Promise<ChannelDescriptor>;
+    /** Whether the Project's Runtime was revoked; false for one the Project never had. */
+    readonly isProjectRuntimeRevoked: (computerId: string, token: string, signal: AbortSignal) => Promise<boolean>;
+    readonly readChannel: (computerId: string, token: string, signal: AbortSignal) => Promise<ChannelDescriptor>;
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that
     // order. Passing the deadline never expires an already registered Runtime.
     readonly readProjectRuntimePairing: (
-        projectId: string,
-        pairingId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<PairingStatus>;
@@ -90,7 +92,7 @@ export interface PairingOperations {
     // registration, credential, and audit commit together. Concurrent/repeated
     // claims fail; a lost successful response cannot replay the daemon secret.
     readonly redeemRuntimePairing: (
-        pairingId: string,
+        computerId: string,
         pairingCode: string,
         machineName: string,
         workspaceName: string,
@@ -98,19 +100,19 @@ export interface PairingOperations {
         signal: AbortSignal,
     ) => Promise<ClaimedPairing>;
     readonly redeemChannelAccessGrant: (
-        channelId: string,
+        computerId: string,
         grantId: string,
         grantSecret: string,
         signal: AbortSignal,
     ) => Promise<RedeemedChannelAccessGrant>;
     readonly revokeLinkedChannelDevice: (
-        channelId: string,
+        computerId: string,
         credentialId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<ChannelHostCredential>;
     readonly revokeBrowserCredential: (
-        projectId: string,
+        computerId: string,
         credentialId: string,
         token: string,
         signal: AbortSignal,
@@ -119,14 +121,18 @@ export interface PairingOperations {
     // revocation timestamp. Retrying after a lost response or disconnect failure
     // is safe; an unclaimed identity can also be cancelled through this command.
     readonly revokeProjectRuntime: (
-        projectId: string,
-        runtimeId: string,
+        computerId: string,
         token: string,
         signal: AbortSignal,
     ) => Promise<RevokedProjectRuntime>;
+    /**
+     * Records the daemon's Agent catalog. The daemon presents its credential with the successor it saved, if any:
+     * while it saves a rotation its connection just made, the Relay already holds the successor as current.
+     */
     readonly updateAgentCatalog: (
-        channelId: string,
+        computerId: string,
         token: string,
+        successor: string | null,
         agents: readonly AgentDescriptor[],
         signal: AbortSignal,
     ) => Promise<void>;

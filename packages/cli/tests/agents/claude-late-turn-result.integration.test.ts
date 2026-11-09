@@ -129,7 +129,6 @@ test("Given Claude's Stop hook outlasts the result watchdog, When I send the nex
             const send = (commandId: string, prompt: string) =>
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         commandId,
@@ -138,7 +137,7 @@ test("Given Claude's Stop hook outlasts the result watchdog, When I send the nex
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
             let answers = "";

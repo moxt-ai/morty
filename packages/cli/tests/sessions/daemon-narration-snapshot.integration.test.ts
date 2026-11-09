@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-
 import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
+    decodeSessionReadyEvent,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     SESSION_EVENT_KIND,
@@ -22,6 +23,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -142,7 +144,6 @@ describe("daemon narration delivery", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_beta/daemon`);
-        relayUrl.searchParams.set("token", "e".repeat(43));
         const agent = new AcpAgentDefinition(
             "controlled-acp",
             "Controlled ACP",
@@ -161,9 +162,10 @@ describe("daemon narration delivery", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_beta",
+                computerId: "channel_beta",
                 defaultWorkspace: workspace,
                 relayUrl,
+                credentials: memoryRuntimeCredentials("e".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -174,8 +176,26 @@ describe("daemon narration delivery", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
+            sendText(
+                socket,
+                encodeSessionCreateCommand({
+                    kind: "session.create",
+                    requestId: crypto.randomUUID(),
+                    operationId: crypto.randomUUID(),
+                    agentId: agent.id,
+                    bindingId: config.bindingId,
+                    directoryId: "default",
+                    configurations: [],
+                }),
+            );
+            let created = await frames.next();
+            while (decodeMessageKind(created) !== "session.ready") {
+                if (decodeMessageKind(created) === "session.operation.failed") {
+                    throw new Error(created);
+                }
+                created = await frames.next();
+            }
             const prompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: "narration_turn",
@@ -184,7 +204,7 @@ describe("daemon narration delivery", () => {
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "stream verbose activity",
-                sessionId: "narration_conversation",
+                target: decodeSessionReadyEvent(created).target,
             };
             sendText(socket, encodeSessionPromptCommand(prompt));
 

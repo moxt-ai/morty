@@ -5,10 +5,7 @@
     "compatibility_date": "2026-09-03",
     "kv_namespaces": [{ "binding": "APP_CREDENTIAL_CACHE" }],
     "durable_objects": {
-        "bindings": [
-            { "name": "RUNTIME_RELAY", "class_name": "RuntimeRelay" },
-            { "name": "PROJECT_RELAY", "class_name": "ProjectDO" }
-        ]
+        "bindings": [{ "name": "COMPUTER_RELAY", "class_name": "ComputerRelay" }]
     },
     "migrations": [
         {
@@ -17,7 +14,8 @@
         },
         { "tag": "platform-rename-project-do", "renamed_classes": [{ "from": "ProjectRelay", "to": "ProjectDO" }] },
         { "tag": "platform-websocket-transport", "new_sqlite_classes": ["WebSocketTransport"] },
-        { "tag": "platform-runtime-browser-transport", "deleted_classes": ["WebSocketTransport"] }
+        { "tag": "platform-runtime-browser-transport", "deleted_classes": ["WebSocketTransport"] },
+        { "tag": "computer-relay", "new_sqlite_classes": ["ComputerRelay"] }
     ],
     "d1_databases": [
         {

@@ -9,6 +9,7 @@ import {
     methods,
     PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
     decodeSessionClosedEvent,
@@ -29,7 +30,7 @@ import type { AgentConnectionFactory } from "../../src/engine/acp/connection/age
 import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
 import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
-import { prepareNewRealSession, withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
+import { withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
@@ -105,22 +106,22 @@ class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
 test("Given retained Agent teardown does not finish, When the Session close deadline elapses, Then the daemon reports a typed timeout", async () => {
     const agent = new ControlledCloseAgentSpecification();
     await withRealDaemon(agent, { MORTY_TEST_CONTROLLED_CLOSE_PATH: process.execPath }, async (peer) => {
-        const sessionId = await prepareNewRealSession(peer, agent.id);
-        vi.useFakeTimers({ toFake: ["clearTimeout", "setTimeout"] });
+        const sessionTarget = peer.target;
+        vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["clearTimeout", "setTimeout"] });
         try {
             const requestId = crypto.randomUUID();
             peer.send(
                 encodeSessionCloseCommand({
                     kind: "session.close",
                     requestId,
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             await agent.closeStarted.promise;
             expect(decodeSessionCloseNoticeEvent(await peer.nextMessage())).toEqual({
                 kind: "session.close.notice",
                 reason: "This Session was closed on request.",
-                sessionId,
+                target: sessionTarget,
             });
             const response = peer.nextMessage();
             await vi.advanceTimersByTimeAsync(30_000);
@@ -129,7 +130,7 @@ test("Given retained Agent teardown does not finish, When the Session close dead
                 kind: "session.operation.failed",
                 message: "The Session could not close before its deadline",
                 requestId,
-                sessionId,
+                target: sessionTarget,
             });
         } finally {
             agent.releaseClose();
@@ -147,7 +148,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
     await Promise.all([mkdir(executableDirectory), mkdir(nativeStateDirectory)]);
     await writeFile(
         executable,
-        `#!${process.execPath}\nif (process.argv.includes("--version")) {\n  process.stdout.write("1.0.0\\n");\n} else {\n  process.argv.push(\n    "--agent-name", "Controlled ACP",\n    "--agent-version", "1.0.0",\n    "--exclusive-writer",\n    "--no-load-session",\n    "--http-mcp",\n    "--no-additional-directories",\n    "--no-delete-session",\n    "--no-fork-session",\n    "--no-embedded-context",\n  );\n  await import(${JSON.stringify(new URL(`file://${fakeAgentPath}`).toString())});\n}\n`,
+        `#!${process.execPath}\nif (process.argv.includes("--version")) {\n  process.stdout.write("1.0.0\\n");\n} else {\n  process.argv.push(\n    "--agent-name", "Controlled ACP",\n    "--agent-version", "1.0.0",\n    "--exclusive-writer",\n    "--no-load-session",\n    "--http-mcp",\n    "--no-delete-session",\n    "--no-fork-session",\n    "--no-embedded-context",\n  );\n  await import(${JSON.stringify(new URL(`file://${fakeAgentPath}`).toString())});\n}\n`,
         { mode: 0o700 },
     );
     await chmod(executable, 0o700);
@@ -156,11 +157,10 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
             new ControlledAcpAgentSpecification(),
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory, PATH: executableDirectory },
             async (peer) => {
-                const sessionId = await prepareNewRealSession(peer, "controlled-acp");
+                const sessionTarget = peer.target;
                 const promptCommandId = crypto.randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         commandId: promptCommandId,
@@ -169,7 +169,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "interleave progress and hold",
-                        sessionId,
+                        target: sessionTarget,
                     }),
                 );
                 for (;;) {
@@ -179,7 +179,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                     }
                     const event = decodeSessionStatusChangedEvent(message);
                     if (
-                        event.sessionId === sessionId &&
+                        sameNativeSession(event.target, sessionTarget) &&
                         event.status.kind === "working" &&
                         event.status.commandId === promptCommandId
                     ) {
@@ -191,7 +191,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                     encodeSessionCloseCommand({
                         kind: "session.close",
                         requestId: closeRequestId,
-                        sessionId,
+                        target: sessionTarget,
                     }),
                 );
                 for (;;) {
@@ -210,7 +210,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                     expect(decodeSessionClosedEvent(message)).toEqual({
                         kind: "session.closed",
                         requestId: closeRequestId,
-                        sessionId,
+                        target: sessionTarget,
                     });
                     break;
                 }

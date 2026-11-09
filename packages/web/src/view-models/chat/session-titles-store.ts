@@ -1,3 +1,5 @@
+import { NativeSessionMap, sameNativeSession } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import {
@@ -10,24 +12,28 @@ type SessionTitle = {
     readonly title: string;
 };
 
-export type SessionTitles = ReadonlyMap<string, SessionTitle>;
+export type SessionTitles = Pick<NativeSessionMap<SessionTitle>, "get" | "has" | typeof Symbol.iterator>;
 export type SessionTitlesStore = Omit<ReturnType<typeof createSessionTitlesStore>, "setState">;
 
-export function sessionTitle(titles: SessionTitles, sessionId: string, fallback = "Untitled session"): string {
-    return titles.get(sessionId)?.title ?? fallback;
+export function sessionTitle(
+    titles: SessionTitles,
+    sessionTarget: NativeSessionTarget | null,
+    fallback = "Untitled session",
+): string {
+    return (sessionTarget === null ? undefined : titles.get(sessionTarget)?.title) ?? fallback;
 }
 
 /** One display title per Session. The Runtime is authoritative; in-flight reads cannot undo newer observations. */
 export function createSessionTitlesStore(identityKey: string | null) {
-    let rememberedId: string | null = null;
+    let rememberedId: NativeSessionTarget | null = null;
     return createStore<{
         readonly titles: SessionTitles;
         readonly restore: () => void;
-        readonly remember: (sessionId: string) => void;
-        readonly forget: (sessionId: string) => void;
-        readonly observed: (sessionId: string, title: string) => void;
-        readonly created: (sessionId: string, title: string) => void;
-        readonly sessionLoaded: (sessionId: string, title: string, startedWith: SessionTitles) => void;
+        readonly remember: (sessionTarget: NativeSessionTarget) => void;
+        readonly forget: (sessionTarget: NativeSessionTarget) => void;
+        readonly observed: (sessionTarget: NativeSessionTarget, title: string) => void;
+        readonly created: (sessionTarget: NativeSessionTarget, title: string) => void;
+        readonly sessionLoaded: (sessionTarget: NativeSessionTarget, title: string, startedWith: SessionTitles) => void;
         readonly directoryLoaded: (sessions: readonly ManagedChatSession[], startedWith: SessionTitles) => void;
     }>()((set, get) => {
         const persist = (): void => {
@@ -36,69 +42,75 @@ export function createSessionTitlesStore(identityKey: string | null) {
             }
             const title = get().titles.get(rememberedId)?.title;
             if (title !== undefined && title.length > 0) {
-                centralSessionStorage.write(rememberedSessionEntry(identityKey), { id: rememberedId, title });
+                centralSessionStorage.write(rememberedSessionEntry(identityKey), { target: rememberedId, title });
             }
         };
-        const put = (sessionId: string, value: SessionTitle): void => {
-            set((state) => ({ titles: new Map(state.titles).set(sessionId, value) }));
-            if (rememberedId === sessionId) {
+        const put = (sessionTarget: NativeSessionTarget, value: SessionTitle): void => {
+            set((state) => ({ titles: new NativeSessionMap(state.titles).set(sessionTarget, value) }));
+            if (rememberedId !== null && sameNativeSession(rememberedId, sessionTarget)) {
                 persist();
             }
         };
         return {
-            titles: new Map(),
+            titles: new NativeSessionMap(),
             restore: () => {
                 if (identityKey === null || rememberedId !== null) {
                     return;
                 }
                 const saved = centralSessionStorage.read(rememberedSessionEntry(identityKey));
                 if (saved !== null) {
-                    rememberedId = saved.id;
-                    if (!get().titles.has(saved.id)) {
+                    rememberedId = saved.target;
+                    if (!get().titles.has(saved.target)) {
                         set((state) => ({
-                            titles: new Map(state.titles).set(saved.id, { kind: "known", title: saved.title }),
+                            titles: new NativeSessionMap(state.titles).set(saved.target, {
+                                kind: "known",
+                                title: saved.title,
+                            }),
                         }));
                     }
                 }
             },
-            remember: (sessionId) => {
-                rememberedId = sessionId;
+            remember: (sessionTarget) => {
+                rememberedId = sessionTarget;
                 persist();
             },
-            forget: (sessionId) => {
-                if (rememberedId === sessionId) {
+            forget: (sessionTarget) => {
+                if (rememberedId !== null && sameNativeSession(rememberedId, sessionTarget)) {
                     rememberedId = null;
                     if (identityKey !== null) {
                         centralSessionStorage.remove(rememberedSessionEntry(identityKey));
                     }
                 }
                 set((state) => {
-                    const titles = new Map(state.titles);
-                    titles.delete(sessionId);
+                    const titles = new NativeSessionMap(state.titles);
+                    titles.delete(sessionTarget);
                     return { titles };
                 });
             },
-            observed: (sessionId, title) => put(sessionId, { kind: "known", title }),
-            created: (sessionId, title) => put(sessionId, { kind: "created", title }),
-            sessionLoaded: (sessionId, title, startedWith) => {
-                const current = get().titles.get(sessionId);
-                if (current?.kind === "created" || (current !== undefined && current !== startedWith.get(sessionId))) {
+            observed: (sessionTarget, title) => put(sessionTarget, { kind: "known", title }),
+            created: (sessionTarget, title) => put(sessionTarget, { kind: "created", title }),
+            sessionLoaded: (sessionTarget, title, startedWith) => {
+                const current = get().titles.get(sessionTarget);
+                if (
+                    current?.kind === "created" ||
+                    (current !== undefined && current !== startedWith.get(sessionTarget))
+                ) {
                     return;
                 }
-                put(sessionId, { kind: "known", title });
+                put(sessionTarget, { kind: "known", title });
             },
             directoryLoaded: (sessions, startedWith) => {
-                const titles = new Map(get().titles);
+                const titles = new NativeSessionMap(get().titles);
                 for (const session of sessions) {
-                    const current = titles.get(session.id);
+                    const current = titles.get(session.target);
                     // A new Session keeps its first-prompt title until the Runtime confirms it was prompted.
                     if (
                         (current?.kind === "created" && !session.prompted) ||
-                        (current !== undefined && current !== startedWith.get(session.id))
+                        (current !== undefined && current !== startedWith.get(session.target))
                     ) {
                         continue;
                     }
-                    titles.set(session.id, { kind: "known", title: session.title });
+                    titles.set(session.target, { kind: "known", title: session.title });
                 }
                 set({ titles });
                 persist();

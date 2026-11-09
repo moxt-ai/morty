@@ -1,4 +1,5 @@
 import type { MortyClient } from "@morty-build/client";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { formatError } from "../format-error.ts";
@@ -108,7 +109,7 @@ function withRequest(
 }
 
 export const createSessionMessageQueueStore = (options: {
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
     readonly connection: SessionOperationConnection;
     /** The Runtime confirmed it withdrew a message. */
     readonly withdrawn: (commandId: string) => void;
@@ -162,7 +163,8 @@ export const createSessionMessageQueueStore = (options: {
         const withdraw = async (message: ChatQueuedMessage, signal: AbortSignal): Promise<QueueRequestOutcome> => {
             const { commandId } = message;
             const outcome = await send(
-                (client, requestSignal) => client.turns.cancelQueued(options.sessionId, message.turnId, requestSignal),
+                (client, requestSignal) =>
+                    client.turns.cancelQueued(options.sessionTarget, message.turnId, requestSignal),
                 signal,
             );
             if (outcome.kind === "done") {
@@ -225,7 +227,7 @@ export const createSessionMessageQueueStore = (options: {
                 }
                 const { commandId } = message;
                 const outcome = await send(
-                    (client, requestSignal) => client.turns.steer(options.sessionId, message.turnId, requestSignal),
+                    (client, requestSignal) => client.turns.steer(options.sessionTarget, message.turnId, requestSignal),
                     signal,
                 );
                 if (outcome.kind === "done") {

@@ -38,8 +38,7 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                     agentId: "controlled-acp",
                     bindingId: peer.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 };
                 const next = async (kind: string): Promise<string> => {
                     for (;;) {
@@ -111,7 +110,7 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                     encodeSessionHistoryPageLoad({
                         kind: "session.live-history.v2.page.load",
                         requestId: historyId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         cursor: null,
                         eventLimit: 200,
                     }),
@@ -131,7 +130,7 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                     encodeSessionConfigReadCommand({
                         kind: "session.config.read",
                         requestId: crypto.randomUUID(),
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 const current = decodeSessionConfigReadResult(await next("session.config.read.result"));
@@ -181,8 +180,7 @@ test.each(["opening", "configuration"] as const)(
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         requestId,
                     }),
                 );
@@ -206,8 +204,7 @@ test.each(["opening", "configuration"] as const)(
                                 agentId: "controlled-acp",
                                 bindingId: peer.bindingId,
                                 directoryId: "default",
-                                additionalDirectoryIds: [],
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 requestId: configureId,
                                 configId: "model",
                                 valueType: "select",

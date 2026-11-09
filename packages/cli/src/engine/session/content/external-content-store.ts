@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { nativeSessionKey } from "@morty-build/client/native-session";
+import { decodeNativeSessionTarget, type NativeSessionTarget } from "@morty-build/client/protocol";
 import { z } from "zod";
 import { OperationError } from "../../infra/operation-error.ts";
 import { ScratchDirectory } from "../../storage/files/scratch-directory.ts";
@@ -45,15 +47,19 @@ export interface ExternalContentStore {
         readonly kind: ExternalContentKind;
         readonly mediaType: string;
         readonly name: string;
-        readonly sessionId: string;
+        readonly target: NativeSessionTarget;
         readonly signal: AbortSignal;
     }) => Promise<ExternalContentReference>;
     readonly resolve: (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         request: string,
         signal: AbortSignal,
     ) => Promise<ResolvedExternalContent | null>;
-    readonly read: (sessionId: string, request: string, signal: AbortSignal) => Promise<ReadExternalContent | null>;
+    readonly read: (
+        sessionTarget: NativeSessionTarget,
+        request: string,
+        signal: AbortSignal,
+    ) => Promise<ReadExternalContent | null>;
 }
 
 interface CachedContent extends ResolvedExternalContent {
@@ -111,7 +117,8 @@ export class LocalExternalContentStore implements ExternalContentStore, AsyncDis
 
     readonly put: ExternalContentStore["put"] = (input) => this.#track(() => this.#put(input));
 
-    readonly #put: ExternalContentStore["put"] = async ({ bytes, kind, mediaType, name, sessionId, signal }) => {
+    readonly #put: ExternalContentStore["put"] = async ({ bytes, kind, mediaType, name, target, signal }) => {
+        const sessionKey = nativeSessionKey(decodeNativeSessionTarget(target));
         const active = AbortSignal.any([signal, this.#lifetime.signal]);
         active.throwIfAborted();
         const metadata = metadataSchema.parse({ kind, mediaType, name });
@@ -122,7 +129,7 @@ export class LocalExternalContentStore implements ExternalContentStore, AsyncDis
             this.#entries.set(request, {
                 ...existing,
                 expiresAt: Date.now() + CONTENT_LIFETIME_MILLISECONDS,
-                sessions: new Set([...existing.sessions, sessionId]),
+                sessions: new Set([...existing.sessions, sessionKey]),
             });
             return { byteLength: existing.byteLength, key };
         }
@@ -141,22 +148,22 @@ export class LocalExternalContentStore implements ExternalContentStore, AsyncDis
             mediaType: metadata.mediaType,
             name: metadata.name,
             path,
-            sessions: new Set([...(retained?.sessions ?? []), sessionId]),
+            sessions: new Set([...(retained?.sessions ?? []), sessionKey]),
         });
         return { byteLength: bytes.byteLength, key };
     };
 
-    readonly resolve: ExternalContentStore["resolve"] = (sessionId, request, signal) =>
-        this.#track(() => this.#resolve(sessionId, request, AbortSignal.any([signal, this.#lifetime.signal])));
+    readonly resolve: ExternalContentStore["resolve"] = (sessionTarget, request, signal) =>
+        this.#track(() => this.#resolve(sessionTarget, request, AbortSignal.any([signal, this.#lifetime.signal])));
 
-    readonly #resolve: ExternalContentStore["resolve"] = async (sessionId, request, signal) => {
+    readonly #resolve: ExternalContentStore["resolve"] = async (sessionTarget, request, signal) => {
         signal.throwIfAborted();
         this.#lifetime.signal.throwIfAborted();
         if (!contentRequest.test(request)) {
             return null;
         }
         const entry = this.#entries.get(request);
-        if (entry === undefined || !entry.sessions.has(sessionId)) {
+        if (entry === undefined || !entry.sessions.has(nativeSessionKey(decodeNativeSessionTarget(sessionTarget)))) {
             return null;
         }
         if (entry.expiresAt <= Date.now()) {
@@ -169,10 +176,10 @@ export class LocalExternalContentStore implements ExternalContentStore, AsyncDis
         return resolvedPath === null ? null : { mediaType: entry.mediaType, name: entry.name, path: resolvedPath };
     };
 
-    readonly read: ExternalContentStore["read"] = (sessionId, request, signal) =>
+    readonly read: ExternalContentStore["read"] = (sessionTarget, request, signal) =>
         this.#track(async () => {
             const active = AbortSignal.any([signal, this.#lifetime.signal]);
-            const resolved = await this.#resolve(sessionId, request, active);
+            const resolved = await this.#resolve(sessionTarget, request, active);
             if (resolved === null) {
                 return null;
             }

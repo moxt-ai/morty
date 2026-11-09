@@ -1,13 +1,14 @@
 import type { ProjectStore, ProjectStoreResolver } from "@morty-build/relay-core/contracts";
 import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
 
-/** The Platform's operations on one Project's storage, beside the Relay's. The Project Durable Object owns both. */
+/** The Platform's operations on one Project's storage, beside the Relay's. The Account Durable Object owns both. */
 export interface PlatformProjectStore extends ProjectStore {
+    readonly lastDaemonRevocation: (signal: AbortSignal) => Promise<number | null>;
     /** Records a Platform audit event; recording the same event again has no effect. */
     readonly recordAudit: (audit: PlatformAuditRecord, signal: AbortSignal) => Promise<void>;
     readonly listAuditEvents: (limit: number, signal: AbortSignal) => Promise<readonly ProjectAuditRow[]>;
 }
 
 export interface PlatformProjectStores extends ProjectStoreResolver {
-    readonly forProject: (projectId: string) => PlatformProjectStore;
+    readonly forProject: (computerId: string) => PlatformProjectStore;
 }

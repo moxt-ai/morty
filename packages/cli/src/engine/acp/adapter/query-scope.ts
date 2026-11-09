@@ -14,15 +14,11 @@ export function nativeSessionQueryKey(query: NativeSessionQuery): NativeSessionQ
         JSON.stringify([
             query.agent.id,
             query.cwd,
-            query.additionalDirectories,
             Object.entries(query.agent.environment).sort(([left], [right]) => left.localeCompare(right)),
         ]),
     );
 }
 
-export function nativeSessionPreviewKey(
-    queryKey: NativeSessionQueryKey,
-    nativeSessionId: string,
-): NativeSessionPreviewKey {
-    return previewKeySchema.parse(JSON.stringify([queryKey, nativeSessionId]));
+export function nativeSessionPreviewKey(queryKey: NativeSessionQueryKey, sessionId: string): NativeSessionPreviewKey {
+    return previewKeySchema.parse(JSON.stringify([queryKey, sessionId]));
 }

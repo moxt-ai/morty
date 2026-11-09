@@ -4,10 +4,9 @@ import {
     MortyPageRequest,
     type MortySessionEventObserver,
     MortyTimeoutError,
-    type PromptAttachment,
     type SessionConfigOption,
 } from "@morty-build/client";
-import type { SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
+import type { NativeSessionTarget, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
@@ -22,7 +21,7 @@ import { agentQuestionAnswer, openAgentQuestions } from "./agent-question-answer
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMortySession } from "./open-session.ts";
-import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
+import { uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
 import type { SessionComposerStore } from "./session-composer-store.ts";
@@ -359,14 +358,13 @@ export function sessionPanePresentation(
 }
 
 interface SessionIdentity {
-    readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly directoryId: string;
 }
 
 async function readSessionHistory(
     client: MortyClient,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     initialCursor: string | null,
     newerEvents: readonly SessionEvent[],
     expectedSessionGenerationId: string | null,
@@ -384,7 +382,7 @@ async function readSessionHistory(
     do {
         const requestedCursor = nextCursor;
         const page = await client.events.list(
-            sessionId,
+            sessionTarget,
             new MortyPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
             signal,
         );
@@ -456,6 +454,7 @@ export function createSessionPaneModel(options: {
         BotChatApi,
         | "connectSession"
         | "managedSession"
+        | "managedSessions"
         | "runtimeConfiguration"
         | "recoverBridge"
         | "waitForBridge"
@@ -477,7 +476,7 @@ export function createSessionPaneModel(options: {
     const { session, botId, requests, clock, titles } = options;
     const { composer, delivery, interactions, queue: messageQueue, rename, settings, tasks } = options.sessionPage;
     const composerAttachments = composer.getState().attachments;
-    const sessionId = session.result.ready.sessionId;
+    const sessionTarget = session.result.ready.target;
     // Working in a conversation makes its harness the reference for the next draft. Its settings carry into New
     // Session only where the user changes them: the others are the Agent's and its directory's, which the draft reads
     // for itself.
@@ -526,33 +525,6 @@ export function createSessionPaneModel(options: {
                 throw cause;
             }
         };
-    const instructionUri = "morty://bot/instructions";
-    const withInstructions = async <T extends { readonly attachments: readonly PromptAttachment[] }>(
-        connected: MortyClient,
-        request: T,
-        signal: AbortSignal,
-    ): Promise<T> => {
-        const instructions = (session.instructions ?? "").trim();
-        if (instructions.length === 0) {
-            return request;
-        }
-        const attachment = await uploadPromptAttachment(
-            connected.sessions,
-            sessionId,
-            {
-                bytes: new TextEncoder().encode(instructions),
-                kind: "resource",
-                mediaType: "text/plain",
-                name: "Agent instructions",
-                uri: instructionUri,
-            },
-            signal,
-        );
-        return {
-            ...request,
-            attachments: [...request.attachments.filter((item) => item.uri !== instructionUri), attachment],
-        };
-    };
     /**
      * Submits through the client the attempt started with. Closing a client ends only its live subscriptions, so the
      * attempt keeps its requests when this pane reconnects or stops.
@@ -562,7 +534,7 @@ export function createSessionPaneModel(options: {
             if (connected === null) {
                 throw new Error("The Session is not connected.");
             }
-            const turn = await connected.turns.submit(sessionId, request, signal);
+            const turn = await connected.turns.submit(sessionTarget, request, signal);
             return { turnId: turn.turnId, queued: turn.state.kind === "queued" };
         });
     /** The messages the timeline shows now. */
@@ -572,11 +544,7 @@ export function createSessionPaneModel(options: {
         queuedMessages(store.getState().queued, messageQueue.getState(), deliveryMessages(delivery.getState())).find(
             (message) => message.commandId === commandId,
         ) ?? null;
-    const request = {
-        additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
-    };
     const sessionIdentity: SessionIdentity = {
-        additionalDirectoryIds: session.entry.additionalDirectories.map((directory) => directory.directoryId),
         agentId: session.agentRef,
         directoryId: session.result.ready.directoryId,
     };
@@ -733,6 +701,7 @@ export function createSessionPaneModel(options: {
                     change.interactions satisfies never;
             }
         };
+        let executionPosition: SessionExecutionSnapshot["executionPosition"];
         /** Reads the Runtime's execution snapshot, observes it and returns it. */
         const readExecution = async (
             connected: MortyClient,
@@ -743,12 +712,21 @@ export function createSessionPaneModel(options: {
             // The read lists only messages accepted before it began; one accepted while it is in flight may be missing.
             const acceptedBefore = delivery.getState().acceptances;
             const snapshot = await connected.sessions.readSessionExecution(
-                sessionId,
+                sessionTarget,
                 sessionIdentity,
                 signal,
                 deliveryCommandId ?? undefined,
             );
             signal.throwIfAborted();
+            if (
+                snapshot.executionPosition !== undefined &&
+                executionPosition !== undefined &&
+                snapshot.executionPosition.sessionGenerationId === executionPosition.sessionGenerationId &&
+                BigInt(snapshot.executionPosition.throughPosition) < BigInt(executionPosition.throughPosition)
+            ) {
+                return snapshot;
+            }
+            executionPosition = snapshot.executionPosition;
             observeExecution(
                 { kind: "snapshot", snapshot, turnAtRead, deliveryCommandId, readAt: Date.now() },
                 { queued: new Set(snapshot.queued.map((queued) => queued.commandId)), acceptedBefore },
@@ -770,7 +748,7 @@ export function createSessionPaneModel(options: {
                     continue;
                 }
                 if (effect.title !== undefined) {
-                    titles.getState().observed(sessionId, effect.title);
+                    titles.getState().observed(sessionTarget, effect.title);
                 }
             }
             return result.effects;
@@ -793,7 +771,7 @@ export function createSessionPaneModel(options: {
             try {
                 const history = await readSessionHistory(
                     connected,
-                    sessionId,
+                    sessionTarget,
                     null,
                     [],
                     effect.generation,
@@ -813,7 +791,7 @@ export function createSessionPaneModel(options: {
                     settings
                         .getState()
                         .readInBackground(
-                            (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                            (readSignal) => connected.sessions.readConfiguration(sessionTarget, readSignal),
                             parentSignal,
                         );
                 }
@@ -848,7 +826,7 @@ export function createSessionPaneModel(options: {
                     settings
                         .getState()
                         .readInBackground(
-                            (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                            (readSignal) => connected.sessions.readConfiguration(sessionTarget, readSignal),
                             signal,
                         );
                 }
@@ -903,22 +881,17 @@ export function createSessionPaneModel(options: {
                             ? attachments.values
                             : await uploadPromptAttachments(
                                   connected.sessions,
-                                  sessionId,
+                                  sessionTarget,
                                   attachments.values,
                                   attemptSignal,
                               );
-                    // Freeze semantic intent before delivery owns retries, including instructions and identity.
-                    return await withInstructions(
-                        connected,
-                        {
-                            ...request,
-                            agentId: session.agentRef,
-                            directoryId: session.result.ready.directoryId,
-                            attachments: uploadedAttachments,
-                            content: content.trim(),
-                        },
-                        attemptSignal,
-                    );
+                    // Freeze semantic intent before delivery owns retries, including identity.
+                    return {
+                        agentId: session.agentRef,
+                        directoryId: session.result.ready.directoryId,
+                        attachments: uploadedAttachments,
+                        content: content.trim(),
+                    };
                 },
                 submit: submitCommand(connected, commandId, sentAt),
             });
@@ -974,7 +947,7 @@ export function createSessionPaneModel(options: {
             try {
                 const page = await readSessionHistory(
                     connected,
-                    sessionId,
+                    sessionTarget,
                     pagination.nextCursor,
                     [],
                     pagination.generation,
@@ -1047,12 +1020,39 @@ export function createSessionPaneModel(options: {
                 const observeSession = async (signal: AbortSignal): Promise<void> => {
                     const access = openedAccess;
                     openedAccess = undefined;
-                    client = await requests.connectSession(botId, sessionId, signal, access);
+                    client = await requests.connectSession(botId, sessionTarget, signal, access);
                     const connected = client;
                     const receiveLifecycle = async (
                         fact: SessionLifecycleFact,
                         event: SessionLiveEvent,
                     ): Promise<void> => {
+                        if (
+                            fact.kind !== "none" &&
+                            fact.kind !== "interaction-requested" &&
+                            fact.kind !== "permission-resolved" &&
+                            fact.kind !== "elicitation-resolved"
+                        ) {
+                            if (
+                                executionPosition !== undefined &&
+                                executionPosition.sessionGenerationId !== event.sessionGenerationId
+                            ) {
+                                await readExecution(connected, get().turn, signal);
+                            }
+                            if (
+                                executionPosition !== undefined &&
+                                (executionPosition.sessionGenerationId !== event.sessionGenerationId ||
+                                    BigInt(event.position) <= BigInt(executionPosition.throughPosition))
+                            ) {
+                                return;
+                            }
+                            // Unversioned peers keep the existing reconciliation path.
+                            if (executionPosition !== undefined) {
+                                executionPosition = {
+                                    sessionGenerationId: event.sessionGenerationId,
+                                    throughPosition: event.position,
+                                };
+                            }
+                        }
                         switch (fact.kind) {
                             case "interaction-requested":
                             case "permission-resolved":
@@ -1065,7 +1065,7 @@ export function createSessionPaneModel(options: {
                                         async (readSignal) =>
                                             sessionInteractionRecovery(
                                                 await connected.sessions.readSessionExecution(
-                                                    sessionId,
+                                                    sessionTarget,
                                                     sessionIdentity,
                                                     readSignal,
                                                 ),
@@ -1150,33 +1150,22 @@ export function createSessionPaneModel(options: {
                             }
                         },
                         receive: async (events) => {
-                            const historyLoads: Promise<void>[] = [];
                             for (const event of events) {
-                                const effects = commitProjection({ event, kind: "live-event" });
-                                for (const effect of effects) {
-                                    if (effect.kind === "load-history") {
-                                        historyLoads.push(loadProjectionHistory(effect, connected, signal));
-                                    } else if (effect.kind === "read-settings") {
-                                        settings
-                                            .getState()
-                                            .readInBackground(
-                                                (readSignal) =>
-                                                    connected.sessions.readConfiguration(sessionId, readSignal),
-                                                signal,
-                                            );
-                                    }
-                                }
-                                if (event.type !== "acp") {
-                                    await receiveLifecycle(sessionLifecycleFact(event.payload), event);
-                                }
+                                // History and lifecycle processing belong to this event. Observe both immediately,
+                                // so cancellation or failure in either cannot leave the other's rejection unhandled.
+                                await Promise.all([
+                                    dispatchProjection({ event, kind: "live-event" }, connected, signal),
+                                    event.type === "acp"
+                                        ? Promise.resolve()
+                                        : receiveLifecycle(sessionLifecycleFact(event.payload), event),
+                                ]);
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();
                             }
-                            await Promise.all(historyLoads);
                             return true;
                         },
                     };
-                    const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
+                    const subscription = await connected.events.subscribeLive(sessionTarget, observer, signal);
                     signal.throwIfAborted();
                     setAndSettle({ connection: { kind: "ready", client: connected } });
                     options.onConnected();
@@ -1386,7 +1375,14 @@ export function createSessionPaneModel(options: {
                 };
                 setReopen({ kind: "reopening" });
                 try {
-                    await requests.managedSession(botId, sessionId, signal);
+                    await requests.managedSession(
+                        botId,
+                        {
+                            harness: session.result.ready.agentId,
+                            sessionId: session.entry.sessionId,
+                        },
+                        signal,
+                    );
                     signal.throwIfAborted();
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -1500,7 +1496,7 @@ export function createSessionPaneModel(options: {
                 if (rename.getState().rename.kind === "failed") {
                     rename.getState().clear();
                 }
-                composer.getState().openTitleEdit(sessionTitle(titles.getState().titles, sessionId));
+                composer.getState().openTitleEdit(sessionTitle(titles.getState().titles, sessionTarget));
             },
             setTitleDraft: (draft) => composer.getState().setTitleDraft(draft),
             cancelTitleEdit: () => composer.getState().closeTitleEdit(),
@@ -1511,7 +1507,7 @@ export function createSessionPaneModel(options: {
                 }
                 composer.getState().closeTitleEdit();
                 const trimmed = draft.trim();
-                if (trimmed.length === 0 || trimmed === sessionTitle(titles.getState().titles, sessionId)) {
+                if (trimmed.length === 0 || trimmed === sessionTitle(titles.getState().titles, sessionTarget)) {
                     return;
                 }
                 rename.getState().confirm(trimmed);
@@ -1523,7 +1519,7 @@ export function createSessionPaneModel(options: {
     });
     const welcome = createSessionWelcomeStore({
         botId,
-        sessionId,
+        sessionTarget,
         fillEmptyDraft: (text) => {
             const presentation = sessionPanePresentation(
                 store.getState(),
@@ -1559,9 +1555,22 @@ export function createSessionPaneModel(options: {
             const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
             try {
                 const connected = await waitForConnectionReady(requestSignal);
-                const result = await connected.sessions.rename(sessionId, pending.title, requestSignal);
-                titles.getState().observed(sessionId, result.title);
-                rename.getState().settled(pending.title);
+                await connected.sessions.rename(sessionTarget, pending.title, requestSignal);
+                requestSignal.throwIfAborted();
+                // The acknowledgement describes this operation, not the current title. Confirm through the same
+                // guarded directory read as the sidebar, keeping the editor open until its title can take focus.
+                const startedWith = titles.getState().titles;
+                try {
+                    const sessions = await requests.managedSessions(botId, requestSignal);
+                    requestSignal.throwIfAborted();
+                    titles.getState().directoryLoaded(sessions, startedWith);
+                    rename.getState().settled(pending.title);
+                } catch {
+                    requestSignal.throwIfAborted();
+                    rename
+                        .getState()
+                        .failed(pending.title, "The title was saved, but its current value could not be refreshed.");
+                }
             } catch (cause) {
                 if (signal.aborted) {
                     return;
@@ -1603,7 +1612,7 @@ export function createSessionPaneModel(options: {
             throw new MortyError("session_not_connected", "The Session is not connected.");
         }
         return await current.client.sessions.readFile(
-            sessionId,
+            sessionTarget,
             path,
             AbortSignal.any([signal, lifetime.signal, AbortSignal.timeout(20_000)]),
             32 * 1024 * 1024,
@@ -1633,7 +1642,7 @@ export function createSessionPaneModel(options: {
         follower = options.sessionPage.connection.follow();
         lendConnection(store.getState().connection);
         const unregisterDebug = registerMortyDebugSession({
-            sessionId,
+            target: sessionTarget,
             blocks: () => sessionDebugBlocks({ messages: timelineMessages() }),
         });
         lifetime.signal.addEventListener("abort", unregisterDebug, { once: true });

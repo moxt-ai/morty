@@ -1,6 +1,22 @@
 import { createServer, request } from "node:http";
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
+
+/** The text of a response body as the service encoded it on the wire. */
+function decoded(encoding: string | undefined, chunks: readonly Buffer[]): string {
+    const body = Buffer.concat(chunks);
+    switch (encoding) {
+        case "gzip":
+            return gunzipSync(body).toString("utf8");
+        case "br":
+            return brotliDecompressSync(body).toString("utf8");
+        case "deflate":
+            return inflateSync(body).toString("utf8");
+        default:
+            return body.toString("utf8");
+    }
+}
 
 /**
  * A real network proxy: forwards requests unchanged, then loses one request before it reaches the service, one request's
@@ -8,11 +24,15 @@ import { listen, port } from "./websocket.ts";
  */
 export async function createResponseLossProxy(upstream: string) {
     // The next response to lose: the service handles the request, but the caller never receives its answer.
-    let lostResponse: { readonly path: RegExp; readonly lost: (status: number) => void } | null = null;
-    const loseNextResponse = (path: RegExp) =>
-        new Promise<number>((resolve) => {
+    let lostResponse: {
+        readonly path: RegExp;
+        readonly lost: (response: { readonly status: number; readonly body: string }) => void;
+    } | null = null;
+    const loseNextResponseWithBody = (path: RegExp) =>
+        new Promise<{ readonly status: number; readonly body: string }>((resolve) => {
             lostResponse = { path, lost: resolve };
         });
+    const loseNextResponse = async (path: RegExp) => (await loseNextResponseWithBody(path)).status;
     // The next request to lose on its way: the service never receives it.
     let droppedRequest: RegExp | null = null;
     const server = createServer((incoming, outgoing) => {
@@ -32,9 +52,13 @@ export async function createResponseLossProxy(upstream: string) {
                 if (lostResponse !== null && incoming.method === "POST" && lostResponse.path.test(incoming.url ?? "")) {
                     const { lost } = lostResponse;
                     lostResponse = null;
-                    response.resume();
+                    const chunks: Buffer[] = [];
+                    response.on("data", (chunk: Buffer) => chunks.push(chunk));
                     response.on("end", () => {
-                        lost(response.statusCode ?? 502);
+                        lost({
+                            status: response.statusCode ?? 502,
+                            body: decoded(response.headers["content-encoding"], chunks),
+                        });
                         outgoing.destroy();
                     });
                     return;
@@ -47,6 +71,9 @@ export async function createResponseLossProxy(upstream: string) {
         incoming.on("aborted", () => forwarded.destroy());
         incoming.pipe(forwarded);
     });
+    let heldConfiguration: { readonly client: WebSocket; readonly data: Buffer; readonly binary: boolean } | null =
+        null;
+    let holdConfiguration: { readonly resolve: () => void } | null = null;
     const sockets = new Set<WebSocket>();
     const webSockets = new WebSocketServer({ server });
     let armed: "before-acceptance" | "after-acceptance" | "held" | null = null;
@@ -69,6 +96,7 @@ export async function createResponseLossProxy(upstream: string) {
                 : { headers: { authorization: incoming.headers.authorization } }),
         });
         sockets.add(remote);
+        let configurationResponse: { readonly requestId: string; readonly ready: () => void } | null = null;
         let lostRequestId: string | null = null;
         const pending: { readonly data: Buffer; readonly binary: boolean }[] = [];
         client.on("message", (data, binary) => {
@@ -79,6 +107,24 @@ export async function createResponseLossProxy(upstream: string) {
                   : Buffer.from(new Uint8Array(data));
             if (!binary) {
                 const frame: unknown = JSON.parse(bytes.toString());
+                if (
+                    holdConfiguration !== null &&
+                    typeof frame === "object" &&
+                    frame !== null &&
+                    "kind" in frame &&
+                    frame.kind === "http.request" &&
+                    "method" in frame &&
+                    frame.method === "POST" &&
+                    "path" in frame &&
+                    typeof frame.path === "string" &&
+                    frame.path.endsWith("/configuration") &&
+                    "requestId" in frame &&
+                    typeof frame.requestId === "string"
+                ) {
+                    configurationResponse = { requestId: frame.requestId, ready: holdConfiguration.resolve };
+                    holdConfiguration = null;
+                }
+
                 if (
                     typeof frame === "object" &&
                     frame !== null &&
@@ -125,6 +171,23 @@ export async function createResponseLossProxy(upstream: string) {
             }
         });
         remote.on("message", (data, binary) => {
+            if (configurationResponse !== null && !binary) {
+                const frame: unknown = JSON.parse(data.toString());
+                if (
+                    typeof frame === "object" &&
+                    frame !== null &&
+                    "kind" in frame &&
+                    frame.kind === "http.response" &&
+                    "requestId" in frame &&
+                    frame.requestId === configurationResponse.requestId
+                ) {
+                    heldConfiguration = { client, data: Buffer.from(data.toString()), binary };
+                    configurationResponse.ready();
+                    configurationResponse = null;
+                    return;
+                }
+            }
+
             if (lostRequestId !== null) {
                 const frame: unknown = binary ? null : JSON.parse(data.toString());
                 if (
@@ -161,13 +224,26 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
+        /** Holds one real settings edit response, letting later notifications and reads pass unchanged. */
+        holdNextConfigurationResponse: () =>
+            new Promise<void>((resolve) => {
+                holdConfiguration = { resolve };
+            }),
+        releaseConfigurationResponse: () => {
+            if (heldConfiguration !== null) {
+                heldConfiguration.client.send(heldConfiguration.data, { binary: heldConfiguration.binary });
+                heldConfiguration = null;
+            }
+        },
+        /** Loses a pairing response after the real service commits it. */
+        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/pairing(?:\?|$)/u),
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
         /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
         dropNextSessionCreation: () => {
-            droppedRequest = /\/runtimes\/[^/]+\/sessions(?:\?|$)/u;
+            droppedRequest = /\/daemon\/sessions(?:\?|$)/u;
         },
         /** Loses the answer to the next Session creation; resolves with the status the service returned. */
-        interruptNextSessionCreation: () => loseNextResponse(/\/runtimes\/[^/]+\/sessions(?:\?|$)/u),
+        interruptNextSessionCreation: () => loseNextResponse(/\/daemon\/sessions(?:\?|$)/u),
         interruptNextTurn: (delivery: "before-acceptance" | "after-acceptance") => {
             armed = delivery;
         },

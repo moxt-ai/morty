@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeIdentifier,
     type NativeSessionResult,
+    type NativeSessionTarget,
     SESSION_ELICITATION_REQUESTED_KIND,
     SESSION_ELICITATION_RESOLVED_KIND,
     SESSION_PERMISSION_REQUESTED_KIND,
@@ -112,7 +114,7 @@ export class ActiveRuntimeTurn {
     ): "accepted" | "already-started" | "unavailable" => {
         if (
             command.commandId !== this.command.commandId ||
-            command.sessionId !== this.command.sessionId ||
+            !sameNativeSession(command.target, this.command.target) ||
             this.#controller.signal.aborted
         ) {
             return "unavailable";
@@ -172,7 +174,7 @@ export class ActiveRuntimeTurn {
 
     readonly recordEvent = (event: RecordedSessionEvent): RecordedSessionEvent => {
         if (
-            event.sessionId !== this.command.sessionId ||
+            !sameNativeSession(event.target, this.command.target) ||
             ("commandId" in event && event.commandId !== this.command.commandId)
         ) {
             return event;
@@ -204,8 +206,8 @@ export class ActiveRuntimeTurn {
         };
     };
 
-    readonly matchesInteraction = (interactionId: string, sessionId: string): boolean =>
-        this.command.sessionId === sessionId && this.#interaction?.interactionId === interactionId;
+    readonly matchesInteraction = (interactionId: string, sessionTarget: NativeSessionTarget): boolean =>
+        sameNativeSession(this.command.target, sessionTarget) && this.#interaction?.interactionId === interactionId;
 
     /**
      * Before the command starts, cancellation withdraws it by aborting its own admission and preparation. Once it

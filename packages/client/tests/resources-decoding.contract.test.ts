@@ -12,7 +12,6 @@ const runtime = {
             agentPath: "/usr/local/bin/codex",
             agentVersion: "codex-cli 1.0.0",
             capabilities: {
-                additionalDirectories: false,
                 audioPrompt: false,
                 closeSession: false,
                 deleteSession: false,
@@ -30,20 +29,16 @@ const runtime = {
             label: "Codex",
         },
     ],
-    channelId: "channel-1",
     machineName: "MacBook",
     online: true,
-    projectId: "project-1",
-    runtimeId: "runtime-1",
+    computerId: "project-1",
     workspaceName: "contract",
 };
 
 const pairedStatus = {
     agents: [],
-    channelId: "channel-1",
     machineName: "MacBook",
-    projectId: "project-1",
-    runtimeId: "runtime-1",
+    computerId: "project-1",
     status: "paired",
     workspaceName: "contract",
 };

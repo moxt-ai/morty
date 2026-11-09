@@ -50,7 +50,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     };
                     const configureSource = async (
                         sessionConfigurations: NonNullable<
@@ -61,7 +60,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                             encodeSessionPromptCommand({
                                 ...identity,
                                 kind: "session.prompt",
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 commandId: crypto.randomUUID(),
                                 prompt: "Keep these source settings",
                                 attachments: [],
@@ -95,7 +94,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                             ...identity,
                             kind: "native.session.request",
                             action: "list",
-                            sessionId: peer.sessionId,
+                            discoveryId: crypto.randomUUID(),
                             requestId: listId,
                             cursor: null,
                         }),
@@ -104,18 +103,16 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                     if (list.action !== "list" || list.entries[0] === undefined) {
                         throw new Error("Missing native source");
                     }
-                    const childId = crypto.randomUUID();
                     const requestId = crypto.randomUUID();
-                    // Retained pre-receipt Runtime wire request: no new fields or negotiation required.
+                    // Only the harness allocates the independent fork's native target.
                     peer.send(
                         JSON.stringify({
                             ...identity,
                             kind: "native.session.request",
                             action: "fork",
-                            sessionId: peer.sessionId,
+                            discoveryId: list.discoveryId,
                             requestId,
                             entryId: list.entries[0].entryId,
-                            targetSessionId: childId,
                         }),
                     );
                     const modeAndSpeed = [
@@ -133,11 +130,14 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                         expect(failure).toMatchObject({ requestId, code: "invalid_session_configuration" });
                     } else {
                         const fork = decodeNativeSessionResult(await nextMessage(peer, "native.session.result"));
+                        if (fork.action !== "fork") {
+                            throw new Error("Expected native fork");
+                        }
                         expect(fork).toMatchObject({
                             action: "fork",
                             requestId,
                             ready: {
-                                sessionId: childId,
+                                target: fork.target,
                                 configOptions: expect.arrayContaining(
                                     fault === "--fork-omits-model" ? modeAndSpeed : selections,
                                 ),
@@ -149,7 +149,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                             ...identity,
                             kind: "session.prepare",
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     expect(decodeSessionReadyEvent(await nextMessage(peer, "session.ready")).configOptions).toEqual(

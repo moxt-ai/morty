@@ -1,23 +1,20 @@
 import { join } from "node:path";
 import { claimMortyState } from "@morty-build/local-state";
-import packageMetadata from "../../../package.json" with { type: "json" };
 import type { VerifiedRuntimeConnection } from "../../engine/runtime/connection/runtime-connection.ts";
 import {
     RuntimeInstallationStore,
     RuntimeInstallationStoreError,
 } from "../../engine/runtime/connection/runtime-installation-store.ts";
-import { MortyRuntimeEngine } from "../../engine/runtime/engine.ts";
 import {
     PairingClientError,
+    pairRuntimeConnection,
     parsePairingCode,
     parseRelayOrigin,
-    prepareRuntimeConnection,
-    validatePairingId,
+    validateComputerId,
 } from "../../engine/runtime/pairing.ts";
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
-import { prepareMortyEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
 
 function readSingleOption(arguments_: readonly string[], option: string): string {
     const values: string[] = [];
@@ -41,19 +38,21 @@ function readSingleOption(arguments_: readonly string[], option: string): string
 function parsePairCommand(arguments_: readonly string[], defaultWorkspace: string) {
     for (let index = 0; index < arguments_.length; index += 2) {
         const option = arguments_[index];
-        if (option !== "--url" && option !== "--code" && option !== "--pairing" && option !== "--workspace") {
+        if (option !== "--url" && option !== "--code" && option !== "--computer" && option !== "--workspace") {
             throw new PairingClientError("invalid_arguments", `Unknown pairing option: ${option ?? "missing option"}`);
         }
     }
     return {
         code: parsePairingCode(readSingleOption(arguments_, "--code")),
-        pairingId: arguments_.includes("--pairing") ? validatePairingId(readSingleOption(arguments_, "--pairing")) : "",
+        computerId: arguments_.includes("--computer")
+            ? validateComputerId(readSingleOption(arguments_, "--computer"))
+            : "",
         relayOrigin: parseRelayOrigin(readSingleOption(arguments_, "--url")),
         workspace: arguments_.includes("--workspace") ? readSingleOption(arguments_, "--workspace") : defaultWorkspace,
     };
 }
 
-export async function openMortyControlInstallation(
+export async function openMortyInstallation(
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<RuntimeInstallationStore> {
@@ -70,18 +69,7 @@ export async function openMortyControlInstallation(
             { cause },
         );
     }
-    return await RuntimeInstallationStore.open(join(root, "installations", "build.morty.cli"), signal);
-}
-
-// Commands and daemons resolve the same directory before writing any data.
-export async function openMortyCliInstallation(
-    signal: AbortSignal,
-    environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<RuntimeInstallationStore> {
-    return await RuntimeInstallationStore.open(
-        await prepareMortyEngineDataDir(packageMetadata.version, signal, environment),
-        signal,
-    );
+    return await RuntimeInstallationStore.open(join(root, "machine"), signal);
 }
 
 export async function pairLocalMachine(
@@ -89,31 +77,18 @@ export async function pairLocalMachine(
     signal: AbortSignal = new AbortController().signal,
 ): Promise<VerifiedRuntimeConnection> {
     const requested = parsePairCommand(arguments_, "");
-    const engineDataDir = await prepareMortyEngineDataDir(packageMetadata.version, signal, process.env);
-    const engine = new MortyRuntimeEngine({ engineDataDir, agentLaunchEnvironment: process.env });
-    const installation = await RuntimeInstallationStore.open(engineDataDir, signal);
-    if (requested.pairingId.length > 0) {
-        const existing = await installation.readConnectionForPairing(requested.pairingId, signal);
-        if (existing !== null) {
-            await prepareRuntimeConnection(
-                installation,
-                existing,
-                signal,
-                process.env,
-                resolveMaxAcpProcesses(process.env),
-            );
-            return existing;
-        }
-    }
-    return await engine.pair(
+    const installation = await openMortyInstallation(signal, process.env);
+    return await pairRuntimeConnection(
+        installation,
         {
             pairingCode: requested.code,
-            pairingId: requested.pairingId,
+            computerId: requested.computerId,
             relayOrigin: requested.relayOrigin.toString(),
             defaultWorkspace: arguments_.includes("--workspace")
                 ? requested.workspace
                 : join(readStateDirectory(), "workspace"),
         },
         signal,
+        process.env,
     );
 }

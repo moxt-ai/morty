@@ -232,8 +232,8 @@ export function NativeSessionDialog({
     const model = nativeSessionPresentation(useExternalStore(store), sessions);
     const diagnostics: DaemonDiagnosticsSource = {
         ...daemonSource,
-        sessionId: null,
-        nativeSessionId: model.preview.kind === "empty" ? null : model.preview.entry.nativeSessionId,
+        harness: model.directory.kind === "ready" ? model.directory.agentRef : null,
+        sessionId: model.preview.kind === "empty" ? null : model.preview.entry.sessionId,
     };
     const reportButton = <BugReportButton appearance="icon" daemonSource={diagnostics} dialog={bugReportDialog} />;
     const withSignal = (action: (signal: AbortSignal) => Promise<void>) => {

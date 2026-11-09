@@ -1,5 +1,10 @@
 import { createServer, request as httpRequest } from "node:http";
-import { decodeNativeSessionRequest, decodeNativeSessionResult } from "@morty-build/client/protocol";
+import {
+    decodeNativeSessionRequest,
+    decodeNativeSessionResult,
+    type NativeSessionTarget,
+    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
+} from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 
@@ -21,18 +26,19 @@ export async function createForkLossProxy(upstream: string, loss: "request" | "r
         incoming.pipe(forwarded);
     });
     const peers = new Set<WebSocket>();
-    const lost = Promise.withResolvers<string>();
+    const lost = Promise.withResolvers<NativeSessionTarget | null>();
     let armed = true;
     const sockets = new WebSocketServer({ server });
     sockets.on("connection", (daemon, request) => {
         const url = new URL(request.url ?? "/", upstream);
         url.protocol = "ws:";
         const relay = new WebSocket(url, {
-            headers: {
-                ...(request.headers.authorization === undefined
-                    ? {}
-                    : { authorization: request.headers.authorization }),
-            },
+            headers: Object.fromEntries(
+                ["authorization", RUNTIME_SUCCESSOR_CREDENTIAL_HEADER].flatMap((name) => {
+                    const value = request.headers[name];
+                    return typeof value === "string" ? [[name, value]] : [];
+                }),
+            ),
         });
         peers.add(daemon);
         peers.add(relay);
@@ -49,7 +55,7 @@ export async function createForkLossProxy(upstream: string, loss: "request" | "r
                     const result = decodeNativeSessionResult(data.toString());
                     if (result.action === "fork") {
                         armed = false;
-                        lost.resolve(result.targetSessionId);
+                        lost.resolve(result.target);
                         daemon.terminate();
                         relay.terminate();
                         return;
@@ -79,7 +85,7 @@ export async function createForkLossProxy(upstream: string, loss: "request" | "r
                     const command = decodeNativeSessionRequest(data.toString());
                     if (command.action === "fork") {
                         armed = false;
-                        lost.resolve(command.targetSessionId);
+                        lost.resolve(null);
                         daemon.terminate();
                         relay.terminate();
                         return;

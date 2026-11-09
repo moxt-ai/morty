@@ -18,31 +18,31 @@ import {
     RuntimeLocalContext,
 } from "./config.ts";
 import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 
 const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-const REDEEM_RESPONSE_KEYS: readonly string[] = ["appId", "channelId", "runtimeCredential", "runtimeId"];
+
+const REDEEM_RESPONSE_KEYS = ["computerId", "runtimeCredential"] as const;
 
 interface PairCommandOptions {
     readonly code: string;
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly relayOrigin: URL;
     readonly workspace: string;
 }
 
 interface ClaimPairingResponse {
-    readonly appId: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly runtimeCredential: string;
-    readonly runtimeId: string;
 }
 
 export interface MortyRuntimePairingOptions {
     readonly defaultWorkspace: string;
     readonly pairingCode: string;
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly relayOrigin: string;
 }
 
@@ -94,9 +94,9 @@ export function parsePairingCode(value: string): string {
     return code;
 }
 
-export function validatePairingId(value: string): string {
+export function validateComputerId(value: string): string {
     if (!isIdentifier(value)) {
-        throw new PairingClientError("invalid_pairing_id", "The Runtime pairing ID is invalid");
+        throw new PairingClientError("invalid_computer_id", "The Runtime pairing ID is invalid");
     }
     return value;
 }
@@ -150,23 +150,17 @@ function decodePairingResponse(value: unknown): ClaimPairingResponse {
     if (!isRecord(value) || !hasExactKeys(value, REDEEM_RESPONSE_KEYS)) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    const appId = value["appId"];
-    const channelId = value["channelId"];
     const runtimeCredential = value["runtimeCredential"];
-    const runtimeId = value["runtimeId"];
+    const computerId = value["computerId"];
     if (
-        typeof appId !== "string" ||
-        !isIdentifier(appId) ||
-        typeof channelId !== "string" ||
-        !isIdentifier(channelId) ||
+        typeof computerId !== "string" ||
+        !isIdentifier(computerId) ||
         typeof runtimeCredential !== "string" ||
-        !TOKEN_PATTERN.test(runtimeCredential) ||
-        typeof runtimeId !== "string" ||
-        !isIdentifier(runtimeId)
+        !TOKEN_PATTERN.test(runtimeCredential)
     ) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    return { appId, channelId, runtimeCredential, runtimeId };
+    return { computerId, runtimeCredential };
 }
 
 async function claimPairing(
@@ -182,10 +176,7 @@ async function claimPairing(
         id: agent.id,
         label: agent.label,
     }));
-    const endpoint = mortyApiUrl(
-        options.relayOrigin,
-        `/v1/runtime-pairings/${encodeURIComponent(options.pairingId)}/redeem`,
-    );
+    const endpoint = mortyApiUrl(options.relayOrigin, `/v1/pairings/${encodeURIComponent(options.computerId)}/redeem`);
     let response: Response;
     try {
         response = await fetch(endpoint, {
@@ -214,19 +205,20 @@ async function claimPairing(
 
 function buildSavedRuntimeConfig(
     connection: VerifiedRuntimeConnection,
+    credentials: RuntimeCredentials,
     defaultWorkspace: string,
     inventory: LocalAgentInventory,
     localContext: RuntimeLocalContext,
 ): RuntimeConfig {
     const relayUrl = mortyApiUrl(connection.relayOrigin, "/v1/runtimes/connect");
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-    relayUrl.searchParams.set("token", connection.runtimeCredential);
 
     const config: RuntimeConfig = createRuntimeConfig(
         {
             defaultWorkspace,
-            channelId: connection.channelId,
+            computerId: connection.computerId,
             relayUrl,
+            credentials,
         },
         new RuntimeAgentDependencies(inventory.readyAgents()),
         localContext,
@@ -240,7 +232,7 @@ function buildSavedRuntimeConfig(
                         environment: localContext.agentLaunchEnvironment,
                         signal: refreshSignal,
                     },
-                    connection.channelId,
+                    connection.computerId,
                 ),
             () => config,
             publishAgentCatalog,
@@ -253,7 +245,7 @@ function buildSavedRuntimeConfig(
                     environment: localContext.agentLaunchEnvironment,
                     signal: refreshSignal,
                 },
-                connection.channelId,
+                connection.computerId,
             ).then((inventory) => inventory.readyAgents()),
     );
     return config;
@@ -276,13 +268,10 @@ async function pairRuntime(
     const claim = await claimPairing(options, defaultWorkspace, inventory.readyAgents(), signal);
     const connection = await installation.saveConnection(
         {
-            appId: claim.appId,
-            channelId: claim.channelId,
+            computerId: claim.computerId,
             defaultWorkspace,
-            pairingId: options.pairingId,
             relayOrigin: options.relayOrigin,
             runtimeCredential: claim.runtimeCredential,
-            runtimeId: claim.runtimeId,
         },
         signal,
     );
@@ -299,7 +288,7 @@ export async function pairRuntimeConnection(
         installation,
         {
             code: parsePairingCode(options.pairingCode),
-            pairingId: validatePairingId(options.pairingId),
+            computerId: validateComputerId(options.computerId),
             relayOrigin: parseRelayOrigin(options.relayOrigin),
             workspace: options.defaultWorkspace,
         },
@@ -324,7 +313,13 @@ export async function prepareRuntimeConnection(
             environment: localContext.agentLaunchEnvironment,
             signal,
         },
-        connection.channelId,
+        connection.computerId,
     );
-    return buildSavedRuntimeConfig(connection, defaultWorkspace, inventory, localContext);
+    return buildSavedRuntimeConfig(
+        connection,
+        installation.runtimeCredentials(connection.connectionId),
+        defaultWorkspace,
+        inventory,
+        localContext,
+    );
 }

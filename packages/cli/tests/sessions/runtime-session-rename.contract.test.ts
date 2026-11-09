@@ -6,7 +6,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
     await using platform = await startTestPlatform();
     try {
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Runtime Session rename",
@@ -15,24 +14,20 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             },
             cancellation.signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
-        const sessionId = `session-${crypto.randomUUID()}`;
-        await runtime.client.sessions.create(
+        const runtime = await platform.connectAgent(project.computerId);
+        const { target: sessionTarget } = await runtime.client.sessions.create(
             {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
-                runtimeId: runtime.runtimeId,
-                sessionId,
+                computerId: runtime.computerId,
+                operationId: crypto.randomUUID(),
             },
             cancellation.signal,
         );
         await runtime.client.turns.submitToRuntime(
-            runtime.runtimeId,
-            sessionId,
+            sessionTarget,
             {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 content: "Remember this conversation",
                 directoryId: "default",
@@ -44,26 +39,24 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
 
         await expect(
             runtime.client.sessions.rename(
-                runtime.runtimeId,
-                sessionId,
+                runtime.computerId,
+                sessionTarget,
                 "Renamed by the developer",
                 cancellation.signal,
             ),
         ).resolves.toEqual(
             expect.objectContaining({
                 kind: "session.renamed",
-                sessionId,
+                target: sessionTarget,
                 title: "Renamed by the developer",
             }),
         );
 
-        await expect(
-            runtime.client.runtimes.listSessions(runtime.runtimeId, 100, cancellation.signal),
-        ).resolves.toEqual([
+        await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
             expect.objectContaining({
                 agentId: "claude",
                 prompted: true,
-                sessionId,
+                target: sessionTarget,
                 status: { kind: "idle" },
                 title: "Renamed by the developer",
             }),
@@ -72,10 +65,8 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         // The controlled Agent harness received the rename: its own native
         // Session listing reports the new title instead of the first prompt.
         const discovery = await runtime.client.runtimes.nativeSessions(
-            runtime.runtimeId,
             {
                 action: "list",
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 cursor: null,
                 directoryId: "default",
@@ -86,7 +77,12 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         expect(discovery).toEqual(
             expect.objectContaining({
                 action: "list",
-                entries: expect.arrayContaining([expect.objectContaining({ title: "Renamed by the developer" })]),
+                entries: expect.arrayContaining([
+                    expect.objectContaining({
+                        sessionId: sessionTarget.sessionId,
+                        title: "Renamed by the developer",
+                    }),
+                ]),
             }),
         );
     } finally {

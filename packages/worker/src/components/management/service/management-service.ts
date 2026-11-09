@@ -1,19 +1,18 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import type { BootstrapOrigin } from "../entity/computer-bootstrap.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
-import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
-import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
 
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
-    readonly #platformProjects: PlatformProjectStorage;
+    readonly #computerId: string | undefined;
     readonly #platform: PlatformProjectGateway;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
 
@@ -22,13 +21,12 @@ export class ManagementService {
         readonly services: { readonly authentication: AuthenticationService };
         readonly storages: {
             readonly managedBots: ManagedBotStorage;
-            readonly platformProjects: PlatformProjectStorage;
         };
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
-        this.#platformProjects = cx.storages.platformProjects;
+        this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID;
         this.#platform = cx.gateways.platformProjects;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
     }
@@ -43,35 +41,32 @@ export class ManagementService {
         signal: AbortSignal,
         origin: BootstrapOrigin,
     ) => {
-        const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin, signal);
-        const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
-        await this.#platformProjects.save(userId, project, signal);
+        const token = await bootstrapToken(this.#credentialKey, userId, project.computerId, origin, signal);
+        const identity = await this.#authentication.createAnonymous(userId, project.computerId, signal, token);
         const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, bot: { botId, displayName } };
     };
 
     /** The one Machine Morty serves a user; setup and every browser handoff resolve it here. Reading never creates. */
     readonly userBot = async (userId: string, signal: AbortSignal) => {
-        const served = servedBot(await this.#managedBots.listBots(userId, signal));
-        if (served === undefined) {
+        const machine = await this.#managedBots.readMachine(userId, signal);
+        if (machine === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return served;
+        return machine;
     };
 
     /**
      * Gives the user its Machine unless it already has one. Only identity bootstrap and transfer redemption call this;
      * both are retried writes, so repeating them returns the same Machine.
      */
-    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) => {
-        const served = servedBot(await this.#managedBots.listBots(userId, signal));
-        if (served !== undefined) {
-            return served;
-        }
-        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
-        await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
-        return { ...bot, runtimeId: null };
-    };
+    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) =>
+        await this.#managedBots.claimMachine(
+            userId,
+            { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" },
+            Date.now(),
+            signal,
+        );
 
     readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
         const bot = await this.#managedBots.readBot(userId, botId, signal);
@@ -81,7 +76,6 @@ export class ManagementService {
         return {
             botId: bot.botId,
             displayName: bot.displayName,
-            instructions: bot.instructions,
             configured: bot.configuration !== null,
         };
     };
@@ -91,27 +85,31 @@ export class ManagementService {
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { botId: bot.botId, runtimeId: bot.configuration?.runtimeId ?? null };
+        return { botId: bot.botId, computerId: bot.configuration?.computerId ?? null };
     };
 
-    readonly readProject = async (userId: string, signal: AbortSignal) =>
-        await this.#platformProjects.read(userId, signal);
+    readonly readProject = async (userId: string, signal: AbortSignal) => {
+        const machine = await this.#managedBots.readMachine(userId, signal);
+        return machine === null || this.#computerId === undefined
+            ? null
+            : { computerId: this.#computerId, displayName: machine.displayName };
+    };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {
-        const previous = await this.#platformProjects.read(userId, signal);
+        const previous = await this.readProject(userId, signal);
         if (previous === null) {
             throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }
         // A successor needs its own Platform reference: clientReference is unique per (app, reference)
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
-        const reference = `${userId}.${previous.projectId}`;
+        const reference = `${userId}.${previous.computerId}`;
         const project = await this.#platform.create(
             userId,
             "Morty",
             signal,
-            projectRegion(previous.projectId),
+            projectRegion(previous.computerId),
             reference,
         );
         return project;
@@ -119,13 +117,13 @@ export class ManagementService {
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        const pairing = await this.#platform.createPairing(project.projectId, idempotencyKey, signal);
+        const pairing = await this.#platform.createPairing(project.computerId, idempotencyKey, signal);
         return pairing;
     };
 
-    readonly readRuntimePairing = async (userId: string, pairingId: string, signal: AbortSignal) => {
+    readonly readRuntimePairing = async (userId: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        return await this.#platform.readPairing(project.projectId, pairingId, signal);
+        return await this.#platform.readPairing(project.computerId, signal);
     };
 
     /**
@@ -166,7 +164,7 @@ export class ManagementService {
 async function bootstrapToken(
     serverKey: CloudBindings["CHAT_CREDENTIAL_KEY"],
     userId: string,
-    projectId: string,
+    computerId: string,
     origin: BootstrapOrigin,
     signal: AbortSignal,
 ) {
@@ -175,13 +173,13 @@ async function bootstrapToken(
         case "created":
             return await derivedToken(
                 serverKey,
-                ["morty-anonymous-user-v1", userId, projectId, origin.creationKey],
+                ["morty-anonymous-user-v1", userId, computerId, origin.creationKey],
                 signal,
             );
         case "replacement":
             return await derivedToken(
                 serverKey,
-                ["morty-project-replacement-v1", userId, origin.previousProjectId, projectId, origin.token],
+                ["morty-project-replacement-v1", userId, origin.previousComputerId, computerId, origin.token],
                 signal,
             );
     }
@@ -208,12 +206,4 @@ async function derivedToken(
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replace(/=+$/u, "")}`;
-}
-
-/** A Project identity owns exactly one Machine; ambiguous stored state must not select another target. */
-function servedBot<Bot>(bots: readonly Bot[]): Bot | undefined {
-    if (bots.length > 1) {
-        throw new ManagementError("BOT_STATE_INVALID", "Machine state is invalid. Set up a fresh Morty identity.", 409);
-    }
-    return bots[0];
 }

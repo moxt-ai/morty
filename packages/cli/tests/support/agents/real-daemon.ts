@@ -7,11 +7,14 @@ import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 import {
     decodeMessageKind,
+    decodeNativeSessionResult,
     decodeSessionEventEnvelope,
     decodeSessionReadyEvent,
+    encodeNativeSessionCommand,
     encodeRuntimeLivenessReadyEvent,
-    encodeSessionPrepareCommand,
+    encodeSessionCreateCommand,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
@@ -23,28 +26,28 @@ import { collectLocalDaemonLogs } from "../../../src/cli/handler/logs/logic/coll
 import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";
 import { sendLocalRequest } from "../../../src/daemon/control/local-client.ts";
 import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
-import {
-    openMortyCliInstallation,
-    openMortyControlInstallation,
-} from "../../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-machine.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
 import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery/discover-local-agents.ts";
 import { RuntimeAgentDependencies } from "../../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
+import {
+    HEARTBEAT_ACK_TIMEOUT_MILLISECONDS,
+    HEARTBEAT_INTERVAL_MILLISECONDS,
+} from "../../../src/engine/runtime/relay/liveness.ts";
 import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
-import { installWorkspaceDaemonRelease } from "../installed-daemon-release.ts";
+import { memoryRuntimeCredentials } from "../runtime-credentials.ts";
 
-export interface RealDaemonPeer {
+export interface DaemonConnectionPeer {
     /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
     readonly cli: (args: readonly string[]) => Promise<void>;
     readonly restart: (mode?: "crash", restoreFiles?: () => Promise<void>) => Promise<void>;
     readonly stateDirectory: string;
     readonly send: (message: string | Uint8Array) => void;
-    readonly sessionId: string;
     readonly workspace: string;
     readonly bindingId: string;
     readonly readDiagnostics: () => Promise<string>;
@@ -52,6 +55,10 @@ export interface RealDaemonPeer {
     readonly nextEvent: () => Promise<string>;
     readonly nextFrame: () => Promise<string | Buffer>;
     readonly nextMessage: () => Promise<string>;
+}
+
+export interface RealDaemonPeer extends DaemonConnectionPeer {
+    readonly target: NativeSessionTarget;
 }
 
 /** Controlled ACP harness registered explicitly, without changing real-Agent compatibility wiring. */
@@ -65,6 +72,19 @@ export const withControlledDaemon = (
 ): Promise<void> =>
     withRealDaemon(specification, environment, scenario, launch, workspaceDirectory, timer, acpAdapters);
 
+/**
+ * Scenarios own time: the relay heartbeat's wall-clock deadlines never expire, so a slow host cannot close the
+ * connection in the middle of a scenario. The connection liveness tests drive those deadlines with their own clock.
+ */
+function withoutRelayLivenessDeadlines(timer: Timer): Timer {
+    return {
+        schedule: (callback, milliseconds) =>
+            milliseconds === HEARTBEAT_ACK_TIMEOUT_MILLISECONDS || milliseconds === HEARTBEAT_INTERVAL_MILLISECONDS
+                ? { cancel: () => undefined }
+                : timer.schedule(callback, milliseconds),
+    };
+}
+
 /** Production daemon and discovery; the peer only sends and observes the public protocol. */
 export async function withRealDaemon(
     specification: LocalAgentSpecification,
@@ -74,6 +94,45 @@ export async function withRealDaemon(
     workspaceDirectory?: string,
     timer: Timer = systemTimer,
     adapters: AdapterResolver = harnessAdapters,
+): Promise<void> {
+    await withDaemonConnection(
+        specification,
+        environment,
+        async (connection) => {
+            const target = await prepareNewRealSession(connection, specification.id);
+            await scenario({ ...connection, target });
+        },
+        launch,
+        workspaceDirectory,
+        timer,
+        adapters,
+    );
+}
+
+export const withControlledDaemonConnection = (
+    specification: LocalAgentSpecification,
+    environment: Readonly<Record<string, string>>,
+    scenario: (peer: DaemonConnectionPeer) => Promise<void>,
+    launch: "embedded" | "managed" = "embedded",
+): Promise<void> =>
+    withDaemonConnection(specification, environment, scenario, launch, undefined, systemTimer, acpAdapters);
+
+export const withRealDaemonConnection = (
+    specification: LocalAgentSpecification,
+    environment: Readonly<Record<string, string>>,
+    scenario: (peer: DaemonConnectionPeer) => Promise<void>,
+    launch: "embedded" | "managed" = "embedded",
+): Promise<void> =>
+    withDaemonConnection(specification, environment, scenario, launch, undefined, systemTimer, harnessAdapters);
+
+async function withDaemonConnection(
+    specification: LocalAgentSpecification,
+    environment: Readonly<Record<string, string>>,
+    scenario: (peer: DaemonConnectionPeer) => Promise<void>,
+    launch: "embedded" | "managed",
+    workspaceDirectory: string | undefined,
+    timer: Timer,
+    adapters: AdapterResolver,
 ): Promise<void> {
     const directory = await mkdtemp(join(tmpdir(), `morty-real-${specification.id}-`));
     const workspace = workspaceDirectory ?? join(directory, "workspace");
@@ -99,6 +158,7 @@ export async function withRealDaemon(
         }
     });
     const server = new WebSocketServer({ server: relay });
+    const runtimeTimer = withoutRelayLivenessDeadlines(timer);
     let runtime: Promise<void> | undefined;
     let execution = new AbortController();
     const cliEnvironment = { ...process.env, ...environment, MORTY_STATE_DIRECTORY: join(directory, "state") };
@@ -167,7 +227,6 @@ export async function withRealDaemon(
             connected.resolve();
         });
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/real-agent/daemon`);
-        relayUrl.searchParams.set("token", "r".repeat(43));
         // Managed launches perform discovery in the production CLI; only an embedded
         // runtime needs a catalog prepared by the fixture.
         const config =
@@ -187,7 +246,12 @@ export async function withRealDaemon(
                           );
                       }
                       return createRuntimeConfig(
-                          { channelId: "real-agent", defaultWorkspace: workspace, relayUrl },
+                          {
+                              credentials: memoryRuntimeCredentials("r".repeat(43)),
+                              computerId: "real-agent",
+                              defaultWorkspace: workspace,
+                              relayUrl,
+                          },
                           new RuntimeAgentDependencies([agent], adapters),
                           new RuntimeLocalContext(
                               directory,
@@ -198,17 +262,13 @@ export async function withRealDaemon(
                   })()
                 : null;
         if (launch === "managed") {
-            await installWorkspaceDaemonRelease(cliEnvironment.MORTY_STATE_DIRECTORY);
-            const installation = await openMortyCliInstallation(signal, cliEnvironment);
+            const installation = await openMortyInstallation(signal, cliEnvironment);
             await installation.saveConnection(
                 {
-                    appId: "app_real",
-                    channelId: "real-agent",
+                    computerId: "real-agent",
                     defaultWorkspace: workspace,
-                    pairingId: "",
                     relayOrigin: new URL(`http://127.0.0.1:${port(relay)}`),
                     runtimeCredential: "r".repeat(43),
-                    runtimeId: "runtime_real",
                 },
                 signal,
             );
@@ -218,7 +278,7 @@ export async function withRealDaemon(
                 await cli(["start"]);
             } else {
                 execution = new AbortController();
-                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), timer);
+                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), runtimeTimer);
                 void runtime.catch((error: unknown) => {
                     connected.reject(error);
                     waiter?.reject(error);
@@ -248,7 +308,6 @@ export async function withRealDaemon(
             return message;
         };
         const pendingEvents: string[] = [];
-        const sessionId = `real_${specification.id}_${randomUUID()}`;
         await scenario({
             restart: async (mode, restoreFiles) => {
                 messages.length = 0;
@@ -256,7 +315,7 @@ export async function withRealDaemon(
                 connected = Promise.withResolvers<void>();
                 if (launch === "managed") {
                     if (mode === "crash") {
-                        const control = await openMortyControlInstallation(signal, cliEnvironment);
+                        const control = await openMortyInstallation(signal, cliEnvironment);
                         const status = lifecycleResponse.parse(
                             await sendLocalRequest(control.stateDirectory, { kind: "status" }, signal),
                         );
@@ -280,7 +339,6 @@ export async function withRealDaemon(
             cli: async (args) => await cli(args),
             readDiagnostics: async () => await readFile(join(directory, "logs", "daemon.log"), "utf8"),
             signal,
-            sessionId,
             workspace,
             send: (message) => {
                 if (socket === undefined) {
@@ -340,22 +398,70 @@ export async function withRealDaemon(
     }
 }
 
-/** Opens a new conversation through the same preparation command the Web uses. */
-export async function prepareNewRealSession(
-    peer: Parameters<Parameters<typeof withRealDaemon>[2]>[0],
+/** Opens an Agent-owned conversation through the same discovery and import boundary as the browser. */
+export async function importRealSession(
+    peer: DaemonConnectionPeer,
     agentId: string,
-): Promise<string> {
-    const requestId = randomUUID();
-    const sessionId = `draft-${randomUUID()}`;
+    sessionId: string,
+): Promise<NativeSessionTarget> {
+    const identity = {
+        kind: "native.session.request",
+        agentId,
+        bindingId: peer.bindingId,
+        directoryId: "default",
+        discoveryId: randomUUID(),
+    } as const;
+    const receive = async (requestId: string) => {
+        for (;;) {
+            const message = await peer.nextMessage();
+            const kind = decodeMessageKind(message);
+            if (kind === "session.operation.failed") {
+                throw new Error(message);
+            }
+            if (kind === "native.session.result") {
+                const result = decodeNativeSessionResult(message);
+                if (result.requestId === requestId) {
+                    return result;
+                }
+            }
+        }
+    };
+    const findId = randomUUID();
+    peer.send(encodeNativeSessionCommand({ ...identity, action: "find", requestId: findId, sessionId }));
+    const found = await receive(findId);
+    if (found.action !== "find") {
+        throw new Error("Expected a native Session discovery");
+    }
+    const importId = randomUUID();
     peer.send(
-        encodeSessionPrepareCommand({
-            kind: "session.prepare",
+        encodeNativeSessionCommand({
+            ...identity,
+            discoveryId: found.discoveryId,
+            directoryId: found.entry.directoryId,
+            action: "import",
+            entryId: found.entry.entryId,
+            requestId: importId,
+        }),
+    );
+    const imported = await receive(importId);
+    if (imported.action !== "import") {
+        throw new Error("Expected a native Session import");
+    }
+    return imported.target;
+}
+
+/** Opens a conversation through first-send creation; only the harness chooses its native ID. */
+export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId: string): Promise<NativeSessionTarget> {
+    const requestId = randomUUID();
+    peer.send(
+        encodeSessionCreateCommand({
+            kind: "session.create",
             requestId,
-            sessionId,
+            operationId: randomUUID(),
+            configurations: [],
             agentId,
             bindingId: peer.bindingId,
             directoryId: "default",
-            additionalDirectoryIds: [],
         }),
     );
     for (;;) {
@@ -368,7 +474,7 @@ export async function prepareNewRealSession(
         if (kind === "session.ready") {
             const ready = decodeSessionReadyEvent(message);
             if (ready.requestId === requestId) {
-                return ready.sessionId;
+                return ready.target;
             }
         }
     }

@@ -9,6 +9,7 @@ import {
     encodeSessionCancelCommand,
     encodeSessionHistoryPageLoad,
     encodeSessionPromptCommand,
+    type NativeSessionTarget,
     SESSION_EVENT_KIND,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
@@ -39,11 +40,10 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: nativeId,
+                        target: nativeId,
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
                         disposition: SessionPromptDisposition.Append,
@@ -73,7 +73,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                         event.payload.commandId === commandId
                     ) {
                         expect(event.payload.commandId).toBe(commandId);
-                        expect(event.sessionId).toBe(nativeId);
+                        expect(event.target).toEqual(nativeId);
                         expect(event.payload.stopReason).toBe(reason);
                         return text;
                     }
@@ -113,7 +113,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
                     commandId: active,
-                    sessionId: nativeId,
+                    target: nativeId,
                 }),
             );
             await finish(active, "cancelled");
@@ -130,10 +130,9 @@ test("Given a completed real Claude Session, When it is forked, Then its history
     await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "CLAUDE_FORK_REPLY");
     await using agent = await ClaudeFixture.create(provider);
     await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, async (peer) => {
-        const sendPrompt = (sessionId: string, commandId: string): void =>
+        const sendPrompt = (sessionTarget: NativeSessionTarget, commandId: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     bindingId: peer.bindingId,
                     commandId,
@@ -142,10 +141,10 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Reply with a short greeting, without using tools",
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
-        const finish = async (sessionId: string, commandId: string): Promise<string> => {
+        const finish = async (sessionTarget: NativeSessionTarget, commandId: string): Promise<string> => {
             let text = "";
             for (;;) {
                 const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
@@ -168,7 +167,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                     event.payload.kind === "prompt.completed" &&
                     event.payload.commandId === commandId
                 ) {
-                    expect(event.sessionId).toBe(sessionId);
+                    expect(event.target).toEqual(sessionTarget);
                     expect(event.payload.stopReason).toBe("end_turn");
                     return text;
                 }
@@ -176,17 +175,15 @@ test("Given a completed real Claude Session, When it is forked, Then its history
         };
 
         const sourceCommandId = randomUUID();
-        sendPrompt(peer.sessionId, sourceCommandId);
-        expect(await finish(peer.sessionId, sourceCommandId)).toContain("CLAUDE_FORK_REPLY");
+        sendPrompt(peer.target, sourceCommandId);
+        expect(await finish(peer.target, sourceCommandId)).toContain("CLAUDE_FORK_REPLY");
 
-        const childSessionId = randomUUID();
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "claude",
             bindingId: peer.bindingId,
             directoryId: "default",
             kind: "native.session.request",
-            sessionId: peer.sessionId,
+            discoveryId: randomUUID(),
         } as const;
         const listRequestId = randomUUID();
         peer.send(encodeNativeSessionCommand({ ...identity, action: "list", cursor: null, requestId: listRequestId }));
@@ -207,7 +204,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
             if (result.action !== "list") {
                 throw new Error("Expected native sessions");
             }
-            const entry = result.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId));
+            const entry = result.entries.find((entry) => entry.sessionId === peer.target.sessionId);
             if (entry === undefined) {
                 throw new Error("Missing source native session");
             }
@@ -221,9 +218,9 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                 action: "fork",
                 requestId,
                 entryId,
-                targetSessionId: childSessionId,
             }),
         );
+        let childTarget: NativeSessionTarget;
         for (;;) {
             const message = await peer.nextMessage();
             const kind = decodeMessageKind(message);
@@ -238,7 +235,9 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                 if (result.action !== "fork") {
                     throw new Error(`Expected fork, received ${result.action}`);
                 }
-                expect(result.targetSessionId).toBe(childSessionId);
+                childTarget = result.target;
+                expect(childTarget.harness).toBe("claude");
+                expect(childTarget.sessionId).not.toBe(peer.target.sessionId);
                 break;
             }
         }
@@ -250,7 +249,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                 eventLimit: 50,
                 kind: "session.live-history.v2.page.load",
                 requestId: historyRequestId,
-                sessionId: childSessionId,
+                target: childTarget,
             }),
         );
         for (;;) {
@@ -279,7 +278,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
         }
 
         const childCommandId = randomUUID();
-        sendPrompt(childSessionId, childCommandId);
-        expect(await finish(childSessionId, childCommandId)).toContain("CLAUDE_FORK_REPLY");
+        sendPrompt(childTarget, childCommandId);
+        expect(await finish(childTarget, childCommandId)).toContain("CLAUDE_FORK_REPLY");
     });
 });

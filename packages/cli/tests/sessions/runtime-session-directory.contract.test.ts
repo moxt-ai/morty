@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
 import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { expect, it } from "vitest";
 import { startTestPlatform } from "../support/platform.ts";
@@ -11,7 +12,6 @@ for (const client of ["SDK", "HTTP"] as const) {
         await using platform = await startTestPlatform();
         try {
             const project = await platform.service.createProject(
-                platform.appId,
                 {
                     clientReference: `client-${crypto.randomUUID()}`,
                     displayName: "Runtime Session directory",
@@ -20,46 +20,45 @@ for (const client of ["SDK", "HTTP"] as const) {
                 },
                 cancellation.signal,
             );
-            const runtime = await platform.connectAgent(project.projectId);
-            const sessionId = `session-${crypto.randomUUID()}`;
+            const runtime = await platform.connectAgent(project.computerId);
             const request = {
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
-                runtimeId: runtime.runtimeId,
-                sessionId,
+                computerId: runtime.computerId,
+                operationId: crypto.randomUUID(),
             };
-            if (client === "SDK") {
-                await runtime.client.sessions.create(request, cancellation.signal);
-            } else {
-                const response = await platform.app.request(
-                    new Request(
-                        `${platform.baseUrl}/morty/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/sessions`,
-                        {
-                            method: "POST",
-                            headers: {
-                                authorization: `Bearer ${platform.appCredential}`,
-                                "content-type": "application/json",
-                            },
-                            body: JSON.stringify(request),
-                            signal: cancellation.signal,
-                        },
-                    ),
-                );
-                expect(response.status).toBe(200);
-                expect(await response.json()).toMatchObject({
-                    kind: "session.ready",
-                    sessionId,
-                    agentId: "claude",
-                    directoryId: "default",
-                });
-            }
+            const ready =
+                client === "SDK"
+                    ? await runtime.client.sessions.create(request, cancellation.signal)
+                    : await (async () => {
+                          const response = await platform.app.request(
+                              new Request(
+                                  `${platform.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`,
+                                  {
+                                      method: "POST",
+                                      headers: {
+                                          authorization: `Bearer ${platform.appCredential}`,
+                                          "content-type": "application/json",
+                                      },
+                                      body: JSON.stringify(request),
+                                      signal: cancellation.signal,
+                                  },
+                              ),
+                          );
+                          expect(response.status).toBe(200);
+                          return decodeSessionReadyEvent(await response.text());
+                      })();
+            const { target: sessionTarget } = ready;
+            expect(ready).toMatchObject({
+                kind: "session.ready",
+                target: sessionTarget,
+                agentId: "claude",
+                directoryId: "default",
+            });
             await runtime.client.turns.submitToRuntime(
-                runtime.runtimeId,
-                sessionId,
+                sessionTarget,
                 {
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     attachments: [],
                     content: "Remember this conversation",
@@ -69,15 +68,14 @@ for (const client of ["SDK", "HTTP"] as const) {
                 cancellation.signal,
             );
 
-            await expect(
-                runtime.client.runtimes.listSessions(runtime.runtimeId, 100, cancellation.signal),
-            ).resolves.toEqual([
+            await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
                 expect.objectContaining({
                     agentId: "claude",
                     directoryId: expect.any(String),
                     prompted: true,
-                    sessionId,
-                    status: { kind: "idle" },
+                    target: sessionTarget,
+                    // Admission does not wait for completion; either live state describes this conversation.
+                    status: expect.objectContaining({ kind: expect.stringMatching(/^(idle|working)$/u) }),
                     title: "Remember this conversation",
                 }),
             ]);
@@ -91,7 +89,6 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
     await using platform = await startTestPlatform();
     const signal = AbortSignal.timeout(30_000);
     const project = await platform.service.createProject(
-        platform.appId,
         {
             clientReference: `client-${crypto.randomUUID()}`,
             displayName: "Long directory references",
@@ -100,14 +97,12 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.projectId);
+    const runtime = await platform.connectAgent(project.computerId);
     for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         const path = join(tmpdir(), `missing-${crypto.randomUUID()}`, ...Array.from({ length: 8 }, () => segment));
         const directoryId = `path-${Buffer.from(path).toString("base64url")}`;
         expect(directoryId.length).toBeGreaterThan(2048);
-        await expect(
-            runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal),
-        ).rejects.toMatchObject({
+        await expect(runtime.client.runtimes.listWorkspace(directoryId, signal)).rejects.toMatchObject({
             code: "local_authorization_failed",
             message: "This directory is missing or unavailable to your user account",
         });
@@ -126,7 +121,6 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Long project",
@@ -135,28 +129,26 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
+        const runtime = await platform.connectAgent(project.computerId);
         const directoryId = `path-${Buffer.from(canonical).toString("base64url")}`;
-        const listing = await runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal);
+        const listing = await runtime.client.runtimes.listWorkspace(directoryId, signal);
         expect(listing.directoryId).toBe(directoryId);
         expect(listing.directoryLabel).toBe(canonical);
         if (process.platform === "linux") {
             expect(listing.parentDirectoryId.length).toBeGreaterThan(2048);
         }
-        const identity = { additionalDirectoryIds: [], agentId: "claude", directoryId };
-        const sessionId = `session-${crypto.randomUUID()}`;
-        await runtime.client.sessions.create(
+        const identity = { agentId: "claude", directoryId };
+        const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 ...identity,
                 configurations: [],
-                runtimeId: runtime.runtimeId,
-                sessionId,
+                computerId: runtime.computerId,
+                operationId: crypto.randomUUID(),
             },
             signal,
         );
         await runtime.client.turns.submitToRuntime(
-            runtime.runtimeId,
-            sessionId,
+            sessionTarget,
             {
                 ...identity,
                 content: "Remember the long workspace conversation",
@@ -165,21 +157,23 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        expect(await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal)).toContainEqual(
-            expect.objectContaining({ sessionId, directoryId, directoryLabel: canonical, prompted: true }),
+        expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
+            expect.objectContaining({ target: sessionTarget, directoryId, directoryLabel: canonical, prompted: true }),
         );
         const discovery = await runtime.client.runtimes.nativeSessions(
-            runtime.runtimeId,
             { ...identity, action: "list", cursor: null, discoveryId: null },
             signal,
         );
         if (discovery.action !== "list" || discovery.entries[0] === undefined) {
             throw new Error("Missing native conversation in the long workspace");
         }
-        expect(discovery.entries[0]).toMatchObject({ directoryId, directoryLabel: canonical });
+        expect(discovery.entries[0]).toMatchObject({
+            sessionId: sessionTarget.sessionId,
+            directoryId,
+            directoryLabel: canonical,
+        });
         const events = await runtime.client.sessions.previewRuntimeNativeEvents(
-            runtime.runtimeId,
-            discovery.entries[0].nativeSessionId,
+            sessionTarget,
             identity,
             { cursor: null, eventLimit: 100 },
             signal,
@@ -190,14 +184,14 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
     }
 });
 
-it("Given a Session with an additional directory, When the App prompts it and reads its execution without stating its binding, Then the Runtime runs the Turn in the Session's own directories", async () => {
-    const additional = await mkdtemp(join(tmpdir(), "morty-additional-directory-"));
+it("Given a Session in a selected workspace, When the App prompts it and reads its execution without stating its binding, Then the Runtime runs the Turn in the Session's own workspace", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "morty-session-workspace-"));
     try {
-        const additionalDirectoryId = `path-${Buffer.from(await realpath(additional)).toString("base64url")}`;
+        const directoryLabel = await realpath(workspace);
+        const directoryId = `path-${Buffer.from(directoryLabel).toString("base64url")}`;
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Session binding",
@@ -206,50 +200,49 @@ it("Given a Session with an additional directory, When the App prompts it and re
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
-        const sessionId = `session-${crypto.randomUUID()}`;
-        await runtime.client.sessions.create(
+        const runtime = await platform.connectAgent(project.computerId);
+        const { target: sessionTarget } = await runtime.client.sessions.create(
             {
-                additionalDirectoryIds: [additionalDirectoryId],
                 agentId: "claude",
                 configurations: [],
-                directoryId: "default",
-                runtimeId: runtime.runtimeId,
-                sessionId,
+                directoryId,
+                computerId: runtime.computerId,
+                operationId: crypto.randomUUID(),
             },
             signal,
         );
-        const access = await runtime.client.sessions.createAccess(runtime.runtimeId, sessionId, 900, signal);
+        const access = await runtime.client.sessions.createAccess(sessionTarget, 900, signal);
         const session = new MortyClient({
             endpoint: platform.baseUrl,
-            projectId: project.projectId,
+            computerId: project.computerId,
             credentialProvider: new StaticMortyCredentialProvider(access.credential),
             transport: { fetch: async (request: Request) => await platform.app.request(request) },
         });
 
         const turn = await session.turns.submit(
-            sessionId,
+            sessionTarget,
             {
                 attachments: [],
-                content: "Remember the additional directory",
+                content: "Remember the selected workspace",
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
             },
             signal,
         );
-        await expect(session.sessions.readSessionExecution(sessionId, {}, signal, turn.turnId)).resolves.toHaveProperty(
-            "command",
-        );
+        await expect(
+            session.sessions.readSessionExecution(sessionTarget, {}, signal, turn.turnId),
+        ).resolves.toHaveProperty("command");
 
-        expect(await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal)).toContainEqual(
+        expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({
-                additionalDirectories: [expect.objectContaining({ directoryId: additionalDirectoryId })],
                 agentId: "claude",
+                directoryId,
+                directoryLabel,
                 prompted: true,
-                sessionId,
-                title: "Remember the additional directory",
+                target: sessionTarget,
+                title: "Remember the selected workspace",
             }),
         );
     } finally {
-        await rm(additional, { recursive: true, force: true });
+        await rm(workspace, { recursive: true, force: true });
     }
 });

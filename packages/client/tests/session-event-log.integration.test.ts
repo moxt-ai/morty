@@ -16,7 +16,7 @@ function event(sessionId: string, eventId: string): SessionEvent {
         },
         recordedAt,
         sessionGenerationId: "session-generation-1",
-        sessionId,
+        target: { harness: "claude", sessionId: sessionId },
         type: "acp",
     };
 }
@@ -78,12 +78,12 @@ describe("Session Event Log V2 SDK", () => {
         const client = new MortyClient({
             credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
-            projectId: "project-1",
+            computerId: "project-1",
         });
         const signal = new AbortController().signal;
 
         try {
-            expect(await client.events.list("source-session", new MortyPageRequest(500, ""), signal)).toEqual({
+            expect(await client.events.list(sourceEvent.target, new MortyPageRequest(500, ""), signal)).toEqual({
                 sessionGenerationId: "session-generation-1",
                 events: [sourceEvent],
                 nextCursor: null,
@@ -92,7 +92,7 @@ describe("Session Event Log V2 SDK", () => {
                 truncated: false,
                 version: 2,
             });
-            expect(await client.sessions.readExternalContent("source-session", externalImage, signal)).toMatchObject({
+            expect(await client.sessions.readExternalContent(sourceEvent.target, externalImage, signal)).toMatchObject({
                 bytes: Uint8Array.of(1, 2, 3),
                 mediaType: "image/png",
                 name: "image",
@@ -104,11 +104,11 @@ describe("Session Event Log V2 SDK", () => {
         expect(received).toEqual([
             {
                 method: "GET",
-                path: "/morty/api/v1/projects/project-1/sessions/source-session/events-v2?limit=500",
+                path: "/morty/api/v1/computers/project-1/harnesses/claude/sessions/source-session/events-v2?limit=500",
             },
             {
                 method: "GET",
-                path: `/morty/api/v1/projects/project-1/sessions/source-session/files/content?maxBytes=3&path=morty-content%3Aimage%3A${"a".repeat(64)}`,
+                path: `/morty/api/v1/computers/project-1/harnesses/claude/sessions/source-session/files/content?maxBytes=3&path=morty-content%3Aimage%3A${"a".repeat(64)}`,
             },
         ]);
     });

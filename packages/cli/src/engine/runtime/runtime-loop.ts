@@ -9,16 +9,18 @@ import { discoverRuntimeAgentInventory } from "./catalog/discover-agent-catalog.
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
 import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
+import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 import { runRuntime } from "./run.ts";
 
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 
 export interface MortyRuntimeConnection {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly relayUrl: string;
-    readonly runtimeCredential: string;
+    /** The embedding host keeps the credential, which rotates on every connection, where it outlives this process. */
+    readonly credentials: RuntimeCredentials;
 }
 
 class MortyRuntimeConfigurationError extends Error {
@@ -40,12 +42,8 @@ function validateRuntimeRelay(relayUrl: URL): void {
     if (relayUrl.protocol !== "ws:" && relayUrl.protocol !== "wss:") {
         throw new MortyRuntimeConfigurationError("The Runtime relay URL must use WebSocket transport");
     }
-    const credential = relayUrl.searchParams.get("token") ?? "";
-    if (credential.length === 0) {
-        throw new MortyRuntimeConfigurationError("The Runtime relay credential is required");
-    }
-    if (!RUNTIME_CREDENTIAL_PATTERN.test(credential)) {
-        throw new MortyRuntimeConfigurationError("The Runtime relay credential is invalid");
+    if (relayUrl.username.length > 0 || relayUrl.password.length > 0 || relayUrl.search.length > 0) {
+        throw new MortyRuntimeConfigurationError("The Runtime relay URL cannot carry credentials");
     }
 }
 
@@ -60,9 +58,14 @@ function relayUrlFromConnection(connection: MortyRuntimeConnection): URL {
     } catch (error) {
         throw new MortyRuntimeConfigurationError("The Runtime relay URL is invalid", { cause: error });
     }
-    relayUrl.searchParams.set("token", connection.runtimeCredential);
     validateRuntimeRelay(relayUrl);
     return relayUrl;
+}
+
+async function validateRuntimeCredentials(credentials: RuntimeCredentials, signal: AbortSignal): Promise<void> {
+    if (!RUNTIME_CREDENTIAL_PATTERN.test((await credentials.held(signal)).current)) {
+        throw new MortyRuntimeConfigurationError("The Runtime relay credential is invalid");
+    }
 }
 
 async function resolveWorkspace(path: string): Promise<string> {
@@ -96,6 +99,7 @@ export async function prepareProvidedRuntime({
 }: PrepareProvidedRuntimeParams): Promise<RuntimeConfig> {
     signal.throwIfAborted();
     const relayUrl = relayUrlFromConnection(connection);
+    await validateRuntimeCredentials(connection.credentials, signal);
     const localContext = new RuntimeLocalContext(installation.stateDirectory, agentLaunchEnvironment, maxAcpProcesses);
     const defaultWorkspace = await resolveWorkspace(connection.defaultWorkspace);
     const specifications = supportedLocalAgentSpecifications();
@@ -109,14 +113,15 @@ export async function prepareProvidedRuntime({
                 signal: refreshSignal,
                 specifications,
             },
-            connection.channelId,
+            connection.computerId,
         );
     const inventory = await discover(signal);
     const config: RuntimeConfig = createRuntimeConfig(
         {
-            channelId: connection.channelId,
+            computerId: connection.computerId,
             defaultWorkspace,
             relayUrl,
+            credentials: connection.credentials,
         },
         new RuntimeAgentDependencies(inventory.readyAgents()),
         localContext,

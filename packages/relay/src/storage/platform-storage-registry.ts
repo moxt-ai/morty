@@ -1,6 +1,6 @@
 import { isProjectLocationHint } from "@morty-build/client/protocol";
+import { projectBucketLocation } from "../entity/computer-id.ts";
 import type { PlatformProjectPlacement, PlatformProjectPlacementRegistry } from "../entity/platform-control-plane.ts";
-import { projectBucketLocation } from "../entity/platform-project-id.ts";
 
 export interface PlatformStorageBindings {
     readonly R2_BUCKET_WNAM?: R2Bucket;

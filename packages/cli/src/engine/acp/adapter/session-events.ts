@@ -57,7 +57,7 @@ export interface AdapterSessionConnectionOptions extends SessionConnectionScope 
 }
 
 export interface AdapterSessionSubscriber {
-    readonly onSessionEvent: (nativeSessionId: string, event: AdapterSessionEvent) => Promise<void>;
+    readonly onSessionEvent: (sessionId: string, event: AdapterSessionEvent) => Promise<void>;
     readonly onBackgroundActivity?: (activity: BackgroundActivity) => void;
     readonly onPromptDelegation?: (stage: PromptDelegationStage) => Promise<void>;
     readonly interactions: AdapterSessionConnectionOptions["interactions"];
@@ -143,8 +143,12 @@ export class AdapterSessionConnection {
             const signal = AbortSignal.any([this.#lifetime.signal, AbortSignal.timeout(30_000)]);
             const externalized =
                 options.externalizeUpdate === undefined
-                    ? await externalizer.update(notification.sessionId, notification.update, signal)
-                    : await options.externalizeUpdate(notification.update, signal);
+                    ? await externalizer.update(
+                          { harness: options.agent.id, sessionId: notification.sessionId },
+                          notification.update,
+                          signal,
+                      )
+                    : await options.externalizeUpdate(notification.sessionId, notification.update, signal);
             signal.throwIfAborted();
             const update = externalized.agent;
             for (const eventUpdate of externalized.events) {

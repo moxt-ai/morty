@@ -1,8 +1,8 @@
 import { z } from "zod";
-
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodMessage, decodeZodValue, encodeZodMessage } from "../../shared/message-codec.ts";
 import { configValueSchema, SHORT_TEXT, sessionIdentityFields } from "../shared/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_CONFIGURE_KIND = "session.configure";
 export const SESSION_CONFIG_UPDATED_KIND = "session.config.updated";
@@ -134,7 +134,7 @@ const sessionConfigUpdatedEventSchema = z
         configurationRevision: IDENTIFIER,
         kind: z.literal(SESSION_CONFIG_UPDATED_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -165,7 +165,7 @@ const sessionConfigReadCommandSchema = z
     .object({
         kind: z.literal(SESSION_CONFIG_READ_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -178,7 +178,7 @@ const sessionConfigReadResultSchema = z
         configurationRevision: IDENTIFIER,
         kind: z.literal(SESSION_CONFIG_READ_RESULT_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 

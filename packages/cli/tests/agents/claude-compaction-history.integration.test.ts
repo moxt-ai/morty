@@ -133,14 +133,13 @@ test.each(["auto", "multiple", "preservedSegment", "preservedMessages", "missing
                 peer.send(
                     encodeSessionPreviewHistoryPageLoad({
                         agentId: "claude",
-                        additionalDirectoryIds: [],
                         bindingId: peer.bindingId,
                         directoryId: "default",
                         cursor: null,
                         eventLimit: 200,
                         kind: "session.preview-history.page.load",
                         requestId: "compaction-history",
-                        sessionId: nativeId,
+                        target: { harness: "claude", sessionId: nativeId },
                     }),
                 );
                 for (;;) {

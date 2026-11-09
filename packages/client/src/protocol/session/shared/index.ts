@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodValue } from "../../shared/message-codec.ts";
+import { nativeSessionTargetSchema } from "./native-session-target.ts";
 
 export { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
 export const SHORT_TEXT = z.string().max(500);
@@ -42,7 +43,6 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
 export const sessionCapabilitiesSchema = z
     .strictObject({
-        additionalDirectories: z.boolean(),
         audioPrompt: z.boolean(),
         closeSession: z.boolean(),
         deleteSession: z.boolean(),
@@ -90,9 +90,8 @@ export const configValueSchema = z
 export type SessionConfigValue = z.infer<typeof configValueSchema>;
 
 export const sessionIdentityFields = {
-    additionalDirectoryIds: z.array(DIRECTORY_IDENTIFIER).max(16).readonly(),
     agentId: IDENTIFIER,
     bindingId: IDENTIFIER,
     directoryId: DIRECTORY_IDENTIFIER,
-    sessionId: IDENTIFIER,
+    target: nativeSessionTargetSchema,
 };

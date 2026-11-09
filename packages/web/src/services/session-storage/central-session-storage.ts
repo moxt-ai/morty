@@ -1,4 +1,10 @@
-import { isDirectoryIdentifier, isIdentifier, MAX_PROMPT_ATTACHMENT_BYTES } from "@morty-build/client/protocol";
+import { nativeSessionKey } from "@morty-build/client/native-session";
+import {
+    isDirectoryIdentifier,
+    isIdentifier,
+    MAX_PROMPT_ATTACHMENT_BYTES,
+    type NativeSessionTarget,
+} from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 /**
@@ -124,8 +130,11 @@ export const transferRedemptionEntry = customSessionStorageEntry({
 });
 
 /** Carries first-visit guidance from a successful native handoff to its session. */
-export const sessionWelcomeEntry = (botId: string, sessionId: string): SessionStorageEntry<"pending"> => ({
-    key: scopedKey("morty:session-welcome:v1:", botId, sessionId),
+export const sessionWelcomeEntry = (
+    botId: string,
+    sessionTarget: NativeSessionTarget,
+): SessionStorageEntry<"pending"> => ({
+    key: scopedKey("morty:session-welcome:v2:", botId, nativeSessionKey(sessionTarget)),
     schema: v.literal("pending"),
     encode: (value) => v.parse(v.literal("pending"), value),
     decode: (raw) => (raw === "pending" ? "pending" : null),
@@ -137,16 +146,19 @@ export const newConversationDraftEntry = (botId: string): SessionStorageEntry<st
         schema: messageDraftSchema,
     });
 
-export const sessionDraftEntry = (sessionId: string): SessionStorageEntry<string> =>
+export const sessionDraftEntry = (botId: string, sessionTarget: NativeSessionTarget): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
-        key: scopedKey("morty:message-draft:session:v1:", sessionId),
+        key: scopedKey("morty:message-draft:session:v2:", botId, nativeSessionKey(sessionTarget)),
         schema: messageDraftSchema,
     });
 
 /** A submitted message the Runtime never took; a reload returns it to the Session's composer. */
-export const sessionUnsentMessageEntry = (sessionId: string): SessionStorageEntry<string> =>
+export const sessionUnsentMessageEntry = (
+    botId: string,
+    sessionTarget: NativeSessionTarget,
+): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
-        key: scopedKey("morty:unsent-message:session:v1:", sessionId),
+        key: scopedKey("morty:unsent-message:session:v2:", botId, nativeSessionKey(sessionTarget)),
         schema: messageDraftSchema,
     });
 
@@ -166,9 +178,12 @@ const elicitationAnswerDraftsSchema = v.pipe(
 export type ElicitationAnswerDrafts = v.InferOutput<typeof elicitationAnswerDraftsSchema>;
 
 /** Answers typed into the Agent's pending questions in a Session, by question; a reload returns them to the form. */
-export const elicitationAnswerDraftsEntry = (sessionId: string): SessionStorageEntry<ElicitationAnswerDrafts> =>
+export const elicitationAnswerDraftsEntry = (
+    botId: string,
+    sessionTarget: NativeSessionTarget,
+): SessionStorageEntry<ElicitationAnswerDrafts> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:elicitation-answers:v1:", sessionId),
+        key: scopedKey("morty:elicitation-answers:v2:", botId, nativeSessionKey(sessionTarget)),
         schema: elicitationAnswerDraftsSchema,
         encode: (value) => JSON.stringify(v.parse(elicitationAnswerDraftsSchema, value)),
         decode: (raw) => {
@@ -198,9 +213,12 @@ export type AgentQuestionChoicesByMessage = v.InferOutput<typeof agentQuestionCh
  * The suggested answers picked for the questions Agent messages ask in a Session, by message and then by question
  * position; returning to the Session or reloading keeps them until they are sent.
  */
-export const agentQuestionChoicesEntry = (sessionId: string): SessionStorageEntry<AgentQuestionChoicesByMessage> =>
+export const agentQuestionChoicesEntry = (
+    botId: string,
+    sessionTarget: NativeSessionTarget,
+): SessionStorageEntry<AgentQuestionChoicesByMessage> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:agent-question-choices:v1:", sessionId),
+        key: scopedKey("morty:agent-question-choices:v2:", botId, nativeSessionKey(sessionTarget)),
         schema: agentQuestionChoicesSchema,
         encode: (value) => JSON.stringify(v.parse(agentQuestionChoicesSchema, value)),
         decode: (raw) => {
@@ -241,7 +259,7 @@ export const newConversationUnsentMessageEntry = (botId: string): SessionStorage
 
 const rememberedSessionSchema = v.pipe(
     v.object({
-        id: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+        target: v.object({ harness: v.custom<string>(isIdentifier), sessionId: v.custom<string>(isIdentifier) }),
         title: v.pipe(v.string(), v.minLength(1), v.maxLength(2_000)),
     }),
     v.readonly(),
@@ -275,7 +293,6 @@ const uploadedAttachmentSchema = v.strictObject({
     uri: v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)),
 });
 const pendingRequestEntries = {
-    additionalDirectoryIds: v.pipe(v.array(v.custom<string>(isDirectoryIdentifier)), v.maxLength(16), v.readonly()),
     agentId: v.exactOptional(submissionIdentifier),
     directoryId: v.exactOptional(v.custom<string>(isDirectoryIdentifier)),
     // Preserve the attempted request exactly; the receiving API owns prompt-size rejection.
@@ -306,10 +323,10 @@ export type SessionPendingSubmission = v.InferOutput<typeof pendingSubmissionSch
 /** The unconfirmed request is a historical intent, separate from the next editable draft. */
 export const sessionPendingSubmissionEntry = (
     botId: string,
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
 ): SessionStorageEntry<SessionPendingSubmission> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:pending-submission:v1:", botId, sessionId),
+        key: scopedKey("morty:pending-submission:v2:", botId, nativeSessionKey(sessionTarget)),
         schema: pendingSubmissionSchema,
         encode: (value) => JSON.stringify(v.parse(pendingSubmissionSchema, value)),
         decode: (raw) => {

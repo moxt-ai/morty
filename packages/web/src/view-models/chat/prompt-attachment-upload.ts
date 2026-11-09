@@ -1,4 +1,5 @@
 import type { MortyClient, PromptAttachment } from "@morty-build/client";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 
 async function contentKey(bytes: Uint8Array): Promise<string> {
@@ -6,9 +7,9 @@ async function contentKey(bytes: Uint8Array): Promise<string> {
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function uploadPromptAttachment(
+async function uploadPromptAttachment(
     sessions: MortyClient["sessions"],
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     attachment: ComposerAttachment,
     signal: AbortSignal,
 ): Promise<PromptAttachment> {
@@ -16,7 +17,7 @@ export async function uploadPromptAttachment(
     const key = await contentKey(attachment.bytes);
     signal.throwIfAborted();
     return await sessions.uploadContent(
-        sessionId,
+        sessionTarget,
         {
             bytes: attachment.bytes,
             contentKey: key,
@@ -31,11 +32,11 @@ export async function uploadPromptAttachment(
 
 export async function uploadPromptAttachments(
     sessions: MortyClient["sessions"],
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     attachments: readonly ComposerAttachment[],
     signal: AbortSignal,
 ): Promise<readonly PromptAttachment[]> {
     return await Promise.all(
-        attachments.map((attachment) => uploadPromptAttachment(sessions, sessionId, attachment, signal)),
+        attachments.map((attachment) => uploadPromptAttachment(sessions, sessionTarget, attachment, signal)),
     );
 }

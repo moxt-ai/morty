@@ -28,8 +28,8 @@ export function storedToken(userId: string): string | null {
 }
 
 /** The access this browser holds for a Project's user, or null when it holds none. */
-export function storedTokenForProject(projectId: string): string | null {
-    const computer = rememberedComputers().find((entry) => entry.scope.projectId === projectId);
+export function storedTokenForProject(computerId: string): string | null {
+    const computer = rememberedComputers().find((entry) => entry.scope.computerId === computerId);
     return computer === undefined ? null : storedToken(computer.scope.userId);
 }
 
@@ -119,6 +119,7 @@ export function rememberComputerName(scope: IdentityScope, name: string): void {
 export function computerAddress(scope: IdentityScope, destination: ComputerDestination): string {
     const query = new URLSearchParams({ identity: encodeIdentityScope(scope) });
     if (destination.kind === "session") {
+        query.set("harness", destination.harness);
         query.set("sessionId", destination.sessionId);
     }
     return `/chat?${query}`;

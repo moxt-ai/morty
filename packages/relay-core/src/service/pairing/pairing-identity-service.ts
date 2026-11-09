@@ -1,14 +1,14 @@
 import { RuntimeAccessContext } from "../../entity/authentication/project-authentication.ts";
-import { ProjectScope } from "../../entity/do/session.ts";
+import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../entity/pairing/pairing.ts";
-import type { PairingIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
+import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { PairingScopeRow } from "../../entity/pairing/pairing-records.ts";
 import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
 import type { ProjectStore, ProjectStoreResolver } from "../../infra/project-store.ts";
 import { DatabaseError } from "../../infra/sql-database.ts";
 
 /** A credential that matches nothing, including one stored for a Project that is no longer served. */
-function unmatchedCredential(credential: PairingIdentityCredential): PairingDirectoryError {
+function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
     const code =
         credential.kind === "pairing"
             ? "pairing_not_found"
@@ -24,7 +24,7 @@ function unmatchedCredential(credential: PairingIdentityCredential): PairingDire
  * Finds the Project a credential belongs to by asking the Project stores this execution can search, then confirms
  * that the Relay still serves that Project from the store that matched.
  */
-export class PairingIdentityService {
+export class ComputerIdentityService {
     readonly #sources: readonly ProjectStore[];
     readonly #stores: ProjectStoreResolver;
     readonly #projects: ProjectStorageDirectory;
@@ -38,11 +38,11 @@ export class PairingIdentityService {
         source === this.#stores.resolve(project.storagePlacement);
 
     readonly authenticateProject = async (
-        credential: PairingIdentityCredential,
+        credential: ComputerIdentityCredential,
         signal: AbortSignal,
     ): Promise<ProjectStorageContext> => {
         const identity = await this.authenticate(credential, signal);
-        const project = await this.#projects.resolve(identity.projectId, signal);
+        const project = await this.#projects.resolve(identity.computerId, signal);
         signal.throwIfAborted();
         if (project === null) {
             throw unmatchedCredential(credential);
@@ -53,23 +53,49 @@ export class PairingIdentityService {
         return project;
     };
 
-    readonly authenticateRuntime = async (tokenHash: string, signal: AbortSignal): Promise<RuntimeAccessContext> => {
+    /**
+     * Presents a daemon credential with its successor. The Project store rotates the credential; a retired credential
+     * presented with another successor is reported as reused, for the caller to end the Runtime's access, and one of a
+     * Runtime whose access already ended as revoked.
+     */
+    readonly rotateRuntime = async (
+        presentedHash: string,
+        successorHash: string,
+        signal: AbortSignal,
+    ): Promise<
+        { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
+    > => {
         signal.throwIfAborted();
         try {
-            const matches: { readonly source: ProjectStore; readonly row: PairingScopeRow }[] = [];
+            const matches: {
+                readonly source: ProjectStore;
+                readonly kind: "rotated" | "reused";
+                readonly row: PairingScopeRow;
+            }[] = [];
+            let revoked = false;
             for (const source of this.#sources) {
-                for (const row of await source.findRuntimeCredential(tokenHash, signal)) {
-                    matches.push({ source, row });
+                const rotation = await source.rotateRuntimeCredential(presentedHash, successorHash, signal);
+                switch (rotation.kind) {
+                    case "rotated":
+                    case "reused":
+                        matches.push({ source, kind: rotation.kind, row: rotation.runtime });
+                        break;
+                    case "revoked":
+                        revoked = true;
+                        break;
+                    case "unknown":
+                        break;
                 }
+            }
+            if (revoked && matches.length === 0) {
+                return { kind: "revoked" };
             }
             const match = matches[0];
             if (matches.length !== 1 || match === undefined) {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
             }
-            const projectId = validateIdentifier(match.row.project_id, "project_id");
-            const runtimeId = validateIdentifier(match.row.runtime_id, "runtime_id");
-            const channelId = validateIdentifier(match.row.channel_id, "channel_id");
-            const project = await this.#projects.resolve(projectId, signal);
+            const computerId = validateIdentifier(match.row.computer_id, "computer_id");
+            const project = await this.#projects.resolve(computerId, signal);
             signal.throwIfAborted();
             if (project === null) {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
@@ -77,7 +103,10 @@ export class PairingIdentityService {
             if (!this.matchesPlacement(match.source, project)) {
                 throw new PairingDirectoryError("directory_unavailable", "Runtime storage is unavailable");
             }
-            return new RuntimeAccessContext(new ProjectScope(projectId), runtimeId, channelId, `daemon:${channelId}`);
+            return {
+                kind: match.kind,
+                access: new RuntimeAccessContext(new ComputerScope(computerId), `daemon:${computerId}`),
+            };
         } catch (cause) {
             signal.throwIfAborted();
             if (cause instanceof PairingDirectoryError) {
@@ -92,10 +121,10 @@ export class PairingIdentityService {
         }
     };
 
-    private readonly authenticate = async (credential: PairingIdentityCredential, signal: AbortSignal) => {
+    private readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
-            const matches: { readonly projectId: string; readonly source: ProjectStore }[] = [];
+            const matches: { readonly computerId: string; readonly source: ProjectStore }[] = [];
             for (const source of this.#sources) {
                 for (const row of await source.findCredential(credential, signal)) {
                     signal.throwIfAborted();
@@ -116,7 +145,7 @@ export class PairingIdentityService {
                             throw new PairingDirectoryError("credential_expired", "The browser credential expired");
                         }
                     }
-                    matches.push({ projectId: validateIdentifier(row.project_id, "project_id"), source });
+                    matches.push({ computerId: validateIdentifier(row.computer_id, "computer_id"), source });
                 }
             }
             const match = matches[0];

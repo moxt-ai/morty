@@ -44,14 +44,13 @@ test("Given a real Claude native Session with 6000 saved messages, When its prev
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                additionalDirectoryIds: [],
                 bindingId: peer.bindingId,
                 directoryId: "default",
                 cursor: null,
                 eventLimit: 10000,
                 kind: "session.preview-history.page.load",
                 requestId: "real-claude-large-preview",
-                sessionId: nativeId,
+                target: { harness: "claude", sessionId: nativeId },
             }),
         );
         for (;;) {

@@ -1,20 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import { isIdentifier } from "@morty-build/client/protocol";
+import { join, resolve } from "node:path";
+import { isIdentifier, runtimeCredentialSuccessor } from "@morty-build/client/protocol";
 import { ensurePrivateDirectory } from "../../storage/files/local-files.ts";
 import {
-    channelIndexFilePath,
-    connectionDirectory,
-    connectionFilePath,
     createInstallationFile,
     type InstallationDirectory,
     installationDirectory,
     installationPointerPath,
-    listInstallationFiles,
     readInstallationFile,
     removeInstallationFile,
     writeInstallationFile,
 } from "../../storage/installation/installation-files.ts";
+import { tryLock } from "../../storage/installation/local-lock.ts";
 import { validateLocalPath } from "../../util/filesystem/private-path.ts";
 import { isNodeError } from "../../util/node-error.ts";
 import {
@@ -22,24 +19,21 @@ import {
     type RuntimeConnectionInput,
     VerifiedRuntimeConnection,
 } from "./runtime-connection.ts";
+import type { HeldRuntimeCredentials, RuntimeCredentials } from "./runtime-credentials.ts";
 
 const CONNECTION_ID_PATTERN = /^mcn_[a-f0-9]{32}$/;
 const INSTALLATION_ID_PATTERN = /^min_[a-f0-9]{32}$/;
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const INSTALLATION_POINTER_KEYS: readonly string[] = ["installationId", "version"];
-const CHANNEL_INDEX_KEYS: readonly string[] = ["channelId", "connectionId", "installationId", "version"];
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
-    "appId",
-    "channelId",
+    "computerId",
     "connectionId",
     "defaultWorkspace",
     "installationId",
     "kind",
-    "pairingId",
     "relayOrigin",
-    "runtimeCredential",
-    "runtimeId",
+    "credentials",
     "version",
 ];
 
@@ -57,12 +51,6 @@ interface InstallationPointer {
     readonly installationId: string;
 }
 
-interface ChannelIndex {
-    readonly channelId: string;
-    readonly connectionId: string;
-    readonly installationId: string;
-}
-
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -70,13 +58,6 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 function hasExactKeys(value: Readonly<Record<string, unknown>>, expectedKeys: readonly string[]): boolean {
     const keys = Object.keys(value);
     return keys.length === expectedKeys.length && expectedKeys.every((key) => Object.hasOwn(value, key));
-}
-
-function validateRemoteAppId(value: string): string {
-    if (!isIdentifier(value)) {
-        throw new RuntimeInstallationStoreError("invalid_app_id", "The remote App ID is invalid");
-    }
-    return value;
 }
 
 function validateConnectionId(value: string): string {
@@ -149,65 +130,42 @@ function decodeInstallationPointer(value: unknown): InstallationPointer {
     return { installationId: validateInstallationId(storedInstallationId) };
 }
 
-function decodeChannelIndex(value: unknown): ChannelIndex {
-    if (!isRecord(value)) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
-    }
-    if (!hasExactKeys(value, CHANNEL_INDEX_KEYS) || value["version"] !== 2) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
-    }
-    const channelId = value["channelId"];
-    const connectionId = value["connectionId"];
-    const storedInstallationId = value["installationId"];
-    if (typeof channelId !== "string" || typeof connectionId !== "string" || typeof storedInstallationId !== "string") {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
-    }
-    return {
-        channelId: validateIdentifier(channelId, "invalid_connection"),
-        connectionId: validateConnectionId(connectionId),
-        installationId: validateInstallationId(storedInstallationId),
-    };
-}
-
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedRuntimeConnection {
-    if (!hasExactKeys(value, VERIFIED_CONNECTION_KEYS) || value["version"] !== 6 || value["kind"] !== "verified") {
+    if (!hasExactKeys(value, VERIFIED_CONNECTION_KEYS) || value["version"] !== 7 || value["kind"] !== "verified") {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
-    const appId = value["appId"];
-    const channelId = value["channelId"];
     const connectionId = value["connectionId"];
     const defaultWorkspace = value["defaultWorkspace"];
     const storedInstallationId = value["installationId"];
-    const pairingId = value["pairingId"];
+    const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];
-    const runtimeCredential = value["runtimeCredential"];
-    const runtimeId = value["runtimeId"];
+    const credentials = value["credentials"];
     if (
         (activation !== "active" && activation !== "stopped") ||
-        typeof appId !== "string" ||
-        typeof channelId !== "string" ||
+        typeof computerId !== "string" ||
         typeof connectionId !== "string" ||
         typeof defaultWorkspace !== "string" ||
         typeof storedInstallationId !== "string" ||
-        typeof pairingId !== "string" ||
         typeof relayOrigin !== "string" ||
-        typeof runtimeCredential !== "string" ||
-        typeof runtimeId !== "string"
+        !isRecord(credentials) ||
+        !hasExactKeys(credentials, ["current", "successor"]) ||
+        typeof credentials["current"] !== "string" ||
+        (credentials["successor"] !== null && typeof credentials["successor"] !== "string")
     ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     return new VerifiedRuntimeConnection(
         activation,
-        validateRemoteAppId(appId),
         validateInstallationId(storedInstallationId),
         validateConnectionId(connectionId),
-        validateIdentifier(channelId, "invalid_connection"),
+        validateIdentifier(computerId, "invalid_connection"),
         defaultWorkspace,
-        pairingId.length === 0 ? "" : validateIdentifier(pairingId, "invalid_connection"),
         parseRelayOrigin(relayOrigin),
-        validateRuntimeCredential(runtimeCredential),
-        validateIdentifier(runtimeId, "invalid_connection"),
+        {
+            current: validateRuntimeCredential(credentials["current"]),
+            successor: credentials["successor"] === null ? null : validateRuntimeCredential(credentials["successor"]),
+        },
     );
 }
 
@@ -267,12 +225,12 @@ async function writeJsonAtomically(
 export class RuntimeInstallationStore {
     readonly installationId: string;
     readonly stateDirectory: InstallationDirectory;
-    readonly #connectionDirectory: string;
+    readonly pairingPath: string;
 
     private constructor(installationId: string, stateDirectory: InstallationDirectory) {
         this.installationId = installationId;
         this.stateDirectory = stateDirectory;
-        this.#connectionDirectory = connectionDirectory(stateDirectory);
+        this.pairingPath = join(stateDirectory, "pairing.json");
     }
 
     static readonly open = async (engineDataDir: string, signal: AbortSignal): Promise<RuntimeInstallationStore> => {
@@ -294,6 +252,7 @@ export class RuntimeInstallationStore {
         const stateDirectory = installationDirectory(dataDirectory, storedInstallationId);
         try {
             await ensurePrivateDirectory(stateDirectory);
+            await validateLocalPath(stateDirectory, true, true, signal);
         } catch (cause) {
             throw new RuntimeInstallationStoreError(
                 "installation_unavailable",
@@ -307,16 +266,30 @@ export class RuntimeInstallationStore {
         return new RuntimeInstallationStore(storedInstallationId, stateDirectory);
     };
 
-    readonly connectionPath = (connectionId: string): string =>
-        connectionFilePath(this.#connectionDirectory, validateConnectionId(connectionId));
-
-    private readonly channelIndexPath = (channelId: string): string =>
-        channelIndexFilePath(this.stateDirectory, validateIdentifier(channelId, "invalid_channel_id"));
+    private readonly changePairing = async <T>(operation: () => Promise<T>): Promise<T> => {
+        const unlock = tryLock(join(this.stateDirectory, "pairing.lock.sqlite"));
+        if (!unlock) {
+            throw new RuntimeInstallationStoreError("pairing_busy", "Another operation is changing the pairing");
+        }
+        try {
+            return await operation();
+        } finally {
+            unlock();
+        }
+    };
 
     readonly readConnection = async (connectionId: string, signal: AbortSignal): Promise<VerifiedRuntimeConnection> => {
-        return this.decodeOwnedConnection(
-            await readJsonFile(this.connectionPath(connectionId), signal, "connection_not_found"),
+        validateConnectionId(connectionId);
+        const connection = this.decodeOwnedConnection(
+            await readJsonFile(this.pairingPath, signal, "connection_not_found"),
         );
+        if (connection.connectionId !== connectionId) {
+            throw new RuntimeInstallationStoreError(
+                "connection_not_found",
+                "The requested pairing is no longer selected",
+            );
+        }
+        return connection;
     };
 
     private readonly decodeOwnedConnection = (record: unknown): VerifiedRuntimeConnection => {
@@ -330,107 +303,39 @@ export class RuntimeInstallationStore {
         return stored;
     };
 
-    readonly #readConnectionForChannel = async (
-        channelId: string,
-        signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection> => {
-        const normalizedChannelId = validateIdentifier(channelId, "invalid_channel_id");
-        const index = decodeChannelIndex(
-            await readJsonFile(this.channelIndexPath(normalizedChannelId), signal, "connection_not_found"),
-        );
-        if (index.installationId !== this.installationId || index.channelId !== normalizedChannelId) {
-            throw new RuntimeInstallationStoreError(
-                "connection_owner_mismatch",
-                "The saved Runtime connection belongs to another installation",
-            );
-        }
-        return await this.readConnection(index.connectionId, signal);
-    };
-
     readonly saveConnection = async (
         input: RuntimeConnectionInput,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection> => {
         const stored = new VerifiedRuntimeConnection(
             "active",
-            validateRemoteAppId(input.appId),
             this.installationId,
             connectionId(),
-            validateIdentifier(input.channelId, "invalid_connection"),
+            validateIdentifier(input.computerId, "invalid_connection"),
             input.defaultWorkspace,
-            input.pairingId.length === 0 ? "" : validateIdentifier(input.pairingId, "invalid_pairing_id"),
             parseRelayOrigin(input.relayOrigin.toString()),
-            validateRuntimeCredential(input.runtimeCredential),
-            validateIdentifier(input.runtimeId, "invalid_connection"),
+            { current: validateRuntimeCredential(input.runtimeCredential), successor: null },
         );
-        await this.writeConnection(stored, signal);
+        await this.changePairing(async () => {
+            await this.overwriteConnection(stored, signal);
+        });
         return stored;
     };
 
-    private readonly writeConnection = async (
-        stored: VerifiedRuntimeConnection,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        signal.throwIfAborted();
+    readonly currentConnection = async (signal: AbortSignal): Promise<VerifiedRuntimeConnection | null> => {
         try {
-            await this.#readConnectionForChannel(stored.channelId, signal);
-            throw new RuntimeInstallationStoreError(
-                "connection_conflict",
-                "A Runtime connection for this channel already exists in this installation",
-            );
+            return this.decodeOwnedConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
         } catch (cause) {
-            if (!(cause instanceof RuntimeInstallationStoreError) || cause.code !== "connection_not_found") {
-                throw cause;
+            if (cause instanceof RuntimeInstallationStoreError && cause.code === "connection_not_found") {
+                return null;
             }
+            throw cause;
         }
-        await this.overwriteConnection(stored, signal);
-        await writeJsonAtomically(
-            this.channelIndexPath(stored.channelId),
-            {
-                channelId: stored.channelId,
-                connectionId: stored.connectionId,
-                installationId: this.installationId,
-                version: 2,
-            },
-            signal,
-        );
     };
 
     readonly listConnections = async (signal: AbortSignal): Promise<readonly VerifiedRuntimeConnection[]> => {
-        signal.throwIfAborted();
-        let entries: readonly string[];
-        try {
-            entries = await listInstallationFiles(this.#connectionDirectory);
-        } catch (cause) {
-            if (isNodeError(cause, "ENOENT")) {
-                return [];
-            }
-            throw new RuntimeInstallationStoreError(
-                "connection_unavailable",
-                "Saved Runtime connections cannot be listed",
-                {
-                    cause,
-                },
-            );
-        }
-        const connections: VerifiedRuntimeConnection[] = [];
-        for (const entry of [...entries].sort()) {
-            signal.throwIfAborted();
-            const match = /^(mcn_[a-f0-9]{32})\.json$/.exec(entry);
-            if (match?.[1] !== undefined) {
-                connections.push(await this.readConnection(match[1], signal));
-            }
-        }
-        return connections;
-    };
-
-    readonly readConnectionForPairing = async (
-        pairingId: string,
-        signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection | null> => {
-        const normalizedPairingId = validateIdentifier(pairingId, "invalid_pairing_id");
-        const connections = await this.listConnections(signal);
-        return connections.find((connection) => connection.pairingId === normalizedPairingId) ?? null;
+        const current = await this.currentConnection(signal);
+        return current === null ? [] : [current];
     };
 
     readonly setConnectionActivation = async (
@@ -438,64 +343,102 @@ export class RuntimeInstallationStore {
         activation: RuntimeConnectionActivation,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection> => {
-        const record = await readJsonFile(this.connectionPath(connectionId), signal, "connection_not_found");
-        const connection = this.decodeOwnedConnection(record);
-        const updated = new VerifiedRuntimeConnection(
-            activation,
-            connection.appId,
-            connection.installationId,
-            connection.connectionId,
-            connection.channelId,
-            connection.defaultWorkspace,
-            connection.pairingId,
-            connection.relayOrigin,
-            connection.runtimeCredential,
-            connection.runtimeId,
+        return await this.changePairing(async () => {
+            const connection = await this.readConnection(connectionId, signal);
+            const updated = new VerifiedRuntimeConnection(
+                activation,
+                connection.installationId,
+                connection.connectionId,
+                connection.computerId,
+                connection.defaultWorkspace,
+                connection.relayOrigin,
+                connection.credentials,
+            );
+            await this.overwriteConnection(updated, signal);
+            return updated;
+        });
+    };
+
+    /**
+     * Pairing identity and its rotating credentials commit together. Every writer holds the same process-safe lock
+     * and re-reads the selected pairing, so activation cannot restore old credentials and an old Runtime cannot
+     * overwrite a replacement. A rejected completion leaves the prepared successor durable for a safe retry.
+     */
+    readonly runtimeCredentials = (connectionId: string): RuntimeCredentials => ({
+        prepare: async (signal) =>
+            await this.changePairing(async () => {
+                const connection = await this.readConnection(connectionId, signal);
+                const saved = connection.credentials;
+                const rotation = {
+                    current: saved.current,
+                    successor: saved.successor ?? runtimeCredentialSuccessor(saved.current),
+                };
+                if (saved.successor === null) {
+                    await this.overwriteCredentials(connection, rotation, signal);
+                }
+                return rotation;
+            }),
+        complete: async (rotation, signal) =>
+            await this.changePairing(async () => {
+                const connection = await this.readConnection(connectionId, signal);
+                const saved = connection.credentials;
+                if (saved.current === rotation.successor) {
+                    return;
+                }
+                if (saved.current !== rotation.current || saved.successor !== rotation.successor) {
+                    throw new RuntimeInstallationStoreError(
+                        "credential_conflict",
+                        "The saved Runtime credential changed during its rotation",
+                    );
+                }
+                await this.overwriteCredentials(connection, { current: rotation.successor, successor: null }, signal);
+            }),
+        held: async (signal) => (await this.readConnection(connectionId, signal)).credentials,
+    });
+
+    private readonly overwriteCredentials = async (
+        connection: VerifiedRuntimeConnection,
+        credentials: HeldRuntimeCredentials,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        await this.overwriteConnection(
+            new VerifiedRuntimeConnection(
+                connection.activation,
+                connection.installationId,
+                connection.connectionId,
+                connection.computerId,
+                connection.defaultWorkspace,
+                connection.relayOrigin,
+                credentials,
+            ),
+            signal,
         );
-        await this.overwriteConnection(updated, signal);
-        return updated;
     };
 
     readonly removeConnection = async (connectionId: string, signal: AbortSignal): Promise<void> => {
-        const connection = await this.readConnection(connectionId, signal);
-        signal.throwIfAborted();
-        try {
-            await removeInstallationFile(this.connectionPath(connection.connectionId));
+        await this.changePairing(async () => {
+            await this.readConnection(connectionId, signal);
             signal.throwIfAborted();
-            await removeInstallationFile(this.channelIndexPath(connection.channelId));
-        } catch (cause) {
-            signal.throwIfAborted();
-            if (isNodeError(cause, "ENOENT")) {
-                return;
-            }
-            throw new RuntimeInstallationStoreError(
-                "connection_unavailable",
-                "The saved Runtime connection cannot be removed",
-                { cause },
-            );
-        }
+            await removeInstallationFile(this.pairingPath);
+        });
     };
 
     private readonly overwriteConnection = async (
         connection: VerifiedRuntimeConnection,
         signal: AbortSignal,
     ): Promise<void> => {
-        const connectionPath = this.connectionPath(connection.connectionId);
         await writeJsonAtomically(
-            connectionPath,
+            this.pairingPath,
             {
                 activation: connection.activation,
-                appId: connection.appId,
-                channelId: connection.channelId,
+                computerId: connection.computerId,
                 connectionId: connection.connectionId,
                 defaultWorkspace: connection.defaultWorkspace,
                 installationId: connection.installationId,
                 kind: connection.kind,
-                pairingId: connection.pairingId,
                 relayOrigin: connection.relayOrigin.toString(),
-                runtimeCredential: connection.runtimeCredential,
-                runtimeId: connection.runtimeId,
-                version: 6,
+                credentials: connection.credentials,
+                version: 7,
             },
             signal,
         );

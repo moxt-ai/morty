@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import type { Command } from "commander";
-import { openMortyCliInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
 import { discoverLocalAgentInventory } from "../../../engine/agent/discovery/discover-local-agents.ts";
 import { RuntimeLocalContext } from "../../../engine/runtime/config.ts";
 import { ensurePrivateDirectory } from "../../../engine/storage/files/local-files.ts";
@@ -23,7 +23,7 @@ export function registerAgentsHandler(program: Command, context: CliContext): vo
         .addOption(valueOption("--output-json <existing-file.json>", "write the JSON inventory to an existing file"))
         .option("--verbose", "include per-Agent detection timing")
         .action(async (options: AgentOptions) => {
-            const installation = await openMortyCliInstallation(context.shutdownSignal, process.env);
+            const installation = await openMortyInstallation(context.shutdownSignal, process.env);
             const localContext = new RuntimeLocalContext(installation.stateDirectory, process.env);
             const defaultWorkspace = join(readStateDirectory(), "workspace");
             await ensurePrivateDirectory(defaultWorkspace);

@@ -15,7 +15,7 @@
     "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-e2e-attachments" }],
     "durable_objects": {
         "bindings": [
-            { "name": "CHAT_PROJECTS", "class_name": "ProjectDurableObject" },
+            { "name": "COMPUTER_RELAY", "class_name": "ComputerRelay", "script_name": "morty-platform-local-e2e" },
             { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" }
         ]
     },

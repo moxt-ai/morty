@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { ControlledAcpConnection } from "./agents/controlled-acp-connection.ts";
@@ -8,11 +10,11 @@ export interface FakeAgentHarnessDefinition {
     readonly id: string;
     readonly label: string;
     readonly arguments?: readonly string[];
+    readonly isolatedNativeStorage?: boolean;
 }
 
 export function fakeAgentHarnessCapabilities(definition: FakeAgentHarnessDefinition) {
     return {
-        additionalDirectories: true,
         audioPrompt: false,
         closeSession: true,
         deleteSession: true,
@@ -30,6 +32,9 @@ export function fakeAgentHarnessCapabilities(definition: FakeAgentHarnessDefinit
 
 /** A controlled Agent executable behind the production daemon and ACP adapter. */
 export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDirectory: string): AcpAgentDefinition {
+    const nativeStorage =
+        definition.isolatedNativeStorage === true ? join(stateDirectory, definition.id) : stateDirectory;
+    mkdirSync(nativeStorage, { recursive: true });
     return new AcpAgentDefinition(
         definition.id,
         definition.label,
@@ -44,7 +49,7 @@ export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDi
                 },
                 options,
             ),
-        { MORTY_FAKE_ACP_STATE_DIRECTORY: stateDirectory },
+        { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStorage },
         "1.0.0",
         undefined,
         fakeAgentHarnessCapabilities(definition),

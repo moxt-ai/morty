@@ -2,16 +2,16 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import { runSetup } from "../../setup/src/setup.ts";
 import worker from "../src/application.ts";
-import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
-test.each(["current", "another service origin", "retired configuration", "ambiguous Machines"] as const)(
+test.each(["current", "another service origin", "retired configuration"] as const)(
     "Given %s, When setup runs again, Then it continues the saved identity's Machine or refuses without rewriting the saved state",
     {
         timeout: 60_000,
@@ -78,14 +78,6 @@ test.each(["current", "another service origin", "retired configuration", "ambigu
         const first = v.parse(v.object({ botId: v.string() }), await run());
         const saved = v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")));
         const identity = saved.identity;
-        if (stateKind === "ambiguous Machines") {
-            await projectObject(fixture.environment(fixture.origin), identity.project_id).fetch(
-                new Request("https://project.internal/additional-machine", {
-                    method: "POST",
-                    body: JSON.stringify({ userId: identity.user_id, botId: "bot_unexpected_machine", createdAt: 0 }),
-                }),
-            );
-        }
         if (stateKind === "retired configuration") {
             // The representation setup wrote before its saved state was versioned.
             await writeFile(configurationPath, JSON.stringify({ base_url: saved.base_url, ...identity }));
@@ -103,10 +95,7 @@ test.each(["current", "another service origin", "retired configuration", "ambigu
                               code: "SAVED_IDENTITY_ORIGIN_MISMATCH",
                               savedIdentity: { savedBaseUrl: fixture.origin, requestedBaseUrl: requested.origin },
                           }
-                        : {
-                              code:
-                                  stateKind === "retired configuration" ? "INVALID_CONFIGURATION" : "BOT_STATE_INVALID",
-                          },
+                        : { code: "INVALID_CONFIGURATION" },
             });
             expect(await readFile(configurationPath, "utf8")).toBe(original);
             if (stateKind !== "another service origin") {
@@ -133,3 +122,169 @@ test.each(["current", "another service origin", "retired configuration", "ambigu
         });
     },
 );
+
+test("Given the answer to setup's Runtime pairing is lost, When setup runs again, Then the Machine is bound to the Runtime of that same pairing", {
+    timeout: 60_000,
+}, async () => {
+    await using cleanup = new AsyncDisposableStack();
+    const fixture = await createIdentityFixture({
+        listenOnLoopback: true,
+        workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
+    });
+    cleanup.defer(() => fixture.close());
+    const network = await createResponseLossProxy(fixture.origin);
+    cleanup.defer(() => network.close());
+    // Setup reaches the Worker through a network that can lose one answer; the Worker serves that origin.
+    await fixture.changeAppOrigin(network.origin);
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-pairing-")));
+    cleanup.defer(() => rm(directory, { recursive: true, force: true }));
+    const state = join(directory, "state");
+    const workspace = join(directory, "workspace");
+    await mkdir(workspace);
+    const runtime = new ControlledSetupRuntime({ agentId: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    cleanup.defer(() => runtime.disconnect());
+    let time = Date.parse("2026-10-30T00:00:00Z");
+    const run = async () =>
+        await runSetup(
+            [
+                "setup",
+                "--base-url",
+                network.origin,
+                "--cwd",
+                workspace,
+                "--harness",
+                "codex",
+                "--session-id",
+                "native-pairing",
+            ],
+            {
+                state,
+                runtime,
+                agentEnvironment: {},
+                signal: AbortSignal.timeout(40_000),
+                clock: {
+                    now: () => new Date(time),
+                    wait: async (milliseconds, signal) => {
+                        signal.throwIfAborted();
+                        time += milliseconds;
+                    },
+                },
+                emit: () => undefined,
+            },
+        );
+
+    const lost = network.interruptNextRuntimePairing();
+    expect(await run()).not.toBe(0);
+    const pairing = await lost;
+    expect(pairing.status).toBe(201);
+    const lostPairing = v.parse(v.object({ computerId: v.string() }), JSON.parse(pairing.body));
+    const pairedRuntime = lostPairing.computerId;
+
+    expect(await run()).toBe(0);
+    const saved = v.parse(
+        v.object({ identity: v.object({ user_token: v.string(), project_id: v.string() }) }),
+        JSON.parse(await readFile(join(state, "config.json"), "utf8")),
+    );
+    const machine = await fetch(`${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/bot`, {
+        headers: { authorization: `Bearer ${saved.identity.user_token}` },
+    });
+    const actual: unknown = await machine.json();
+    const original = await fetch(
+        `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/pairing`,
+        { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
+    );
+    expect(original.status).toBe(200);
+    const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
+    expect(originalStatus).toBe("paired");
+    expect(actual).toMatchObject({ computerId: pairedRuntime });
+});
+
+test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
+    timeout: 60_000,
+}, async () => {
+    await using cleanup = new AsyncDisposableStack();
+    const fixture = await createIdentityFixture({
+        listenOnLoopback: true,
+        workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
+    });
+    cleanup.defer(() => fixture.close());
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-revoked-")));
+    cleanup.defer(() => rm(directory, { recursive: true, force: true }));
+    const state = join(directory, "state");
+    const workspace = join(directory, "workspace");
+    await mkdir(workspace);
+    const runtime = new ControlledSetupRuntime({ agentId: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    cleanup.defer(() => runtime.disconnect());
+    let time = Date.parse("2026-11-09T00:00:00Z");
+    const run = async () => {
+        const events: Readonly<Record<string, unknown>>[] = [];
+        const code = await runSetup(
+            [
+                "setup",
+                "--base-url",
+                fixture.origin,
+                "--cwd",
+                workspace,
+                "--harness",
+                "codex",
+                "--session-id",
+                "native-revoked",
+            ],
+            {
+                state,
+                runtime,
+                agentEnvironment: {},
+                signal: AbortSignal.timeout(40_000),
+                clock: {
+                    now: () => new Date(time),
+                    wait: async (milliseconds, signal) => {
+                        signal.throwIfAborted();
+                        time += milliseconds;
+                    },
+                },
+                emit: (event) => events.push(event),
+            },
+        );
+        expect(code, JSON.stringify(events)).toBe(0);
+        return {
+            events,
+            ready: v.parse(v.object({ status: v.literal("ready"), botId: v.string() }), events.at(-1)),
+        };
+    };
+    const savedIdentity = v.object({
+        identity: v.object({ user_token: v.string(), project_id: v.string() }),
+    });
+    const machineRuntime = async () => {
+        const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
+        const response = await worker.fetch(
+            new Request(`${fixture.origin}/morty/api/computers/${identity.project_id}/management/bot`, {
+                headers: { authorization: `Bearer ${identity.user_token}` },
+            }),
+            fixture.environment(fixture.origin),
+        );
+        expect(response.status).toBe(200);
+        return {
+            identity,
+            computerId: v.parse(v.object({ computerId: v.string() }), await response.json()).computerId,
+        };
+    };
+    const first = await run();
+    const before = await machineRuntime();
+    const revoked = await fixture.platformRequest(
+        new Request(`https://platform.test/morty/api/v1/computers/${before.identity.project_id}/pairing`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
+        }),
+    );
+    expect(revoked.status).toBe(204);
+
+    const again = await run();
+    const after = await machineRuntime();
+
+    expect(again.events).toContainEqual(
+        expect.objectContaining({ status: "runtime_revoked", computerId: before.computerId }),
+    );
+    expect(again.ready.botId).toBe(first.ready.botId);
+    expect(after.identity).toEqual(before.identity);
+    expect(after.computerId).toBe(before.computerId);
+});

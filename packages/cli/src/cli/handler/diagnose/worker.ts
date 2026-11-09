@@ -64,13 +64,13 @@ export async function runRelayProbeWorker(
         const connection = await engine.pair(
             {
                 relayOrigin: origin.href,
-                pairingId: pairing.pairingId,
+                computerId: pairing.computerId,
                 pairingCode: pairing.pairingCode,
                 defaultWorkspace: workspace,
             },
             stopped,
         );
-        notify({ kind: "prepared", channelId: connection.channelId, runtimeId: connection.runtimeId, routesBefore });
+        notify({ kind: "prepared", computerId: connection.computerId, routesBefore });
         await start.promise;
         if (!stopped.aborted) {
             await engine.runLoop({

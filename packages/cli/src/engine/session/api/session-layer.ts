@@ -1,8 +1,10 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
 import type { SessionInfoUpdatedEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
 import { AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { CommandLedgerTable } from "../../storage/session/command-ledger-table.ts";
 import { LiveEventPositionTable } from "../../storage/session/live-event-position-table.ts";
+import { SessionCreationTable } from "../../storage/session/session-creation-table.ts";
 import { SessionEventCacheTable } from "../../storage/session/session-event-cache-table.ts";
 import {
     channelSessionDatabasePaths,
@@ -16,6 +18,7 @@ import { SessionManager } from "../manager/session-manager.ts";
 import { NativeSessionService } from "../native/native-session-browser.ts";
 import type { AgentProcessPool } from "../process/agent-process-pool.ts";
 import { PromptLifecycle } from "../prompt/prompt-lifecycle.ts";
+import { SessionCreations } from "../record/session-creations.ts";
 import { SqliteSessionStore } from "../record/session-store.ts";
 import { ExecutionReceipts } from "../turn/execution-receipts.ts";
 import type { RuntimeTurnActivity } from "../turn/runtime-turn-activity.ts";
@@ -62,7 +65,7 @@ export interface SessionLayerOptions {
     readonly turnActivity?: RuntimeTurnActivity;
     readonly onExecutionCountChange?: (count: number) => void;
     readonly bindingId: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly resolveAgent: ResolveAgent;
     readonly sink: SessionEventSink;
@@ -72,8 +75,8 @@ export interface SessionLayerOptions {
 
 /** Wires the session layer for one runtime: its stores, manager, turns, and native session browsing. */
 export function buildSessionLayer(options: SessionLayerOptions) {
-    const { bindingId, channelId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
-    const databases = channelSessionDatabasePaths(stateDirectory, channelId);
+    const { bindingId, computerId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
+    const databases = channelSessionDatabasePaths(stateDirectory, computerId);
     const sessionDatabase = openAcpSessionDatabase(databases.sessions);
     let events: CachedSessionEventStore;
     let operations: ExecutionReceipts;
@@ -89,6 +92,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     }
     const sessionStore = new SqliteSessionStore(new AcpSessionTable(sessionDatabase), events);
     const activeSessions = new SessionTurns(operations, options.turnActivity);
+    const sessionCreations = new SessionCreations(new SessionCreationTable(sessionDatabase));
     const directories = new WorkspaceDirectoryService(bindingId, defaultWorkspace);
     const manager = new SessionManager({
         observer: new SessionLayerObserver(
@@ -104,7 +108,6 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         ),
         store: sessionStore,
         processes: options.processes,
-        sessionIdentity: "native",
         onSessionStatusChanged: sink.publishStatus,
         onSessionClosed: sink.publishClosed,
         lastTurn: operations.lastTurn,
@@ -113,15 +116,15 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     });
     const eventProjection = new PromptLifecycle(
         sink,
-        async (sessionId, event) => {
-            if (await manager.recordLifecycleEvent(sessionId, event)) {
+        async (sessionTarget, event) => {
+            if (await manager.recordLifecycleEvent(sessionTarget, event)) {
                 return;
             }
-            const recorded = events.append(sessionId, event);
+            const recorded = events.append(sessionTarget, event);
             operations.record(recorded);
             eventProjection.record(recorded);
         },
-        (sessionId, event, recordedAt) => events.append(sessionId, event, recordedAt),
+        (sessionTarget, event, recordedAt) => events.append(sessionTarget, event, recordedAt),
         activeSessions.recordSessionEvent,
         operations,
     );
@@ -130,39 +133,39 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         resolveAgent,
         directories,
         manager,
+        sessionCreations,
         async (request, requestOptions) => {
-            const snapshot = await activeSessions.executionSnapshot(async (command) => {
-                if (command.sessionId !== request.targetSessionId || command.agentId !== request.agentId) {
-                    return false;
-                }
-                const cwd = await directories.resolve(command.bindingId, command.directoryId, requestOptions.signal);
-                const additionalDirectories = await directories.resolveMany(
-                    command.bindingId,
-                    command.additionalDirectoryIds,
-                    requestOptions.signal,
-                );
-                return (
-                    cwd === requestOptions.cwd &&
-                    additionalDirectories.length === requestOptions.additionalDirectories.length &&
-                    additionalDirectories.every(
-                        (directory, index) => directory === requestOptions.additionalDirectories[index],
-                    )
-                );
-            });
-            // Read after the snapshot, so neither is older than the execution beside it.
-            const lastTurn = snapshot.turn === null ? operations.lastTurn(request.targetSessionId) : undefined;
-            const interactionState = manager.interactionSnapshot({
-                ...requestOptions,
-                sessionId: request.targetSessionId,
-            });
-            return {
-                ...snapshot,
-                interactionState: interactionState ?? null,
-                ...(request.deliveryCommandId === undefined
-                    ? {}
-                    : { command: operations.delivery(request.deliveryCommandId, request.targetSessionId) }),
-                ...(lastTurn === undefined ? {} : { lastTurn }),
-            };
+            return await activeSessions.executionSnapshot(
+                request.target,
+                async (command) => {
+                    if (!sameNativeSession(command.target, request.target) || command.agentId !== request.agentId) {
+                        return false;
+                    }
+                    const cwd = await directories.resolve(
+                        command.bindingId,
+                        command.directoryId,
+                        requestOptions.signal,
+                    );
+                    return cwd === requestOptions.cwd;
+                },
+                (snapshot) => {
+                    const lastTurn = snapshot.turn === null ? operations.lastTurn(request.target) : undefined;
+                    const interactionState = manager.interactionSnapshot({
+                        ...requestOptions,
+                        target: request.target,
+                    });
+                    return {
+                        ...snapshot,
+                        executionPosition: events.livePosition(request.target),
+                        interactionState: interactionState ?? null,
+                        ...(request.deliveryCommandId === undefined
+                            ? {}
+                            : { command: operations.delivery(request.deliveryCommandId, request.target) }),
+                        ...(lastTurn === undefined ? {} : { lastTurn }),
+                    };
+                },
+                requestOptions.signal,
+            );
         },
     );
     // Outcomes retained across a restart are published once. The sink keeps them until the Relay connects,
@@ -171,14 +174,15 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     for (const recovered of operations.recover()) {
         switch (recovered.kind) {
             case "recorded":
-                sink.publish(events.append(recovered.sessionId, recovered.event, recovered.recordedAt));
+                sink.publish(events.append(recovered.target, recovered.event, recovered.recordedAt));
                 break;
             case "restated":
-                eventProjection.restateOutcome(recovered.sessionId, recovered.outcome);
+                eventProjection.restateOutcome(recovered.target, recovered.outcome);
                 break;
         }
     }
     return {
+        sessionCreations,
         activeSessions,
         directories,
         eventProjection,

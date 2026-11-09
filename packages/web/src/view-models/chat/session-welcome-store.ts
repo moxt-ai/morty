@@ -1,3 +1,4 @@
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import { centralSessionStorage, sessionWelcomeEntry } from "../../services/session-storage/central-session-storage.ts";
 
@@ -10,10 +11,10 @@ interface SessionWelcomeStore {
 
 export function createSessionWelcomeStore(options: {
     readonly botId: string;
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
     readonly fillEmptyDraft: (text: string) => boolean;
 }) {
-    const entry = sessionWelcomeEntry(options.botId, options.sessionId);
+    const entry = sessionWelcomeEntry(options.botId, options.sessionTarget);
     return createStore<SessionWelcomeStore>()((set, get) => ({
         state: { kind: "hidden" },
         connected: () => {

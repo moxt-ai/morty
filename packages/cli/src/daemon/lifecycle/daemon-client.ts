@@ -1,17 +1,14 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
+import packageMetadata from "../../../package.json" with { type: "json" };
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
-import { releaseEntry, requireInstalledRelease } from "../../installation/releases.ts";
 import { daemonLockExists } from "../../storage/daemon/daemon-lock.ts";
 import { CONTROL_TIMEOUT_MILLISECONDS, sendLocalRequest } from "../control/local-client.ts";
 import { decodeLifecycleResponse, type LifecycleResponse } from "../control/protocol.ts";
 
 async function spawnDaemon(entry: string): Promise<ChildProcess> {
-    if (entry === undefined) {
-        throw new Error("The CLI entrypoint is missing");
-    }
     const child = spawn(process.execPath, [entry, "__daemon"], {
         detached: true,
         windowsHide: true,
@@ -48,15 +45,18 @@ async function waitForDaemonExit(stateDirectory: InstallationDirectory, signal: 
     throw deadline.reason;
 }
 
-// Only the verified durable installation may own the long-lived daemon.
-export async function ensureDaemon(stateDirectory: InstallationDirectory, signal: AbortSignal): Promise<string> {
+// A new daemon runs the same package as its invoking command.
+export async function ensureDaemon(
+    stateDirectory: InstallationDirectory,
+    entry: string,
+    signal: AbortSignal,
+): Promise<string> {
     const running = await readDaemonVersion(stateDirectory, signal);
     if (running !== null) {
         return running;
     }
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(CONTROL_TIMEOUT_MILLISECONDS)]);
-    const installed = await requireInstalledRelease(signal);
-    return await waitForDaemon(stateDirectory, installed.version, releaseEntry(installed), deadline);
+    return await waitForDaemon(stateDirectory, packageMetadata.version, entry, deadline);
 }
 
 // Status identifies the currently running daemon.

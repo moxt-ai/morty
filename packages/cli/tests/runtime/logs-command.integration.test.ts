@@ -40,13 +40,8 @@ async function runCli(
 }
 
 /** Write one installation's logs, mirroring the store's `<root>/installations/<appId>/<id>/logs` layout. */
-async function writeInstallationLog(
-    stateDirectory: string,
-    applicationId: string,
-    filename: string,
-    lines: readonly string[],
-): Promise<void> {
-    const logs = join(stateDirectory, "installations", applicationId, "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs");
+async function writeInstallationLog(stateDirectory: string, filename: string, lines: readonly string[]): Promise<void> {
+    const logs = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs");
     await mkdir(logs, { mode: 0o700, recursive: true });
     await writeFile(join(logs, filename), `${lines.join("\n")}\n`, { mode: 0o600 });
 }
@@ -57,12 +52,12 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "worker-lifecycle.log", [
+        await writeInstallationLog(stateDirectory, "worker-lifecycle.log", [
             'Morty worker lifecycle {"kind":"worker_started","pid":4242,"version":"0.0.272"}',
             'Morty worker lifecycle {"kind":"worker_exited","pid":4242,"exitCode":137,"signal":"SIGKILL","stderr":"/home/user/secret-path boom"}',
         ]);
-        await writeInstallationLog(stateDirectory, "ai.moxt.machine-connector", "daemon.log", [
-            'Morty relay diagnostic {"event":"relay_connection_opened","channelId":"channel-1"}',
+        await writeInstallationLog(stateDirectory, "daemon.log", [
+            'Morty relay diagnostic {"event":"relay_connection_opened","computerId":"channel-1"}',
         ]);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateDirectory };
 
@@ -76,35 +71,8 @@ describe("Morty logs command", () => {
         // Paths are reported relative to the state root so a shared report never
         // carries the collector's home directory.
         expect(result.stdout).not.toContain(stateDirectory);
-        expect(result.stdout).toContain("installations/build.morty.cli/");
+        expect(result.stdout).toContain("machine/");
         expect(result.stdout).toContain("Review them before sharing");
-    }, 60_000);
-
-    // @no-uc: Technical regression; a CLI upgrade relocates Runtime state, and both installations shapes must still be found.
-    it("Given a version-scoped CLI installation, When the user collects logs, Then the versioned Runtime log and the unversioned manager log are both found", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
-        temporaryDirectories.push(directory);
-        const stateDirectory = join(directory, "state");
-        // A CLI upgrade moves the Runtime's own state under `versions/<version>/`
-        // while the manager keeps writing beside the state root, so both shapes
-        // have to be found for one report to be complete.
-        await writeInstallationLog(join(stateDirectory, "versions", "0.0.272"), "build.morty.cli", "daemon.log", [
-            'Morty relay diagnostic {"event":"relay_connection_opened"}',
-        ]);
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "worker-lifecycle.log", [
-            'Morty worker lifecycle {"kind":"worker_exited","exitCode":137,"signal":"SIGKILL"}',
-        ]);
-
-        const result = await runCli(
-            ["logs", "--state-directory", stateDirectory],
-            process.env,
-            AbortSignal.timeout(30_000),
-        );
-
-        expect(result.code).toBe(0);
-        expect(result.stdout).toContain("versions/0.0.272/installations/build.morty.cli/");
-        expect(result.stdout).toContain("relay_connection_opened");
-        expect(result.stdout).toContain("worker_exited");
     }, 60_000);
 
     // @no-uc: Technical regression; bounded log tailing must report what it dropped rather than hide it.
@@ -112,7 +80,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
+        await writeInstallationLog(stateDirectory, "daemon.log", [
             "oldest-line-should-be-dropped",
             "newest-line-should-be-kept",
         ]);
@@ -134,9 +102,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
-            '{"event":"relay_connection_opened"}',
-        ]);
+        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
 
         const result = await runCli(
             ["logs", "--json", "--state-directory", stateDirectory],
@@ -158,17 +124,8 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
-            '{"event":"relay_connection_opened"}',
-        ]);
-        const logPath = join(
-            stateDirectory,
-            "installations",
-            "build.morty.cli",
-            "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "logs",
-            "daemon.log",
-        );
+        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
+        const logPath = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs", "daemon.log");
         const directoryPath = dirname(logPath);
         // Widen both deliberately: `validateLocalPath(path, ..., privateAccess: true)`
         // repairs modes with chmod, which would silently hide this difference.
@@ -192,17 +149,8 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
-            '{"event":"relay_connection_opened"}',
-        ]);
-        const logPath = join(
-            stateDirectory,
-            "installations",
-            "build.morty.cli",
-            "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "logs",
-            "daemon.log",
-        );
+        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
+        const logPath = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs", "daemon.log");
         // Simulates the read-only mount or failing-disk case the export has to
         // survive: the file is present but this user cannot read it.
         await chmod(logPath, 0o000);
@@ -233,9 +181,7 @@ describe("Morty logs command", () => {
                 readonly unreadable: string[];
             };
             expect(parsed.entries).toEqual([]);
-            expect(parsed.unreadable).toEqual([
-                "installations/build.morty.cli/min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/logs/daemon.log",
-            ]);
+            expect(parsed.unreadable).toEqual(["machine/min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/logs/daemon.log"]);
         } finally {
             await chmod(logPath, 0o600);
         }
@@ -246,19 +192,11 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
-            '{"event":"relay_connection_opened"}',
-        ]);
+        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
         // The logs directory exists and holds a readable file, but cannot be
         // enumerated: an owner-writable, not owner-readable mode (0o300). Treating
         // this as "no logs here" is what hid the evidence before.
-        const logsDirectory = join(
-            stateDirectory,
-            "installations",
-            "build.morty.cli",
-            "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "logs",
-        );
+        const logsDirectory = join(stateDirectory, "machine", "min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "logs");
         await chmod(logsDirectory, 0o300);
         try {
             const result = await runCli(
@@ -270,7 +208,7 @@ describe("Morty logs command", () => {
             expect(result.code).toBe(1);
             expect(result.stdout).toContain("The local daemon logs could not be read.");
             expect(result.stdout).not.toContain("No local daemon logs were found.");
-            expect(result.stderr).toContain("installations/build.morty.cli/min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/logs");
+            expect(result.stderr).toContain("machine/min_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/logs");
         } finally {
             await chmod(logsDirectory, 0o700);
         }

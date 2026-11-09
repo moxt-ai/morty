@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { SessionEvent, SessionEventPayload, SessionLiveEvent } from "@morty-build/client/protocol";
+import { NativeSessionMap } from "@morty-build/client/native-session";
+import type {
+    NativeSessionTarget,
+    SessionEvent,
+    SessionEventPayload,
+    SessionLiveEvent,
+} from "@morty-build/client/protocol";
 import type { ProjectedToolCall } from "../../acp/tool-call-projection.ts";
 import type { SessionEventCacheTable } from "../../storage/session/session-event-cache-table.ts";
 import type { SessionLiveEventPosition } from "./live-event-positions.ts";
@@ -173,33 +179,39 @@ export interface SessionEventPage {
 }
 
 export interface SessionEventStore {
-    readonly append: (sessionId: string, event: SessionEventPayload, recordedAt?: string) => SessionLiveEvent;
+    readonly append: (
+        sessionTarget: NativeSessionTarget,
+        event: SessionEventPayload,
+        recordedAt?: string,
+    ) => SessionLiveEvent;
     readonly close: () => void;
     /**
      * The projected tool call announced with this identifier in its current
      * merged form, or `undefined` when no such announcement is recorded.
      */
-    readonly getToolCall: (sessionId: string, toolCallId: string) => ProjectedToolCall | undefined;
+    readonly getToolCall: (sessionTarget: NativeSessionTarget, toolCallId: string) => ProjectedToolCall | undefined;
     /**
      * Number of projected events whose payloads are currently held in memory.
      * The store keeps this bounded by its retention window; it is the
      * observable memory footprint of the Session event tier.
      */
-    readonly materializedEventCount: (sessionId: string) => number;
+    readonly materializedEventCount: (sessionTarget: NativeSessionTarget) => number;
     readonly materialize: (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         sessionGenerationId: string,
         events: readonly SessionEventPayload[],
     ) => void;
-    readonly page: (sessionId: string, eventLimit: number, cursor: string | null) => SessionEventPage;
+    readonly page: (sessionTarget: NativeSessionTarget, eventLimit: number, cursor: string | null) => SessionEventPage;
     /** The live stream boundary, including events omitted from projected history. */
-    readonly livePosition: (sessionId: string) => Pick<SessionEventPage, "sessionGenerationId" | "throughPosition">;
-    readonly remove: (sessionId: string) => void;
-    readonly reset: (sessionId: string) => void;
+    readonly livePosition: (
+        sessionTarget: NativeSessionTarget,
+    ) => Pick<SessionEventPage, "sessionGenerationId" | "throughPosition">;
+    readonly remove: (sessionTarget: NativeSessionTarget) => void;
+    readonly reset: (sessionTarget: NativeSessionTarget) => void;
 }
 
 function liveEvent(
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     sessionGenerationId: string,
     eventId: string,
     position: number,
@@ -212,7 +224,7 @@ function liveEvent(
         position: position.toString(),
         recordedAt,
         sessionGenerationId,
-        sessionId,
+        target: sessionTarget,
     };
 }
 
@@ -234,18 +246,18 @@ function eventPage(
 }
 
 export class MemorySessionEventStore implements SessionEventStore {
-    readonly #allocatedPositionBySession = new Map<string, number>();
-    readonly #events = new Map<string, SessionEvents>();
+    readonly #allocatedPositionBySession = new NativeSessionMap<number>();
+    readonly #events = new NativeSessionMap<SessionEvents>();
     readonly #eventIds: SessionEventIdAllocator;
 
     constructor(eventIds: SessionEventIdAllocator = new InMemorySessionEventIdAllocator()) {
         this.#eventIds = eventIds;
     }
 
-    readonly #session = (sessionId: string): SessionEvents => {
+    readonly #session = (sessionTarget: NativeSessionTarget): SessionEvents => {
         const sessionGenerationId = randomUUID();
-        const session = this.#events.get(sessionId) ?? new SessionEvents(sessionGenerationId);
-        this.#events.set(sessionId, session);
+        const session = this.#events.get(sessionTarget) ?? new SessionEvents(sessionGenerationId);
+        this.#events.set(sessionTarget, session);
         return session;
     };
 
@@ -262,18 +274,22 @@ export class MemorySessionEventStore implements SessionEventStore {
             return resolved;
         };
 
-    readonly append = (sessionId: string, event: SessionEventPayload, recordedAt?: string): SessionLiveEvent => {
-        const session = this.#session(sessionId);
-        const allocatedPosition = this.#allocatedPositionBySession.get(sessionId) ?? 9_999;
+    readonly append = (
+        sessionTarget: NativeSessionTarget,
+        event: SessionEventPayload,
+        recordedAt?: string,
+    ): SessionLiveEvent => {
+        const session = this.#session(sessionTarget);
+        const allocatedPosition = this.#allocatedPositionBySession.get(sessionTarget) ?? 9_999;
         if (allocatedPosition === Number.MAX_SAFE_INTEGER) {
             throw new Error("The live Session event position allocation is exhausted");
         }
         const position = allocatedPosition + 1;
-        this.#allocatedPositionBySession.set(sessionId, position);
+        this.#allocatedPositionBySession.set(sessionTarget, position);
         const recorded = liveEvent(
-            sessionId,
+            sessionTarget,
             session.sessionGenerationId,
-            this.#eventIds.allocate(sessionId, session.sessionGenerationId),
+            this.#eventIds.allocate(sessionTarget, session.sessionGenerationId),
             position,
             event,
             recordedAt,
@@ -287,35 +303,41 @@ export class MemorySessionEventStore implements SessionEventStore {
         this.#events.clear();
     };
 
-    readonly getToolCall = (sessionId: string, toolCallId: string): ProjectedToolCall | undefined => {
-        const session = this.#events.get(sessionId);
+    readonly getToolCall = (sessionTarget: NativeSessionTarget, toolCallId: string): ProjectedToolCall | undefined => {
+        const session = this.#events.get(sessionTarget);
         return session === undefined ? undefined : session.toolCall(toolCallId, this.#resolver(session));
     };
 
-    readonly materializedEventCount = (sessionId: string): number =>
-        this.#events.get(sessionId)?.materializedCount ?? 0;
+    readonly materializedEventCount = (sessionTarget: NativeSessionTarget): number =>
+        this.#events.get(sessionTarget)?.materializedCount ?? 0;
 
     readonly materialize = (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         sessionGenerationId: string,
         events: readonly SessionEventPayload[],
     ): void => {
-        if (this.#events.get(sessionId)?.sessionGenerationId === sessionGenerationId) {
+        if (this.#events.get(sessionTarget)?.sessionGenerationId === sessionGenerationId) {
             return;
         }
-        this.#events.set(sessionId, new SessionEvents(sessionGenerationId));
+        this.#events.set(sessionTarget, new SessionEvents(sessionGenerationId));
         for (const event of events) {
-            this.append(sessionId, event);
+            this.append(sessionTarget, event);
         }
     };
 
-    readonly livePosition = (sessionId: string): Pick<SessionEventPage, "sessionGenerationId" | "throughPosition"> => {
-        const session = this.#session(sessionId);
+    readonly livePosition = (
+        sessionTarget: NativeSessionTarget,
+    ): Pick<SessionEventPage, "sessionGenerationId" | "throughPosition"> => {
+        const session = this.#session(sessionTarget);
         return { sessionGenerationId: session.sessionGenerationId, throughPosition: session.throughPosition };
     };
 
-    readonly page = (sessionId: string, eventLimit: number, cursor: string | null): SessionEventPage => {
-        const session = this.#session(sessionId);
+    readonly page = (
+        sessionTarget: NativeSessionTarget,
+        eventLimit: number,
+        cursor: string | null,
+    ): SessionEventPage => {
+        const session = this.#session(sessionTarget);
         const endIndex = session.endIndex(cursor);
         return eventPage(session, session.sessionGenerationId, endIndex, eventLimit, (start, end) => {
             const merged = new Map<number, SessionEvent>();
@@ -324,13 +346,13 @@ export class MemorySessionEventStore implements SessionEventStore {
         });
     };
 
-    readonly remove = (sessionId: string): void => {
-        this.#events.delete(sessionId);
+    readonly remove = (sessionTarget: NativeSessionTarget): void => {
+        this.#events.delete(sessionTarget);
     };
 
-    readonly reset = (sessionId: string): void => {
+    readonly reset = (sessionTarget: NativeSessionTarget): void => {
         const sessionGenerationId = randomUUID();
-        this.#events.set(sessionId, new SessionEvents(sessionGenerationId));
+        this.#events.set(sessionTarget, new SessionEvents(sessionGenerationId));
     };
 }
 
@@ -338,7 +360,7 @@ export class CachedSessionEventStore implements SessionEventStore {
     readonly #cacheTable: SessionEventCacheTable;
     readonly #eventIds: SessionEventIdAllocator;
     readonly #liveEventPositions: SessionLiveEventPosition;
-    readonly #sessions = new Map<string, SessionEvents>();
+    readonly #sessions = new NativeSessionMap<SessionEvents>();
     #flushSchedule: FlushSchedule = { kind: "idle" };
 
     constructor(
@@ -351,15 +373,15 @@ export class CachedSessionEventStore implements SessionEventStore {
         this.#cacheTable = cacheTable;
     }
 
-    readonly #session = (sessionId: string): SessionEvents => {
+    readonly #session = (sessionTarget: NativeSessionTarget): SessionEvents => {
         const sessionGenerationId = randomUUID();
-        const session = this.#sessions.get(sessionId) ?? new SessionEvents(sessionGenerationId);
-        this.#sessions.set(sessionId, session);
+        const session = this.#sessions.get(sessionTarget) ?? new SessionEvents(sessionGenerationId);
+        this.#sessions.set(sessionTarget, session);
         return session;
     };
 
     readonly #resolver =
-        (sessionId: string, session: SessionEvents): MaterializedEventsResolver =>
+        (sessionTarget: NativeSessionTarget, session: SessionEvents): MaterializedEventsResolver =>
         (eventIds) => {
             const resolved = new Map<string, SessionEvent>();
             const missing: string[] = [];
@@ -372,7 +394,7 @@ export class CachedSessionEventStore implements SessionEventStore {
                 }
             }
             for (const [eventId, stored] of this.#cacheTable.readByEventIds(
-                sessionId,
+                sessionTarget,
                 session.sessionGenerationId,
                 missing,
             )) {
@@ -383,31 +405,35 @@ export class CachedSessionEventStore implements SessionEventStore {
             return resolved;
         };
 
-    readonly append = (sessionId: string, event: SessionEventPayload, recordedAt?: string): SessionLiveEvent => {
+    readonly append = (
+        sessionTarget: NativeSessionTarget,
+        event: SessionEventPayload,
+        recordedAt?: string,
+    ): SessionLiveEvent => {
         if (this.#flushSchedule.kind === "closed") {
             throw new Error("The V2 Session event store is closed");
         }
-        const session = this.#session(sessionId);
-        const position = this.#liveEventPositions.allocate(sessionId);
+        const session = this.#session(sessionTarget);
+        const position = this.#liveEventPositions.allocate(sessionTarget);
         const recorded = liveEvent(
-            sessionId,
+            sessionTarget,
             session.sessionGenerationId,
-            this.#eventIds.allocate(sessionId, session.sessionGenerationId),
+            this.#eventIds.allocate(sessionTarget, session.sessionGenerationId),
             position,
             event,
             recordedAt,
         );
-        session.apply(recorded, this.#resolver(sessionId, session));
-        this.#sessions.set(sessionId, session);
+        session.apply(recorded, this.#resolver(sessionTarget, session));
+        this.#sessions.set(sessionTarget, session);
         if (session.materializedCount > HOT_EVENT_HIGH_WATER_MARK) {
             this.#scheduleFlush();
         }
         return recorded;
     };
 
-    readonly getToolCall = (sessionId: string, toolCallId: string): ProjectedToolCall | undefined => {
-        const session = this.#sessions.get(sessionId);
-        return session === undefined ? undefined : session.toolCall(toolCallId, this.#resolver(sessionId, session));
+    readonly getToolCall = (sessionTarget: NativeSessionTarget, toolCallId: string): ProjectedToolCall | undefined => {
+        const session = this.#sessions.get(sessionTarget);
+        return session === undefined ? undefined : session.toolCall(toolCallId, this.#resolver(sessionTarget, session));
     };
 
     readonly #scheduleFlush = (): void => {
@@ -425,17 +451,17 @@ export class CachedSessionEventStore implements SessionEventStore {
     };
 
     readonly materialize = (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         sessionGenerationId: string,
         events: readonly SessionEventPayload[],
     ): void => {
-        if (this.#sessions.get(sessionId)?.sessionGenerationId === sessionGenerationId) {
+        if (this.#sessions.get(sessionTarget)?.sessionGenerationId === sessionGenerationId) {
             return;
         }
-        this.#deletePersisted(sessionId);
-        this.#sessions.set(sessionId, new SessionEvents(sessionGenerationId));
+        this.#deletePersisted(sessionTarget);
+        this.#sessions.set(sessionTarget, new SessionEvents(sessionGenerationId));
         for (const event of events) {
-            this.append(sessionId, event);
+            this.append(sessionTarget, event);
         }
     };
 
@@ -443,7 +469,7 @@ export class CachedSessionEventStore implements SessionEventStore {
         if (!this.#cacheTable.isAvailable || this.#flushSchedule.kind === "closed") {
             return;
         }
-        const batches = [...this.#sessions.entries()].flatMap(([sessionId, session]) => {
+        const batches = [...this.#sessions.entries()].flatMap(([sessionTarget, session]) => {
             const drops = session.pendingDrops(includeHotTail);
             return drops.length === 0
                 ? []
@@ -451,7 +477,7 @@ export class CachedSessionEventStore implements SessionEventStore {
                       {
                           events: drops,
                           sessionGenerationId: session.sessionGenerationId,
-                          sessionId,
+                          sessionTarget,
                       },
                   ];
         });
@@ -460,24 +486,30 @@ export class CachedSessionEventStore implements SessionEventStore {
         }
         if (this.#cacheTable.insert(batches)) {
             for (const batch of batches) {
-                this.#sessions.get(batch.sessionId)?.commitDrops(batch.events);
+                this.#sessions.get(batch.sessionTarget)?.commitDrops(batch.events);
             }
         }
     };
 
-    readonly livePosition = (sessionId: string): Pick<SessionEventPage, "sessionGenerationId" | "throughPosition"> => {
-        const session = this.#session(sessionId);
+    readonly livePosition = (
+        sessionTarget: NativeSessionTarget,
+    ): Pick<SessionEventPage, "sessionGenerationId" | "throughPosition"> => {
+        const session = this.#session(sessionTarget);
         return { sessionGenerationId: session.sessionGenerationId, throughPosition: session.throughPosition };
     };
 
-    readonly page = (sessionId: string, eventLimit: number, cursor: string | null): SessionEventPage => {
-        const session = this.#sessions.get(sessionId);
-        const current = session ?? this.#session(sessionId);
+    readonly page = (
+        sessionTarget: NativeSessionTarget,
+        eventLimit: number,
+        cursor: string | null,
+    ): SessionEventPage => {
+        const session = this.#sessions.get(sessionTarget);
+        const current = session ?? this.#session(sessionTarget);
         const endIndex = current.endIndex(cursor);
         return eventPage(current, current.sessionGenerationId, endIndex, eventLimit, (startIndex, endIndex) => {
             const merged = new Map<number, SessionEvent>();
             for (const { event, ordinal } of this.#cacheTable.read(
-                sessionId,
+                sessionTarget,
                 current.sessionGenerationId,
                 startIndex + 1,
                 endIndex,
@@ -489,24 +521,24 @@ export class CachedSessionEventStore implements SessionEventStore {
         });
     };
 
-    readonly #deletePersisted = (sessionId: string, sessionGenerationId?: string): void => {
-        this.#cacheTable.delete(sessionId, sessionGenerationId);
+    readonly #deletePersisted = (sessionTarget: NativeSessionTarget, sessionGenerationId?: string): void => {
+        this.#cacheTable.delete(sessionTarget, sessionGenerationId);
     };
 
-    readonly remove = (sessionId: string): void => {
-        this.#deletePersisted(sessionId);
-        this.#sessions.delete(sessionId);
+    readonly remove = (sessionTarget: NativeSessionTarget): void => {
+        this.#deletePersisted(sessionTarget);
+        this.#sessions.delete(sessionTarget);
     };
 
-    readonly reset = (sessionId: string): void => {
-        const previous = this.#sessions.get(sessionId);
-        this.#deletePersisted(sessionId, previous?.sessionGenerationId);
+    readonly reset = (sessionTarget: NativeSessionTarget): void => {
+        const previous = this.#sessions.get(sessionTarget);
+        this.#deletePersisted(sessionTarget, previous?.sessionGenerationId);
         const sessionGenerationId = randomUUID();
-        this.#sessions.set(sessionId, new SessionEvents(sessionGenerationId));
+        this.#sessions.set(sessionTarget, new SessionEvents(sessionGenerationId));
     };
 
-    readonly materializedEventCount = (sessionId: string): number =>
-        this.#sessions.get(sessionId)?.materializedCount ?? 0;
+    readonly materializedEventCount = (sessionTarget: NativeSessionTarget): number =>
+        this.#sessions.get(sessionTarget)?.materializedCount ?? 0;
 
     readonly close = (): void => {
         if (this.#flushSchedule.kind === "closed") {

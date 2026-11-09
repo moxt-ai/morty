@@ -9,6 +9,7 @@ import {
     sessionPermissionRequestedEventSchema,
     sessionPermissionResolvedEventSchema,
 } from "../interactions/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 const MAX_EVENT_COUNT = 10_000;
 const MAX_COLLECTION_SIZE = 1_000;
@@ -351,13 +352,11 @@ const promptMessageId = z.string().min(1).max(2_048);
 export interface PromptExecutionContext {
     readonly agentId: string;
     readonly directoryId: string;
-    readonly additionalDirectoryIds: readonly string[];
 }
 const promptExecutionContextSchema = z
     .object({
         agentId: identifier,
         directoryId: DIRECTORY_IDENTIFIER,
-        additionalDirectoryIds: z.array(DIRECTORY_IDENTIFIER).max(16).readonly(),
     })
     .readonly() satisfies z.ZodType<PromptExecutionContext>;
 
@@ -501,7 +500,7 @@ const sharedSessionEventFields = {
     mortyMetadata: z.object(mortyMetadataFields).readonly().optional(),
     recordedAt: z.iso.datetime({ offset: true }),
     sessionGenerationId: identifier,
-    sessionId: identifier,
+    target: nativeSessionTargetSchema,
 };
 const sessionLiveEventFields = { ...sharedSessionEventFields, position: positionSchema };
 /**

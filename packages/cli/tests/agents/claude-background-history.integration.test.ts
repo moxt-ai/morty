@@ -15,7 +15,7 @@ import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { ClaudeCodeAgentSpecification } from "../../src/engine/agent/specification/vendors/claude-code-agent.ts";
 import { ClaudeFixture } from "../support/agents/claude.ts";
-import { prepareNewRealSession, withRealDaemon } from "../support/agents/real-daemon.ts";
+import { withRealDaemon } from "../support/agents/real-daemon.ts";
 import { IdleTimeoutTimer } from "../support/idle-timeout-timer.ts";
 import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
@@ -119,14 +119,13 @@ test("Given native task notifications and user-pasted notification text, When Cl
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                additionalDirectoryIds: [],
                 bindingId: peer.bindingId,
                 directoryId: "default",
                 cursor: null,
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",
                 requestId: "background-history",
-                sessionId: nativeId,
+                target: { harness: "claude", sessionId: nativeId },
             }),
         );
         for (;;) {
@@ -207,7 +206,7 @@ test("Given Claude is running a background command, When two idle hours pass and
             new ClaudeCodeAgentSpecification(),
             agent.environment,
             async (peer) => {
-                const sessionId = await prepareNewRealSession(peer, "claude");
+                const sessionTarget = peer.target;
                 const statuses: string[] = [];
                 const users: string[] = [];
                 let permissions = 0;
@@ -217,11 +216,10 @@ test("Given Claude is running a background command, When two idle hours pass and
                         encodeSessionPromptCommand({
                             kind: "session.prompt",
                             commandId,
-                            sessionId,
+                            target: sessionTarget,
                             agentId: "claude",
                             bindingId: peer.bindingId,
                             directoryId: "default",
-                            additionalDirectoryIds: [],
                             attachments: [],
                             prompt,
                             disposition: SessionPromptDisposition.Append,
@@ -260,7 +258,7 @@ test("Given Claude is running a background command, When two idle hours pass and
                                     requestId: crypto.randomUUID(),
                                     interactionId: request.interactionId,
                                     optionId: option.optionId,
-                                    sessionId: request.sessionId,
+                                    target: request.target,
                                     outcome: "selected",
                                 }),
                             );

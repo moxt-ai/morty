@@ -1,3 +1,5 @@
+import { type NativeSessionMap, nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import {
     ArrowLeftRight,
     Check,
@@ -100,11 +102,11 @@ function NetworkLatencyCard({ children }: { readonly children: ReactNode }) {
     );
 }
 
-function NetworkLatencyIntro({ projectId }: { readonly projectId: string | null }) {
+function NetworkLatencyIntro({ computerId }: { readonly computerId: string | null }) {
     return (
         <div className="text-14 leading-5 text-muted-foreground">
             <p>Round-trip latency for this browser and its connected Runtime.</p>
-            <p className="mt-1">Relay location: {projectLocationLabel(projectId ?? "")}</p>
+            <p className="mt-1">Relay location: {projectLocationLabel(computerId ?? "")}</p>
         </div>
     );
 }
@@ -211,7 +213,7 @@ function ManagedSessionDirectoryList({
     archive,
     sessions,
     conversationGroups,
-    activeId,
+    activeTarget,
     showSelectedIndicator = false,
     connectionStatus,
     sessionStatuses,
@@ -225,11 +227,11 @@ function ManagedSessionDirectoryList({
     readonly archive: ConversationDirectoryStore["archive"];
     readonly sessions: readonly ManagedChatSession[] | null;
     readonly conversationGroups: readonly ConversationGroup[] | null;
-    readonly activeId: string;
+    readonly activeTarget: NativeSessionTarget | null;
     /** The phone sheet has no persistent selection elsewhere, so it marks the open Session with a check. */
     readonly showSelectedIndicator?: boolean;
     readonly connectionStatus: BotConnectionStatus;
-    readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
+    readonly sessionStatuses: Pick<NativeSessionMap<ConversationListStatus>, "get">;
     /** The open Session's pane, whose turn and delivery decide that Session's status. */
     readonly openPane: Parameters<typeof conversationListStatus>[2];
     readonly onConnectAgent: (() => void) | null;
@@ -292,7 +294,11 @@ function ManagedSessionDirectoryList({
                                 data-testid={dataTestId.managedConversation}
                                 type="button"
                                 aria-label={`Open ${session.title}`}
-                                aria-current={activeId === session.id ? "page" : undefined}
+                                aria-current={
+                                    activeTarget !== null && sameNativeSession(activeTarget, session.target)
+                                        ? "page"
+                                        : undefined
+                                }
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
                                 className={cn(
@@ -331,7 +337,9 @@ function ManagedSessionDirectoryList({
                                     >
                                         <span className="size-2 rounded-full bg-primary" />
                                     </span>
-                                ) : showSelectedIndicator && activeId === session.id ? (
+                                ) : showSelectedIndicator &&
+                                  activeTarget !== null &&
+                                  sameNativeSession(activeTarget, session.target) ? (
                                     <span
                                         aria-hidden="true"
                                         className="inline-flex -mr-[3px] size-4 items-center justify-center"
@@ -363,7 +371,7 @@ function ManagedSessionDirectoryList({
                                 <ContextMenu.Trigger asChild>{sessionButton}</ContextMenu.Trigger>
                             );
                         return (
-                            <div className="min-w-0 w-full" key={session.id}>
+                            <div className="min-w-0 w-full" key={nativeSessionKey(session.target)}>
                                 <ContextMenu.Root>
                                     {sessionTrigger}
                                     <ContextMenu.Portal>
@@ -378,7 +386,7 @@ function ManagedSessionDirectoryList({
                                                 data-testid={dataTestId.archiveConversation}
                                                 disabled={archive.kind === "archiving"}
                                                 onSelect={() => {
-                                                    void archiveSession(session.id, operationsSignal());
+                                                    void archiveSession(session.target, operationsSignal());
                                                 }}
                                             >
                                                 Close session
@@ -428,7 +436,7 @@ export function ConversationSidebar({
     workspace,
     onConnectAgent,
     requests,
-    activeId,
+    activeTarget,
     onOpen,
     onNewConversation,
 }: {
@@ -446,7 +454,7 @@ export function ConversationSidebar({
         | "daemonDiagnostics"
         | "networkDiagnostic"
     >;
-    readonly activeId: string;
+    readonly activeTarget: NativeSessionTarget | null;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onNewConversation: () => void;
 }) {
@@ -483,8 +491,8 @@ export function ConversationSidebar({
     const diagnostic = useStore(workspace.sidebar.networkDiagnostic);
     const sessionDiagnostics = {
         botId,
-        sessionId: activeId,
-        nativeSessionId: null,
+        harness: activeTarget?.harness ?? null,
+        sessionId: activeTarget?.sessionId ?? null,
         context: () => chatDiagnostics(workspace),
         read: (signal: AbortSignal) => requests.daemonDiagnostics(botId, signal),
         readNetwork: (signal: AbortSignal) => requests.networkDiagnostic(botId, signal),
@@ -505,12 +513,12 @@ export function ConversationSidebar({
         archive,
         sessions,
         conversationGroups,
-        activeId,
+        activeTarget,
         connectionStatus,
         sessionStatuses,
         openPane:
             home.selection.kind === "ready" && pane !== null && "turn" in paneSource
-                ? { sessionId: pane.session.result.ready.sessionId, pane: paneSource, delivery: paneDelivery }
+                ? { sessionTarget: pane.session.result.ready.target, pane: paneSource, delivery: paneDelivery }
                 : null,
         onConnectAgent,
         onOpen: openSession,
@@ -987,7 +995,7 @@ export function ConversationSidebar({
                                                 onClose={diagnostic.close}
                                             >
                                                 <div className="flex flex-col gap-0">
-                                                    <NetworkLatencyIntro projectId={workspace.projectId} />
+                                                    <NetworkLatencyIntro computerId={workspace.computerId} />
                                                     {diagnostic.state.kind === "measuring" ? (
                                                         <NetworkLatencySkeleton />
                                                     ) : diagnostic.state.kind === "failed" ? (

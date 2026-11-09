@@ -15,15 +15,63 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Release only the newest shippable main commit. Build once: release the archive
+  # the merge queue built and accepted for it; only commits without one build and
+  # test it here.
+  accepted:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      release: ${{ steps.select.outputs.release }}
+      run-id: ${{ steps.promote.outputs.run-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Release only the newest commit with shippable changes
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/select-release.mjs
+      - name: Promote the archive accepted by the merge queue
+        if: steps.select.outputs.release == 'true'
+        id: promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/promote-release.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.promote.outputs.upload == 'true'
+        with:
+          name: morty-release
+          path: .release/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
   pipeline:
+    needs: accepted
+    # Outside main no release is selected and the pipeline only builds and tests.
+    if: ${{ !cancelled() && !failure() && needs.accepted.outputs.release != 'false' && needs.accepted.outputs.run-id == '' }}
     uses: ./.github/workflows/morty-pipeline.yml
+    with:
+      release: ${{ github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
       actions: read
 
+  # A skipped pipeline would skip every later job by default, so each release
+  # job requires the success of the job it needs explicitly.
   deployment-preflight:
-    if: github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: pipeline
+    if: ${{ !cancelled() && needs.accepted.result == 'success' && needs.accepted.outputs.release == 'true' && (needs.pipeline.result == 'success' || (needs.pipeline.result == 'skipped' && needs.accepted.outputs.run-id != '')) && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: [accepted, pipeline]
     runs-on: ubuntu-latest
     environment: morty-production
     timeout-minutes: 10
@@ -35,7 +83,7 @@ jobs:
         with:
           name: morty-release
           path: .release
-      - name: Verify production authority and secrets before publication
+      - name: Verify production authority and secrets before any production write
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
@@ -45,9 +93,50 @@ jobs:
           python3 deployment/verify-account-token.py
           python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json --preflight-only
 
+  deploy:
+    # Workers go first: a failed verification restores the previous ones before npm or the hosted setup change.
+    if: ${{ !cancelled() && needs.deployment-preflight.result == 'success' }}
+    needs: deployment-preflight
+    runs-on: ubuntu-latest
+    environment: morty-production
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: morty-release
+          path: .release
+      - name: Deploy and verify the Workers, restoring the previous ones on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
+          MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: |
+          python3 deployment/verify-account-token.py
+          python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json
+      - name: Preserve deployment verification
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deployment-evidence-${{ github.run_attempt }}
+          path: |
+            deployment-evidence.json
+            account-token-evidence.json
+            session-access-evidence.json
+          if-no-files-found: ignore
+          retention-days: 90
+
   publish:
-    if: github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    needs: [pipeline, deployment-preflight]
+    if: ${{ !cancelled() && needs.deploy.result == 'success' && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: deploy
     runs-on: ubuntu-latest
     environment: morty-npm
     timeout-minutes: 10
@@ -71,11 +160,13 @@ jobs:
           GITHUB_REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
         run: node scripts/publish-release.mjs
 
-  deploy:
+  setup:
+    # The hosted setup installs npm latest, so it changes only after publication.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     needs: publish
     runs-on: ubuntu-latest
     environment: morty-production
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,29 +180,25 @@ jobs:
         with:
           name: morty-release
           path: .release
-      - name: Verify authority and deploy the accepted release
+      - name: Replace the hosted setup once npm serves the accepted CLI
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
-          MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
           EXPECTED_REVISION: ${{ github.sha }}
         run: |
           python3 deployment/verify-account-token.py
-          python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json
-      - name: Preserve deployment verification
+          python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json --activate-setup
+      - name: Preserve setup verification
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: deployment-evidence-${{ github.run_attempt }}
-          path: |
-            deployment-evidence.json
-            account-token-evidence.json
-            session-access-evidence.json
+          name: setup-evidence-${{ github.run_attempt }}
+          path: setup-evidence.json
           if-no-files-found: ignore
           retention-days: 90
 
   github-release:
-    needs: deploy
+    if: ${{ !cancelled() && needs.setup.result == 'success' }}
+    needs: [accepted, setup]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -134,4 +221,5 @@ jobs:
       - name: Finalize the deployed GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          ACCEPTANCE_RUN_ID: ${{ needs.accepted.outputs.run-id || github.run_id }}
         run: node scripts/finalize-release.mjs

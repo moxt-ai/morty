@@ -49,8 +49,7 @@ export type Journal = {
     readonly commandId: string;
     readonly placement: DeliveryPlacement;
     /** Chat states the Session's whole binding, so a saved request stays complete for any Relay it is resent to. */
-    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition"> &
-        Required<Pick<SubmitRequest, "additionalDirectoryIds">>;
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition">;
 };
 export function journalMessage(journal: Journal): SubmittedMessage {
     return {
@@ -68,17 +67,11 @@ export function deliveryMessagePresentation(message: SubmittedMessage) {
     return {
         ...message,
         displayPrompt:
-            message.content.trim() ||
-            message.attachments.values
-                .filter((attachment) => attachment.uri !== "morty://bot/instructions")
-                .map((attachment) => attachment.name)
-                .join(", "),
+            message.content.trim() || message.attachments.values.map((attachment) => attachment.name).join(", "),
         attachments: message.attachments.kind === "local" ? message.attachments.values : [],
         attachmentLabels:
             message.attachments.kind === "uploaded"
-                ? message.attachments.values
-                      .filter((attachment) => attachment.uri !== "morty://bot/instructions")
-                      .map((attachment) => ({ name: attachment.name, uri: attachment.uri }))
+                ? message.attachments.values.map((attachment) => ({ name: attachment.name, uri: attachment.uri }))
                 : [],
     };
 }

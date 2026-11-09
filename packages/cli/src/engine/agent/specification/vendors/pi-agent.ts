@@ -57,7 +57,6 @@ export class PiAgentSpecification extends InProcessAcpAgentSpecification {
         const session = await connection.agent.request(
             methods.agent.session.new,
             {
-                additionalDirectories: [],
                 cwd: defaultWorkspace,
                 mcpServers: [],
             },

@@ -1,5 +1,5 @@
 import { methods } from "@agentclientprotocol/sdk";
-import type { SessionCapabilities } from "@morty-build/client/protocol";
+import type { NativeSessionTarget, SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { NativeSessionQuery, SessionEventPage, SessionEventStore } from "../native-history/preview-contract.ts";
 import { type NativeSessionPage, nativeSessionPageSchema } from "../protocol/native-session.ts";
@@ -12,7 +12,8 @@ export class AcpQuerySession {
     readonly #events: SessionEventStore;
     readonly #connection: AdapterSessionConnection;
     #lifecycle: { readonly kind: "open" } | { readonly kind: "terminated" } = { kind: "open" };
-    #eventScope: string = crypto.randomUUID();
+    #eventScope: { readonly kind: "unselected" } | { readonly kind: "selected"; readonly target: NativeSessionTarget } =
+        { kind: "unselected" };
 
     private constructor(options: NativeSessionQuery, events: SessionEventStore, connector: AcpSessionConnector) {
         this.#options = options;
@@ -22,7 +23,9 @@ export class AcpQuerySession {
             cwd: options.cwd,
             ...(options.externalizeUpdate === undefined ? {} : { externalizeUpdate: options.externalizeUpdate }),
             onEvent: async (event) => {
-                this.#events.append(this.#eventScope, { type: "acp", payload: event.payload });
+                if (this.#eventScope.kind === "selected") {
+                    this.#events.append(this.#eventScope.target, { type: "acp", payload: event.payload });
+                }
             },
         });
         void this.#connection.termination.then(() => {
@@ -98,7 +101,7 @@ export class AcpQuerySession {
     };
 
     readonly previewEvents = async (
-        nativeSessionId: string,
+        sessionId: string,
         eventLimit: number,
         signal: AbortSignal,
     ): Promise<SessionEventPage> => {
@@ -109,18 +112,18 @@ export class AcpQuerySession {
                 "native_history_unsupported",
             );
         }
-        this.#eventScope = nativeSessionId;
-        this.#events.reset(nativeSessionId);
-        this.#connection.events.select(nativeSessionId);
+        const target = { harness: this.#options.agent.id, sessionId };
+        this.#eventScope = { kind: "selected", target };
+        this.#events.reset(target);
+        this.#connection.events.select(sessionId);
         this.#connection.beginStateChange();
         const response: unknown = await this.#connection.race(
             this.#connection.connection.agent.request(
                 methods.agent.session.load,
                 {
-                    additionalDirectories: [...this.#options.additionalDirectories],
                     cwd: this.#options.cwd,
                     mcpServers: [],
-                    sessionId: nativeSessionId,
+                    sessionId: sessionId,
                 },
                 { cancellationSignal: signal },
             ),
@@ -130,9 +133,13 @@ export class AcpQuerySession {
         await this.#connection.events.drained();
         signal.throwIfAborted();
         this.#connection.commitLifecycle(response);
-        return this.#events.page(nativeSessionId, eventLimit, null);
+        return this.#events.page(target, eventLimit, null);
     };
 
     readonly closeProcess = async (): Promise<void> => await this.#connection.closeProcess();
-    readonly discardEvents = (): void => this.#events.remove(this.#eventScope);
+    readonly discardEvents = (): void => {
+        if (this.#eventScope.kind === "selected") {
+            this.#events.remove(this.#eventScope.target);
+        }
+    };
 }

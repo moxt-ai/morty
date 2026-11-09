@@ -28,7 +28,6 @@ test("Given pi compacts the conversation, When the daemon relays the turn, Then 
         const sendPrompt = (prompt: string): void => {
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
@@ -37,7 +36,7 @@ test("Given pi compacts the conversation, When the daemon relays the turn, Then 
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
         };
@@ -107,7 +106,7 @@ test("Given pi compacts the conversation, When the daemon relays the turn, Then 
                 eventLimit: 200,
                 kind: "session.live-history.v2.page.load",
                 requestId,
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         for (;;) {
@@ -284,7 +283,6 @@ test.each([false, true])(
             const requestId = randomUUID();
             peer.send(
                 encodeSessionPreviewHistoryPageLoad({
-                    additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
                     directoryId: "default",
@@ -292,7 +290,7 @@ test.each([false, true])(
                     eventLimit: 200,
                     kind: "session.preview-history.page.load",
                     requestId,
-                    sessionId,
+                    target: { harness: "pi", sessionId: sessionId },
                 }),
             );
             for (;;) {

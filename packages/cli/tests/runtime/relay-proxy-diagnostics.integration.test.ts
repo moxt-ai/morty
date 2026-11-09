@@ -79,7 +79,7 @@ async function fixture(
     relay.on(
         "request",
         (request: IncomingMessage | Http2ServerRequest, response: ServerResponse | Http2ServerResponse) => {
-            const pairing = request.url?.match(/\/runtime-pairings\/(direct-pairing|proxy-pairing)\/redeem$/u)?.[1];
+            const pairing = request.url?.match(/\/pairings\/(direct-pairing|proxy-pairing)\/redeem$/u)?.[1];
             if (pairing !== undefined) {
                 claimed.push(pairing);
                 const role = pairing === "direct-pairing" ? "direct" : "proxy";
@@ -95,9 +95,7 @@ async function fixture(
                 response.setHeader("content-type", "application/json");
                 response.end(
                     JSON.stringify({
-                        appId: "app_probe",
-                        channelId: `chn_${role}`,
-                        runtimeId: `rnt_${role}`,
+                        computerId: `chn_${role}`,
                         runtimeCredential: role[0]?.repeat(43),
                     }),
                 );
@@ -195,8 +193,8 @@ async function fixture(
         config,
         JSON.stringify({
             relayOrigin: origin,
-            direct: { pairingId: "direct-pairing", pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" },
-            proxy: { pairingId: "proxy-pairing", pairingCode: "VWXY-ZABC-DEFG-HJKL-MNPQ" },
+            direct: { computerId: "direct-pairing", pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" },
+            proxy: { computerId: "proxy-pairing", pairingCode: "VWXY-ZABC-DEFG-HJKL-MNPQ" },
         }),
         { mode: 0o600 },
     );
@@ -306,8 +304,8 @@ test("Given distinct fresh pairings, When direct and proxy probes run together o
     expect(report).toMatchObject({
         targetOrigin: new URL(peer.origin).origin,
         legs: [
-            { role: "direct", channelId: "chn_direct", onlineCount: 1 },
-            { role: "proxy", channelId: "chn_proxy", onlineCount: 1 },
+            { role: "direct", computerId: "chn_direct", onlineCount: 1 },
+            { role: "proxy", computerId: "chn_proxy", onlineCount: 1 },
         ],
     });
     const encoded = JSON.stringify(report);
@@ -351,8 +349,8 @@ test("Given a reused pairing, When a comparison is requested, Then it fails befo
         peer.config,
         JSON.stringify({
             relayOrigin: peer.origin,
-            direct: { pairingId: "direct-pairing", pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" },
-            proxy: { pairingId: "direct-pairing", pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" },
+            direct: { computerId: "direct-pairing", pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" },
+            proxy: { computerId: "direct-pairing", pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" },
         }),
         { mode: 0o600 },
     );

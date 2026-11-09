@@ -8,7 +8,9 @@ import {
     type AcpSessionUpdate,
     decodeMessageKind,
     decodeSessionEventEnvelope,
+    decodeSessionReadyEvent,
     encodeRuntimeLivenessReadyEvent,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
@@ -27,6 +29,7 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runti
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 class Messages {
     readonly #closed = Promise.withResolvers<never>();
@@ -89,7 +92,6 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/real-codex-collaboration/daemon`,
     );
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const agent = new AcpAgentDefinition(
         "codex",
         "Codex",
@@ -98,7 +100,12 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         codex.environment,
     );
     const config = createRuntimeConfig(
-        { channelId: "real-codex-collaboration", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            computerId: "real-codex-collaboration",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         new RuntimeAgentDependencies([agent]),
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -108,11 +115,29 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        const sessionId = "codex_collaboration";
+        const requestId = randomUUID();
+        socket.send(
+            encodeSessionCreateCommand({
+                kind: "session.create",
+                requestId,
+                operationId: randomUUID(),
+                agentId: "codex",
+                bindingId: config.bindingId,
+                directoryId: "default",
+                configurations: [],
+            }),
+        );
+        let created = await messages.next();
+        while (decodeMessageKind(created) !== "session.ready") {
+            if (decodeMessageKind(created) === "session.operation.failed") {
+                throw new Error(created);
+            }
+            created = await messages.next();
+        }
+        const sessionTarget = decodeSessionReadyEvent(created).target;
         const commandId = randomUUID();
         socket.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
                 commandId,
@@ -121,7 +146,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
                 attachments: [],
                 kind: "session.prompt",
                 prompt,
-                sessionId,
+                target: sessionTarget,
             }),
         );
 

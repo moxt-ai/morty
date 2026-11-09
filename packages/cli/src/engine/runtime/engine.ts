@@ -128,6 +128,7 @@ export class MortyRuntimeEngine {
 
 export type { ConnectionManager } from "./connection/connection-manager.ts";
 export type { RuntimeConnectionInput, VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+export type { RuntimeCredentialRotation, RuntimeCredentials } from "./connection/runtime-credentials.ts";
 export type { MortyRuntimePairingOptions } from "./pairing.ts";
 export { RuntimeRelayRevokedError } from "./relay/runtime-revocation.ts";
 export type { MortyRuntimeConnection } from "./runtime-loop.ts";

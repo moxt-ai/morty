@@ -16,15 +16,14 @@ describe("acp interactions", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -33,8 +32,12 @@ describe("acp interactions", () => {
         });
         const signal = new AbortController().signal;
         try {
+            const target = await manager.createNativeSession({
+                agent: fakeAgent(),
+                cwd: process.cwd(),
+                signal,
+            });
             const running = manager.runPrompt({
-                additionalDirectories: [],
                 agent: fakeAgent(),
                 commandId: "running-command",
                 cwd: process.cwd(),
@@ -46,7 +49,7 @@ describe("acp interactions", () => {
                 },
                 prompt: "wait for steering",
                 resources: [],
-                sessionId: "steering-session",
+                target,
                 signal,
             });
             const finishedBeforeStart = running.then(() => {
@@ -66,7 +69,6 @@ describe("acp interactions", () => {
 
             await expect(
                 manager.steerPrompt({
-                    additionalDirectories: [],
                     agent: fakeAgent(),
                     commandId: "steering-command",
                     cwd: process.cwd(),
@@ -78,7 +80,7 @@ describe("acp interactions", () => {
                     },
                     prompt: "focus on the requested fix",
                     resources: [],
-                    sessionId: "steering-session",
+                    target,
                     signal,
                     targetCommandId: "running-command",
                 }),
@@ -148,7 +150,7 @@ describe("acp interactions", () => {
             action: "accept",
             content: "",
             interactionId: elicitation.interactionId,
-            sessionId: session.request.sessionId,
+            target: session.request.target,
         });
         await expect(running).resolves.toEqual({
             stopReason: "end_turn",

@@ -1,9 +1,10 @@
 import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client";
 import type { ElicitationResponseRequest } from "@morty-build/client/channel";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 
 type PermissionInteractionDetails = Pick<
     SessionPermissionRequestedEvent,
-    "details" | "interactionId" | "options" | "sessionId" | "title" | "toolCallId" | "toolKind"
+    "details" | "interactionId" | "options" | "target" | "title" | "toolCallId" | "toolKind"
 >;
 
 type PermissionInteractionState =
@@ -25,7 +26,7 @@ export type PermissionInteraction = PermissionInteractionDetails & {
 
 type ElicitationInteractionDetails = Pick<
     SessionElicitationRequestedEvent,
-    "fields" | "interactionId" | "message" | "mode" | "sessionId" | "url"
+    "fields" | "interactionId" | "message" | "mode" | "target" | "url"
 >;
 
 type ElicitationInteractionState =
@@ -54,12 +55,12 @@ export interface PermissionInteractionResponse {
     readonly interactionId: string;
     readonly optionId: string;
     readonly outcome: "cancelled" | "selected";
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export interface ElicitationInteractionResponse {
     readonly action: ElicitationResponseRequest["action"];
     readonly content: string;
     readonly interactionId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }

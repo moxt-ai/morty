@@ -15,7 +15,6 @@ it("describes a selected directory without browsing its children and still rejec
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
-            platform.appId,
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Directory metadata",
@@ -24,12 +23,12 @@ it("describes a selected directory without browsing its children and still rejec
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
-        const listing = await runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal);
+        const runtime = await platform.connectAgent(project.computerId);
+        const listing = await runtime.client.runtimes.listWorkspace(directoryId, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 
         const invalid = await fetch(
-            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/workspace`,
+            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/daemon/workspace`,
             {
                 method: "POST",
                 headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
@@ -43,13 +42,14 @@ it("describes a selected directory without browsing its children and still rejec
         // Directory lookup/stat remains permitted, while readdir is denied for ordinary users.
         // The returned metadata contract is the same when a privileged test user ignores chmod.
         await chmod(root, 0o111);
-        await expect(
-            runtime.client.runtimes.describeWorkspace(runtime.runtimeId, directoryId, signal),
-        ).resolves.toStrictEqual({ directoryId, directoryLabel: listing.directoryLabel });
+        await expect(runtime.client.runtimes.describeWorkspace(directoryId, signal)).resolves.toStrictEqual({
+            directoryId,
+            directoryLabel: listing.directoryLabel,
+        });
         const missing = `path-${Buffer.from(join(canonical, "missing")).toString("base64url")}`;
-        await expect(
-            runtime.client.runtimes.describeWorkspace(runtime.runtimeId, missing, signal),
-        ).rejects.toMatchObject({ code: "local_authorization_failed" });
+        await expect(runtime.client.runtimes.describeWorkspace(missing, signal)).rejects.toMatchObject({
+            code: "local_authorization_failed",
+        });
     } finally {
         await chmod(root, 0o755);
         await rm(root, { recursive: true, force: true });

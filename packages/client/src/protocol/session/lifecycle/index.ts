@@ -10,10 +10,12 @@ import {
     sessionCommandSchema,
     sessionIdentityFields,
     sessionStatusSchema,
-    workspaceEntrySchema,
 } from "../shared/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_PREPARE_KIND = "session.prepare";
+export const SESSION_CREATE_KIND = "session.create";
+export const SESSION_CREATION_READ_KIND = "session.creation.read";
 export const SESSION_READY_KIND = "session.ready";
 export const SESSION_LIST_KIND = "session.list";
 export const SESSION_LISTED_KIND = "session.listed";
@@ -35,7 +37,7 @@ export const SESSION_PROMPT_ACCEPTED_KIND = "session.prompt.accepted";
 const sessionStatusChangedEventSchema = z
     .object({
         kind: z.literal(SESSION_STATUS_CHANGED_KIND),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         status: sessionStatusSchema,
     })
     .readonly();
@@ -44,15 +46,18 @@ export type SessionStatusChangedEvent = z.infer<typeof sessionStatusChangedEvent
 
 const sessionMetadataSchema = z
     .object({
-        additionalDirectories: z.array(workspaceEntrySchema).max(16).readonly(),
         agentId: IDENTIFIER,
         directoryId: DIRECTORY_IDENTIFIER,
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         prompted: z.boolean(),
         sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         status: sessionStatusSchema,
         title: z.string().max(500),
         updatedAt: z.iso.datetime({ offset: true }),
+    })
+    .refine((entry) => entry.agentId === entry.target.harness && entry.sessionId === entry.target.sessionId, {
+        message: "Session metadata must describe its native pair",
     })
     .readonly();
 
@@ -82,7 +87,7 @@ const sessionQueryCommandSchema = z
     .object({
         kind: z.literal(SESSION_QUERY_KIND),
         requestId: IDENTIFIER,
-        sessionIds: z.array(IDENTIFIER).min(1).max(500).readonly(),
+        targets: z.array(nativeSessionTargetSchema).min(1).max(500).readonly(),
     })
     .readonly();
 
@@ -102,7 +107,7 @@ const sessionRestoreCommandSchema = z
     .object({
         kind: z.literal(SESSION_RESTORE_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -112,7 +117,7 @@ const sessionCloseCommandSchema = z
     .object({
         kind: z.literal(SESSION_CLOSE_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -155,6 +160,37 @@ const sessionPrepareCommandSchema = z
 
 export type SessionPrepareCommand = z.infer<typeof sessionPrepareCommandSchema>;
 
+const sessionCreateCommandSchema = z
+    .object({
+        kind: z.literal(SESSION_CREATE_KIND),
+        requestId: IDENTIFIER,
+        operationId: IDENTIFIER,
+        bindingId: IDENTIFIER,
+        agentId: IDENTIFIER,
+        directoryId: DIRECTORY_IDENTIFIER,
+        configurations: sessionConfigurationSelectionsSchema,
+    })
+    .readonly();
+
+export type SessionCreateCommand = z.infer<typeof sessionCreateCommandSchema>;
+export const decodeSessionCreateCommand = (encoded: string): SessionCreateCommand =>
+    decode(encoded, sessionCreateCommandSchema);
+export const encodeSessionCreateCommand = (message: SessionCreateCommand): string =>
+    encode(message, sessionCreateCommandSchema);
+
+const sessionCreationReadCommandSchema = z
+    .object({
+        kind: z.literal(SESSION_CREATION_READ_KIND),
+        requestId: IDENTIFIER,
+        operationId: IDENTIFIER,
+    })
+    .readonly();
+export type SessionCreationReadCommand = z.infer<typeof sessionCreationReadCommandSchema>;
+export const decodeSessionCreationReadCommand = (encoded: string): SessionCreationReadCommand =>
+    decode(encoded, sessionCreationReadCommandSchema);
+export const encodeSessionCreationReadCommand = (message: SessionCreationReadCommand): string =>
+    encode(message, sessionCreationReadCommandSchema);
+
 const runtimeTimingsSchema = z
     .array(
         z
@@ -169,7 +205,6 @@ const runtimeTimingsSchema = z
 
 export const sessionReadyEventSchema = z
     .object({
-        additionalDirectories: z.array(workspaceEntrySchema).max(16).readonly(),
         agentId: IDENTIFIER,
         agentName: z.string().max(255),
         agentVersion: z.string().max(128),
@@ -183,7 +218,7 @@ export const sessionReadyEventSchema = z
         requestId: IDENTIFIER,
         restored: z.boolean(),
         runtimeTimings: runtimeTimingsSchema.optional(),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -192,6 +227,7 @@ export type SessionReadyEvent = z.infer<typeof sessionReadyEventSchema>;
 const sessionRestoredEventSchema = z
     .object({
         entry: sessionMetadataSchema,
+        target: nativeSessionTargetSchema,
         kind: z.literal(SESSION_RESTORED_KIND),
         ready: sessionReadyEventSchema,
         requestId: IDENTIFIER,
@@ -204,7 +240,7 @@ const sessionClosedEventSchema = z
     .object({
         kind: z.literal(SESSION_CLOSED_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -220,7 +256,7 @@ const sessionCloseNoticeEventSchema = z
     .object({
         kind: z.literal(SESSION_CLOSE_NOTICE_KIND),
         reason: z.string().min(1).max(500),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -230,7 +266,7 @@ const sessionCommandsUpdatedEventSchema = z
     .object({
         commands: z.array(sessionCommandSchema).max(500).readonly(),
         kind: z.literal(SESSION_COMMANDS_UPDATED_KIND),
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
     })
     .readonly();
 
@@ -239,8 +275,8 @@ export type SessionCommandsUpdatedEvent = z.infer<typeof sessionCommandsUpdatedE
 const sessionInfoUpdatedEventSchema = z
     .object({
         kind: z.literal(SESSION_INFO_UPDATED_KIND),
-        projectId: IDENTIFIER.optional(),
-        sessionId: IDENTIFIER,
+        computerId: IDENTIFIER.optional(),
+        target: nativeSessionTargetSchema,
         title: z.string().max(500).nullable(),
         updatedAt: z.string().max(128),
     })
@@ -255,7 +291,7 @@ const sessionOperationFailedEventSchema = z
         message: z.string().min(1).max(500),
         requestId: IDENTIFIER,
         runtimeTimings: runtimeTimingsSchema.optional(),
-        sessionId: z.string().max(128),
+        target: nativeSessionTargetSchema.optional(),
     })
     .readonly();
 
@@ -270,7 +306,7 @@ const sessionPromptAcceptedEventSchema = z
     .object({
         kind: z.literal(SESSION_PROMPT_ACCEPTED_KIND),
         requestId: IDENTIFIER,
-        sessionId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         state: z.enum(["queued", "running", "settled"]),
     })
     .readonly();

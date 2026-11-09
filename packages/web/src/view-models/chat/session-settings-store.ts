@@ -1,4 +1,5 @@
 import { MortyApiError, type SessionConfigOption } from "@morty-build/client";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -22,7 +23,6 @@ type SettingsChange =
 
 /** The Session binding a settings change states, as the pane that opened the Session read it. */
 interface SessionBinding {
-    readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly directoryId: string;
 }
@@ -64,12 +64,24 @@ export interface SessionSettingsStore {
 /** The Session's settings on this page and the change the user asked of them, whichever pane shows them. */
 export function createSessionSettingsStore(options: {
     readonly botId: string;
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
     readonly connection: SessionOperationConnection;
 }) {
     return createStore<SessionSettingsStore>()((set, get) => {
         let pendingRead: AbortController | null = null;
         const openedAt = new Date().toISOString();
+        // A mutation response acknowledges the edit; it may already be older than another client's edit.
+        // All refreshes use the same read lifetime so newer observations invalidate older reads.
+        const refresh = (signal: AbortSignal): void =>
+            get().readInBackground(
+                (readSignal) =>
+                    options.connection.send(
+                        (client, requestSignal) =>
+                            client.sessions.readConfiguration(options.sessionTarget, requestSignal),
+                        readSignal,
+                    ),
+                signal,
+            );
         return {
             openedAt,
             observedAt: openedAt,
@@ -126,10 +138,10 @@ export function createSessionSettingsStore(options: {
             configure: async (binding, option, value, booleanValue, signal) => {
                 set({ change: { configId: option.id, kind: "configuring" } });
                 try {
-                    const result = await options.connection.send(
+                    await options.connection.send(
                         async (client, requestSignal) => {
                             return await client.sessions.updateConfiguration(
-                                options.sessionId,
+                                options.sessionTarget,
                                 {
                                     ...binding,
                                     booleanValue,
@@ -151,7 +163,7 @@ export function createSessionSettingsStore(options: {
                             ? { configId: option.id, kind: "boolean", value: booleanValue }
                             : { configId: option.id, kind: "select", value },
                     );
-                    get().adopt(result);
+                    refresh(signal);
                     set({ change: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -161,15 +173,7 @@ export function createSessionSettingsStore(options: {
                         return;
                     }
                     if (cause instanceof MortyApiError && cause.code === "session_configuration_conflict") {
-                        get().readInBackground(
-                            (readSignal) =>
-                                options.connection.send(
-                                    (client, requestSignal) =>
-                                        client.sessions.readConfiguration(options.sessionId, requestSignal),
-                                    readSignal,
-                                ),
-                            signal,
-                        );
+                        refresh(signal);
                     }
                     set({
                         change: { kind: "failed", message: formatError(cause, "The selection could not be applied.") },

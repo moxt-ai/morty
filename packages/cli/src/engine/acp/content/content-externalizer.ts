@@ -1,4 +1,5 @@
 import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { z } from "zod";
 
 /** One blob pulled out of an Agent update. The caller stores it and keeps the returned key. */
@@ -11,7 +12,7 @@ interface ExtractedContent {
 
 /** Stores an extracted blob for a session and returns its content-addressed key. */
 export type StoreExtractedContent = (
-    sessionId: string,
+    sessionTarget: NativeSessionTarget,
     content: ExtractedContent,
     signal: AbortSignal,
 ) => Promise<{ readonly byteLength: number; readonly key: string }>;
@@ -73,7 +74,11 @@ export interface PreparedAcpUpdate {
 type FindLinkedResources = (
     text: string,
 ) => readonly { readonly uri: string; readonly mediaType: string; readonly name: string }[];
-export type ExternalizeSessionUpdate = (update: SessionUpdate, signal: AbortSignal) => Promise<PreparedAcpUpdate>;
+export type ExternalizeSessionUpdate = (
+    sessionId: string,
+    update: SessionUpdate,
+    signal: AbortSignal,
+) => Promise<PreparedAcpUpdate>;
 
 const embeddedImageSchema = z.looseObject({
     type: z.literal("image"),
@@ -134,7 +139,11 @@ export class AcpContentExternalizer {
         }));
     }
 
-    async #content(sessionId: string, content: ContentBlock, signal: AbortSignal): Promise<PreparedContent> {
+    async #content(
+        sessionTarget: NativeSessionTarget,
+        content: ContentBlock,
+        signal: AbortSignal,
+    ): Promise<PreparedContent> {
         switch (content.type) {
             case "text":
                 return { agent: content, event: { ...content, text: boundedText(content.text) } };
@@ -150,7 +159,7 @@ export class AcpContentExternalizer {
                         throw new Error("Embedded image bytes do not match a supported image MIME type");
                     }
                     const stored = await this.#store(
-                        sessionId,
+                        sessionTarget,
                         { bytes, kind: "image", mediaType: content.mimeType, name: "image" },
                         signal,
                     );
@@ -177,7 +186,7 @@ export class AcpContentExternalizer {
                     return { agent: content, event: content };
                 }
                 const stored = await this.#store(
-                    sessionId,
+                    sessionTarget,
                     { bytes: decodeBase64(content.data), kind: "audio", mediaType: content.mimeType, name: "audio" },
                     signal,
                 );
@@ -202,7 +211,7 @@ export class AcpContentExternalizer {
                 }
                 const mediaType = embedded.mimeType ?? "application/octet-stream";
                 const stored = await this.#store(
-                    sessionId,
+                    sessionTarget,
                     { bytes, kind: "resource", mediaType, name: "resource" },
                     signal,
                 );
@@ -224,7 +233,7 @@ export class AcpContentExternalizer {
     }
 
     async #rawOutput(
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         value: unknown,
         images: Map<string, PreparedContent>,
         signal: AbortSignal,
@@ -237,7 +246,7 @@ export class AcpContentExternalizer {
         if (Array.isArray(value)) {
             const result: unknown[] = [];
             for (const item of value) {
-                result.push(await this.#rawOutput(sessionId, item, images, signal, depth + 1));
+                result.push(await this.#rawOutput(sessionTarget, item, images, signal, depth + 1));
             }
             return result;
         }
@@ -246,7 +255,7 @@ export class AcpContentExternalizer {
         }
         const image = toolImageSchema.safeParse(value);
         if (image.success && image.data.data.length > 0) {
-            const prepared = await this.#content(sessionId, image.data, signal);
+            const prepared = await this.#content(sessionTarget, image.data, signal);
             if (isRecord(prepared.event) && typeof prepared.event["imageKey"] === "string") {
                 images.set(prepared.event["imageKey"], prepared);
             } else {
@@ -258,13 +267,13 @@ export class AcpContentExternalizer {
         }
         const result: Record<string, unknown> = {};
         for (const [key, item] of Object.entries(value)) {
-            result[key] = await this.#rawOutput(sessionId, item, images, signal, depth + 1);
+            result[key] = await this.#rawOutput(sessionTarget, item, images, signal, depth + 1);
         }
         return result;
     }
 
     async #toolUpdate(
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         update: Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>,
         signal: AbortSignal,
     ): Promise<PreparedAcpUpdate> {
@@ -272,13 +281,13 @@ export class AcpContentExternalizer {
         const rawOutput =
             update.rawOutput === undefined
                 ? undefined
-                : await this.#rawOutput(sessionId, update.rawOutput, images, signal);
+                : await this.#rawOutput(sessionTarget, update.rawOutput, images, signal);
         const metadata =
             update._meta === undefined || update._meta === null
                 ? update._meta
                 : z
                       .record(z.string(), z.unknown())
-                      .parse(await this.#rawOutput(sessionId, update._meta, images, signal));
+                      .parse(await this.#rawOutput(sessionTarget, update._meta, images, signal));
         const originalJson = images.size === 0 ? undefined : JSON.stringify(update.rawOutput);
         const rewrittenJson = images.size === 0 ? undefined : JSON.stringify(rawOutput);
         const agentContent: ToolCallContent[] = [];
@@ -293,7 +302,7 @@ export class AcpContentExternalizer {
                 item.content.type === "text" && item.content.text === originalJson && rewrittenJson !== undefined
                     ? { ...item.content, text: rewrittenJson }
                     : item.content;
-            const prepared = await this.#content(sessionId, content, signal);
+            const prepared = await this.#content(sessionTarget, content, signal);
             agentContent.push({ ...item, content: prepared.agent });
             eventContent.push({ ...item, content: prepared.event });
             if (isRecord(prepared.event) && typeof prepared.event["imageKey"] === "string") {
@@ -314,7 +323,7 @@ export class AcpContentExternalizer {
     }
 
     readonly update = async (
-        sessionId: string,
+        sessionTarget: NativeSessionTarget,
         update: SessionUpdate,
         signal: AbortSignal,
     ): Promise<PreparedAcpUpdate> => {
@@ -323,7 +332,7 @@ export class AcpContentExternalizer {
             case "user_message_chunk":
             case "agent_message_chunk":
             case "compaction_summary_chunk": {
-                const content = await this.#content(sessionId, update.content, signal);
+                const content = await this.#content(sessionTarget, update.content, signal);
                 return {
                     agent: { ...update, content: content.agent },
                     events: [
@@ -338,13 +347,13 @@ export class AcpContentExternalizer {
             }
             case "tool_call":
             case "tool_call_update":
-                return await this.#toolUpdate(sessionId, update, signal);
+                return await this.#toolUpdate(sessionTarget, update, signal);
             case "compaction_update": {
                 if (update.summary === undefined || update.summary === null) {
                     return { agent: update, events: [update] };
                 }
                 const content = await Promise.all(
-                    update.summary.map(async (item) => await this.#content(sessionId, item, signal)),
+                    update.summary.map(async (item) => await this.#content(sessionTarget, item, signal)),
                 );
                 return {
                     agent: { ...update, summary: content.map((item) => item.agent) },

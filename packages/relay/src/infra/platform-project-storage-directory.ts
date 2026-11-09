@@ -1,11 +1,11 @@
 import type { ProjectStorageDirectory } from "@morty-build/relay-core/contracts";
 import { PairingDirectoryError } from "@morty-build/relay-core/contracts";
+import { decodeComputerPlacement, projectBucketLocation } from "../entity/computer-id.ts";
 import type { PlatformProjectPlacementRegistry } from "../entity/platform-control-plane.ts";
-import { decodePlatformProjectPlacement, projectBucketLocation } from "../entity/platform-project-id.ts";
 import type { PlatformControlPlaneStorage } from "../storage/platform-control-plane-storage.ts";
 
 /** The Platform directory is the Project lifecycle authority; it decides whether a Project's storage is served. */
-type ActiveProjects = Pick<PlatformControlPlaneStorage, "readActiveProjectScope">;
+type ActiveProjects = Pick<PlatformControlPlaneStorage, "readActiveComputerScope">;
 
 export class PlatformProjectStorageDirectory implements ProjectStorageDirectory {
     readonly #registry: PlatformProjectPlacementRegistry;
@@ -16,22 +16,22 @@ export class PlatformProjectStorageDirectory implements ProjectStorageDirectory 
         this.#projects = projects;
     }
 
-    readonly resolve: ProjectStorageDirectory["resolve"] = async (projectId, signal) => {
+    readonly resolve: ProjectStorageDirectory["resolve"] = async (computerId, signal) => {
         signal.throwIfAborted();
-        const placement = decodePlatformProjectPlacement(projectId);
+        const placement = decodeComputerPlacement(computerId);
         if (placement === null || !this.#registry.supports(placement)) {
             throw new PairingDirectoryError("directory_unavailable", "Project storage placement is unavailable");
         }
-        if ((await this.#projects.readActiveProjectScope(projectId, signal)) === null) {
+        if ((await this.#projects.readActiveComputerScope(computerId, signal)) === null) {
             return null;
         }
         signal.throwIfAborted();
         return {
-            projectId,
+            computerId,
             storagePlacement: {
                 hasShard: true,
                 shard: {
-                    d1ShardId: projectId,
+                    d1ShardId: computerId,
                     r2BucketId: projectBucketLocation(placement.locationHint),
                     revision: 1,
                 },

@@ -11,9 +11,9 @@ import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
-
 import { fakeAgent, fakeAgentPath, RecordingObserver } from "./acp-feature-fixture.ts";
 
 describe("acp commands environment", () => {
@@ -22,15 +22,14 @@ describe("acp commands environment", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -55,10 +54,13 @@ describe("acp commands environment", () => {
 
         try {
             const prepared = await manager.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
-                sessionId: "controlled-compact-session",
+                target: await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -75,15 +77,14 @@ describe("acp commands environment", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -94,14 +95,17 @@ describe("acp commands environment", () => {
 
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: `${agentId}-compact-command`,
                 cwd: process.cwd(),
                 images: [],
                 prompt: "advertise commands",
                 resources: [],
-                sessionId: `${agentId}-compact-session`,
+                target: await manager.createNativeSession({
+                    agent,
+                    cwd: process.cwd(),
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 
@@ -130,15 +134,14 @@ describe("acp commands environment", () => {
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -151,23 +154,27 @@ describe("acp commands environment", () => {
         });
         const config = createRuntimeConfig(
             {
-                channelId: "login-shell-environment",
+                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                computerId: "login-shell-environment",
                 defaultWorkspace: workspace,
-                relayUrl: new URL("ws://127.0.0.1:8787/v1/runtimes/connect?token=test"),
+                relayUrl: new URL("ws://127.0.0.1:8787/v1/runtimes/connect"),
             },
             [fakeAgent()],
             localContext,
         );
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: config.catalog.find("codex"),
                 commandId: "login-shell-command",
                 cwd: workspace,
                 images: [],
                 prompt: "generate markdown image",
                 resources: [],
-                sessionId: "login-shell-session",
+                target: await manager.createNativeSession({
+                    agent: config.catalog.find("codex"),
+                    cwd: workspace,
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 signal: new AbortController().signal,
             });
 

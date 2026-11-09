@@ -6,8 +6,8 @@ import * as acp from "@agentclientprotocol/sdk";
 import {
     decodeDaemonToServiceMessage,
     encodeNativeSessionRequest,
+    encodeSessionCreateCommand,
     encodeSessionPermissionRespondCommand,
-    encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     SESSION_EVENT_KIND,
@@ -22,6 +22,7 @@ import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 test("Given a completed foreground turn, When its Agent requests background permission, Then the session snapshot recovers that request and removes it after the user responds", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -114,9 +115,13 @@ test("Given a completed foreground turn, When its Agent requests background perm
     });
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/background/daemon`);
-    relayUrl.searchParams.set("token", "r".repeat(43));
     const config = createControlledRuntimeConfig(
-        { channelId: "background", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            computerId: "background",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(directory, process.env),
     );
@@ -125,29 +130,33 @@ test("Given a completed foreground turn, When its Agent requests background perm
     try {
         const socket = await connected.promise;
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-        const sessionId = "background_interaction";
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "claude",
             bindingId: config.bindingId,
             directoryId: "default",
-            sessionId,
         };
         socket.send(
-            encodeSessionPrepareCommand({
+            encodeSessionCreateCommand({
                 ...identity,
-                kind: "session.prepare",
+                kind: "session.create",
                 requestId: "prepare",
-                transient: true,
+                operationId: crypto.randomUUID(),
+                configurations: [],
             }),
         );
-        while ((await next()).kind !== "session.ready") {
-            /* Wait for the public readiness response. */
+        let created = await next();
+        while (created.kind !== "session.ready") {
+            if (created.kind === "session.operation.failed") {
+                throw new Error(created.message);
+            }
+            created = await next();
         }
+        const sessionTarget = created.target;
         socket.send(
             encodeSessionPromptCommand({
                 ...identity,
                 commandId: "foreground",
+                target: sessionTarget,
                 disposition: "append",
                 attachments: [],
                 kind: "session.prompt",
@@ -169,7 +178,8 @@ test("Given a completed foreground turn, When its Agent requests background perm
                     action: "active-turn",
                     kind: "native.session.request",
                     requestId,
-                    targetSessionId: sessionId,
+                    discoveryId: crypto.randomUUID(),
+                    target: sessionTarget,
                 }),
             );
             for (;;) {
@@ -190,7 +200,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         });
         socket.send(
             encodeSessionPermissionRespondCommand({
-                sessionId,
+                target: sessionTarget,
                 interactionId: requested.payload.event.interactionId,
                 kind: "session.permission.respond",
                 requestId: crypto.randomUUID(),

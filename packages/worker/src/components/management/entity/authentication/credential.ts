@@ -7,6 +7,9 @@ export const anonymousToken = v.pipe(
     ),
 );
 
+/** The machine's own credential, the only kind its holder may choose: a successor it saved before requesting it. */
+export const localCredentialToken = v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u));
+
 export type Credential = {
     readonly credentialId: string;
     readonly userId: string;

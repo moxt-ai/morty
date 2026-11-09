@@ -47,21 +47,19 @@ writer before continuing it elsewhere.
 Live output favors responsiveness over guaranteed delivery. Disconnects and restarts
 can leave gaps; catch-up depends on native Agent history. Morty keeps no cloud
 copy of conversation history. Agent-owned history stays in the Agent's directories;
-Morty uninstall must never remove it.
+Stopping Morty preserves it.
 
-Morty's state directory is `~/Library/Application Support/Morty/v2` on macOS,
-`%LOCALAPPDATA%\Morty\v2` on Windows, and `$XDG_STATE_HOME/morty/v2` (or
-`~/.local/state/morty/v2`) on Linux. An absolute `MORTY_STATE_DIRECTORY` overrides
-it. Use a fresh empty directory; existing unmarked data and earlier installation
+Morty's state directory is `~/Library/Application Support/Morty/v3` on macOS,
+`%LOCALAPPDATA%\Morty\v3` on Windows, and `$XDG_STATE_HOME/morty/v3` (or
+`~/.local/state/morty/v3`) on Linux. An absolute `MORTY_STATE_DIRECTORY` overrides
+it. Stop an earlier daemon with its original CLI before running setup. Use a fresh empty directory; existing unmarked data and earlier installation
 generations are not adopted. This pre-launch reset requires new installation
 and pairing; earlier Morty clients, credentials and browser state are unsupported.
 
-The `@morty-build/cli` npm command is a launcher for the persistent installed
-release. Use `npx --yes @morty-build/cli` followed by `status`, `doctor`, `stop`,
-`start`, `restart`, `update`, or `uninstall`. `restart` does not download a version;
-`update` verifies a candidate before switching and attempts to restore the previous
-release if activation fails. `doctor` reports the last installation operation.
-After an interrupted update, inspect `doctor` and restart the selected release;
-reinstall a known-good exact version if its files are incomplete.
+Use `npx --yes @morty-build/cli@latest start` to ensure the daemon is running.
+Use `restart` with the same command prefix to launch the selected release, or
+`stop` to leave the machine offline. `status` reports the CLI and daemon versions.
+Each machine installation keeps one pairing. The browser remembers each paired
+machine's access separately and opens the selected identity when you switch computers.
 
 For hosting and runtime configuration, see [deployment](deployment.md).

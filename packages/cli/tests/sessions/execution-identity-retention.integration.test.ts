@@ -78,7 +78,6 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
             { MORTY_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent"), PATH: executableDirectory },
             async (peer) => {
                 const original: SessionPromptCommand = {
-                    additionalDirectoryIds: [],
                     agentId: "controlled-acp",
                     attachments: [],
                     bindingId: peer.bindingId,
@@ -87,7 +86,7 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                     disposition: SessionPromptDisposition.Append,
                     kind: "session.prompt",
                     prompt: "Original operation",
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 };
                 const send = (command: SessionPromptCommand) => peer.send(encodeSessionPromptCommand(command));
                 send(original);
@@ -109,8 +108,9 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                     { length: 1_026 },
                     (_, index) => `z-rejected-${String(index).padStart(4, "0")}`,
                 );
+                const unavailableDirectory = `path-${Buffer.from(join(peer.workspace, "missing-directory")).toString("base64url")}`;
                 for (const commandId of rejected) {
-                    send({ ...original, commandId, agentId: "missing-agent" });
+                    send({ ...original, commandId, directoryId: unavailableDirectory });
                 }
                 const failures = await observe(peer, rejected);
                 for (const outcome of failures.outcomes.values()) {
@@ -124,7 +124,7 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                             kind: "session.cancel",
                             requestId: cancellation,
                             commandId: original.commandId,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     const cancelled = await observe(peer, [cancellation]);
@@ -141,7 +141,7 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                             kind: "session.cancel-before-start",
                             requestId: withdrawal,
                             commandId: original.commandId,
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                         }),
                     );
                     expect((await observe(peer, [withdrawal])).outcomes.get(withdrawal)).toEqual({

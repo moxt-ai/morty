@@ -21,11 +21,10 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
         new ClaudeCodeAgentSpecification(),
         agent.environment,
         async (peer) => {
-            const sessionId = await prepareNewRealSession(peer, "claude");
+            const sessionTarget = await prepareNewRealSession(peer, "claude");
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     bindingId: peer.bindingId,
                     commandId,
@@ -34,7 +33,7 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Reply with a greeting",
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             const output: string[] = [];
@@ -61,13 +60,12 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
             const prepareId = randomUUID();
             peer.send(
                 encodeSessionPrepareCommand({
-                    additionalDirectoryIds: [],
                     agentId: "claude",
                     bindingId: peer.bindingId,
                     directoryId: "default",
                     kind: "session.prepare",
                     requestId: prepareId,
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             for (;;) {
@@ -87,7 +85,7 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
                     eventLimit: 100,
                     kind: "session.live-history.v2.page.load",
                     requestId,
-                    sessionId,
+                    target: sessionTarget,
                 }),
             );
             for (;;) {
@@ -129,7 +127,6 @@ test("Given a real Claude answer quotes login diagnostics, When it completes, Th
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 commandId,
@@ -138,7 +135,7 @@ test("Given a real Claude answer quotes login diagnostics, When it completes, Th
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Explain a login diagnostic without running tools",
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         let output = "";

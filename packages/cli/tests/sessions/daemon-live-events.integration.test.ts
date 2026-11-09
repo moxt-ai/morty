@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeContentAvailableEvent,
     decodeContentReadyEvent,
@@ -13,15 +14,18 @@ import {
     decodeNativeSessionResult,
     decodeSessionEventEnvelope,
     decodeSessionHistoryPageLoaded,
+    decodeSessionReadyEvent,
     encodeContentChunkFrame,
     encodeContentCommitCommand,
     encodeContentWriteCommand,
     encodeNativeSessionRequest,
     encodeSessionCancelCommand,
+    encodeSessionCreateCommand,
     encodeSessionHistoryPageLoad,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     NATIVE_SESSION_RESULT_KIND,
+    type NativeSessionTarget,
     type PromptAttachment,
     SESSION_EVENT_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
@@ -40,6 +44,7 @@ import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -201,6 +206,9 @@ class ClientFrames {
             this.#resolvers.push(ready);
         });
     };
+    readonly prepend = (frames: readonly string[]): void => {
+        this.#messages.unshift(...frames);
+    };
 }
 
 async function startControlledDaemon(options: { readonly stateDirectory?: string } = {}): Promise<{
@@ -211,6 +219,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     readonly liveBatchSizes: number[];
     readonly socket: Duplex;
     readonly timer: ControllableTimer;
+    readonly sessionTarget: NativeSessionTarget;
 }> {
     const ownsStateDirectory = options.stateDirectory === undefined;
     const stateDirectory = options.stateDirectory ?? (await mkdtemp(join(tmpdir(), "morty-daemon-timeline-")));
@@ -246,7 +255,6 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     });
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-    relayUrl.searchParams.set("token", "d".repeat(43));
     const agent = new AcpAgentDefinition(
         "controlled-acp",
         "Controlled ACP",
@@ -264,7 +272,12 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
         { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
     );
     const config = createRuntimeConfig(
-        { channelId: "channel_alpha", defaultWorkspace: workspace, relayUrl },
+        {
+            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            computerId: "channel_alpha",
+            defaultWorkspace: workspace,
+            relayUrl,
+        },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
     );
@@ -272,10 +285,35 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     const timer = new ControllableTimer();
     const runtime = runRuntime(config, cancellation.signal, timer);
     const socket = await socketReady.promise;
+    const frames = new ClientFrames(socket);
+    sendText(
+        socket,
+        encodeSessionCreateCommand({
+            kind: "session.create",
+            requestId: "fixture-create",
+            operationId: "fixture-creation",
+            agentId: agent.id,
+            bindingId: config.bindingId,
+            directoryId: "default",
+            configurations: [],
+        }),
+    );
+    let created = await frames.next();
+    const initialFrames: string[] = [];
+    while (decodeMessageKind(created) !== "session.ready") {
+        if (decodeMessageKind(created) === "session.operation.failed") {
+            throw new Error(created);
+        }
+        initialFrames.push(created);
+        created = await frames.next();
+    }
+    frames.prepend(initialFrames);
+    const sessionTarget = decodeSessionReadyEvent(created).target;
     return {
         agent,
         config,
-        frames: new ClientFrames(socket),
+        frames,
+        sessionTarget,
         liveBatchSizes: [],
         socket,
         timer,
@@ -310,7 +348,7 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
             mediaType: "text/plain",
             name: "context.txt",
             requestId,
-            sessionId: "test-session",
+            target: fixture.sessionTarget,
         }),
     );
     let ready = await fixture.frames.next();
@@ -321,7 +359,7 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
     sendBinary(fixture.socket, encodeContentChunkFrame({ bytes, requestId, sequence: 0 }));
     sendText(
         fixture.socket,
-        encodeContentCommitCommand({ kind: "content.commit", requestId, sessionId: "test-session" }),
+        encodeContentCommitCommand({ kind: "content.commit", requestId, target: fixture.sessionTarget }),
     );
     let available = await fixture.frames.next();
     while (decodeMessageKind(available) !== "content.available") {
@@ -340,7 +378,6 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
 
 function prompt(fixture: Fixture, text: string): SessionPromptCommand {
     return {
-        additionalDirectoryIds: [],
         agentId: fixture.agent.id,
         bindingId: fixture.config.bindingId,
         commandId: "test-turn",
@@ -349,7 +386,7 @@ function prompt(fixture: Fixture, text: string): SessionPromptCommand {
         attachments: [],
         kind: "session.prompt",
         prompt: text,
-        sessionId: "test-session",
+        target: fixture.sessionTarget,
     };
 }
 async function nextLive(fixture: Fixture, allowPromptFailure = false): Promise<SessionLiveEvent> {
@@ -407,7 +444,7 @@ async function cancel(fixture: Fixture, command: SessionPromptCommand): Promise<
             kind: "session.cancel",
             requestId: crypto.randomUUID(),
             commandId: command.commandId,
-            sessionId: command.sessionId,
+            target: command.target,
         }),
     );
     for (;;) {
@@ -439,7 +476,7 @@ async function history(
         encodeSessionHistoryPageLoad({
             kind: "session.live-history.v2.page.load",
             requestId: "history",
-            sessionId: command.sessionId,
+            target: command.target,
             cursor: options.cursor ?? null,
             eventLimit: options.eventLimit ?? 200,
         }),
@@ -459,14 +496,13 @@ async function activeTurn(fixture: Fixture, command: SessionPromptCommand) {
         fixture.socket,
         encodeNativeSessionRequest({
             action: "active-turn",
-            additionalDirectoryIds: [],
             agentId: fixture.agent.id,
             bindingId: fixture.config.bindingId,
             directoryId: "default",
             kind: "native.session.request",
             requestId: "active",
-            sessionId: command.sessionId,
-            targetSessionId: command.sessionId,
+            discoveryId: randomUUID(),
+            target: command.target,
         }),
     );
     for (;;) {
@@ -921,7 +957,7 @@ describe("daemon V2 live delivery", () => {
                         break;
                     }
                 }
-                expect(firstAnswer.sessionId).toBe(command.sessionId);
+                expect(sameNativeSession(firstAnswer.target, command.target)).toBe(true);
                 expect(Number(firstAnswer.position)).toBeGreaterThan(previousPosition);
                 previousPosition = Number(firstAnswer.position);
                 for (;;) {
@@ -982,10 +1018,29 @@ describe("daemon V2 live delivery", () => {
                 expect(Number(event.position)).toBeGreaterThan(previousPosition);
             }
 
+            sendText(
+                restarted.socket,
+                encodeSessionCreateCommand({
+                    kind: "session.create",
+                    requestId: "other-create",
+                    operationId: "other-creation",
+                    agentId: restarted.agent.id,
+                    bindingId: restarted.config.bindingId,
+                    directoryId: "default",
+                    configurations: [],
+                }),
+            );
+            let created = await restarted.frames.next();
+            while (decodeMessageKind(created) !== "session.ready") {
+                if (decodeMessageKind(created) === "session.operation.failed") {
+                    throw new Error(created);
+                }
+                created = await restarted.frames.next();
+            }
             const otherSessionCommand = {
                 ...prompt(restarted, "separate Session allocation"),
                 commandId: "separate-session-allocation",
-                sessionId: "other-session",
+                target: decodeSessionReadyEvent(created).target,
             };
             sendText(restarted.socket, encodeSessionPromptCommand(otherSessionCommand));
             const otherSessionEvent = await nextLive(restarted);

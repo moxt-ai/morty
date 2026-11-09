@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
-import { RUNTIME_WORKSPACE_BINDING_ID } from "@morty-build/client/protocol";
+import { type NativeSessionTarget, RUNTIME_WORKSPACE_BINDING_ID } from "@morty-build/client/protocol";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
 import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
+import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 
 /**
  * Where a Runtime keeps its local data, and the environment it runs and launches Agents with. The data directory is
@@ -51,15 +52,13 @@ export interface RuntimeConfig {
     readonly defaultWorkspace: string;
     readonly bindingId: string;
     readonly catalog: LocalAgentCatalog;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly localContext: RuntimeLocalContext;
     readonly reconnectTarget: RuntimeReconnectTarget | null;
     readonly relayUrl: URL;
+    readonly credentials: RuntimeCredentials;
     /** Stable embedding context for one Session; applied to a copied Agent before process reuse is checked. */
-    readonly sessionEnvironment?: (context: {
-        readonly sessionId: string;
-        readonly agentId: string;
-    }) => Readonly<Record<string, string>>;
+    readonly sessionEnvironment?: (context: NativeSessionTarget) => Readonly<Record<string, string>>;
     /**
      * Serves the definition a command should run against, re-discoving the Agent when its
      * executable changed since the catalog snapshot was taken. Undefined keeps the boot-time
@@ -75,8 +74,9 @@ export interface RuntimeConfig {
 
 export interface RuntimeConnectionConfig {
     readonly defaultWorkspace: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly relayUrl: URL;
+    readonly credentials: RuntimeCredentials;
 }
 
 export function createRuntimeConfig(
@@ -96,10 +96,11 @@ export function createRuntimeConfig(
         defaultWorkspace: connection.defaultWorkspace,
         bindingId: RUNTIME_WORKSPACE_BINDING_ID,
         catalog: new LocalAgentCatalog(runtimeAgents),
-        channelId: connection.channelId,
+        computerId: connection.computerId,
         localContext,
         reconnectTarget,
         relayUrl: connection.relayUrl,
+        credentials: connection.credentials,
         ...(resolveAgent === undefined ? {} : { resolveAgent }),
         ...(rediscoverAgents === undefined ? {} : { rediscoverAgents }),
     };

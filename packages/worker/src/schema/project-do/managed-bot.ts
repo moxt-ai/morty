@@ -1,15 +1,11 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const managedBot = sqliteTable(
-    "managed_bot",
-    {
-        userId: text("user_id").notNull(),
-        botId: text("bot_id").primaryKey().notNull(),
-        displayName: text("display_name").notNull(),
-        runtimeId: text("runtime_id"),
-        instructions: text("instructions").notNull().default(""),
-        createdAt: integer("created_at").notNull(),
-        updatedAt: integer("updated_at").notNull(),
-    },
-    (table) => [index("managed_bot_user_idx").on(table.userId, table.createdAt)],
-);
+/** The Machine of this Project's one owner: a Project identity is one computer, so it has exactly one Machine. */
+export const managedBot = sqliteTable("managed_bot", {
+    userId: text("user_id").primaryKey().notNull(),
+    botId: text("bot_id").notNull().unique(),
+    displayName: text("display_name").notNull(),
+    computerId: text("computer_id"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+});

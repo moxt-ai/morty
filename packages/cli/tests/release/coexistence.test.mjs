@@ -22,8 +22,6 @@ async function findEntry(scope, name) {
 const mortyEntry = process.env.MORTY_RELEASE_ENTRY ?? (await findEntry("@morty-build", "cli"));
 const moxtEntry = process.env.MOXT_RELEASE_ENTRY ?? (await findEntry("@moxt-ai", "mobius"));
 const releaseVersion = JSON.parse(await readFile(join(dirname(mortyEntry), "../package.json"), "utf8")).version;
-const archive = process.env.MORTY_RELEASE_ARCHIVE;
-assert.ok(archive, "MORTY_RELEASE_ARCHIVE is required");
 
 test("Given released Moxt and packed Morty on one machine, each product's lifecycle preserves the other's running service and user data", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-moxt-coexistence-"));
@@ -36,15 +34,13 @@ test("Given released Moxt and packed Morty on one machine, each product's lifecy
     try {
         await moxt("start");
         await writeFile(join(moxtRoot, "user-data"), "Moxt keeps this");
-        await morty("install", "--archive", archive);
         await morty("start");
         await writeFile(join(mortyRoot, "user-data"), "Morty keeps this");
-        for (const args of [["restart"], ["update", "--archive", archive], ["stop"], ["start"], ["uninstall"]]) {
+        for (const args of [["restart"], ["stop"], ["start"]]) {
             await morty(...args);
             assert.match((await moxt("status")).stdout, /Daemon: 0\.0\.431/);
             assert.equal(await readFile(join(moxtRoot, "user-data"), "utf8"), "Moxt keeps this");
         }
-        await morty("install", "--archive", archive);
         await morty("start");
         for (const args of [["restart"], ["upgrade"], ["stop"], ["start"]]) {
             await moxt(...args);

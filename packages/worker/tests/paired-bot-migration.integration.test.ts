@@ -9,7 +9,7 @@ const files = import.meta.glob<string>("../migrations/project-do/*.sql", {
 const ordered = Object.keys(files).sort();
 const materialization = ordered.findIndex((path) => path.endsWith("/0037_materialize_paired_bots.sql"));
 
-test("Given a bot created by a consumed pairing ticket but never configured, When the ticket table is dropped, Then the bot remains an unconfigured managed bot", () => {
+test("Given a user with a configured bot and a bot created by a consumed pairing ticket, When every migration runs, Then the owner keeps the one Machine bound to a Runtime", () => {
     using database = new DatabaseSync(":memory:");
     for (const path of ordered.slice(0, materialization)) {
         database.exec(files[path] ?? "");
@@ -31,7 +31,7 @@ test("Given a bot created by a consumed pairing ticket but never configured, Whe
     expect(
         database
             .prepare(
-                "SELECT user_id, bot_id, display_name, runtime_id, instructions, created_at, updated_at FROM managed_bot ORDER BY bot_id",
+                "SELECT user_id, bot_id, display_name, computer_id, created_at, updated_at FROM managed_bot ORDER BY bot_id",
             )
             .all(),
     ).toEqual([
@@ -39,19 +39,9 @@ test("Given a bot created by a consumed pairing ticket but never configured, Whe
             user_id: "usr_owner",
             bot_id: "bot_configured",
             display_name: "Laptop",
-            runtime_id: "rt_laptop",
-            instructions: "Be brief.",
+            computer_id: "rt_laptop",
             created_at: 1,
             updated_at: 2,
-        },
-        {
-            user_id: "usr_owner",
-            bot_id: "bot_pending",
-            display_name: "My Machine",
-            runtime_id: null,
-            instructions: "",
-            created_at: 5,
-            updated_at: 5,
         },
     ]);
     expect(database.prepare("SELECT name FROM sqlite_master WHERE name = 'agent_pairing_ticket'").all()).toEqual([]);

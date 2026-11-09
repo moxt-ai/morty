@@ -1,4 +1,6 @@
-import { and, desc, eq } from "drizzle-orm";
+import { nativeSessionKey } from "@morty-build/client/native-session";
+import { decodeNativeSessionTarget, type NativeSessionTarget } from "@morty-build/client/protocol";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import * as v from "valibot";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import { chatManagedSession } from "../../../schema/project-do/index.ts";
@@ -7,9 +9,10 @@ import { PlatformProjectError, platformIdentifier } from "../../management/entit
 const summarySchema = v.pipe(
     v.object({
         createdAt: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
-        projectId: platformIdentifier,
+        computerId: platformIdentifier,
         userId: platformIdentifier,
-        id: platformIdentifier,
+        harness: platformIdentifier,
+        sessionId: platformIdentifier,
     }),
     v.readonly(),
 );
@@ -28,49 +31,57 @@ export class ManagedSessionStorage {
         return database;
     };
 
-    readonly list = async (projectId: string, userId: string, botId: string, signal: AbortSignal) => {
+    readonly list = async (computerId: string, userId: string, botId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
             .select({
                 createdAt: chatManagedSession.createdAt,
-                projectId: chatManagedSession.projectId,
+                computerId: chatManagedSession.computerId,
                 userId: chatManagedSession.userId,
-                id: chatManagedSession.resourceId,
+                harness: chatManagedSession.harness,
+                sessionId: chatManagedSession.sessionId,
             })
             .from(chatManagedSession)
             .where(
                 and(
-                    eq(chatManagedSession.projectId, projectId),
+                    eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
+                    isNotNull(chatManagedSession.harness),
+                    isNotNull(chatManagedSession.sessionId),
                 ),
             )
             .orderBy(desc(chatManagedSession.createdAt), chatManagedSession.resourceId);
         signal.throwIfAborted();
-        return v.parse(v.array(summarySchema), result);
+        return v.parse(v.array(summarySchema), result).map(({ harness, sessionId, ...summary }) => ({
+            ...summary,
+            target: { harness, sessionId },
+        }));
     };
 
     readonly save = async (
-        projectId: string,
+        computerId: string,
         userId: string,
         botId: string,
-        record: { readonly id: string },
+        target: NativeSessionTarget,
         signal: AbortSignal,
     ) => {
         const value = v.parse(summarySchema, {
-            ...record,
+            ...decodeNativeSessionTarget(target),
             createdAt: Date.now(),
-            projectId,
+            computerId,
             userId,
         });
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(chatManagedSession)
             .values({
-                projectId: value.projectId,
+                computerId: value.computerId,
                 userId: value.userId,
                 botId,
-                resourceId: value.id,
+                resourceId: nativeSessionKey(target),
+                harness: value.harness,
+                sessionId: value.sessionId,
                 createdAt: value.createdAt,
             })
             .onConflictDoNothing()
@@ -79,10 +90,10 @@ export class ManagedSessionStorage {
     };
 
     readonly ownsSession = async (
-        projectId: string,
+        computerId: string,
         userId: string,
         botId: string,
-        id: string,
+        target: NativeSessionTarget,
         signal: AbortSignal,
     ): Promise<boolean> => {
         signal.throwIfAborted();
@@ -91,10 +102,11 @@ export class ManagedSessionStorage {
             .from(chatManagedSession)
             .where(
                 and(
-                    eq(chatManagedSession.projectId, projectId),
+                    eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
-                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
+                    eq(chatManagedSession.harness, decodeNativeSessionTarget(target).harness),
+                    eq(chatManagedSession.sessionId, target.sessionId),
                 ),
             )
             .get();
@@ -102,11 +114,36 @@ export class ManagedSessionStorage {
         return result !== undefined;
     };
 
-    readonly archive = async (
+    readonly findNative = async (
         projectId: string,
         userId: string,
         botId: string,
-        id: string,
+        target: NativeSessionTarget,
+        signal: AbortSignal,
+    ): Promise<NativeSessionTarget | null> => {
+        signal.throwIfAborted();
+        const found = await this.#requireDatabase()
+            .select({ id: chatManagedSession.resourceId })
+            .from(chatManagedSession)
+            .where(
+                and(
+                    eq(chatManagedSession.computerId, projectId),
+                    eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.botId, botId),
+                    eq(chatManagedSession.harness, target.harness),
+                    eq(chatManagedSession.sessionId, target.sessionId),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return found === undefined ? null : decodeNativeSessionTarget(target);
+    };
+
+    readonly archive = async (
+        computerId: string,
+        userId: string,
+        botId: string,
+        target: NativeSessionTarget,
         signal: AbortSignal,
     ): Promise<void> => {
         signal.throwIfAborted();
@@ -114,10 +151,11 @@ export class ManagedSessionStorage {
             .delete(chatManagedSession)
             .where(
                 and(
-                    eq(chatManagedSession.projectId, projectId),
+                    eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
-                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
+                    eq(chatManagedSession.harness, decodeNativeSessionTarget(target).harness),
+                    eq(chatManagedSession.sessionId, target.sessionId),
                 ),
             )
             .run();

@@ -9,7 +9,7 @@ export class NativeSessionForkStorage {
         this.#database = database;
     }
 
-    readonly read = (projectId: string, operationId: string) =>
+    readonly read = (computerId: string, operationId: string) =>
         this.#database.orm
             .select({
                 requestHash: nativeSessionFork.requestHash,
@@ -17,28 +17,31 @@ export class NativeSessionForkStorage {
                 attemptJson: nativeSessionFork.attemptJson,
             })
             .from(nativeSessionFork)
-            .where(and(eq(nativeSessionFork.projectId, projectId), eq(nativeSessionFork.operationId, operationId)))
+            .where(and(eq(nativeSessionFork.computerId, computerId), eq(nativeSessionFork.operationId, operationId)))
             .get();
 
-    readonly start = (projectId: string, operationId: string, requestHash: string, attemptJson: string): void => {
-        this.#database.orm.insert(nativeSessionFork).values({ projectId, operationId, requestHash, attemptJson }).run();
+    readonly start = (computerId: string, operationId: string, requestHash: string, attemptJson: string): void => {
+        this.#database.orm
+            .insert(nativeSessionFork)
+            .values({ computerId, operationId, requestHash, attemptJson })
+            .run();
     };
 
-    readonly complete = (projectId: string, operationId: string, resultJson: string): void => {
+    readonly complete = (computerId: string, operationId: string, resultJson: string): void => {
         this.#database.orm
             .update(nativeSessionFork)
             .set({ resultJson, attemptJson: null })
-            .where(and(eq(nativeSessionFork.projectId, projectId), eq(nativeSessionFork.operationId, operationId)))
+            .where(and(eq(nativeSessionFork.computerId, computerId), eq(nativeSessionFork.operationId, operationId)))
             .run();
     };
 
     /** Forget an attempt that never completed, so its operation may run again. */
-    readonly abandon = (projectId: string, operationId: string): void => {
+    readonly abandon = (computerId: string, operationId: string): void => {
         this.#database.orm
             .delete(nativeSessionFork)
             .where(
                 and(
-                    eq(nativeSessionFork.projectId, projectId),
+                    eq(nativeSessionFork.computerId, computerId),
                     eq(nativeSessionFork.operationId, operationId),
                     isNull(nativeSessionFork.resultJson),
                 ),

@@ -18,15 +18,13 @@ describe("native session preparation", () => {
         const f = await fixture("Claude Code", "load-only");
         const owner = new AbortController();
         try {
-            const nativeSessionId = await f.seed("Shared preparation");
+            const sessionId = await f.seed("Shared preparation");
             await writeFile(join(f.native, "pause-load"), "");
             const options = {
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
-                sessionId: "shared-loading",
+                target: { harness: f.agent.id, sessionId },
                 signal: owner.signal,
-                origin: { kind: "import", nativeSessionId, title: "" },
             } as const;
             const paused = Promise.withResolvers<void>();
             const watcher = watch(f.native, () => {
@@ -35,7 +33,7 @@ describe("native session preparation", () => {
                     paused.resolve();
                 }
             });
-            const preparing = f.sessions.prepareSession(options);
+            const preparing = f.sessions.openNativeSession(options, { kind: "import", sessionId, title: "" });
             await paused.promise;
             const waiter = new AbortController();
             const cancelled = f.sessions.prepareSession({ ...options, signal: waiter.signal }).then(
@@ -56,7 +54,7 @@ describe("native session preparation", () => {
         const f = await fixture("Claude Code", "load-only");
         const owner = new AbortController();
         try {
-            const nativeSessionId = await f.seed("Closing preparation");
+            const sessionId = await f.seed("Closing preparation");
             await writeFile(join(f.native, "pause-load"), "");
             const paused = Promise.withResolvers<void>();
             const watcher = watch(f.native, () => {
@@ -66,14 +64,14 @@ describe("native session preparation", () => {
                 }
             });
             const preparing = f.sessions
-                .prepareSession({
-                    agent: f.agent,
-                    cwd: f.workspace,
-                    additionalDirectories: [],
-                    sessionId: "closing-loading",
-                    signal: owner.signal,
-                    origin: { kind: "import", nativeSessionId, title: "" },
-                })
+                .openNativeSession(
+                    {
+                        agent: f.agent,
+                        cwd: f.workspace,
+                        signal: owner.signal,
+                    },
+                    { kind: "import", sessionId, title: "" },
+                )
                 .then(
                     () => "completed",
                     () => "cancelled",
@@ -96,15 +94,14 @@ describe("native session preparation", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            sessionIdentity: "assigned",
             onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
+            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
                     kind: content.kind,
                     mediaType: content.mediaType,
                     name: content.name,
-                    sessionId,
+                    target: sessionTarget,
                     signal,
                 }),
             ),
@@ -114,10 +111,13 @@ describe("native session preparation", () => {
         try {
             await external.runPrompt({
                 agent: f.agent,
-                additionalDirectories: [],
                 cwd: f.workspace,
                 signal: new AbortController().signal,
-                sessionId: "external",
+                target: await external.createNativeSession({
+                    agent: f.agent,
+                    cwd: f.workspace,
+                    signal: AbortSignal.timeout(10_000),
+                }),
                 commandId: "external-turn",
                 prompt: "Saved conversation",
                 images: [],
@@ -131,7 +131,6 @@ describe("native session preparation", () => {
                 ...f.identity,
                 action: "import",
                 entryId: entry.entryId,
-                targetSessionId: "imported",
             } satisfies NativeSessionCommand;
             await expect(f.service.execute(command, new AbortController().signal)).rejects.toMatchObject({
                 code: "acp_agent_error",
@@ -139,7 +138,7 @@ describe("native session preparation", () => {
             await external.close();
             expect(await f.service.execute(command, new AbortController().signal)).toMatchObject({
                 action: "import",
-                ready: { sessionId: "imported" },
+                ready: { target: { harness: f.agent.id, sessionId: entry.sessionId } },
             });
         } finally {
             await external.close();
@@ -151,8 +150,8 @@ describe("native session preparation", () => {
     it("Given an Agent returns a detailed internal ACP error, When a user imports its native session, Then the actionable detail is reported", async () => {
         const f = await fixture("Codex", "load-only");
         try {
-            const nativeSessionId = await f.seed("Unavailable native history");
-            const entry = (await f.list()).entries.find((candidate) => candidate.nativeSessionId === nativeSessionId);
+            const sessionId = await f.seed("Unavailable native history");
+            const entry = (await f.list()).entries.find((candidate) => candidate.sessionId === sessionId);
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
@@ -163,7 +162,6 @@ describe("native session preparation", () => {
                         ...f.identity,
                         action: "import",
                         entryId: entry.entryId,
-                        targetSessionId: "failed-import",
                     },
                     new AbortController().signal,
                 ),

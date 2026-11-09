@@ -47,13 +47,13 @@ export function newDevicesSince(
  * looked.
  */
 export function createLinkedDevicesStore(options: {
-    readonly projectId: string;
+    readonly computerId: string;
     readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
     /** Resolves once the device list differs from the one last read. */
     readonly waitForChange: (signal: AbortSignal) => Promise<void>;
     readonly waitForBridge: (signal: AbortSignal) => Promise<void>;
 }) {
-    const seen = linkedDevicesSeenEntry(options.projectId);
+    const seen = linkedDevicesSeenEntry(options.computerId);
     return createStore<LinkedDevicesStore>()((set, get) => {
         let restart: (() => void) | null = null;
         /** Reads the devices; false when they could not be read. */
