@@ -1,5 +1,7 @@
 import type {
+    NativeSessionTarget,
     SessionConfigReadCommand,
+    SessionConfigurationSelection,
     SessionConfigureCommand,
     SessionCreateCommand,
     SessionPrepareCommand,
@@ -27,6 +29,7 @@ import { SessionError } from "../../../session/api/session-error.ts";
 import type { ClosedSessionHandling, SessionManager } from "../../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
 import { applyCompleteSessionConfiguration } from "../../../session/prompt/apply-session-configuration.ts";
+import { type HeldSession, resolveHeldSession } from "../../../session/record/held-session.ts";
 import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
@@ -34,28 +37,39 @@ import type { CommandContext } from "../context.ts";
 import type { RuntimeCommand } from "../definition.ts";
 import { reportOperationFailure, send } from "../transport.ts";
 
-async function prepareSession(
-    command: SessionPrepareCommand,
-    recovery: SessionRecovery,
-    closed: ClosedSessionHandling,
+/** What a preparation of a Session asks for, apart from the Session itself. */
+interface SessionPreparationRequest {
+    readonly requestId: string;
+    /** The complete settings a Session being created starts with. */
+    readonly configurations?: readonly SessionConfigurationSelection[] | undefined;
+    readonly transient?: boolean | undefined;
+}
+
+/** Resolves the Session this Runtime holds for `target`, measured as part of the preparation. */
+const resolveMeasuredHeldSession = async (
+    target: NativeSessionTarget,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
     metrics: AccumulatingOperationMetrics,
     signal: AbortSignal,
+): Promise<HeldSession> =>
+    await metrics.measure(
+        "workspace-resolve",
+        async () => await resolveHeldSession(sessions, resolveAgent, directories, target, signal),
+    );
+
+async function prepareSession(
+    command: SessionPreparationRequest,
+    session: HeldSession,
+    recovery: SessionRecovery,
+    closed: ClosedSessionHandling,
+    sessions: SessionManager,
+    metrics: AccumulatingOperationMetrics,
 ): Promise<SessionReadyEvent> {
     return await metrics.measure("prepare-total", async () => {
-        const resolved = await metrics.measure(
-            "workspace-resolve",
-            async () => await resolveSessionDirectory(directories, command.directory, signal),
-        );
-        const resolvedAgent = await resolveAgent(command.harness, signal, command.target);
-        const preparation = {
-            ...resolvedAgent,
-            cwd: resolved.cwd,
-            target: command.target,
-            signal,
-        };
+        const preparation = session.options;
+        const { target } = preparation;
         const prepare = async (): Promise<PreparedSession> => {
             if (command.transient === true) {
                 return await sessions.inspectSession(preparation, metrics);
@@ -79,11 +93,11 @@ async function prepareSession(
                                 created.configOptions,
                                 configurations,
                                 "refuse",
-                                resolvedAgent.agent,
-                                resolvedAgent.adapter,
-                                resolved.cwd,
+                                preparation.agent,
+                                preparation.adapter,
+                                preparation.cwd,
                                 command.requestId,
-                                command.target,
+                                target,
                                 creationSignal,
                             ),
                     ),
@@ -93,19 +107,19 @@ async function prepareSession(
         };
         const prepared = await prepare();
         return {
-            harness: command.harness,
+            harness: target.harness,
             agentName: prepared.agentName,
             agentVersion: prepared.agentVersion,
             capabilities: prepared.capabilities,
             commands: prepared.commands,
             configOptions: prepared.configOptions,
             configurationRevision: prepared.configurationRevision,
-            directory: command.directory,
-            directoryLabel: resolved.directoryLabel,
+            directory: session.directory,
+            directoryLabel: session.directoryLabel,
             kind: "session.ready",
             requestId: command.requestId,
             restored: prepared.restored,
-            target: command.target,
+            target,
         };
     });
 }
@@ -152,13 +166,11 @@ async function executeSessionPrepare(
     try {
         const readyEvent = await prepareSession(
             command,
+            await resolveMeasuredHeldSession(command.target, resolveAgent, directories, sessions, metrics, signal),
             { kind: "interactive-only" },
             "reopen",
-            resolveAgent,
-            directories,
             sessions,
             metrics,
-            signal,
         );
         send(socket, {
             ...readyEvent,
@@ -169,7 +181,7 @@ async function executeSessionPrepare(
             "session_prepare_failed",
             command.requestId,
             {
-                harness: command.harness,
+                harness: command.target.harness,
                 code: operationErrorCode(error),
                 sessionId: command.target.sessionId,
             },
@@ -200,21 +212,12 @@ async function executeSessionRestore(
             return found;
         });
         const ready = await prepareSession(
-            {
-                harness: entry.harness,
-                directory: entry.directory,
-                kind: "session.prepare",
-                requestId: command.requestId,
-                target: entry.target,
-                sessionState: "provisioned",
-            },
+            command,
+            await resolveMeasuredHeldSession(entry.target, resolveAgent, directories, sessions, metrics, signal),
             { kind: "history-required" },
             "reopen",
-            resolveAgent,
-            directories,
             sessions,
             metrics,
-            signal,
         );
         send(socket, {
             entry,
@@ -286,16 +289,13 @@ async function executeSessionConfigure(
     signal: AbortSignal,
 ): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectory(directories, command.directory, signal);
+        const session = await resolveHeldSession(sessions, resolveAgent, directories, command.target, signal);
         const snapshot = await sessions.configureSession({
-            ...(await resolveAgent(command.harness, signal, command.target)),
+            ...session.options,
             booleanValue: command.booleanValue,
             configId: command.configId,
             expectedConfigurationRevision: command.expectedConfigurationRevision,
-            cwd: resolved.cwd,
             requestId: command.requestId,
-            target: command.target,
-            signal,
             value: command.value,
             valueType: command.valueType,
         });
@@ -366,19 +366,28 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                     signal,
                 });
                 try {
-                    return await prepareSession(
-                        { ...command, kind: SESSION_PREPARE_KIND, target },
-                        { kind: "interactive-only" },
-                        "reopen",
+                    const metrics = new AccumulatingOperationMetrics();
+                    const created = await resolveMeasuredHeldSession(
+                        target,
                         context.resolveAgent,
                         context.directories,
                         context.sessions,
-                        new AccumulatingOperationMetrics(),
+                        metrics,
                         signal,
+                    );
+                    // A created Session reports the directory its creation named.
+                    return await prepareSession(
+                        command,
+                        { ...created, directory: command.directory },
+                        { kind: "interactive-only" },
+                        "reopen",
+                        context.sessions,
+                        metrics,
                     );
                 } catch (cause) {
                     if (!signal.aborted) {
-                        await context.sessions.closeSession(target, signal);
+                        // A refused creation leaves no Session behind in the Sessions this Runtime holds.
+                        await context.sessions.archiveSession(target, signal);
                     }
                     throw cause;
                 }
@@ -524,25 +533,16 @@ async function executeSessionConfigRead(
             return found;
         });
         const ready = await prepareSession(
-            {
-                harness: entry.harness,
-                directory: entry.directory,
-                kind: "session.prepare",
-                requestId: command.requestId,
-                target: command.target,
-                sessionState: "provisioned",
-            },
+            command,
+            await resolveMeasuredHeldSession(entry.target, resolveAgent, directories, sessions, metrics, signal),
             // A settings read must not force history loading: Agents without
             // load support would fail even with a live process whose config is
             // already readable, and prepare reuses the current configuration.
             { kind: "interactive-only" },
             // Reading settings must not reopen a Session that a client closed.
             "keep-closed",
-            resolveAgent,
-            directories,
             sessions,
             metrics,
-            signal,
         );
         send(socket, {
             configOptions: ready.configOptions,

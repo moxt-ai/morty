@@ -71,7 +71,6 @@ test.each(["codex", "claude"] as const)(
                 const prompt = (sessionTarget: RealDaemonPeer["target"], text: string, selectMode = false): void =>
                     peer.send(
                         encodeSessionPromptCommand({
-                            ...identity,
                             kind: "session.prompt",
                             target: sessionTarget,
                             commandId: randomUUID(),
@@ -91,7 +90,6 @@ test.each(["codex", "claude"] as const)(
                     const requestId = randomUUID();
                     peer.send(
                         encodeSessionPrepareCommand({
-                            ...identity,
                             kind: "session.prepare",
                             requestId,
                             target: sessionTarget,

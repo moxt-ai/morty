@@ -199,9 +199,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
         const sendPrompt = (commandId: string, prompt: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    harness: "codex",
                     commandId,
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

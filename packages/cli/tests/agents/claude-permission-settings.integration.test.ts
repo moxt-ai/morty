@@ -45,8 +45,6 @@ test.each([
                         kind: "session.prepare",
                         requestId,
                         target: peer.target,
-                        harness: "claude",
-                        directory: ".",
                     }),
                 );
                 for (;;) {

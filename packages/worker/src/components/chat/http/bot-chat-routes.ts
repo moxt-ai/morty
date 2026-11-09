@@ -342,13 +342,14 @@ export function createBotChatRoutes() {
             async (context) => {
                 const operationId = v.parse(platformIdentifier, context.req.param("operationId"));
                 const { computerId, ...input } = context.req.valid("json");
-                const receipt = await context.env.services.chat.recoverableNativeFork(
-                    context.get("chatScope"),
-                    computerId,
-                    operationId,
-                    input,
+                return privateJson(
+                    await context.env.services.chat.recoverableNativeFork(
+                        context.get("chatScope"),
+                        computerId,
+                        operationId,
+                        input,
+                    ),
                 );
-                return privateJson(receipt.result);
             },
         )
         .post(

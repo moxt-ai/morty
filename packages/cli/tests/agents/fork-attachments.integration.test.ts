@@ -66,7 +66,6 @@ test.each(["pi", "claude", "codex"] as const)(
             }
             peer.send(
                 encodeSessionPromptCommand({
-                    ...identity,
                     kind: "session.prompt",
                     commandId: randomUUID(),
                     target: peer.target,
@@ -130,7 +129,6 @@ test.each(["pi", "claude", "codex"] as const)(
                 }
                 peer.send(
                     encodeSessionPromptCommand({
-                        ...identity,
                         kind: "session.prompt",
                         commandId: randomUUID(),
                         target: childTarget,

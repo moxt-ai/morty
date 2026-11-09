@@ -24,13 +24,11 @@ const interruptedPrompt = "Begin work that will be interrupted by the runtime re
 
 async function journey(peer: RealDaemonPeer, harness: string, reply: string): Promise<void> {
     const sessionTarget = await prepareNewRealSession(peer, harness);
-    const identity = { harness, directory: "." };
     const prompt = "Remember this conversation across a daemon restart";
     const sendAndFinish = async (text: string): Promise<void> => {
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                ...identity,
                 kind: "session.prompt",
                 commandId,
                 target: sessionTarget,
@@ -66,7 +64,7 @@ async function journey(peer: RealDaemonPeer, harness: string, reply: string): Pr
     await sendAndFinish(prompt);
     await peer.restart();
     const requestId = randomUUID();
-    peer.send(encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, target: sessionTarget }));
+    peer.send(encodeSessionPrepareCommand({ kind: "session.prepare", requestId, target: sessionTarget }));
     for (;;) {
         const message = await peer.nextMessage();
         const kind = decodeMessageKind(message);
@@ -170,12 +168,10 @@ async function interruptedJourney(
     let stage = "preparing the original session";
     try {
         const sessionTarget = await prepareNewRealSession(peer, harness);
-        const identity = { harness, directory: "." };
         const commandId = randomUUID();
         const sendPrompt = (id: string, prompt: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    ...identity,
                     kind: "session.prompt",
                     commandId: id,
                     target: sessionTarget,
@@ -205,9 +201,7 @@ async function interruptedJourney(
         }
         stage = "restoring the native session";
         const requestId = randomUUID();
-        peer.send(
-            encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, target: sessionTarget }),
-        );
+        peer.send(encodeSessionPrepareCommand({ kind: "session.prepare", requestId, target: sessionTarget }));
         for (;;) {
             const message = await peer.nextMessage();
             const kind = decodeMessageKind(message);

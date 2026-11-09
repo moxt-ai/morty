@@ -1,6 +1,7 @@
 import {
     decodeAgentSettingsDiscoverCommand,
     decodeNativeSessionRequest,
+    decodeSessionArchiveCommand,
     decodeSessionCloseCommand,
     decodeSessionCreateCommand,
     decodeSessionCreationReadCommand,
@@ -28,7 +29,6 @@ import {
 } from "./project-runtime-session-control-routes.ts";
 import {
     decodeSessionRequest,
-    sessionBindingEntries,
     sessionConfigurationRequest,
     sessionRenameRequest,
     turnAttachmentsSchema,
@@ -40,7 +40,6 @@ const sessionIdentitySchema = v.strictObject({
     harness: identifier,
     directory: v.custom<string>(isDirectoryPath),
 });
-const sessionBindingSchema = v.strictObject(sessionBindingEntries);
 const createSessionSchema = v.strictObject({
     ...sessionIdentitySchema.entries,
     // The Runtime validates each selection; the Relay only bounds the request.
@@ -48,8 +47,9 @@ const createSessionSchema = v.strictObject({
     computerId: identifier,
     operationId: identifier,
 });
+// The Agent's own history of a native session, read from the Agent directory the caller browses.
 const nativeEventsSchema = v.strictObject({
-    ...sessionBindingSchema.entries,
+    directory: v.custom<string>(isDirectoryPath),
     cursor: v.nullable(v.string()),
     eventLimit: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
 });
@@ -64,7 +64,8 @@ const sessionQuerySchema = v.strictObject({
         v.maxLength(500),
     ),
 });
-const sessionRestoreSchema = v.strictObject({});
+// Operations whose request is the Session the path names, with no body fields.
+const emptySessionRequestSchema = v.strictObject({});
 const sessionListQuerySchema = v.strictObject({
     limit: v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/), v.transform(Number), v.safeInteger(), v.maxValue(500)),
 });
@@ -219,10 +220,9 @@ export function createProjectRuntimeRoutes() {
             "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/load",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
-                const body = validated(sessionIdentitySchema, context.req.valid("json"));
+                validated(emptySessionRequestSchema, context.req.valid("json"));
                 const command = decodeSessionPrepareCommand(
                     JSON.stringify({
-                        ...body,
                         kind: "session.prepare",
                         requestId: crypto.randomUUID(),
                         target: sessionTarget(context),
@@ -243,7 +243,7 @@ export function createProjectRuntimeRoutes() {
             "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/restore",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
-                validated(sessionRestoreSchema, context.req.valid("json"));
+                validated(emptySessionRequestSchema, context.req.valid("json"));
                 const command = decodeSessionRestoreCommand(
                     JSON.stringify({
                         kind: "session.restore",
@@ -268,10 +268,32 @@ export function createProjectRuntimeRoutes() {
             "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/close",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
-                validated(sessionRestoreSchema, context.req.valid("json"));
+                validated(emptySessionRequestSchema, context.req.valid("json"));
                 const command = decodeSessionCloseCommand(
                     JSON.stringify({
                         kind: "session.close",
+                        requestId: crypto.randomUUID(),
+                        target: sessionTarget(context),
+                    }),
+                );
+                const result = await context.env.services.runtimePairings.requestControl(
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    bearerToken(context.req.raw),
+                    command,
+                    context.req.raw.signal,
+                );
+                context.header("Cache-Control", "no-store");
+                return context.json(result);
+            },
+        )
+        .post(
+            "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/archive",
+            bodyParser<RelayHttpEnvironment>(),
+            async (context) => {
+                validated(emptySessionRequestSchema, context.req.valid("json"));
+                const command = decodeSessionArchiveCommand(
+                    JSON.stringify({
+                        kind: "session.archive",
                         requestId: crypto.randomUUID(),
                         target: sessionTarget(context),
                     }),
@@ -316,7 +338,7 @@ export function createProjectRuntimeRoutes() {
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = validated(nativeEventsSchema, context.req.valid("json"));
-                const events = await sessionControl(context).previewEvents(body, body);
+                const events = await sessionControl(context).previewEvents(body.directory, body);
                 context.header("Cache-Control", "no-store");
                 return context.json(events);
             },
@@ -325,8 +347,8 @@ export function createProjectRuntimeRoutes() {
             "/computers/:computerId/daemon/harnesses/:harness/sessions/:sessionId/active-turn",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
-                const body = validated(sessionBindingSchema, context.req.valid("json"));
-                const result = await sessionControl(context).activeTurn(body);
+                validated(emptySessionRequestSchema, context.req.valid("json"));
+                const result = await sessionControl(context).activeTurn();
                 context.header("Cache-Control", "no-store");
                 return context.json(result);
             },

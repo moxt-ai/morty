@@ -8,7 +8,6 @@ import {
     DIRECTORY_PATH,
     sessionCapabilitiesSchema,
     sessionCommandSchema,
-    sessionIdentityFields,
     sessionStatusSchema,
 } from "../shared/index.ts";
 import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
@@ -26,6 +25,8 @@ export const SESSION_RESTORED_KIND = "session.restored";
 export const SESSION_CLOSE_KIND = "session.close";
 export const SESSION_CLOSED_KIND = "session.closed";
 export const SESSION_CLOSE_NOTICE_KIND = "session.close.notice";
+export const SESSION_ARCHIVE_KIND = "session.archive";
+export const SESSION_ARCHIVED_KIND = "session.archived";
 /** Failure code of an operation that needs a Session the Runtime has closed and nobody has reopened. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
 export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
@@ -123,9 +124,25 @@ const sessionCloseCommandSchema = z
 
 export type SessionCloseCommand = z.infer<typeof sessionCloseCommandSchema>;
 
+/**
+ * Removes a Session from the Sessions this Runtime holds, which are Morty's directory of Sessions on the computer. The
+ * Runtime closes the Session if it is open, then forgets its record; the Agent's own history of the Session stays, so
+ * opening it from the Agent's sessions brings it back. Archiving a Session the Runtime does not hold succeeds: the
+ * Session is absent afterwards, as asked, so a retry after a lost answer succeeds too.
+ */
+const sessionArchiveCommandSchema = z
+    .object({
+        kind: z.literal(SESSION_ARCHIVE_KIND),
+        requestId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
+    })
+    .readonly();
+
+export type SessionArchiveCommand = z.infer<typeof sessionArchiveCommandSchema>;
+
+/** Opens an existing Session with the Agent and directory the Runtime holds it with. */
 const sessionPrepareCommandSchema = z
     .object({
-        ...sessionIdentityFields,
         /**
          * The complete settings a new Session starts with. The Runtime applies them in dependency order as part of
          * creating the Session: it answers only once every selection holds, and otherwise creates nothing.
@@ -134,6 +151,7 @@ const sessionPrepareCommandSchema = z
         kind: z.literal(SESSION_PREPARE_KIND),
         requestId: IDENTIFIER,
         sessionState: z.literal("provisioned").optional(),
+        target: nativeSessionTargetSchema,
         /** Marks an inspection-only Session preparation. */
         transient: z.boolean().optional(),
     })
@@ -245,6 +263,17 @@ const sessionClosedEventSchema = z
 
 export type SessionClosedEvent = z.infer<typeof sessionClosedEventSchema>;
 
+/** Answers `session.archive` once the Runtime no longer holds the Session. */
+const sessionArchivedEventSchema = z
+    .object({
+        kind: z.literal(SESSION_ARCHIVED_KIND),
+        requestId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
+    })
+    .readonly();
+
+export type SessionArchivedEvent = z.infer<typeof sessionArchivedEventSchema>;
+
 /**
  * Tells every observer that the Runtime closed a Session. Unlike `session.closed`, which answers one
  * `session.close` request, a notice is not tied to a request, so it also reaches clients that did not ask.
@@ -344,6 +373,14 @@ export const decodeSessionClosedEvent = (encoded: string): SessionClosedEvent =>
     decode(encoded, sessionClosedEventSchema);
 export const encodeSessionClosedEvent = (message: SessionClosedEvent): string =>
     encode(message, sessionClosedEventSchema);
+export const decodeSessionArchiveCommand = (encoded: string): SessionArchiveCommand =>
+    decode(encoded, sessionArchiveCommandSchema);
+export const encodeSessionArchiveCommand = (message: SessionArchiveCommand): string =>
+    encode(message, sessionArchiveCommandSchema);
+export const decodeSessionArchivedEvent = (encoded: string): SessionArchivedEvent =>
+    decode(encoded, sessionArchivedEventSchema);
+export const encodeSessionArchivedEvent = (message: SessionArchivedEvent): string =>
+    encode(message, sessionArchivedEventSchema);
 export const decodeSessionCloseNoticeEvent = (encoded: string): SessionCloseNoticeEvent =>
     decode(encoded, sessionCloseNoticeEventSchema);
 export const encodeSessionCloseNoticeEvent = (message: SessionCloseNoticeEvent): string =>

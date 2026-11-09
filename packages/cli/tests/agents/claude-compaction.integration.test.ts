@@ -17,9 +17,7 @@ test("Given Claude Code compacts a conversation with content, When the daemon re
         const sendPrompt = (prompt: string): void => {
             peer.send(
                 encodeSessionPromptCommand({
-                    harness: "claude",
                     commandId: randomUUID(),
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

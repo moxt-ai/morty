@@ -56,19 +56,17 @@ const managedSessionStatusSchema = v.variant("kind", [
     ),
     v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
 ]);
+/** A Session the computer's Runtime holds, as the Runtime describes it. */
 const managedSessionSchema = v.pipe(
     v.object({
-        createdAt: v.pipe(v.string(), v.isoTimestamp()),
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
         directory: v.string(),
-        computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
         target: nativeSessionTargetSchema,
         status: managedSessionStatusSchema,
-        userId: identifier,
     }),
     v.readonly(),
 );
@@ -342,11 +340,13 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request("managed-sessions", {}, signal),
         ).sessions;
-    readonly archiveManagedSession = async (target: NativeSessionTarget, signal: AbortSignal) =>
+    /** Resolves once the Runtime no longer holds the Session; otherwise rejects with the Runtime's failure. */
+    readonly archiveManagedSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> => {
         v.parse(
-            v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),
+            v.object({ target: nativeSessionTargetSchema }),
             await this.#request("managed-session/archive", v.parse(nativeSessionTargetSchema, target), signal),
         );
+    };
     readonly managedSession = async (target: NativeSessionTarget, signal: AbortSignal) => {
         const stored = v.parse(
             managedSdkSessionSchema,

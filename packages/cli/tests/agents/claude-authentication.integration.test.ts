@@ -25,9 +25,7 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    harness: "claude",
                     commandId,
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -59,8 +57,6 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
             const prepareId = randomUUID();
             peer.send(
                 encodeSessionPrepareCommand({
-                    harness: "claude",
-                    directory: ".",
                     kind: "session.prepare",
                     requestId: prepareId,
                     target: sessionTarget,
@@ -125,9 +121,7 @@ test("Given a real Claude answer quotes login diagnostics, When it completes, Th
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                harness: "claude",
                 commandId,
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

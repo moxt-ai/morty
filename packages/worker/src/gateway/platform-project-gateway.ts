@@ -40,6 +40,8 @@ function runtimeSetupMessage(code: string): string {
             return "Morty could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
         case "session_configuration_conflict":
             return "The selected Agent settings could not all be applied. Review the settings and try again.";
+        case "session_close_timeout":
+            return "The agent did not stop in time, so the session is still open. Try again.";
         default:
             return "Morty could not complete Runtime setup.";
     }
@@ -386,19 +388,6 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    /** Reads a committed creation receipt without repeating any harness operation. */
-    readonly readChatSessionCreation = async (computerId: string, operationId: string, signal: AbortSignal) =>
-        await this.#withProject(computerId, signal, async (client) => {
-            try {
-                return await client.sessions.readCreation(operationId, signal);
-            } catch (cause) {
-                if (cause instanceof MortyApiError && cause.code === "session_creation_unavailable") {
-                    return null;
-                }
-                throw cause;
-            }
-        });
-
     /** Grants access to a Session the Runtime has just created and reported ready. */
     readonly createdChatSessionAccess = async (
         computerId: string,
@@ -426,17 +415,7 @@ export class PlatformProjectGateway {
             computerId,
             signal,
             async (client) => {
-                const ready = this.#expectSession(
-                    await client.sessions.load(
-                        input.target,
-                        {
-                            harness: input.harness,
-                            directory: input.workspaceRef,
-                        },
-                        signal,
-                    ),
-                    input.target,
-                );
+                const ready = this.#expectSession(await client.sessions.load(input.target, signal), input.target);
                 return await this.#sessionAccess(client, computerId, input, ready, credentialLifetimeSeconds, signal);
             },
             120000,
@@ -469,6 +448,15 @@ export class PlatformProjectGateway {
             workspaceRef: session.workspaceRef,
         };
     };
+
+    /** The Sessions the Runtime holds, most recently updated first. */
+    readonly listChatSessions = async (computerId: string, limit: number, signal: AbortSignal) =>
+        await this.#withProject(
+            computerId,
+            signal,
+            async (client) => await client.runtimes.listSessions(limit, signal),
+            120000,
+        );
 
     readonly queryChatSessions = async (
         computerId: string,
@@ -511,14 +499,28 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly closeChatSession = async (
+    /** Archives a Session on the Runtime and answers with the Session the Runtime no longer holds. */
+    readonly archiveChatSession = async (
         computerId: string,
         target: NativeSessionTarget,
         signal: AbortSignal,
-    ): Promise<void> =>
-        await this.#withProject(computerId, signal, async (client) => {
-            await client.sessions.close(target, signal);
-        });
+    ): Promise<NativeSessionTarget> =>
+        await this.#withProject(
+            computerId,
+            signal,
+            async (client) => {
+                const archived = await client.sessions.archive(target, signal);
+                if (!sameNativeSession(archived.target, target)) {
+                    throw new PlatformProjectError(
+                        "PLATFORM_INVALID_RESPONSE",
+                        "Morty archived a different Session.",
+                        502,
+                    );
+                }
+                return archived.target;
+            },
+            120000,
+        );
 
     readonly nativeSessionAccess = async (
         computerId: string,
@@ -561,14 +563,14 @@ export class PlatformProjectGateway {
     readonly previewRuntimeNativeEvents = async (
         computerId: string,
         target: NativeSessionTarget,
-        identity: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[1],
+        directory: string,
         page: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[2],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
             computerId,
             signal,
-            async (client) => await client.sessions.previewRuntimeNativeEvents(target, identity, page, signal),
+            async (client) => await client.sessions.previewRuntimeNativeEvents(target, directory, page, signal),
             120000,
         );
 

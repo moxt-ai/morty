@@ -173,8 +173,6 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       kind: "session.prepare",
                                       requestId: crypto.randomUUID(),
                                       target,
-                                      harness: "codex",
-                                      directory: ".",
                                   }),
                         );
                         expected.push({

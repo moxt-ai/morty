@@ -59,10 +59,8 @@ for (const client of ["SDK", "HTTP"] as const) {
             await runtime.client.turns.submitToRuntime(
                 sessionTarget,
                 {
-                    harness: "claude",
                     attachments: [],
                     content: "Remember this conversation",
-                    directory: ".",
                     idempotencyKey: `turn-${crypto.randomUUID()}`,
                 },
                 cancellation.signal,
@@ -152,7 +150,6 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         await runtime.client.turns.submitToRuntime(
             sessionTarget,
             {
-                ...identity,
                 content: "Remember the long workspace conversation",
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
                 attachments: [],
@@ -176,7 +173,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         });
         const events = await runtime.client.sessions.previewRuntimeNativeEvents(
             sessionTarget,
-            identity,
+            directory,
             { cursor: null, eventLimit: 100 },
             signal,
         );
@@ -186,7 +183,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
     }
 });
 
-it("Given a Session in a selected workspace, When the App prompts it and reads its execution without stating its binding, Then the Runtime runs the Turn in the Session's own workspace", async () => {
+it("Given a Session in a selected workspace, When the App prompts it and reads its execution naming only the Session, Then the Runtime runs the Turn in the Session's own workspace", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "morty-session-workspace-"));
     try {
         const directoryLabel = await realpath(workspace);
@@ -230,9 +227,9 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
             },
             signal,
         );
-        await expect(
-            session.sessions.readSessionExecution(sessionTarget, {}, signal, turn.turnId),
-        ).resolves.toHaveProperty("command");
+        await expect(session.sessions.readSessionExecution(sessionTarget, signal, turn.turnId)).resolves.toHaveProperty(
+            "command",
+        );
 
         expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({

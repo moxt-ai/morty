@@ -60,7 +60,6 @@ test("Given native text and structured task snapshots with delimiter-heavy subje
         await writeFile(join(project, `${nativeId}.jsonl`), `${records.join("\n")}\n`);
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
-                harness: "claude",
                 directory: ".",
                 cursor: null,
                 eventLimit: 200,

@@ -31,8 +31,6 @@ async function promptRealSession(
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            harness: "codex",
-            directory: ".",
             prompt: text,
             disposition: SessionPromptDisposition.Append,
             attachments: [],

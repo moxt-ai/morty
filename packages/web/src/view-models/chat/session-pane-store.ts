@@ -358,11 +358,6 @@ export function sessionPanePresentation(
     } as const;
 }
 
-interface SessionIdentity {
-    readonly harness: string;
-    readonly directory: string;
-}
-
 async function readSessionHistory(
     client: MortyClient,
     sessionTarget: NativeSessionTarget,
@@ -539,10 +534,6 @@ export function createSessionPaneModel(options: {
         queuedMessages(store.getState().queued, messageQueue.getState(), deliveryMessages(delivery.getState())).find(
             (message) => message.commandId === commandId,
         ) ?? null;
-    const sessionIdentity: SessionIdentity = {
-        harness: session.harness,
-        directory: session.result.ready.directory,
-    };
     /**
      * Lends the Session's operations this pane's connection as it is now. A failure an operation meets through it
      * closes this pane when it says the Session is closed now, not as it was before a reopening since the lending.
@@ -709,7 +700,6 @@ export function createSessionPaneModel(options: {
             const acceptedBefore = delivery.getState().acceptances;
             const snapshot = await connected.sessions.readSessionExecution(
                 sessionTarget,
-                sessionIdentity,
                 signal,
                 deliveryCommandId ?? undefined,
             );
@@ -882,8 +872,6 @@ export function createSessionPaneModel(options: {
                               );
                     // Freeze semantic intent before delivery owns retries, including identity.
                     return {
-                        harness: session.harness,
-                        directory: session.result.ready.directory,
                         attachments: uploadedAttachments,
                         content: content.trim(),
                     };
@@ -1061,7 +1049,6 @@ export function createSessionPaneModel(options: {
                                             sessionInteractionRecovery(
                                                 await connected.sessions.readSessionExecution(
                                                     sessionTarget,
-                                                    sessionIdentity,
                                                     readSignal,
                                                 ),
                                             ),
@@ -1466,7 +1453,7 @@ export function createSessionPaneModel(options: {
                 if (!canChangeSettings(operationFacts())) {
                     return;
                 }
-                await settings.getState().configure(sessionIdentity, option, value, booleanValue, signal);
+                await settings.getState().configure(option, value, booleanValue, signal);
             },
             openTitleEdit: () => {
                 // A new edit replaces the failure the last rename left.

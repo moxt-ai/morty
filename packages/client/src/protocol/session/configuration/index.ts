@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodMessage, decodeZodValue, encodeZodMessage } from "../../shared/message-codec.ts";
-import { configValueSchema, SHORT_TEXT, sessionIdentityFields } from "../shared/index.ts";
+import { configValueSchema, SHORT_TEXT } from "../shared/index.ts";
 import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_CONFIGURE_KIND = "session.configure";
@@ -114,12 +114,12 @@ export const sessionConfigurationSelectionsSchema = z
 
 const sessionConfigureCommandSchema = z
     .object({
-        ...sessionIdentityFields,
         booleanValue: z.boolean(),
         configId: z.string().min(1).max(128),
         expectedConfigurationRevision: IDENTIFIER,
         kind: z.literal(SESSION_CONFIGURE_KIND),
         requestId: IDENTIFIER,
+        target: nativeSessionTargetSchema,
         value: z.string().max(500),
         valueType: z.enum(["boolean", "select"]),
     })

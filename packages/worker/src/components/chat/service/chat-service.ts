@@ -1,4 +1,4 @@
-import { NativeSessionMap, nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
+import { nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeIdentifier,
     decodeMessageKind,
@@ -8,7 +8,6 @@ import {
     type NativeSessionTarget,
     SESSION_CLOSE_NOTICE_KIND,
     type SessionCloseNoticeEvent,
-    type SessionReadyEvent,
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
@@ -16,10 +15,11 @@ import { PlatformProjectError } from "../../management/entity/platform-project.t
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
-import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
 const OPENED_SESSION_CREDENTIAL_SECONDS = 900;
+/** The most Sessions one Session list read returns: the Runtime's own bound. */
+const LISTED_SESSION_LIMIT = 500;
 const RENEWED_SESSION_CREDENTIAL_SECONDS = 600;
 /** The Platform issues no Session credential that lasts less than this. */
 export const MINIMUM_SESSION_CREDENTIAL_SECONDS = 60;
@@ -38,8 +38,8 @@ function sessionCredentialLifetime(usualSeconds: number, accessExpiresAt: number
 
 /**
  * Sent once the stream reaches the Runtime. `sessions: "owned"` promises that `statuses` holds the current status of
- * each Session the user owns and that the changes of every Session the user owns follow, including Sessions created
- * later. An older Chat Worker sent neither: it followed only the changes of the Sessions owned when the stream started.
+ * each Session the Runtime holds for the computer's owner and that the changes of every such Session follow, including
+ * Sessions created later.
  */
 export const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
 
@@ -91,7 +91,6 @@ type ConfigureBotInput = {
     readonly computerId: string;
     readonly harness: string;
 };
-type ManagedSessionArchival = { readonly close: "confirmed" | "unconfirmed" };
 
 async function chatOperationId(scope: ChatScope, key: string): Promise<string> {
     const digest = await crypto.subtle.digest(
@@ -115,30 +114,11 @@ function notInRecentSessions(): never {
 }
 
 /**
- * A managed Session that the scope's user owns through its Machine. `find` is the only way to construct one: it reads
- * Morty's ownership record, so work on an existing managed Session cannot start from an unchecked client identifier.
+ * Morty's Sessions on a computer are the Sessions its Runtime holds: the Runtime alone says which exist, and the cloud
+ * keeps no list of its own. A computer has one owner, whom every authorized scope acts as, so each Session the Runtime
+ * holds is the scope's.
  */
-class OwnedManagedSession {
-    readonly scope: ChatScope;
-    readonly target: NativeSessionTarget;
-
-    private constructor(scope: ChatScope, target: NativeSessionTarget) {
-        this.scope = scope;
-        this.target = target;
-    }
-
-    static readonly find = async (
-        sessions: ManagedSessionStorage,
-        scope: ChatScope,
-        target: NativeSessionTarget,
-    ): Promise<OwnedManagedSession | null> =>
-        (await sessions.ownsSession(scope.computerId, scope.userId, target, scope.signal))
-            ? new OwnedManagedSession(scope, target)
-            : null;
-}
-
 export class ChatService {
-    readonly #chatSessions: ManagedSessionStorage;
     readonly #identities: IdentityStorage;
     readonly #managedBots: ManagedBotStorage;
     readonly #platform: PlatformProjectGateway;
@@ -148,12 +128,10 @@ export class ChatService {
         readonly sessionOperations: ManagedSessionOperations | undefined;
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
         readonly storages: {
-            readonly chatSessions: ManagedSessionStorage;
             readonly identities: IdentityStorage;
             readonly managedBots: ManagedBotStorage;
         };
     }) {
-        this.#chatSessions = cx.storages.chatSessions;
         this.#identities = cx.storages.identities;
         this.#managedBots = cx.storages.managedBots;
         this.#platform = cx.gateways.platformProjects;
@@ -229,20 +207,20 @@ export class ChatService {
     };
 
     /**
-     * Runs an operation on an existing managed Session after every earlier one on that Session has finished. Ownership
-     * is resolved inside that turn, so archival cannot overtake a reopen that has already passed the check. `notOwned`
-     * is what the endpoint reports for a Session the scope does not own.
+     * Runs an operation on an existing Session after every earlier one on that Session has finished, so archival cannot
+     * overtake a reopen that has already found the Session.
      */
-    readonly #withOwnedManagedSession = <Result>(
+    readonly #withSession = <Result>(
         scope: ChatScope,
         target: NativeSessionTarget,
-        notOwned: () => Result,
-        operation: (session: OwnedManagedSession) => Promise<Result>,
-    ): Promise<Result> =>
-        this.#runSessionOperation(nativeSessionKey(target), scope.signal, async () => {
-            const session = await OwnedManagedSession.find(this.#chatSessions, scope, target);
-            return session === null ? notOwned() : await operation(session);
-        });
+        operation: () => Promise<Result>,
+    ): Promise<Result> => this.#runSessionOperation(nativeSessionKey(target), scope.signal, operation);
+
+    /** The Runtime's description of a Session it holds; a Session it does not hold is not in Recent sessions. */
+    readonly #heldSession = async (scope: ChatScope, target: NativeSessionTarget) =>
+        (await this.#platform.queryChatSessions(scope.computerId, [target], scope.signal)).find((session) =>
+            sameNativeSession(session.target, target),
+        ) ?? notInRecentSessions();
 
     /** Runs an operation on a Session after every earlier one on that Session has finished. */
     readonly #runSessionOperation = <Result>(
@@ -277,50 +255,27 @@ export class ChatService {
         }
     };
 
+    /** The Sessions the Runtime holds, most recently updated first. */
     readonly managedSessions = async (scope: ChatScope) => {
         const _runtime = await this.localRuntime(scope);
-        const owned = await this.#chatSessions.list(scope.computerId, scope.userId, scope.signal);
-        if (owned.length === 0) {
-            return { sessions: [] };
-        }
-        const metadata = await this.#platform.queryChatSessions(
-            scope.computerId,
-            owned.map((session) => session.target),
-            scope.signal,
-        );
-        const byId = new NativeSessionMap<(typeof metadata)[number]>();
-        for (const session of metadata) {
-            byId.set(session.target, session);
-        }
-        // The Runtime alone says which Sessions exist; an owner record says only whose they are. A record whose Session
-        // the Runtime does not hold, such as a start that never reached it, is not a conversation.
+        const sessions = await this.#platform.listChatSessions(scope.computerId, LISTED_SESSION_LIMIT, scope.signal);
         return {
-            sessions: owned.flatMap((session) => {
-                const details = byId.get(session.target);
-                if (details === undefined) {
-                    return [];
-                }
-                return [
-                    {
-                        ...session,
-                        createdAt: new Date(session.createdAt).toISOString(),
-                        directory: details.directory,
-                        directoryLabel: details.directoryLabel,
-                        prompted: details.prompted,
-                        target: { harness: details.harness, sessionId: details.sessionId },
-                        status: details.status,
-                        title: details.title,
-                        updatedAt: details.updatedAt,
-                    },
-                ];
-            }),
+            sessions: sessions.map((session) => ({
+                directory: session.directory,
+                directoryLabel: session.directoryLabel,
+                prompted: session.prompted,
+                target: session.target,
+                status: session.status,
+                title: session.title,
+                updatedAt: session.updatedAt,
+            })),
         };
     };
 
     /**
-     * Publishes the current status of each of the caller's Sessions with the following notice, then their activity
-     * changes and close notices, until the stream ends. Whether a Session is the caller's is read when its event arrives, so Sessions created or
-     * archived while the stream runs need no new stream.
+     * Publishes the current status of each Session the Runtime holds with the following notice, then their activity
+     * changes and close notices, until the stream ends. Sessions created or archived while the stream runs need no new
+     * stream.
      */
     readonly subscribeManagedSessionStatuses = async (
         scope: ChatScope,
@@ -348,21 +303,15 @@ export class ChatService {
                 socket.close(1000, "Session status subscription closed");
                 reject(cause);
             };
-            // Events are published in the order they arrive, each once its ownership has been read.
+            // Events are published in the order they arrive, after the current statuses.
             let published = Promise.resolve();
             const inOrder = (step: () => Promise<void>): void => {
                 published = published.then(step);
                 published.catch((cause: unknown) => finish(signal.aborted ? signal.reason : cause));
             };
-            const publishOwned = (event: SessionStatusChangedEvent | SessionCloseNoticeEvent): void =>
+            const publishEvent = (event: SessionStatusChangedEvent | SessionCloseNoticeEvent): void =>
                 inOrder(async () => {
-                    const owned = await this.#chatSessions.ownsSession(
-                        scope.computerId,
-                        scope.userId,
-                        event.target,
-                        signal,
-                    );
-                    if (owned && !settled) {
+                    if (!settled) {
                         await publish(event);
                     }
                 });
@@ -395,11 +344,11 @@ export class ChatService {
                         return;
                     }
                     if (kind === SESSION_CLOSE_NOTICE_KIND) {
-                        publishOwned(decodeSessionCloseNoticeEvent(event.data));
+                        publishEvent(decodeSessionCloseNoticeEvent(event.data));
                         return;
                     }
                     if (kind === "session.status.changed") {
-                        publishOwned(decodeSessionStatusChangedEvent(event.data));
+                        publishEvent(decodeSessionStatusChangedEvent(event.data));
                     }
                 } catch (cause) {
                     finish(
@@ -464,18 +413,14 @@ export class ChatService {
         const access =
             "conversationKey" in input
                 ? await this.#openNewChat(scope, input)
-                : await this.#withOwnedManagedSession(
-                      scope,
-                      await this.#ownedNativeSessionTarget(scope, input),
-                      notInRecentSessions,
-                      (session) => this.#reopenManagedSession(session),
-                  );
+                : await this.#withSession(scope, input, () => this.#reopenManagedSession(scope, input));
         return access;
     };
 
     /**
-     * First send creates a harness Session. Its operation identity permits recovery without inventing a conversation
-     * identity. A failed retry never removes ownership established by a previous attempt.
+     * First send creates a harness Session under an operation identity derived from the draft. The Runtime keeps the
+     * creation's receipt under it, so a retry after a lost answer opens the Session the first attempt created instead
+     * of creating another.
      */
     readonly #openNewChat = async (scope: ChatScope, input: NewChatInput) => {
         await this.#requireRuntimeAgent(scope, input.harness);
@@ -486,47 +431,11 @@ export class ChatService {
             harness: input.harness,
             workspaceRef: input.workspaceRef,
         };
-        // Serialize creation, initial configuration, and ownership recovery for the same operation.
-        const ready = await this.#runSessionOperation(session.operationId, scope.signal, async () => {
-            let created: SessionReadyEvent;
-            try {
-                created = await this.#platform.createChatSession(
-                    scope.computerId,
-                    { ...session, configurations: input.configurations },
-                    scope.signal,
-                );
-            } catch (cause) {
-                scope.signal.throwIfAborted();
-                if (cause instanceof PlatformProjectError && cause.status >= 500) {
-                    // Recover ownership after response loss by reading a receipt, never by issuing another create.
-                    try {
-                        const recovered = await this.#platform.readChatSessionCreation(
-                            scope.computerId,
-                            session.operationId,
-                            scope.signal,
-                        );
-                        if (
-                            recovered !== null &&
-                            recovered.harness === input.harness &&
-                            recovered.directory === input.workspaceRef
-                        ) {
-                            await this.#chatSessions.save(
-                                scope.computerId,
-                                scope.userId,
-                                recovered.target,
-                                scope.signal,
-                            );
-                        }
-                    } catch {
-                        scope.signal.throwIfAborted();
-                        // The original failure remains authoritative; retry keeps the same operation identity.
-                    }
-                }
-                throw cause;
-            }
-            await this.#chatSessions.save(scope.computerId, scope.userId, created.target, scope.signal);
-            return created;
-        });
+        const ready = await this.#platform.createChatSession(
+            scope.computerId,
+            { ...session, configurations: input.configurations },
+            scope.signal,
+        );
         return await this.#platform.createdChatSessionAccess(
             scope.computerId,
             { ...session, target: ready.target },
@@ -536,13 +445,8 @@ export class ChatService {
         );
     };
 
-    readonly #reopenManagedSession = async ({ scope, target }: OwnedManagedSession) => {
-        const metadata = (await this.#platform.queryChatSessions(scope.computerId, [target], scope.signal)).find(
-            (session) => sameNativeSession(session.target, target),
-        );
-        if (metadata === undefined) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
-        }
+    readonly #reopenManagedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
+        const metadata = await this.#heldSession(scope, target);
         return await this.#platform.openChatSession(
             scope.computerId,
             {
@@ -557,13 +461,10 @@ export class ChatService {
         );
     };
 
+    /** Issues a credential for a Session the Runtime holds. */
     readonly nativeSessionAccess = async (scope: ChatScope, target: NativeSessionTarget) => {
-        const sessionTarget = await this.#ownedNativeSessionTarget(scope, target);
-        const session = await OwnedManagedSession.find(this.#chatSessions, scope, sessionTarget);
-        if (session === null) {
-            throw new PlatformProjectError("NOT_FOUND", "The session was not found.", 404);
-        }
         const _runtime = await this.localRuntime(scope);
+        const session = await this.#heldSession(scope, target);
         return await this.#platform.nativeSessionAccess(
             scope.computerId,
             session.target,
@@ -572,21 +473,11 @@ export class ChatService {
         );
     };
 
-    readonly #ownedNativeSessionTarget = async (
-        scope: ChatScope,
-        target: NativeSessionTarget,
-    ): Promise<NativeSessionTarget> => {
-        return (
-            (await this.#chatSessions.findNative(scope.computerId, scope.userId, target, scope.signal)) ??
-            notInRecentSessions()
-        );
-    };
-
     readonly managedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
         await this.#bot(scope);
-        const sessionTarget = await this.#ownedNativeSessionTarget(scope, target);
-        return await this.#withOwnedManagedSession(scope, sessionTarget, notInRecentSessions, async (session) => {
+        return await this.#withSession(scope, target, async () => {
             const runtime = await this.localRuntime(scope);
+            const session = await this.#heldSession(scope, target);
             const restored = await this.#platform.readChatSession(scope.computerId, runtime, target, scope.signal);
             if (!sameNativeSession(restored.ready.target, session.target)) {
                 throw new PlatformProjectError(
@@ -599,32 +490,16 @@ export class ChatService {
         });
     };
 
-    readonly archiveManagedSession = async (
-        scope: ChatScope,
-        target: NativeSessionTarget,
-    ): Promise<ManagedSessionArchival> => {
-        const sessionTarget = await this.#chatSessions.findNative(scope.computerId, scope.userId, target, scope.signal);
-        if (sessionTarget === null) {
-            return { close: "unconfirmed" };
-        }
-        return await this.#withOwnedManagedSession<ManagedSessionArchival>(
-            scope,
-            sessionTarget,
-            () => ({ close: "unconfirmed" }),
-            async (session) => {
-                const _runtime = await this.localRuntime(scope);
-                let close: ManagedSessionArchival["close"] = "unconfirmed";
-                try {
-                    await this.#platform.closeChatSession(scope.computerId, session.target, scope.signal);
-                    close = "confirmed";
-                } catch {
-                    scope.signal.throwIfAborted();
-                }
-                // Archival stays available to an offline Runtime, but does not prove its process stopped.
-                await this.#chatSessions.archive(scope.computerId, scope.userId, session.target, scope.signal);
-                return { close };
-            },
-        );
+    /**
+     * Archives the Session on the Runtime, which closes it and forgets it, so it leaves the list. It answers only once
+     * the Runtime no longer holds the Session, and fails as the Runtime does otherwise, so a Session the Runtime still
+     * holds stays listed. Archiving a Session the Runtime does not hold succeeds.
+     */
+    readonly archiveManagedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
+        const _runtime = await this.localRuntime(scope);
+        return await this.#withSession(scope, target, async () => ({
+            target: await this.#platform.archiveChatSession(scope.computerId, target, scope.signal),
+        }));
     };
 
     readonly nativeSessions = async (scope: ChatScope, requestedComputerId: string, input: NativeListInput) => {
@@ -674,9 +549,7 @@ export class ChatService {
         if (result.action !== "import") {
             throw new PlatformProjectError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
         }
-        const stored = { harness: agent.harness, result, entry };
-        await this.#chatSessions.save(scope.computerId, scope.userId, result.target, scope.signal);
-        return stored;
+        return { harness: agent.harness, result, entry };
     };
 
     readonly previewNativeSession = async (
@@ -688,10 +561,7 @@ export class ChatService {
         const events = await this.#platform.previewRuntimeNativeEvents(
             scope.computerId,
             { harness: input.harness, sessionId: input.sessionId },
-            {
-                harness: input.harness,
-                directory: input.directory,
-            },
+            input.directory,
             { cursor: null, eventLimit: 200 },
             scope.signal,
         );
@@ -717,8 +587,6 @@ export class ChatService {
                 409,
             );
         }
-        const target = await this.#readNativeTarget(scope, result.ready);
-        await this.#chatSessions.save(scope.computerId, scope.userId, target, scope.signal);
         return result;
     };
 
@@ -734,30 +602,7 @@ export class ChatService {
             scope.computerId,
             `${scope.userId}\u0000fork\u0000${operationId}`,
         );
-        const receipt = await this.#platform.forkNativeSession(
-            scope.computerId,
-            scopedOperationId,
-            input,
-            scope.signal,
-        );
-        const target = await this.#readNativeTarget(scope, receipt.result.ready);
-        await this.#chatSessions.save(scope.computerId, scope.userId, target, scope.signal);
-        return receipt;
-    };
-
-    readonly #readNativeTarget = async (scope: ChatScope, ready: SessionReadyEvent): Promise<NativeSessionTarget> => {
-        const entries = await this.#platform.queryChatSessions(scope.computerId, [ready.target], scope.signal);
-        const entry = entries.find(
-            (entry) => sameNativeSession(entry.target, ready.target) && entry.harness === ready.harness,
-        );
-        if (entry === undefined) {
-            throw new PlatformProjectError(
-                "PLATFORM_INVALID_RESPONSE",
-                "Morty could not identify the native Session.",
-                502,
-            );
-        }
-        return { harness: entry.harness, sessionId: entry.sessionId };
+        return await this.#platform.forkNativeSession(scope.computerId, scopedOperationId, input, scope.signal);
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {

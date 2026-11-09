@@ -69,8 +69,6 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                         kind: "session.prompt",
                         commandId,
                         target: peer.target,
-                        harness: "claude",
-                        directory: ".",
                         attachments: [],
                         ...(steering
                             ? { disposition: "steer" as const, targetCommandId: main }
@@ -134,8 +132,6 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                         action: "active-turn",
                         requestId,
                         target: peer.target,
-                        harness: "claude",
-                        directory: ".",
                     }),
                 );
                 for (;;) {

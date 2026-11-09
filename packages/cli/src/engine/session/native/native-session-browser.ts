@@ -12,7 +12,7 @@ import {
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { NativeSessionInfo } from "../../acp/protocol/native-session.ts";
 import { sessionIdSchema } from "../../acp/protocol/native-session.ts";
-import type { ResolveAgent, SessionCreationOptions, SessionPrepareOptions } from "../api/session-api.ts";
+import type { ResolveAgent, SessionCreationOptions } from "../api/session-api.ts";
 import { RuntimeOperations } from "../manager/operation-drain.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import type { SessionCreations } from "../record/session-creations.ts";
@@ -31,6 +31,12 @@ interface AuthorizedNativeSession {
     readonly directory: string;
     readonly directoryLabel: string;
 }
+
+/** What an execution read of a Session this Runtime holds reports; a Session it does not hold is refused. */
+export type ActiveTurnRead = Pick<
+    Extract<NativeSessionResult, { readonly action: "active-turn" }>,
+    "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
+>;
 
 const MAXIMUM_SESSION_TITLE_LENGTH = 500;
 const forkSuffixPattern = / \(Fork #([1-9][0-9]*)\)$/u;
@@ -66,28 +72,14 @@ export class NativeSessionService {
     readonly #creations: SessionCreations;
     readonly #activeTurn: (
         command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>,
-        options: SessionPrepareOptions,
-    ) => Promise<
-        Pick<
-            Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-            "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
-        >
-    >;
+    ) => ActiveTurnRead;
 
     constructor(
         resolveAgent: ResolveAgent,
         directories: WorkspaceDirectoryService,
         sessions: SessionManager,
         creations: SessionCreations,
-        activeTurn: (
-            command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>,
-            options: SessionPrepareOptions,
-        ) => Promise<
-            Pick<
-                Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-                "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
-            >
-        >,
+        activeTurn: (command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>) => ActiveTurnRead,
     ) {
         this.#resolveAgent = resolveAgent;
         this.#directories = directories;
@@ -123,6 +115,16 @@ export class NativeSessionService {
 
     readonly #execute = async (command: NativeSessionCommand, signal: AbortSignal): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
+        if (command.action === "active-turn") {
+            return {
+                action: "active-turn",
+                kind: "native.session.result",
+                requestId: command.requestId,
+                target: command.target,
+                ...this.#activeTurn(command),
+                queuedCancellation: "before-start",
+            };
+        }
         const cwd = await this.#directories.resolve(command.directory, signal);
         signal.throwIfAborted();
         const options: SessionCreationOptions = {
@@ -130,24 +132,6 @@ export class NativeSessionService {
             cwd,
             signal,
         };
-        if (command.action === "active-turn") {
-            sessionIdSchema.parse(command.target.sessionId);
-            if (command.target.harness !== command.harness) {
-                throw new AcpExecutionError(
-                    "The native Session belongs to a different harness",
-                    {},
-                    "session_identity_mismatch",
-                );
-            }
-            return {
-                action: "active-turn",
-                kind: "native.session.result",
-                requestId: command.requestId,
-                target: command.target,
-                ...(await this.#activeTurn(command, { ...options, target: command.target })),
-                queuedCancellation: "before-start",
-            };
-        }
         const capabilities = await options.adapter.getCapabilities(nativeSessionQuery(options));
         if (!capabilities.listSessions) {
             throw new AcpExecutionError(

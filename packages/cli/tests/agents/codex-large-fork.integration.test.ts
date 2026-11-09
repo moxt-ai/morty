@@ -29,8 +29,6 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                     kind: "session.prompt",
                     commandId,
                     target: sourceSessionId,
-                    harness: "codex",
-                    directory: ".",
                     attachments: [],
                     prompt: `Question ${turn}: answer without using tools`,
                     disposition: SessionPromptDisposition.Append,
@@ -142,7 +140,6 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
         const continuedId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                ...identity,
                 kind: "session.prompt",
                 target: forked.target,
                 commandId: continuedId,

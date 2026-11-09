@@ -107,8 +107,6 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
                 kind: "session.prompt",
                 commandId,
                 target: imported.target,
-                harness: "codex",
-                directory: ".",
                 attachments: [],
                 prompt: "Continue this conversation after installation",
                 disposition: SessionPromptDisposition.Append,

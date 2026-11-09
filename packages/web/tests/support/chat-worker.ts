@@ -90,10 +90,8 @@ export async function createChatWorkerEnvironment(
                         runtime.computerId,
                         { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         {
-                            harness: agents[0]?.harness ?? "codex",
                             booleanValue: false,
                             configId: "model",
-                            directory: ".",
                             expectedConfigurationRevision: snapshot.configurationRevision,
                             value,
                             valueType: "select",
@@ -106,10 +104,8 @@ export async function createChatWorkerEnvironment(
                     await runtime.client.turns.submitToRuntime(
                         { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         {
-                            harness: agents[0]?.harness ?? "codex",
                             attachments: [],
                             content,
-                            directory: ".",
                             idempotencyKey: crypto.randomUUID(),
                         },
                         AbortSignal.timeout(30_000),

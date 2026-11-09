@@ -377,9 +377,7 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
 
 function prompt(fixture: Fixture, text: string): SessionPromptCommand {
     return {
-        harness: fixture.agent.harness,
         commandId: "test-turn",
-        directory: ".",
         disposition: SessionPromptDisposition.Append,
         attachments: [],
         kind: "session.prompt",
@@ -494,8 +492,6 @@ async function activeTurn(fixture: Fixture, command: SessionPromptCommand) {
         fixture.socket,
         encodeNativeSessionRequest({
             action: "active-turn",
-            harness: fixture.agent.harness,
-            directory: ".",
             kind: "native.session.request",
             requestId: "active",
             target: command.target,

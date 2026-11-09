@@ -60,8 +60,6 @@ if (process.argv.includes("--version")) {
             async (peer) => {
                 peer.send(
                     encodeSessionPrepareCommand({
-                        harness: "controlled-acp",
-                        directory: ".",
                         kind: "session.prepare",
                         requestId: "prepare-external-image-session",
                         target: peer.target,
@@ -74,9 +72,7 @@ if (process.argv.includes("--version")) {
                 }
                 peer.send(
                     encodeSessionPromptCommand({
-                        harness: "controlled-acp",
                         commandId: "external-image-seed-turn",
-                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

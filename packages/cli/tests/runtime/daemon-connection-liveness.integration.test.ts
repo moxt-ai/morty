@@ -1040,8 +1040,6 @@ describe("daemon relay connection liveness", () => {
                             kind: SESSION_PROMPT_KIND,
                             commandId,
                             target: sessionTarget,
-                            harness: "codex",
-                            directory: ".",
                             disposition: "append",
                             attachments: [],
                             prompt: "broadcast without viewers",
@@ -1089,9 +1087,7 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        harness: "codex",
                         commandId: `live-command-${turn}`,
-                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: SESSION_PROMPT_KIND,

@@ -41,8 +41,6 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 kind: "session.prompt",
                 commandId,
                 target: peer.target,
-                harness: "codex",
-                directory: ".",
                 attachments: [],
                 prompt,
                 disposition: SessionPromptDisposition.Append,

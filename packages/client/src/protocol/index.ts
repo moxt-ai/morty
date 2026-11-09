@@ -316,6 +316,8 @@ export type {
 export { decodeInteraction } from "./session/interactions/model.ts";
 
 export type {
+    SessionArchiveCommand,
+    SessionArchivedEvent,
     SessionCloseCommand,
     SessionClosedEvent,
     SessionCloseNoticeEvent,
@@ -338,6 +340,8 @@ export type {
 } from "./session/lifecycle/index.ts";
 
 export {
+    decodeSessionArchiveCommand,
+    decodeSessionArchivedEvent,
     decodeSessionCloseCommand,
     decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
@@ -356,6 +360,8 @@ export {
     decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
+    encodeSessionArchiveCommand,
+    encodeSessionArchivedEvent,
     encodeSessionCloseCommand,
     encodeSessionClosedEvent,
     encodeSessionCloseNoticeEvent,
@@ -374,6 +380,8 @@ export {
     encodeSessionStatusChangedEvent,
     encodeSessionsListedEvent,
     encodeSessionsQueriedEvent,
+    SESSION_ARCHIVE_KIND,
+    SESSION_ARCHIVED_KIND,
     SESSION_CLOSE_KIND,
     SESSION_CLOSE_NOTICE_KIND,
     SESSION_CLOSED_ERROR_CODE,
