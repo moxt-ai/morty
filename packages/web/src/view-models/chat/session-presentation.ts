@@ -62,11 +62,11 @@ export type SessionMessage =
               | {
                     readonly kind: "message";
                     readonly content: SessionContentBlock;
-                    readonly messageId: string | null;
+                    readonly messageId: string;
                     /** Questions the message asks while the Agent keeps working; the user answers with a message. */
                     readonly questions: readonly AgentQuestion[];
                 }
-              | { readonly kind: "thought"; readonly content: SessionContentBlock; readonly messageId: string | null }
+              | { readonly kind: "thought"; readonly content: SessionContentBlock; readonly messageId: string }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
               | {
                     readonly kind: "compaction";
@@ -378,7 +378,7 @@ function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessio
                 presentation: {
                     content: sessionContent(update.content),
                     kind: "message",
-                    messageId: update.messageId ?? null,
+                    messageId: update.messageId,
                     questions: update.questions ?? [],
                 },
                 role: "assistant",
@@ -390,7 +390,7 @@ function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessio
                 presentation: {
                     content: sessionContent(update.content, REASONING_CHARACTER_LIMIT),
                     kind: "thought",
-                    messageId: update.messageId ?? null,
+                    messageId: update.messageId,
                 },
                 role: "assistant",
             };
@@ -601,7 +601,7 @@ function consumeSessionEvent(
         if (message === null) {
             return { kind: "skipped" };
         }
-        if (message.role === "user" && update.sessionUpdate === "user_message_chunk" && update.messageId != null) {
+        if (message.role === "user" && update.sessionUpdate === "user_message_chunk") {
             const existingIndex = entries.findIndex((entry) => {
                 if (entry.kind !== "message" || entry.message.role !== "user") {
                     return false;
@@ -631,7 +631,6 @@ function consumeSessionEvent(
                   firstEvent:
                       message.role === "user" &&
                       update.sessionUpdate === "user_message_chunk" &&
-                      update.messageId != null &&
                       entries.length === 0 &&
                       leadingEvent !== "known"
                           ? "possibly-before-page-visible"
