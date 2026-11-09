@@ -7,7 +7,7 @@ module.exports = {
                 path: [
                     "^packages/worker/src/(schema|storage|entity|infra)/",
                     "^packages/worker/src/components/[^/]+/(schema|storage|entity|infra)/",
-                    "^packages/(relay|relay-core|recording)/src/(schema|storage|entity|infra)/",
+                    "^packages/(relay|relay-core)/src/(schema|storage|entity|infra)/",
                 ],
             },
             to: {
@@ -15,7 +15,7 @@ module.exports = {
                 path: [
                     "^packages/worker/src/(service|http|composition|gateway|do)/",
                     "^packages/worker/src/components/[^/]+/(service|http|composition|gateway|do)/",
-                    "^packages/(relay|relay-core|recording)/src/(service|http|composition|gateway|durable-objects|di|middleware)/",
+                    "^packages/(relay|relay-core)/src/(service|http|composition|gateway|durable-objects|di|middleware)/",
                 ],
             },
         },
@@ -25,16 +25,13 @@ module.exports = {
             comment:
                 "Routes translate requests and call services; persistence belongs to storage behind a service (http -> service -> storage).",
             from: {
-                path: [
-                    "^packages/worker/src/components/[^/]+/http/",
-                    "^packages/(worker|relay|relay-core|recording)/src/http/",
-                ],
+                path: ["^packages/worker/src/components/[^/]+/http/", "^packages/(worker|relay|relay-core)/src/http/"],
             },
             to: {
                 path: [
                     "^packages/worker/src/storage/",
                     "^packages/worker/src/components/[^/]+/storage/",
-                    "^packages/(relay|relay-core|recording)/src/storage/",
+                    "^packages/(relay|relay-core)/src/storage/",
                 ],
                 dependencyTypesNot: ["type-only"],
             },

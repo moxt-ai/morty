@@ -60,8 +60,6 @@ def main():
     env.pop('CLOUDFLARE_API_TOKEN', None)
     run(['pnpm', 'build:setup'], env=env)
     run(['pnpm', 'exec', 'vite', 'build', '--outDir', str(release)], env=env)
-    recording = overlay(ROOT / 'packages/recording/wrangler.jsonc', environment)
-    recording.update(name=spec['recording'])
     platform = overlay(ROOT / 'packages/relay/wrangler.jsonc', environment)
     platform.update(name=spec['platform'], main=str(ROOT / 'deployment/platform-entry.mjs'))
     platform['migrations'].append({'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']})
@@ -69,11 +67,10 @@ def main():
     platform['compatibility_flags'] = list(dict.fromkeys(platform.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     platform['d1_databases'] = [{'binding': 'PLATFORM_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]
-    platform['services'] = [{'binding': 'RECORDING', 'service': spec['recording']}]
-    platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
+    platform['vars'] = {'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
     platform['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
     platform.pop('assets', None)
-    for label, config in [('recording', recording), ('platform', platform)]:
+    for label, config in [('platform', platform)]:
         write(generated / (label + '.json'), config)
         run(WRANGLER + ['deploy', '--dry-run', '--config', str(generated / (label + '.json')), '--outdir', str(release / label)], env=env)
         entries = [p for p in (release / label).glob('*.js') if not p.name.endswith('.map')]
@@ -92,7 +89,7 @@ def main():
     write(morty_dir / 'wrangler.json', portable)
     shutil.copytree(ROOT / 'packages/relay/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
     shutil.copy2(ROOT / 'packages/setup/dist/setup.mjs', release / 'setup.mjs')
-    configs = {'recording': 'recording/wrangler.json', 'platform': 'platform/wrangler.json', 'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
+    configs = {'platform': 'platform/wrangler.json', 'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
     for label, file in configs.items():
         config = read(release / file)
         assert config['account_id'] == ACCOUNT and config['name'] == spec[label] and not config.get('routes')

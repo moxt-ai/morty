@@ -52,6 +52,8 @@ def main():
         if release not in file.parents or file.is_symlink() or hashlib.sha256(file.read_bytes()).hexdigest() != checksum:
             raise ValueError('Release checksum failed')
     configs = {key: release / value for key, value in manifest['configs'].items()}
+    if set(configs) != {'platform', 'morty'}:
+        raise ValueError('Release must carry only the Platform and Morty Workers; rebuild older archives before restoring')
     for component, file in configs.items():
         config = read(file)
         if config['account_id'] != ACCOUNT or config['name'] != expected[component] or config.get('routes'):
@@ -64,7 +66,7 @@ def main():
         raise ValueError('Release must retire migration control; rebuild older archives before restoring')
     assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
     assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
-    assert platform['services'] == [{'binding': 'RECORDING', 'service': expected['recording']}]
+    assert not platform.get('services')
     assert morty['vars']['MORTY_RELAY_URL'] == expected['platform_origin'] and morty['vars']['MORTY_SERVICE_ID'] == expected['app_id']
     assert morty['r2_buckets'] == [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': expected['buckets']['attachments']}]
     assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
@@ -150,7 +152,7 @@ def main():
             run(WRANGLER + ['r2', 'bulk', 'put', expected['buckets']['web_assets'], '--filename', str(upload), '--content-type', types[extension], '--cache-control', 'public, max-age=31536000, immutable', '--concurrency', '10', '--remote', '--force', '--config', str(configs['morty'])], env)
         run(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
         run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['platform'])], env)
-        for component in ['recording', 'platform', 'morty']:
+        for component in ['platform', 'morty']:
             command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'morty ' + manifest['revision']]
             if secrets_by_component.get(component):
                 secrets = secrets_by_component[component]

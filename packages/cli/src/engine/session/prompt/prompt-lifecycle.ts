@@ -196,9 +196,7 @@ export class PromptLifecycle {
     /**
      * Publishes again an outcome a receipt already holds, for clients that missed it. The restatement is marked, so
      * status notifications do not take it for a new outcome, and it does not settle the receipt again. It keeps the
-     * time the outcome was recorded; only an outcome
-     * a receipt recorded is marked as such, so Recording can settle a Turn it missed from it and never from an
-     * acknowledgement composed now.
+     * time the outcome was recorded.
      */
     readonly restateOutcome = (sessionId: string, { event, recordedAt }: RestatedOutcome): void => {
         if (event.type !== "lifecycle-metadata" || !("commandId" in event.payload)) {
@@ -207,11 +205,7 @@ export class PromptLifecycle {
         const restated = this.#append(sessionId, event, recordedAt);
         this.#publishInOrder({
             ...restated,
-            mortyMetadata: {
-                ...restated.mortyMetadata,
-                ...(recordedAt === undefined ? {} : { recordedOutcome: true }),
-                restated: true,
-            },
+            mortyMetadata: { ...restated.mortyMetadata, restated: true },
         });
     };
 

@@ -79,14 +79,7 @@
             "bucket_name": "morty-relay-local-wnam-objects"
         }
     ],
-    "services": [
-        {
-            "binding": "RECORDING",
-            "service": "morty-recording-local"
-        }
-    ],
     "vars": {
-        "RECORDING_PROVIDER_ID": "recording-local",
         "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
         "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret"
     },

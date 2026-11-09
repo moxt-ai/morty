@@ -50,7 +50,6 @@ import { ProjectDurableObjectStores } from "./gateway/project-durable-object-sto
 import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
 import { createPlatformControlApplication } from "./http/platform-routes.ts";
 import { createProjectApplication } from "./http/project-routes.ts";
-import { recordingReadRoutes, recordingSummaryV2Routes } from "./http/recording-read-routes.ts";
 import { authorizeSessionContentUpload } from "./http/session-content-upload.ts";
 import { PlatformProjectStorageDirectory } from "./infra/platform-project-storage-directory.ts";
 import { createBrowserCors } from "./middleware/browser-cors.ts";
@@ -60,7 +59,6 @@ import {
 } from "./middleware/session-access-target.ts";
 import { AppCredentialAuthenticationService } from "./service/app-credential-authentication-service.ts";
 import { PlatformControlPlaneService } from "./service/platform-control-plane-service.ts";
-import { RecordingPolicyService } from "./service/recording-policy-service.ts";
 import {
     type SessionAccess,
     SessionAccessService,
@@ -68,13 +66,10 @@ import {
 } from "./service/session-access-service.ts";
 import { PlatformControlPlaneStorage } from "./storage/platform-control-plane-storage.ts";
 import { type PlatformStorageBindings, PlatformStorageRegistry } from "./storage/platform-storage-registry.ts";
-import { RecordingPolicyStorage } from "./storage/recording-policy-storage.ts";
 
 export interface PlatformRelayBindings extends PlatformStorageBindings, ProjectWorkerRoutingBindings {
     readonly PLATFORM_DIRECTORY_DATABASE: D1Database;
     readonly R2_BUCKET_APAC: R2Bucket;
-    readonly RECORDING?: Fetcher;
-    readonly RECORDING_PROVIDER_ID?: string;
     readonly RUNTIME_RELAY: DurableObjectNamespace<RuntimeRelay>;
     /** Worker secret from which the Relay derives the keys that sign Session credentials. */
     readonly MORTY_SESSION_SIGNING_SECRET: string;
@@ -183,7 +178,6 @@ type DispatchEnvironment = {
         readonly projects: PlatformProjectStorageDirectory;
         readonly identityStores: readonly ProjectStore[];
         readonly relay: RelayContext;
-        readonly recordingPolicies: RecordingPolicyService;
         readonly sessionAccess: SessionAccessService;
         readonly sessionAccessTarget: SessionAccessTarget;
         readonly signal: AbortSignal;
@@ -254,8 +248,6 @@ export function createPlatformApplication(
                         .all("/storage-placement/", controlHandler)
                         .all("/audit-events", controlHandler)
                         .all("/audit-events/", controlHandler)
-                        .all("/recording-policy", controlHandler)
-                        .all("/recording-policy/", controlHandler)
                         .all("/sessions/*", controlHandler),
                 ),
         );
@@ -712,7 +704,6 @@ export function createPlatformApplication(
         return context.json(revoked);
     });
     const projectRoutes = new Hono<DispatchEnvironment>()
-        .route("/recording", recordingReadRoutes)
         .route("/sessions", sessionRoutes)
         .route("/session-access", sessionAccessRoutes)
         .all("/runtime-pairings/*", projectHandler)
@@ -751,10 +742,6 @@ export function createPlatformApplication(
             context.set("control", control);
             context.set("appAuthentication", appAuthentication);
             context.set("sessionAccess", sessionAccess);
-            context.set(
-                "recordingPolicies",
-                new RecordingPolicyService(new RecordingPolicyStorage(environment.PLATFORM_DIRECTORY_DATABASE)),
-            );
             context.set("stores", stores);
             context.set("projects", projects);
             context.set("identityStores", identityStores);
@@ -778,7 +765,6 @@ export function createPlatformApplication(
             await next();
         })
         .route(MORTY_API_PREFIX, new Hono<DispatchEnvironment>().route("/v1", versionedRoutes))
-        .route(`${MORTY_API_PREFIX}/v2/projects/:projectId/recording`, recordingSummaryV2Routes)
         .all("*", (context) => projectApplication.fetch(context.req.raw, context.var.relay));
     const platformApplication: Hono<{ Bindings: PlatformApplicationBindings }> = new Hono<{
         Bindings: PlatformApplicationBindings;

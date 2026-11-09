@@ -5,9 +5,7 @@ import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStoreResolver } from "../infra/project-store.ts";
-import { DisabledSessionRecording, type SessionRecording } from "../infra/session-recording.ts";
 import type { SessionStatusNotifications } from "../infra/session-status-notifications.ts";
-import { BestEffortRecording } from "../service/channel/best-effort-recording.ts";
 import { ChannelActor } from "../service/channel/channel-actor.ts";
 import { ChannelCredentialService } from "../service/channel/channel-credential-service.ts";
 import { LocalRuntimeRequests } from "../service/channel/local-runtime-requests.ts";
@@ -26,7 +24,6 @@ function createRuntimeRelayDependencies(cx: {
     readonly gateways: {
         readonly peers: RuntimePeers;
         readonly projectCredentials: ProjectCredentialAuthority;
-        readonly recording: SessionRecording;
         readonly notifications?: SessionStatusNotifications;
     };
     readonly utilities: {
@@ -106,7 +103,6 @@ function createRuntimeRelayDependencies(cx: {
             return service !== null && (await service.isRuntimeActive(identity, signal));
         },
     };
-    const recording = new BestEffortRecording(cx.gateways.recording, cx.utilities.waitUntil);
     const services = {
         credentials,
         connections: new RuntimeConnectionService(new RuntimeConnectionStorage(cx.database)),
@@ -115,7 +111,6 @@ function createRuntimeRelayDependencies(cx: {
                 config: { projectId: scope.projectId, runtimeId },
                 gateways: {
                     peers: cx.gateways.peers,
-                    recording,
                     ...(cx.gateways.notifications === undefined ? {} : { notifications: cx.gateways.notifications }),
                 },
             }),
@@ -147,7 +142,6 @@ export function createDurableObjectDependencies(cx: {
     readonly gateways: {
         readonly peers: RuntimePeers;
         readonly projectCredentials: ProjectCredentialAuthority;
-        readonly recording?: SessionRecording;
         readonly notifications?: SessionStatusNotifications;
     };
     readonly utilities: {
@@ -172,7 +166,6 @@ export function createDurableObjectDependencies(cx: {
         gateways: {
             peers,
             projectCredentials: cx.gateways.projectCredentials,
-            recording: cx.gateways.recording ?? new DisabledSessionRecording(),
             ...(cx.gateways.notifications === undefined ? {} : { notifications: cx.gateways.notifications }),
         },
         storages: cx.storages,

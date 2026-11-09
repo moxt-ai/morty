@@ -1,1 +1,0 @@
-ALTER TABLE `recorded_turn_items` ADD `dropped_characters` integer DEFAULT 0 NOT NULL;
