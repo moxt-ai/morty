@@ -3,6 +3,7 @@ import { RUNTIME_HEARTBEAT_ACK_MESSAGE, RUNTIME_HEARTBEAT_MESSAGE } from "@morty
 import {
     acceptWebSocketHttpTransport,
     type ClaimPairing,
+    ComputerScope,
     createLocalSessionOperations,
     DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
@@ -20,6 +21,7 @@ import { decodeComputerDurableObjectPath } from "../entity/computer-durable-obje
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
+import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
@@ -49,7 +51,11 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
     readonly #application = createPlatformWorker();
     #store: Store | null = null;
 
-    readonly #chat = new ComputerChat(this.ctx.storage, (id) => this.#owns(id));
+    readonly #chat = new ComputerChat(
+        this.ctx.storage,
+        (id) => this.#owns(id),
+        (computerId, change, signal) => this.#commitAccessRevocation(computerId, change, signal),
+    );
 
     readonly #uploads = new WebSocketUploadBudget();
     #connections: ReturnType<ComputerRelay["createConnections"]> | undefined;
@@ -221,6 +227,33 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
     async revokeSessionAccess(computerId: string, revokedAt: number): Promise<number> {
         return await this.#operate(computerId).revokeSessionAccess(revokedAt, uncancelled);
     }
+
+    /** Identity and Session authorization belong to this computer; neither can commit without the other. */
+    readonly #commitAccessRevocation = async (
+        computerId: string,
+        change: () => Promise<boolean>,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        const store = this.#operate(computerId);
+        const revokedAt = await this.ctx.storage.transaction(async () => {
+            signal.throwIfAborted();
+            if (!(await change())) {
+                return null;
+            }
+            const committed = await store.revokeSessionAccess(Date.now(), signal);
+            signal.throwIfAborted();
+            return committed;
+        });
+        if (revokedAt === null) {
+            return false;
+        }
+        // Authorization already observes the committed cutoff. Close existing local viewers without another RPC.
+        this.#connectionsForComputer.context.services.runtime.revokeSessionViewers(
+            new ComputerScope(computerId),
+            sessionAccessRevokedThrough(revokedAt),
+        );
+        return true;
+    };
 
     async readSessionAccessRevocation(computerId: string): Promise<number | null> {
         return await this.#operate(computerId).readSessionAccessRevocation(uncancelled);

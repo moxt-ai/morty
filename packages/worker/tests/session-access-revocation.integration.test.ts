@@ -90,14 +90,14 @@ test("Given a browser opening a Session, When its device is revoked before the R
     }
 }, 45_000);
 
-test("Given a browser device with an open chat window, When its owner ends the device while the Relay cannot record the revocation, Then the request fails as retryable and repeating it refuses the window's Session credential", async () => {
+test("Given a device with an open Session, When its owner disconnects it while the public Relay endpoint is unavailable, Then both credentials are revoked together without a retry", async () => {
     const cloud = await createIdentityFixture();
     // A real listener that resets every connection, as an unreachable Relay would.
     const unreachable = createServer((connection) => connection.destroy());
     await new Promise<void>((resolve) => unreachable.listen(0, "127.0.0.1", resolve));
     try {
         const owner = await cloud.createAnonymousUser();
-        await using _runtime = await cloud.connectAgent(owner.computerId);
+        await using runtime = await cloud.connectAgent(owner.computerId);
         const request = (path: string, token: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
                 new Request(`${APP_ORIGIN}/morty/api/${path}`, {
@@ -155,18 +155,20 @@ test("Given a browser device with an open chat window, When its owner ends the d
             throw new Error("Missing unreachable Relay address");
         }
 
+        await runtime.disconnect();
         await cloud.changePlatformOrigin(`http://127.0.0.1:${address.port}`);
+        await runtime.reconnect();
         const failed = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
 
-        expect(failed.status).toBe(503);
-        expect(await failed.json()).toMatchObject({ error: { code: "SESSION_ACCESS_REVOCATION_UNAVAILABLE" } });
+        expect.soft(failed.status).toBe(200);
+        expect.soft(await failed.json()).toEqual({ status: "device_access_ended" });
         expect((await request(`${project}/session`, browser)).status).toBe(401);
 
+        await runtime.disconnect();
         await cloud.changePlatformOrigin(relay);
-        const repeated = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
-
-        expect(repeated.status).toBe(200);
-        expect(await repeated.json()).toEqual({ status: "device_access_ended" });
+        await runtime.reconnect();
+        const remaining = await request(`${project}/identity/devices`, owner.token);
+        expect(await remaining.json()).toMatchObject({ devices: [] });
         await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
     } finally {
         await cloud.close();

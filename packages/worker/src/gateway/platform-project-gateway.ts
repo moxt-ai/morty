@@ -533,13 +533,6 @@ export class PlatformProjectGateway {
             return { ...access, endpoint: this.configuration().origin };
         });
 
-    /** Ends every Session credential issued for the Project until now, and the live views opened with them. */
-    readonly revokeSessionAccess = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        await this.#withProject(computerId, signal, async (client) => {
-            await client.sessions.revokeAccess(signal);
-        });
-    };
-
     readonly nativeSessions = async (
         computerId: string,
         request: Parameters<MortyClient["runtimes"]["nativeSessions"]>[0],

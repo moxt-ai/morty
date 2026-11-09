@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createResponseLossProxy } from "../../../platform-test-support/src/response-loss-proxy.ts";
@@ -23,7 +22,6 @@ export async function createChatWorkerEnvironment(
         ...(delayExecutionReads ? { delayExecutionReads: true as const } : {}),
         platformAllowedOrigins: new Set(["*"]),
         workerEntryPoint: resolve(process.cwd(), "../worker/tests/support/credential-storage-worker.ts"),
-        wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
     const sharingNetwork = loseSharingResponses ? await createResponseLossProxy(cloud.origin) : null;
     const origin = sharingNetwork?.origin ?? cloud.origin;
@@ -124,6 +122,17 @@ export async function createChatWorkerEnvironment(
                         harness: first.harness,
                         agentName: first.label,
                     });
+                },
+                /** Reads the current title through a separate client's production Runtime API. */
+                readSessionTitle: async (sessionId: string) => {
+                    const [session] = await runtime.client.runtimes.querySessions(
+                        [{ harness: agents[0]?.harness ?? "codex", sessionId }],
+                        AbortSignal.timeout(30_000),
+                    );
+                    if (session === undefined) {
+                        throw new Error("Expected the Session on the Runtime");
+                    }
+                    return session.title;
                 },
                 /** Renames a Session through the Platform, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {

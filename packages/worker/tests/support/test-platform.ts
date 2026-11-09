@@ -35,6 +35,8 @@ export async function startTestPlatform(
             appCredential: credential,
             attachments: bindings.env.R2_BUCKET_APAC,
             baseUrl: bindings.origin,
+            cloudflare: bindings.cloudflare,
+            configure: bindings.configure,
             service,
             connectAgent: async (
                 computerId: string,
