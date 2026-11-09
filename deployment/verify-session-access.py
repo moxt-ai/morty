@@ -47,12 +47,18 @@ def verify(origin, app_credential, root_key, revision):
     if status != 201:
         fail('Verification Project provisioning', status, project)
     computer_id = project['computerId']
-    session_id = 'deployment-' + revision[:12]
-    status, access = request(origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/access-credentials', app_credential, {
+    # A Session is addressed by its harness and native Session ID; the Relay issues credentials without the Runtime.
+    target = {'harness': 'codex', 'sessionId': 'deployment-' + revision[:12]}
+    session_url = (
+        origin + '/v1/computers/' + computer_id + '/harnesses/' + target['harness'] + '/sessions/' + target['sessionId']
+    )
+    status, access = request(session_url + '/access-credentials', app_credential, {
         'expiresInSeconds': 60,
     })
     if status != 201:
         fail('Production Session issuance', status, access)
+    if access.get('computerId') != computer_id or access.get('target') != target:
+        raise ValueError('Production issued a Session credential for a different Session')
     credential = access.get('credential', '')
     match = re.fullmatch(r'msession_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]+)_([A-Za-z0-9_-]{43})', credential)
     if match is None:
@@ -66,7 +72,7 @@ def verify(origin, app_credential, root_key, revision):
     if not hmac.compare_digest(signature, encoded_signature):
         raise ValueError('Production Session signature does not match the configured signing secret')
     # The Session credential selects ComputerRelay; the Runtime verifies it before answering this public route.
-    verify_url = origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/live-event-subscription-target'
+    verify_url = session_url + '/live-event-subscription-target'
     status, selected = request(verify_url, credential)
     if status != 200 or selected.get('computerId') != computer_id:
         fail('Production Runtime verification', status, selected)
