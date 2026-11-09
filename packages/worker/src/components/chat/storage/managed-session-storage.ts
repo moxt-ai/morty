@@ -46,6 +46,7 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.state, "active"),
                     isNotNull(chatManagedSession.harness),
                     isNotNull(chatManagedSession.sessionId),
                 ),
@@ -58,7 +59,28 @@ export class ManagedSessionStorage {
         }));
     };
 
-    readonly save = async (computerId: string, userId: string, target: NativeSessionTarget, signal: AbortSignal) => {
+    /** A historical creation receipt never reopens a later archival. */
+    readonly recordCreated = async (
+        computerId: string,
+        userId: string,
+        target: NativeSessionTarget,
+        signal: AbortSignal,
+    ) => {
+        await this.#write(computerId, userId, target, "created", signal);
+    };
+
+    /** An explicit import grants access again to an archived native Session. */
+    readonly include = async (computerId: string, userId: string, target: NativeSessionTarget, signal: AbortSignal) => {
+        await this.#write(computerId, userId, target, "imported", signal);
+    };
+
+    readonly #write = async (
+        computerId: string,
+        userId: string,
+        target: NativeSessionTarget,
+        origin: "created" | "imported",
+        signal: AbortSignal,
+    ) => {
         const value = v.parse(summarySchema, {
             ...decodeNativeSessionTarget(target),
             createdAt: Date.now(),
@@ -66,7 +88,7 @@ export class ManagedSessionStorage {
             userId,
         });
         signal.throwIfAborted();
-        await this.#requireDatabase()
+        const insertion = this.#requireDatabase()
             .insert(chatManagedSession)
             .values({
                 computerId: value.computerId,
@@ -75,9 +97,17 @@ export class ManagedSessionStorage {
                 harness: value.harness,
                 sessionId: value.sessionId,
                 createdAt: value.createdAt,
-            })
-            .onConflictDoNothing()
-            .run();
+            });
+        if (origin === "created") {
+            await insertion.onConflictDoNothing().run();
+        } else {
+            await insertion
+                .onConflictDoUpdate({
+                    target: [chatManagedSession.computerId, chatManagedSession.userId, chatManagedSession.resourceId],
+                    set: { state: "active" },
+                })
+                .run();
+        }
         signal.throwIfAborted();
     };
 
@@ -95,6 +125,7 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.state, "active"),
                     eq(chatManagedSession.harness, decodeNativeSessionTarget(target).harness),
                     eq(chatManagedSession.sessionId, target.sessionId),
                 ),
@@ -118,6 +149,7 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, projectId),
                     eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.state, "active"),
                     eq(chatManagedSession.harness, target.harness),
                     eq(chatManagedSession.sessionId, target.sessionId),
                 ),
@@ -135,11 +167,13 @@ export class ManagedSessionStorage {
     ): Promise<void> => {
         signal.throwIfAborted();
         await this.#requireDatabase()
-            .delete(chatManagedSession)
+            .update(chatManagedSession)
+            .set({ state: "archived" })
             .where(
                 and(
                     eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
+                    eq(chatManagedSession.state, "active"),
                     eq(chatManagedSession.harness, decodeNativeSessionTarget(target).harness),
                     eq(chatManagedSession.sessionId, target.sessionId),
                 ),

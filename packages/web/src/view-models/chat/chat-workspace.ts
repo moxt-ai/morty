@@ -396,6 +396,13 @@ export function createChatWorkspace(options: {
             computerId,
             sessionTarget,
             clock: options.clock,
+            refreshTitle: async (signal) => {
+                // Acknowledgements identify an operation, not the current title. Newer observations still win.
+                const startedWith = titles.getState().titles;
+                const sessions = await requests.managedSessions(signal);
+                signal.throwIfAborted();
+                titles.getState().directoryLoaded(sessions, startedWith);
+            },
             lifetime: operationsLifetime.signal,
         });
         sessionStates.set(sessionTarget, state);

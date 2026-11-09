@@ -1,0 +1,1 @@
+ALTER TABLE `chat_managed_session` ADD `state` text DEFAULT 'active' NOT NULL;

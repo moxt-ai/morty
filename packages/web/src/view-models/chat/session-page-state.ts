@@ -50,6 +50,7 @@ export function createSessionPageState(options: {
     readonly computerId: string;
     readonly sessionTarget: NativeSessionTarget;
     readonly clock: Clock;
+    readonly refreshTitle: (signal: AbortSignal) => Promise<void>;
     /** The page's lifetime, on which delivery and the Session's operations run. */
     readonly lifetime: AbortSignal;
 }): SessionPageState {
@@ -143,7 +144,7 @@ export function createSessionPageState(options: {
         delivery,
         interactions,
         queue,
-        rename: createSessionRenameStore(),
+        rename: createSessionRenameStore({ sessionTarget, connection, refreshTitle: options.refreshTitle }),
         settings: createSessionSettingsStore({ computerId, sessionTarget, connection }),
         tasks,
     };

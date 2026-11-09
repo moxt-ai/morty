@@ -1,45 +1,88 @@
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
+import { isSessionClosedFailure } from "../format-error.ts";
+import type { SessionOperationConnection } from "./session-operation-connection.ts";
 
-/** A title the user confirmed for a Session: waiting for the Runtime to take it, or the reason it did not. */
+/** The Session owns one explicit rename through its acknowledgement and authoritative refresh. */
 export type SessionRename =
     | { readonly kind: "none" }
-    | { readonly kind: "pending"; readonly title: string }
+    | { readonly kind: "waiting"; readonly title: string }
+    | { readonly kind: "sending"; readonly title: string }
+    | { readonly kind: "refreshing"; readonly title: string }
     | { readonly kind: "failed"; readonly message: string };
 
 export type SessionRenameStore = {
     readonly rename: SessionRename;
-    readonly confirm: (title: string) => void;
-    /** The Runtime took `title`. A title confirmed since stays pending. */
-    readonly settled: (title: string) => void;
-    /** Sending `title` failed. A title confirmed since stays pending. */
-    readonly failed: (title: string, message: string) => void;
-    readonly clear: () => void;
+    readonly confirm: (title: string, signal: AbortSignal) => Promise<void>;
+    readonly clearFailure: () => void;
 };
 
-/**
- * The rename a Session holds. It belongs to the Session, not to the pane that took it, as a first message does: a
- * pane that stops before the Session connects leaves it pending, and the next pane that connects sends it.
- */
-export function createSessionRenameStore() {
-    return createStore<SessionRenameStore>()((set, get) => {
-        const current = (title: string): boolean => {
-            const rename = get().rename;
-            return rename.kind === "pending" && rename.title === title;
-        };
-        return {
-            rename: { kind: "none" },
-            confirm: (title) => set({ rename: { kind: "pending", title } }),
-            settled: (title) => {
-                if (current(title)) {
+/** Switching panes neither cancels nor resends a rename. An ambiguous failure requires a new user decision. */
+export function createSessionRenameStore(options: {
+    readonly sessionTarget: NativeSessionTarget;
+    readonly connection: SessionOperationConnection;
+    readonly refreshTitle: (signal: AbortSignal) => Promise<void>;
+}) {
+    return createStore<SessionRenameStore>()((set, get) => ({
+        rename: { kind: "none" },
+        clearFailure: () => {
+            if (get().rename.kind === "failed") {
+                set({ rename: { kind: "none" } });
+            }
+        },
+        confirm: async (title, signal) => {
+            signal.throwIfAborted();
+            const current = get().rename;
+            switch (current.kind) {
+                case "waiting":
+                case "sending":
+                case "refreshing":
+                    return;
+                case "none":
+                case "failed":
+                    break;
+                default:
+                    return current satisfies never;
+            }
+            set({ rename: { kind: "waiting", title } });
+            const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
+            try {
+                await options.connection.send(async (client, sendingSignal) => {
+                    sendingSignal.throwIfAborted();
+                    set({ rename: { kind: "sending", title } });
+                    await client.sessions.rename(options.sessionTarget, title, sendingSignal);
+                }, requestSignal);
+                requestSignal.throwIfAborted();
+                set({ rename: { kind: "refreshing", title } });
+                await options.refreshTitle(requestSignal);
+                requestSignal.throwIfAborted();
+                set({ rename: { kind: "none" } });
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (isSessionClosedFailure(cause)) {
                     set({ rename: { kind: "none" } });
+                    return;
                 }
-            },
-            failed: (title, message) => {
-                if (current(title)) {
-                    set({ rename: { kind: "failed", message } });
+                const rename = get().rename;
+                let message: string;
+                switch (rename.kind) {
+                    case "refreshing":
+                        message = "The title was saved, but its current value could not be refreshed.";
+                        break;
+                    case "sending":
+                        message = "The rename could not be confirmed. Check the current title before saving again.";
+                        break;
+                    case "waiting":
+                        message = "The Session could not connect to rename the conversation.";
+                        break;
+                    case "none":
+                    case "failed":
+                        return;
+                    default:
+                        return rename satisfies never;
                 }
-            },
-            clear: () => set({ rename: { kind: "none" } }),
-        };
-    });
+                set({ rename: { kind: "failed", message } });
+            }
+        },
+    }));
 }

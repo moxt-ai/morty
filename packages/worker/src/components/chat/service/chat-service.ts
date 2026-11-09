@@ -510,7 +510,7 @@ export class ChatService {
                             recovered.harness === input.harness &&
                             recovered.directory === input.workspaceRef
                         ) {
-                            await this.#chatSessions.save(
+                            await this.#chatSessions.recordCreated(
                                 scope.computerId,
                                 scope.userId,
                                 recovered.target,
@@ -524,15 +524,17 @@ export class ChatService {
                 }
                 throw cause;
             }
-            await this.#chatSessions.save(scope.computerId, scope.userId, created.target, scope.signal);
+            await this.#chatSessions.recordCreated(scope.computerId, scope.userId, created.target, scope.signal);
             return created;
         });
-        return await this.#platform.createdChatSessionAccess(
-            scope.computerId,
-            { ...session, target: ready.target },
-            ready,
-            sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
-            scope.signal,
+        return await this.#withOwnedManagedSession(scope, ready.target, notInRecentSessions, () =>
+            this.#platform.createdChatSessionAccess(
+                scope.computerId,
+                { ...session, target: ready.target },
+                ready,
+                sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
+                scope.signal,
+            ),
         );
     };
 
@@ -675,7 +677,7 @@ export class ChatService {
             throw new PlatformProjectError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
         }
         const stored = { harness: agent.harness, result, entry };
-        await this.#chatSessions.save(scope.computerId, scope.userId, result.target, scope.signal);
+        await this.#chatSessions.include(scope.computerId, scope.userId, result.target, scope.signal);
         return stored;
     };
 
@@ -718,7 +720,7 @@ export class ChatService {
             );
         }
         const target = await this.#readNativeTarget(scope, result.ready);
-        await this.#chatSessions.save(scope.computerId, scope.userId, target, scope.signal);
+        await this.#chatSessions.include(scope.computerId, scope.userId, target, scope.signal);
         return result;
     };
 
@@ -741,7 +743,8 @@ export class ChatService {
             scope.signal,
         );
         const target = await this.#readNativeTarget(scope, receipt.result.ready);
-        await this.#chatSessions.save(scope.computerId, scope.userId, target, scope.signal);
+        await this.#chatSessions.recordCreated(scope.computerId, scope.userId, target, scope.signal);
+        await this.#ownedNativeSessionTarget(scope, target);
         return receipt;
     };
 

@@ -68,6 +68,37 @@ async function createChatFixture(
     };
 }
 
+test("Given an archived conversation, When the original creation request is retried, Then it stays closed", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect((await fixture.request("chat/setup", { computerId: fixture.computerId, harness: "codex" })).status).toBe(
+        202,
+    );
+    const input = {
+        harness: "codex",
+        configurations: [],
+        conversationKey: "archived-creation-retry",
+        workspaceRef: ".",
+    };
+    const created = await fixture.request("chat/access", input);
+    expect(created.status).toBe(200);
+    const { target } = v.parse(v.object({ target: targetSchema }), await created.json());
+    const ordinaryRetry = await fixture.request("chat/access", input);
+    expect(ordinaryRetry.status).toBe(200);
+    expect(v.parse(v.object({ target: targetSchema }), await ordinaryRetry.json()).target).toEqual(target);
+    expect((await fixture.request("chat/managed-session/archive", target)).status).toBe(200);
+    expect(await (await fixture.request("chat/managed-sessions", {})).json()).toEqual({ sessions: [] });
+    const refusedBeforeReplay = await fixture.request("chat/access", target);
+    expect(refusedBeforeReplay.status).toBe(404);
+    expect(await refusedBeforeReplay.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    const retried = await fixture.request("chat/access", input);
+    expect(retried.status).toBe(404);
+    expect(await retried.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    expect(await (await fixture.request("chat/managed-sessions", {})).json()).toEqual({ sessions: [] });
+    expect((await fixture.request("chat/access", target)).status).toBe(404);
+});
+
 test("Given a paired computer, When its owner selects and creates with harness, Then setup and session access expose the same harness", async ({
     cloud,
 }) => {
@@ -584,7 +615,7 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
     expect(await restored.json()).toMatchObject({ harness: "pi" });
 });
 
-test("Given an imported native session, When its owner imports it again, Then Chat reopens the canonical session without creating a duplicate", async ({
+test("Given an imported native session, When its owner closes and explicitly imports it again, Then Chat reopens the canonical session without creating a duplicate", async ({
     cloud,
 }) => {
     const nativeId = crypto.randomUUID();
@@ -611,6 +642,8 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     const first = await fixture.request(path, input);
     expect(first.status).toBe(200);
     const opened = v.parse(v.object({ ready: v.object({ target: targetSchema }) }), await first.json());
+    expect((await fixture.request("chat/managed-session/archive", opened.ready.target)).status).toBe(200);
+    expect(await (await fixture.request("chat/managed-sessions", {})).json()).toEqual({ sessions: [] });
     const second = await fixture.request(path, input);
     expect(second.status).toBe(200);
     expect(await second.json()).toMatchObject({ ready: { target: opened.ready.target } });

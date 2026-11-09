@@ -1,5 +1,4 @@
 import * as v from "valibot";
-import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import {
     anonymousToken,
@@ -15,7 +14,6 @@ import {
 import type { Session } from "../entity/authentication/session.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { PlatformProjectError } from "../entity/platform-project.ts";
 import { sharingOperationCredential } from "../entity/project-credential.ts";
 import type { IdentityStorage, IdentityTransfer, JoiningDevice } from "../storage/identity-storage.ts";
 import { type AnonymousIdentity, digest } from "../storage/identity-storage-common.ts";
@@ -59,8 +57,6 @@ type Authorization<Operation extends CredentialOperation> =
     | { readonly kind: "forbidden" };
 
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
-
-const SESSION_ACCESS_REVOCATION_ATTEMPTS = 3;
 
 /** Who shared the link a device joined through, as the owner recognizes it. */
 export type DeviceSharer =
@@ -154,16 +150,15 @@ function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbi
 
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
-    readonly #platform: Pick<PlatformProjectGateway, "revokeSessionAccess">;
+    readonly #commitRevocation: CloudBindings["CHAT_REVOKE_ACCESS"];
     readonly #computerId: string | null;
 
     constructor(cx: {
-        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_COMPUTER_ID"> };
+        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_REVOKE_ACCESS" | "CHAT_COMPUTER_ID"> };
         readonly storages: { readonly identities: IdentityStorage };
-        readonly gateways: { readonly platformProjects: Pick<PlatformProjectGateway, "revokeSessionAccess"> };
     }) {
         this.identities = cx.storages.identities;
-        this.#platform = cx.gateways.platformProjects;
+        this.#commitRevocation = cx.config.bindings.CHAT_REVOKE_ACCESS;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID ?? null;
     }
 
@@ -367,18 +362,20 @@ export class AuthenticationService {
             return refused(access);
         }
         if (
-            !(await this.identities.revokeAllAccess(
-                access.credential.userId,
-                access.token,
-                successor,
-                Date.now(),
+            !(await this.#changeAccess(
+                () =>
+                    this.identities.revokeAllAccess(
+                        access.credential.userId,
+                        access.token,
+                        successor,
+                        Date.now(),
+                        signal,
+                    ),
                 signal,
             ))
         ) {
             return { kind: "unauthenticated" };
         }
-        // Revoked access can no longer obtain Session credentials; those it already holds end only at the Platform.
-        await this.#revokeIssuedSessionAccess(signal);
         return { kind: "revoked" };
     };
 
@@ -394,8 +391,10 @@ export class AuthenticationService {
         if (access.kind !== "authorized") {
             return refused(access);
         }
-        await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
-        await this.#revokeIssuedSessionAccess(signal);
+        await this.#changeAccess(async () => {
+            await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
+            return true;
+        }, signal);
         return { kind: "revoked" };
     };
 
@@ -412,13 +411,15 @@ export class AuthenticationService {
         if (access.kind !== "authorized") {
             return refused(access);
         }
-        await this.identities.endOtherBrowserAccess(
-            access.credential.userId,
-            access.credential.kind === "browser" ? access.credential.deviceId : null,
-            Date.now(),
-            signal,
-        );
-        await this.#revokeIssuedSessionAccess(signal);
+        await this.#changeAccess(async () => {
+            await this.identities.endOtherBrowserAccess(
+                access.credential.userId,
+                access.credential.kind === "browser" ? access.credential.deviceId : null,
+                Date.now(),
+                signal,
+            );
+            return true;
+        }, signal);
         return { kind: "ended" };
     };
 
@@ -442,53 +443,22 @@ export class AuthenticationService {
         if (access.credential.kind === "browser" && access.credential.deviceId === deviceId) {
             return { kind: "own" };
         }
-        if (!(await this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal))) {
+        if (
+            !(await this.#changeAccess(
+                () => this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal),
+                signal,
+            ))
+        ) {
             return { kind: "unknown" };
         }
-        await this.#revokeIssuedSessionAccess(signal);
         return { kind: "ended" };
     };
 
-    /**
-     * Revokes the Session credentials issued until now, after the caller committed the change that stops new ones being
-     * issued. Revoking is safe to repeat, so a failure the Platform may recover from is retried a bounded number of
-     * times. When it still fails, the request fails: its change stays committed, and repeating the request repeats
-     * the revocation.
-     */
-    readonly #revokeIssuedSessionAccess = async (signal: AbortSignal): Promise<void> => {
-        const computerId = this.#computerId;
-        if (computerId === null) {
-            throw new Error("Access is revoked only inside its Project");
+    readonly #changeAccess = async (change: () => Promise<boolean>, signal: AbortSignal): Promise<boolean> => {
+        if (this.#commitRevocation === undefined) {
+            throw new ManagementError("IDENTITY_UNAVAILABLE", "Computer access storage is unavailable.", 503);
         }
-        for (let attempt = 1; ; attempt += 1) {
-            try {
-                await this.#platform.revokeSessionAccess(computerId, signal);
-                return;
-            } catch (cause) {
-                signal.throwIfAborted();
-                if (!(cause instanceof PlatformProjectError)) {
-                    throw cause;
-                }
-                if (cause.status < 500) {
-                    throw new ManagementError(
-                        "SESSION_ACCESS_REVOCATION_REFUSED",
-                        "Access ended, but Morty could not close the chat windows already open with it.",
-                        502,
-                        {},
-                        { cause },
-                    );
-                }
-                if (attempt === SESSION_ACCESS_REVOCATION_ATTEMPTS) {
-                    throw new ManagementError(
-                        "SESSION_ACCESS_REVOCATION_UNAVAILABLE",
-                        "Access ended, but the chat windows already open with it are not closed yet. Try again.",
-                        503,
-                        {},
-                        { cause },
-                    );
-                }
-            }
-        }
+        return await this.#commitRevocation(change, signal);
     };
 
     readonly endBrowserAccess = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> => {

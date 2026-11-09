@@ -1,9 +1,17 @@
 import { ComputerRelay as ProductionComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
+import platform, { type ConfiguredPlatformRelayBindings } from "../../../relay/src/worker.ts";
 import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
+import chat from "../../src/index.ts";
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
 import { managedBot } from "../../src/schema/project-do/index.ts";
 
-export { default } from "../../src/index.ts";
+// Both public Workers reach the same production ComputerRelay namespace, as deployed.
+export default {
+    fetch: (request: Request, env: ConfiguredPlatformRelayBindings) =>
+        /^\/morty\/api\/(?:v1|dashboard|channels)\//u.test(new URL(request.url).pathname)
+            ? platform.fetch(request, env)
+            : chat.fetch(request, env),
+};
 
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
