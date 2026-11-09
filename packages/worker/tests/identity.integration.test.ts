@@ -557,10 +557,12 @@ test("Given browser access the owner revoked, When the browser presents its cred
         environment,
     );
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const successor = `morty_anon_v1_${"B".repeat(43)}`;
     const revoked = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, {
             method: "POST",
-            headers: { authorization: `Bearer ${owner.token}` },
+            headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ successor }),
         }),
         environment,
     );
@@ -591,7 +593,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
         expect(response.status).toBe(401);
         expect(await response.json()).toEqual({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } });
     }
-    expect((await worker.fetch(accountRequest(owner.token, owner.computerId), environment)).status).toBe(200);
+    expect((await worker.fetch(accountRequest(successor, owner.computerId), environment)).status).toBe(200);
 });
 
 test("Given a browser that opened one link, When it opens another link for the same user and later ends its access, Then its earlier credential stops at once while another device keeps its own access", async () => {

@@ -21,6 +21,7 @@ function unusedLink(database: IdentityDatabase) {
 const openedCredential = alias(anonymousCredential, "opened_credential");
 const openedLink = alias(continueLink, "opened_link");
 const issuedLink = alias(continueLink, "issued_link");
+const successorCredential = alias(anonymousCredential, "successor_credential");
 
 /**
  * A browser device's term: the latest among the links the device opened, so opening another link never shortens it.
@@ -229,6 +230,106 @@ export class IdentityStorage {
             endDevices(database, eq(browserDevice.userId, userId), now),
         ]);
         signal.throwIfAborted();
+    };
+
+    /**
+     * Revokes every local and recovery credential, the caller's included, ends every browser device's access, and voids
+     * the links no device has used yet, in one transaction that issues `successor` as the only local credential. Only
+     * the machine's own credential may do this, so a copy of it stops working too. Repeating it with the successor as
+     * the caller, after a lost reply, repeats the revocation and keeps the successor. False when the caller no longer
+     * holds access, and then nothing changed.
+     */
+    readonly revokeAllAccess = async (
+        userId: string,
+        token: string,
+        successor: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        signal.throwIfAborted();
+        const database = requireIdentityDatabase(this.#database);
+        const tokenHash = await digest(token);
+        const successorHash = await digest(successor);
+        const successorInForce = exists(
+            database
+                .select({ id: successorCredential.id })
+                .from(successorCredential)
+                .where(
+                    and(
+                        eq(successorCredential.userId, userId),
+                        eq(successorCredential.tokenHash, successorHash),
+                        eq(successorCredential.kind, "local"),
+                        isNull(successorCredential.revokedAt),
+                    ),
+                ),
+        );
+        await database.batch([
+            database
+                .insert(anonymousCredential)
+                .select(
+                    database
+                        .select({
+                            id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
+                            userId: anonymousCredential.userId,
+                            tokenHash: sql<string>`${successorHash}`.as("token_hash"),
+                            kind: sql<"local">`'local'`.as("kind"),
+                            createdAt: sql<number>`${now}`.as("created_at"),
+                            revokedAt: sql<null>`null`.as("revoked_at"),
+                            replacedAt: sql<null>`null`.as("replaced_at"),
+                            remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
+                            deviceId: sql<null>`null`.as("device_id"),
+                        })
+                        .from(anonymousCredential)
+                        .where(
+                            and(
+                                eq(anonymousCredential.userId, userId),
+                                eq(anonymousCredential.tokenHash, tokenHash),
+                                eq(anonymousCredential.kind, "local"),
+                                isNull(anonymousCredential.revokedAt),
+                            ),
+                        ),
+                )
+                .onConflictDoNothing({ target: anonymousCredential.tokenHash }),
+            // Nothing else changes unless the successor holds access: a caller revoked meanwhile revokes nothing.
+            database
+                .update(continueLink)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        eq(continueLink.userId, userId),
+                        isNull(continueLink.revokedAt),
+                        unusedLink(database),
+                        successorInForce,
+                    ),
+                ),
+            database
+                .update(anonymousCredential)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        eq(anonymousCredential.userId, userId),
+                        ne(anonymousCredential.kind, "browser"),
+                        ne(anonymousCredential.tokenHash, successorHash),
+                        isNull(anonymousCredential.revokedAt),
+                        successorInForce,
+                    ),
+                ),
+            endDevices(database, and(eq(browserDevice.userId, userId), successorInForce), now),
+        ]);
+        const rotated = await database
+            .select({ id: anonymousCredential.id })
+            .from(anonymousCredential)
+            .where(
+                and(
+                    eq(anonymousCredential.userId, userId),
+                    eq(anonymousCredential.tokenHash, successorHash),
+                    eq(anonymousCredential.kind, "local"),
+                    isNull(anonymousCredential.revokedAt),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return rotated !== undefined;
     };
 
     /**

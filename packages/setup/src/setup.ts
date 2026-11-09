@@ -92,11 +92,18 @@ type PairingIntent =
     | { readonly kind: "requesting"; readonly requestKey: string }
     | { readonly kind: "paired"; readonly computerId: string };
 
+/**
+ * Revoking all access also replaces the local credential, so a copy of it stops working too. Setup saves the successor
+ * before the request: a lost reply then leaves one of the two credentials in force, never neither.
+ */
+type CredentialRotation = { readonly kind: "none" } | { readonly kind: "requested"; readonly successor: string };
+
 interface ReadyIdentity extends IssuedIdentity {
     readonly kind: "ready";
     /** Setup owns the unfinished pairing intent; the Worker owns the final Machine binding. */
     readonly pairing: PairingIntent;
     readonly replacement: ReplacementState;
+    readonly rotation: CredentialRotation;
 }
 
 /**
@@ -115,7 +122,13 @@ interface SavedState {
 const SAVED_STATE_VERSION = 2;
 
 function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
-    return { kind: "ready", ...issued, pairing: { kind: "none" }, replacement: { kind: "unchanged" } };
+    return {
+        kind: "ready",
+        ...issued,
+        pairing: { kind: "none" },
+        replacement: { kind: "unchanged" },
+        rotation: { kind: "none" },
+    };
 }
 
 function withPairedRuntime(identity: ReadyIdentity, computerId: string): ReadyIdentity {
@@ -141,6 +154,7 @@ function replacedIdentity(previous: ReadyIdentity, successor: IssuedIdentity): R
             kind: "revoked",
             previous: { kind: "pending", computerId: previous.computerId, token: previous.userToken },
         },
+        rotation: { kind: "none" },
     };
 }
 
@@ -149,6 +163,16 @@ function withPreviousRetired(identity: ReadyIdentity, previous: RetiringIdentity
         ...identity,
         replacement: { kind: "revoked", previous: { kind: "retired", computerId: previous.computerId } },
     };
+}
+
+/** Saved before the request that makes `successor` the only local credential. */
+function withRotationRequested(identity: ReadyIdentity, successor: string): ReadyIdentity {
+    return { ...identity, rotation: { kind: "requested", successor } };
+}
+
+/** The local credential after the Worker replaced it with the requested successor. */
+function rotatedIdentity(identity: ReadyIdentity, successor: string): ReadyIdentity {
+    return { ...identity, userToken: successor, rotation: { kind: "none" } };
 }
 
 /** Cleared only after a finished setup reported the replacement. */
@@ -200,6 +224,10 @@ function encodeSavedState(state: SavedState) {
                     project_id: identity.computerId,
                     pairing: identity.pairing,
                     replacement: encodeReplacement(identity.replacement),
+                    // Present only while a rotation is requested; a state without one keeps its representation.
+                    ...(identity.rotation.kind === "requested"
+                        ? { credential_rotation: { successor_token: identity.rotation.successor } }
+                        : {}),
                 },
             };
         default: {
@@ -775,14 +803,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return { base, identity: { kind: "creating", creationKey } };
             }
             case "ready": {
-                const ready = exactly(saved["identity"], [
-                    "kind",
-                    "user_id",
-                    "user_token",
-                    "project_id",
-                    "pairing",
-                    "replacement",
-                ]);
+                const keys = ["kind", "user_id", "user_token", "project_id", "pairing", "replacement"];
+                const rotating = "credential_rotation" in fieldsOf(saved["identity"]);
+                const ready = exactly(saved["identity"], rotating ? [...keys, "credential_rotation"] : keys);
                 return {
                     base,
                     identity: {
@@ -792,6 +815,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         computerId: savedIdentifier(ready["project_id"]),
                         pairing: pairingIntent(ready["pairing"]),
                         replacement: replacement(ready["replacement"]),
+                        rotation: rotating
+                            ? {
+                                  kind: "requested",
+                                  successor: savedCredential(
+                                      exactly(ready["credential_rotation"], ["successor_token"])["successor_token"],
+                                  ),
+                              }
+                            : { kind: "none" },
                     },
                 };
             }
@@ -957,6 +988,52 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             remoteFailure(object(await response.json()), response.status);
         }
         return await commit(context, withPreviousRetired(context.identity, previous));
+    }
+
+    /**
+     * Revokes every other credential, link and browser access, and replaces the local credential with a successor
+     * saved first. A run that lost the reply repeats the same request with whichever credential is still in force.
+     */
+    async function revokeAllAccessWithRotation<Revoking extends Context>(
+        context: Revoking,
+    ): Promise<{ readonly context: Revoking; readonly sessionAccess: "revoked" | "unconfirmed" }> {
+        const earlier = context.identity.rotation;
+        const successor =
+            earlier.kind === "requested"
+                ? earlier.successor
+                : `morty_anon_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
+        const requested = await commit(context, withRotationRequested(context.identity, successor));
+        let revoked: Record<string, unknown>;
+        try {
+            revoked = await request(requested, "/identity/revoke-all-access", { successor });
+        } catch (cause) {
+            // The earlier request may have replaced the credential already; the successor then repeats it.
+            if (earlier.kind !== "requested" || errorCode(cause) !== "UNAUTHENTICATED") {
+                throw cause;
+            }
+            revoked = await request(
+                { ...requested, identity: { ...requested.identity, userToken: successor } },
+                "/identity/revoke-all-access",
+                { successor },
+            );
+        }
+        if (revoked["status"] !== "access_revoked") {
+            fail("INVALID_RESPONSE");
+        }
+        const sessionAccess = revoked["sessionAccess"];
+        if (sessionAccess !== "revoked" && sessionAccess !== "unconfirmed") {
+            fail("INVALID_RESPONSE");
+        }
+        return { context: await commit(requested, rotatedIdentity(requested.identity, successor)), sessionAccess };
+    }
+
+    /** Finishes revoking all access when an earlier run stopped before saving the replaced local credential. */
+    async function settleCredentialRotation<Settling extends Context>(context: Settling): Promise<Settling> {
+        if (context.identity.rotation.kind === "none") {
+            return context;
+        }
+        progress("identity", "Finishing the earlier revocation of all access.");
+        return (await revokeAllAccessWithRotation(context)).context;
     }
 
     function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
@@ -1762,23 +1839,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (options.base !== undefined && options.base !== saved.base) {
             throw new SavedIdentityOriginError(saved.base, options.base);
         }
-        const context = await retireReplacedIdentity({ directory, base: saved.base, identity: saved.identity });
-        const revoked = await request(context, "/identity/revoke-all-access", {});
-        if (revoked["status"] !== "access_revoked") {
-            fail("INVALID_RESPONSE");
-        }
-        const sessionAccess = revoked["sessionAccess"];
-        if (sessionAccess !== "revoked" && sessionAccess !== "unconfirmed") {
-            fail("INVALID_RESPONSE");
-        }
+        const revoked = await revokeAllAccessWithRotation(
+            await retireReplacedIdentity({ directory, base: saved.base, identity: saved.identity }),
+        );
         emit({
             status: "access_revoked",
-            computerId: context.identity.computerId,
-            sessionAccess,
+            computerId: revoked.context.identity.computerId,
+            sessionAccess: revoked.sessionAccess,
             message:
-                sessionAccess === "revoked"
-                    ? "Previous sharing links and other Morty credentials have been revoked, and chat windows opened with them have been closed. The local identity is retained."
-                    : "Previous sharing links and other Morty credentials have been revoked. Chat windows already open elsewhere could not be closed and may remain usable for up to 15 minutes; run this command again to retry closing them. The local identity is retained.",
+                revoked.sessionAccess === "revoked"
+                    ? "Previous sharing links and all other Morty credentials have been revoked, and chat windows opened with them have been closed. This computer's own credential was replaced, so copies of it no longer work."
+                    : "Previous sharing links and all other Morty credentials have been revoked, and this computer's own credential was replaced. Chat windows already open elsewhere could not be closed and may remain usable for up to 15 minutes; run this command again to retry closing them.",
         });
     }
 
@@ -1819,7 +1890,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const saved = await loadIdentity(directory, options.base);
         restoreReplacementAccess(saved);
         const identity = await prepareIdentity(location, saved);
-        const verified = await verifyIdentityAndBot(await retireReplacedIdentity(identity.context));
+        const verified = await verifyIdentityAndBot(
+            await retireReplacedIdentity(await settleCredentialRotation(identity.context)),
+        );
         let machine = verified.context;
         emit({ status: "identity_ready", userId: machine.identity.userId, botId: machine.botId });
         const prepared = await prepareRuntime(machine, cwd, verified.expectedComputerId, options.replaceProject);

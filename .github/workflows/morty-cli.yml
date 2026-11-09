@@ -15,8 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Build once: release the archive the merge queue built and accepted for this
-  # exact commit. Only commits without one build and test it here.
+  # Release only the newest shippable main commit. Build once: release the archive
+  # the merge queue built and accepted for it; only commits without one build and
+  # test it here.
   accepted:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -25,6 +26,7 @@ jobs:
       contents: read
       actions: read
     outputs:
+      release: ${{ steps.select.outputs.release }}
       run-id: ${{ steps.promote.outputs.run-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,7 +36,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+      - name: Release only the newest commit with shippable changes
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/select-release.mjs
       - name: Promote the archive accepted by the merge queue
+        if: steps.select.outputs.release == 'true'
         id: promote
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,7 +58,8 @@ jobs:
 
   pipeline:
     needs: accepted
-    if: ${{ !cancelled() && !failure() && needs.accepted.outputs.run-id == '' }}
+    # Outside main no release is selected and the pipeline only builds and tests.
+    if: ${{ !cancelled() && !failure() && needs.accepted.outputs.release != 'false' && needs.accepted.outputs.run-id == '' }}
     uses: ./.github/workflows/morty-pipeline.yml
     with:
       release: ${{ github.ref == 'refs/heads/main' }}
@@ -61,7 +70,7 @@ jobs:
   # A skipped pipeline would skip every later job by default, so each release
   # job requires the success of the job it needs explicitly.
   deployment-preflight:
-    if: ${{ !cancelled() && needs.accepted.result == 'success' && (needs.pipeline.result == 'success' || (needs.pipeline.result == 'skipped' && needs.accepted.outputs.run-id != '')) && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && needs.accepted.result == 'success' && needs.accepted.outputs.release == 'true' && (needs.pipeline.result == 'success' || (needs.pipeline.result == 'skipped' && needs.accepted.outputs.run-id != '')) && github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     needs: [accepted, pipeline]
     runs-on: ubuntu-latest
     environment: morty-production

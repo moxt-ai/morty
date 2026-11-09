@@ -86,7 +86,7 @@ export function createPlatformProjectRoutes() {
                     return response;
                 }
                 // Keep the local identity until setup has saved the successor, so a lost reply can be retried.
-                const revoked = await authentication.revokeAllAccess(local.token, signal);
+                const revoked = await authentication.revokeOtherAccess(local.token, signal);
                 if (revoked.kind !== "revoked") {
                     throw new ManagementError("UNAUTHENTICATED", "Local identity is no longer available.", 401);
                 }

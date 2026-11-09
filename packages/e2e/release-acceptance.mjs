@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -223,25 +223,33 @@ try {
     }
     receipt.localCleanup = localClean;
     if (identity?.project_id && identity?.user_token) {
-        const call = (path, method) =>
+        // Revoking all access replaces the local credential; the replacement is then retired too.
+        const successor = `morty_anon_v1_${randomBytes(32).toString("base64url")}`;
+        const call = (path, method, token, body) =>
             fetch(new URL(`/morty/api/computers/${encodeURIComponent(identity.project_id)}${path}`, origin), {
                 method,
-                headers: { authorization: `Bearer ${identity.user_token}`, "content-type": "application/json" },
-                ...(method === "POST" ? { body: "{}" } : {}),
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 signal: AbortSignal.timeout(30_000),
             });
-        const shares = await call("/identity/revoke-all-access", "POST");
+        const shares = await call("/identity/revoke-all-access", "POST", identity.user_token, { successor });
         const sharedResult = shares.status === 200 ? await shares.json() : null;
         const sharesRevoked =
             shares.status === 401 || (shares.status === 200 && sharedResult?.sessionAccess === "revoked");
-        const local = sharesRevoked ? await call("/identity/v1/local-credential", "DELETE") : null;
-        const rejected = local ? await call("/session", "GET") : null;
-        cleanupComplete = sharesRevoked && [204, 401].includes(local?.status) && rejected?.status === 401;
+        const remaining = shares.status === 200 ? successor : identity.user_token;
+        const local = sharesRevoked ? await call("/identity/v1/local-credential", "DELETE", remaining) : null;
+        const rejected = local
+            ? [await call("/session", "GET", identity.user_token), await call("/session", "GET", successor)]
+            : null;
+        cleanupComplete =
+            sharesRevoked &&
+            [204, 401].includes(local?.status) &&
+            rejected?.every((response) => response.status === 401) === true;
         receipt.credentialCleanup = {
             shares: shares.status,
             sessionAccess: sharedResult?.sessionAccess,
             local: local?.status,
-            subsequentAccess: rejected?.status,
+            subsequentAccess: rejected?.map((response) => response.status),
         };
     } else {
         cleanupComplete = true;
