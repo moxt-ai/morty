@@ -98,21 +98,16 @@ export class E2EHarness {
         const artifactDirectory = join(rootDirectory, "artifacts");
         const workDirectory = join(rootDirectory, "work");
         await Promise.all([artifactDirectory, workDirectory].map((path) => mkdir(path, { recursive: true })));
-        return new E2EHarness(name, rootDirectory, artifactDirectory, workDirectory, configuredRoot !== undefined);
+        return new E2EHarness(name, rootDirectory, artifactDirectory, workDirectory);
     }
 
-    constructor(
-        name: string,
-        rootDirectory: string,
-        artifactDirectory: string,
-        workDirectory: string,
-        preserveArtifacts: boolean,
-    ) {
+    constructor(name: string, rootDirectory: string, artifactDirectory: string, workDirectory: string) {
         this.name = name;
         this.rootDirectory = rootDirectory;
         this.artifactDirectory = artifactDirectory;
         this.workDirectory = workDirectory;
-        this.preserveArtifacts = preserveArtifacts || process.env["MORTY_E2E_KEEP_STATE"] === "1";
+        // MORTY_E2E_ARTIFACT_ROOT only places the diagnostics: a failure keeps them, a success keeps them on request.
+        this.preserveArtifacts = process.env["MORTY_E2E_KEEP_STATE"] === "1";
         this.timeoutMilliseconds = Number(process.env["MORTY_E2E_TIMEOUT_MS"] ?? 10 * 60 * 1_000);
         this.signal = AbortSignal.timeout(this.timeoutMilliseconds);
         this.startedAt = Date.now();

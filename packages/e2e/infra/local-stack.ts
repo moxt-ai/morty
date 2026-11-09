@@ -12,20 +12,35 @@ const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
 const wranglerExecutable = join(repository, "node_modules", ".bin", "wrangler");
 
-async function freePort() {
+// The Workers learn each other's origins before either starts, so the stack chooses their ports instead of binding
+// port 0. It chooses below every platform's ephemeral range (Linux from 32768, macOS and Windows from 49152): a port
+// the system assigns to any other socket meanwhile, an outbound connection or a Worker's inspector, cannot take it.
+const STACK_PORTS = { first: 20_000, last: 32_767 } as const;
+
+async function bindable(port: number): Promise<boolean> {
     const server = createServer();
-    await new Promise<void>((resolveListen, reject) => {
-        server.once("error", reject);
-        server.listen(0, "127.0.0.1", resolveListen);
+    const listening = await new Promise<boolean>((resolveListen, reject) => {
+        server.once("error", (error: NodeJS.ErrnoException) =>
+            error.code === "EADDRINUSE" ? resolveListen(false) : reject(error),
+        );
+        server.listen(port, "127.0.0.1", () => resolveListen(true));
     });
-    const address = server.address();
-    if (address === null || typeof address === "string") {
-        throw new Error("Could not allocate a local port");
+    if (listening) {
+        await new Promise<void>((resolveClose, reject) =>
+            server.close((error) => (error ? reject(error) : resolveClose())),
+        );
     }
-    await new Promise<void>((resolveClose, reject) =>
-        server.close((error) => (error ? reject(error) : resolveClose())),
-    );
-    return address.port;
+    return listening;
+}
+
+async function freePort(taken: ReadonlySet<number> = new Set()) {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+        const port = STACK_PORTS.first + Math.floor(Math.random() * (STACK_PORTS.last - STACK_PORTS.first + 1));
+        if (!taken.has(port) && (await bindable(port))) {
+            return port;
+        }
+    }
+    throw new Error("Could not allocate a local stack port");
 }
 
 async function migrate(
@@ -55,7 +70,7 @@ export class LocalStack {
 
     static async create(harness: E2EHarness) {
         const platformPort = await freePort();
-        const chatPort = await freePort();
+        const chatPort = await freePort(new Set([platformPort]));
         const directories = {
             platform: join(harness.workDirectory, "platform"),
             chat: join(harness.workDirectory, "chat"),
