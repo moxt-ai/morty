@@ -21,7 +21,7 @@ test("Given a rotated connection, When replacement pairing is cancelled, Then th
         await credentials.complete(rotation, signal);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
         await expect(
-            installation.saveConnection({ ...input, pairingId: "pairing_replacement" }, AbortSignal.abort()),
+            installation.saveConnection(input, AbortSignal.abort()),
         ).rejects.toMatchObject({ name: "AbortError" });
         expect((await installation.currentConnection(signal))?.connectionId).toBe(connection.connectionId);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
