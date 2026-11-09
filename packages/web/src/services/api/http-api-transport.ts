@@ -23,7 +23,7 @@ export class HttpApiTransport {
     constructor(origin: string) {
         this.#origin = origin;
     }
-    readonly dispose = () => this.#lifetime.abort();
+    readonly dispose = (reason?: Error) => this.#lifetime.abort(reason);
     readonly #key = (request: Request) => JSON.stringify([request.url, request.headers.get("authorization")]);
     readonly fetch = async (request: Request): Promise<Response> => {
         const requestId = crypto.randomUUID();
