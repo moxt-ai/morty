@@ -1,58 +1,60 @@
 import type { MortyClient } from "@morty-build/client";
-import { acceptedTurn, type CurrentTurn, type TurnFailure, transitionCurrentTurn } from "./session-current-turn.ts";
+import { createStore } from "zustand/vanilla";
+import type { SessionActivityState } from "./session-activity-machine.ts";
 import {
-    type DelegationStage,
-    type SessionInteractionRecovery,
-    sessionInteractionRecovery,
-} from "./session-lifecycle.ts";
-import {
-    observeSessionProjectionExecution,
-    type SessionProjection,
-    sessionProjectionExecutionOwner,
-} from "./session-projection.ts";
+    acceptedTurn,
+    type CurrentTurn,
+    idleTurn,
+    type TurnFailure,
+    transitionCurrentTurn,
+} from "./session-current-turn.ts";
+import type { DeliveryPlacement, DeliveryState } from "./session-delivery-store.ts";
+import { type DelegationStage, requestedInteraction, type SessionLifecycleFact } from "./session-lifecycle.ts";
+import type { SessionInteraction } from "./session-pane-types.ts";
 
-// What the Session pane knows about the Session's execution: the timeline, the current turn, the Runtime's queue,
-// which submissions the Runtime has, and the pending interactions. Every execution fact the pane observes, a live
-// lifecycle event or a snapshot read, moves all of them through `observeSessionExecution`, so no entry point can
-// update some of them and miss the others.
+// What the page knows about one Session's execution: the current turn, the Runtime's queue, the Agent's pending
+// requests, and what the Runtime has shown of each command. Every fact about the execution, a live lifecycle event, an
+// execution read, the service's acceptance of a submission, enters through `applyExecutionFact`, and only there is it
+// decided whether a fact is newer than what the state already holds. The page keeps this state for the Session, so it
+// outlives the pane that follows the Session; the pane feeds facts in and performs the reads the transitions ask for.
 
 /** The Runtime's account of the Session's execution, as one read returns it. */
-export type SessionExecutionSnapshot = Awaited<ReturnType<MortyClient["sessions"]["readSessionExecution"]>>;
+type SessionExecutionSnapshot = Awaited<ReturnType<MortyClient["sessions"]["readSessionExecution"]>>;
 
 /** A message the Runtime holds queued behind the running turn. */
 export type QueuedCommand = SessionExecutionSnapshot["queued"][number];
 
-/** The execution state the pane owns. The Runtime's queue is kept only here; the queue panel derives from it. */
-export interface SessionExecution {
-    readonly projection: SessionProjection;
-    readonly turn: CurrentTurn;
-    readonly queued: readonly QueuedCommand[];
-}
+/** A point of the Session's execution log: its generation, and a position that only grows within it. */
+type LogPosition = SessionExecutionSnapshot["executionPosition"];
 
 /** How a turn's live lifecycle says it ended. */
 type TurnOutcome =
     | { readonly kind: "completed" }
-    /** Steering ended the turn, but its execution goes on; only a snapshot tells what runs now. */
+    /** Steering ended the turn, but its execution goes on; only a read tells what runs now. */
     | { readonly kind: "steered" }
     | { readonly kind: "failed"; readonly failure: TurnFailure };
 
-export type SessionExecutionObservation =
+/** A lifecycle fact that changes the Agent's pending requests. */
+type InteractionChange = Extract<
+    SessionLifecycleFact,
+    { readonly kind: "interaction-requested" | "permission-resolved" | "elicitation-resolved" }
+>;
+
+/** What a lifecycle event says about the Session's execution. */
+export type LiveExecutionChange =
+    | InteractionChange
+    /** The Runtime's queue changed; only a read tells what it holds now. */
+    | { readonly kind: "queue-changed" }
     /**
-     * A snapshot the Runtime returned for a read that began while `turnAtRead` was current. Only a turn the service
-     * reported before the read began can have ended by the time it was served. `deliveryCommandId` names the command whose
-     * delivery the read asked for.
+     * The Runtime started the command at `startedAt`. A command that `steers` joined the running execution instead of
+     * starting one, so it does not become the turn to stop.
      */
     | {
-          readonly kind: "snapshot";
-          readonly snapshot: SessionExecutionSnapshot;
-          readonly turnAtRead: CurrentTurn;
-          readonly deliveryCommandId: string | null;
-          /** When the read returned, which dates a running turn whose Runtime does not report its start. */
-          readonly readAt: number;
+          readonly kind: "turn-started";
+          readonly commandId: string;
+          readonly startedAt: number;
+          readonly steers: boolean;
       }
-    /** The Runtime started the command at `startedAt`. */
-    | { readonly kind: "turn-started"; readonly commandId: string; readonly startedAt: number }
-    | { readonly kind: "turn-ended"; readonly commandId: string; readonly outcome: TurnOutcome }
     /** The Runtime handed the command to the native session's owner, which reached `stage` with it at `at`. */
     | {
           readonly kind: "turn-delegated";
@@ -60,37 +62,370 @@ export type SessionExecutionObservation =
           readonly stage: DelegationStage;
           readonly at: number;
       }
+    | { readonly kind: "turn-ended"; readonly commandId: string; readonly outcome: TurnOutcome };
+
+/** A lifecycle event at `position` of the Session's log. */
+type LiveExecutionFact = {
+    readonly kind: "live";
+    readonly sessionGenerationId: string;
+    readonly position: string;
+    readonly change: LiveExecutionChange;
+};
+
+export type SessionExecutionFact =
+    /**
+     * A pane starts following the Session, opened while `running` ran, or nothing. Until the pane's first read, the
+     * queue and requests this page last saw may be out of date, and nothing orders live facts.
+     */
+    | {
+          readonly kind: "opened";
+          readonly running: { readonly commandId: string; readonly turnId: string } | null;
+          readonly openedAt: number;
+      }
+    | LiveExecutionFact
+    /**
+     * The Runtime's account of the execution through `snapshot.executionPosition`, for a read that began when the
+     * state's `executionReadBasis` was `basis`. `deliveryCommandId` names the command whose delivery the read asked for;
+     * `readAt`, when it returned, dates a running turn whose Runtime does not report its start.
+     */
+    | {
+          readonly kind: "read";
+          readonly snapshot: SessionExecutionSnapshot;
+          readonly basis: number;
+          readonly deliveryCommandId: string | null;
+          readonly readAt: number;
+      }
+    /**
+     * The service accepted this page's submission of `commandId`, to run now or queued, sent at `startedAt`. An HTTP
+     * answer has no position in the Session's log.
+     */
+    | {
+          readonly kind: "acknowledged";
+          readonly commandId: string;
+          readonly turnId: string;
+          readonly queued: boolean;
+          readonly startedAt: number;
+      }
+    /** This page submits a new turn, so the failure reported for an earlier one no longer describes the Session. */
+    | { readonly kind: "turn-submitted" }
+    /** The pane's timeline shows the `shown` commands' own messages; its history records the `recorded` commands. */
+    | { readonly kind: "history"; readonly shown: readonly string[]; readonly recorded: readonly string[] }
     /** The Runtime closed the Session, which runs and queues nothing and asks nothing of the user. */
     | { readonly kind: "closed" };
 
-export interface SessionExecutionChange {
-    readonly execution: SessionExecution;
-    /** Commands the observation shows the Runtime has, which confirms their delivery. */
-    readonly delivered: readonly string[];
-    /** Commands the observation shows have left the Runtime's queue: started, withdrawn or no longer listed. */
-    readonly leftQueue: readonly string[];
-    /** A live turn event says nothing about interactions; a snapshot recovers them, and a closing ends them. */
-    readonly interactions:
-        | { readonly kind: "kept" }
-        | { readonly kind: "recovered"; readonly recovery: SessionInteractionRecovery }
-        | { readonly kind: "cleared" };
+/** What the Runtime has shown this page about one of the Session's commands. */
+interface RuntimeCommand {
+    /** When this page learned the Runtime holds the command, in the order `SessionExecutionState.learned` counts. */
+    readonly learnedAt: number;
+    /** The timeline showed the command's own message. */
+    readonly shown: boolean;
+    /** The Runtime reported the command's turn ended. */
+    readonly ended: boolean;
 }
 
-const keptInteractions = { kind: "kept" } as const;
+/** How far the state reflects the Session's execution log. */
+type ExecutionCoverage =
+    /** No read since the pane started following the Session; the read that follows covers the live facts before it. */
+    | { readonly kind: "unread" }
+    | { readonly kind: "covered"; readonly position: LogPosition }
+    /**
+     * A live fact came from another generation of the log than `position`. The read it asked for decides on it and
+     * on the facts that arrived after it.
+     */
+    | { readonly kind: "awaiting-read"; readonly position: LogPosition; readonly held: readonly LiveExecutionFact[] };
 
-/** The turn id of a command the service reports running: the one it accepted this pane's submission under, if any. */
+export interface SessionExecutionState {
+    readonly coverage: ExecutionCoverage;
+    readonly turn: CurrentTurn;
+    /** The messages the Runtime holds queued, as last observed. */
+    readonly queued: readonly QueuedCommand[];
+    /** The queue the last applied read listed, and the `basis` it began with: what it could not have seen. */
+    readonly listing: { readonly queued: ReadonlySet<string>; readonly basis: number } | null;
+    /** The Agent's requests in arrival order, each with its latest resolution. */
+    readonly interactions: readonly SessionInteraction[];
+    readonly commands: ReadonlyMap<string, RuntimeCommand>;
+    /** How many commands this page has learned the Runtime holds. */
+    readonly learned: number;
+}
+
+type SessionExecutionEffect =
+    /** The state needs a fresh read of the Runtime's execution before it is current again. */
+    | { readonly kind: "read" }
+    /** The Runtime reported what runs and what is queued; the timeline marks it at this point. */
+    | { readonly kind: "mark-timeline"; readonly running: string | null; readonly queued: readonly string[] };
+
+interface SessionExecutionTransition {
+    readonly state: SessionExecutionState;
+    readonly effects: readonly SessionExecutionEffect[];
+}
+
+const initialSessionExecution: SessionExecutionState = {
+    coverage: { kind: "unread" },
+    turn: idleTurn,
+    queued: [],
+    listing: null,
+    interactions: [],
+    commands: new Map(),
+    learned: 0,
+};
+
+const readEffect: SessionExecutionEffect = { kind: "read" };
+
+function settled(state: SessionExecutionState): SessionExecutionTransition {
+    return { state, effects: [] };
+}
+
+/** Records that the Runtime holds `commandIds`, and that it showed or ended them. */
+function learn(
+    state: SessionExecutionState,
+    commandIds: readonly string[],
+    fact: "holds" | "shows" | "ended",
+): SessionExecutionState {
+    let commands: Map<string, RuntimeCommand> | null = null;
+    let learned = state.learned;
+    for (const commandId of commandIds) {
+        const known = (commands ?? state.commands).get(commandId);
+        const base = known ?? { learnedAt: learned, shown: false, ended: false };
+        const next = fact === "shows" ? { ...base, shown: true } : fact === "ended" ? { ...base, ended: true } : base;
+        if (known !== undefined && next.shown === known.shown && next.ended === known.ended) {
+            continue;
+        }
+        commands ??= new Map(state.commands);
+        commands.set(commandId, next);
+        if (known === undefined) {
+            learned += 1;
+        }
+    }
+    return commands === null ? state : { ...state, commands, learned };
+}
+
+function commandEnded(state: Pick<SessionExecutionState, "commands">, commandId: string): boolean {
+    return state.commands.get(commandId)?.ended === true;
+}
+
+/** The turn id of a command the service reports running: the one it accepted this page's submission under, if any. */
 function runningTurnId(turn: CurrentTurn, commandId: string): string {
     const accepted = acceptedTurn(turn);
     return accepted?.commandId === commandId ? accepted.turnId : commandId;
 }
 
-function observeSnapshot(
-    execution: SessionExecution,
-    observation: Extract<SessionExecutionObservation, { readonly kind: "snapshot" }>,
-): SessionExecutionChange {
-    const { snapshot, turnAtRead, deliveryCommandId, readAt } = observation;
+function interactionId(interaction: SessionInteraction): string {
+    return interaction.kind === "permission"
+        ? interaction.permission.interactionId
+        : interaction.elicitation.interactionId;
+}
+
+function transitionInteractions(
+    current: readonly SessionInteraction[],
+    change: InteractionChange,
+): readonly SessionInteraction[] {
+    switch (change.kind) {
+        case "interaction-requested": {
+            const id = interactionId(change.interaction);
+            return [...current.filter((interaction) => interactionId(interaction) !== id), change.interaction];
+        }
+        case "permission-resolved":
+            return current.map((interaction): SessionInteraction => {
+                if (
+                    interaction.kind !== "permission" ||
+                    interaction.permission.interactionId !== change.interactionId ||
+                    interaction.permission.state.kind === "resolved"
+                ) {
+                    return interaction;
+                }
+                return {
+                    kind: "permission",
+                    permission: {
+                        ...interaction.permission,
+                        state: { kind: "resolved", optionId: change.optionId, outcome: change.outcome },
+                    },
+                };
+            });
+        case "elicitation-resolved":
+            return current.map((interaction): SessionInteraction => {
+                if (
+                    interaction.kind !== "elicitation" ||
+                    interaction.elicitation.interactionId !== change.interactionId ||
+                    interaction.elicitation.state.kind === "resolved"
+                ) {
+                    return interaction;
+                }
+                return {
+                    kind: "elicitation",
+                    elicitation: {
+                        ...interaction.elicitation,
+                        state: {
+                            action: change.action,
+                            content:
+                                interaction.elicitation.state.kind === "submitted"
+                                    ? interaction.elicitation.state.content
+                                    : "",
+                            kind: "resolved",
+                        },
+                    },
+                };
+            });
+        default:
+            return change satisfies never;
+    }
+}
+
+/** Applies what a live fact says, once it is known to be newer than what the state holds. */
+function applyLiveChange(state: SessionExecutionState, change: LiveExecutionChange): SessionExecutionTransition {
+    switch (change.kind) {
+        case "interaction-requested":
+        case "permission-resolved":
+        case "elicitation-resolved":
+            return settled({ ...state, interactions: transitionInteractions(state.interactions, change) });
+        case "queue-changed":
+            return { state, effects: [readEffect] };
+        case "turn-started": {
+            const { commandId, startedAt } = change;
+            const known = learn(state, [commandId], "holds");
+            return settled({
+                ...known,
+                queued: known.queued.some((item) => item.commandId === commandId)
+                    ? known.queued.filter((item) => item.commandId !== commandId)
+                    : known.queued,
+                // Steering starts a command, not a new execution to stop.
+                turn: change.steers
+                    ? known.turn
+                    : transitionCurrentTurn(known.turn, {
+                          kind: "running",
+                          commandId,
+                          turnId: runningTurnId(known.turn, commandId),
+                          startedAt,
+                          observedAt: startedAt,
+                      }),
+            });
+        }
+        case "turn-delegated": {
+            const known = learn(state, [change.commandId], "holds");
+            return settled({
+                ...known,
+                turn: transitionCurrentTurn(known.turn, {
+                    kind: "delegated",
+                    commandId: change.commandId,
+                    stage: change.stage,
+                    at: change.at,
+                }),
+            });
+        }
+        case "turn-ended": {
+            const { commandId, outcome } = change;
+            if (outcome.kind === "steered") {
+                // Steering ended the turn but not its execution; only a read tells what runs now.
+                return { state: learn(state, [commandId], "holds"), effects: [readEffect] };
+            }
+            const known = learn(state, [commandId], "ended");
+            return settled({
+                ...known,
+                turn: transitionCurrentTurn(known.turn, {
+                    kind: "ended",
+                    commandId,
+                    failure: outcome.kind === "failed" ? outcome.failure : null,
+                }),
+            });
+        }
+        default:
+            return change satisfies never;
+    }
+}
+
+/** Applies a live fact against the position the state covers: an older one is already reflected. */
+function applyCoveredLive(
+    state: SessionExecutionState,
+    position: LogPosition,
+    fact: LiveExecutionFact,
+): SessionExecutionTransition {
+    if (BigInt(fact.position) <= BigInt(position.throughPosition)) {
+        return settled(state);
+    }
+    return applyLiveChange(
+        {
+            ...state,
+            coverage: {
+                kind: "covered",
+                position: { sessionGenerationId: fact.sessionGenerationId, throughPosition: fact.position },
+            },
+        },
+        fact.change,
+    );
+}
+
+function applyLive(state: SessionExecutionState, fact: LiveExecutionFact): SessionExecutionTransition {
+    const { coverage } = state;
+    switch (coverage.kind) {
+        case "unread":
+            // Nothing orders live facts before the first read; the read that follows covers them.
+            return applyLiveChange(state, fact.change);
+        case "awaiting-read":
+            return settled({ ...state, coverage: { ...coverage, held: [...coverage.held, fact] } });
+        case "covered":
+            if (fact.sessionGenerationId !== coverage.position.sessionGenerationId) {
+                return {
+                    state: { ...state, coverage: { kind: "awaiting-read", position: coverage.position, held: [fact] } },
+                    effects: [readEffect],
+                };
+            }
+            return applyCoveredLive(state, coverage.position, fact);
+        default:
+            return coverage satisfies never;
+    }
+}
+
+/** Decides the live facts a read was awaited for: those of another generation than the read's are dropped. */
+function replayHeld(
+    transition: SessionExecutionTransition,
+    held: readonly LiveExecutionFact[],
+): SessionExecutionTransition {
+    let { state, effects } = transition;
+    for (const fact of held) {
+        if (
+            state.coverage.kind !== "covered" ||
+            fact.sessionGenerationId !== state.coverage.position.sessionGenerationId
+        ) {
+            continue;
+        }
+        const next = applyCoveredLive(state, state.coverage.position, fact);
+        state = next.state;
+        effects = [...effects, ...next.effects];
+    }
+    return { state, effects };
+}
+
+function applyRead(
+    state: SessionExecutionState,
+    fact: Extract<SessionExecutionFact, { readonly kind: "read" }>,
+): SessionExecutionTransition {
+    const { snapshot, basis, deliveryCommandId, readAt } = fact;
+    const { coverage } = state;
+    const position = snapshot.executionPosition;
+    const held = coverage.kind === "awaiting-read" ? coverage.held : [];
+    if (
+        coverage.kind !== "unread" &&
+        coverage.position.sessionGenerationId === position.sessionGenerationId &&
+        BigInt(position.throughPosition) < BigInt(coverage.position.throughPosition)
+    ) {
+        // The state already reflects facts newer than this read.
+        return replayHeld(settled({ ...state, coverage: { kind: "covered", position: coverage.position } }), held);
+    }
     const running = snapshot.turn;
-    let turn = execution.turn;
+    // Only the Runtime knows whether a submission arrived, including one that finished while no pane followed the
+    // Session. A Runtime or Relay that cannot report it omits the delivery, and the submission stays unconfirmed. The
+    // execution receipt of a running command confirms its delivery even when admission and live events were lost.
+    let next = learn(
+        state,
+        [
+            ...snapshot.queued.map((item) => item.commandId),
+            ...(deliveryCommandId !== null && snapshot.command !== undefined && snapshot.command.state !== "unknown"
+                ? [deliveryCommandId]
+                : []),
+            ...(running === null ? [] : [running.commandId]),
+        ],
+        "holds",
+    );
+    let turn = next.turn;
     if (running !== null) {
         turn = transitionCurrentTurn(turn, {
             kind: "running",
@@ -100,118 +435,241 @@ function observeSnapshot(
             observedAt: readAt,
         });
     } else {
-        if (turnAtRead.kind === "current") {
+        // Only a turn this page learned of before the read began can have ended by the time it was served.
+        if (turn.kind === "current" && (state.commands.get(turn.commandId)?.learnedAt ?? -1) < basis) {
             turn = transitionCurrentTurn(turn, { kind: "nothing-running" });
         }
-        // A retained outcome describes the last settled command; a running or untouched Session has none.
+        // A retained outcome describes the last settled command. Repeating an outcome already observed cannot undo
+        // what this page did since; a genuinely unseen one recovers a turn that ended while no pane followed it.
         const lastTurn = snapshot.lastTurn;
-        if (lastTurn !== undefined) {
+        if (lastTurn !== undefined && !commandEnded(next, lastTurn.commandId)) {
             turn = transitionCurrentTurn(turn, {
                 kind: "last-turn-reported",
                 commandId: lastTurn.commandId,
                 failure: lastTurn.state === "failed" ? { code: lastTurn.code, message: lastTurn.message } : null,
             });
+            next = learn(next, [lastTurn.commandId], "ended");
         }
     }
-    // Only the Runtime knows whether a submission arrived, including one that finished while this pane was away. A
-    // Runtime or Relay that cannot report it omits the delivery, and the submission stays unconfirmed. The execution
-    // receipt of a running command confirms its delivery even when admission and live events were lost.
-    const delivered = [
-        ...snapshot.queued.map((item) => item.commandId),
-        ...(deliveryCommandId !== null && snapshot.command !== undefined && snapshot.command.state !== "unknown"
-            ? [deliveryCommandId]
-            : []),
-        ...(running === null ? [] : [running.commandId]),
-    ];
-    const listed = new Set(snapshot.queued.map((item) => item.commandId));
-    return {
-        execution: {
-            projection: observeSessionProjectionExecution(execution.projection, {
-                running: running?.commandId ?? null,
-                queued: snapshot.queued.map((item) => item.commandId),
-            }),
-            turn,
-            queued: snapshot.queued,
+    const queued = snapshot.queued.map((item) => item.commandId);
+    return replayHeld(
+        {
+            state: {
+                ...next,
+                coverage: { kind: "covered", position },
+                turn,
+                queued: snapshot.queued,
+                listing: { queued: new Set(queued), basis },
+                interactions:
+                    snapshot.interactionState === null
+                        ? []
+                        : snapshot.interactionState.interactions.map(requestedInteraction),
+            },
+            effects: [{ kind: "mark-timeline", running: running?.commandId ?? null, queued }],
         },
-        delivered,
-        leftQueue: execution.queued.flatMap((item) => (listed.has(item.commandId) ? [] : [item.commandId])),
-        interactions: { kind: "recovered", recovery: sessionInteractionRecovery(snapshot) },
-    };
+        held,
+    );
 }
 
-/** Moves the pane's whole execution state by one observed fact. */
-export function observeSessionExecution(
-    execution: SessionExecution,
-    observation: SessionExecutionObservation,
-): SessionExecutionChange {
-    switch (observation.kind) {
-        case "snapshot":
-            return observeSnapshot(execution, observation);
-        case "turn-started": {
-            const { commandId, startedAt } = observation;
-            const owner = sessionProjectionExecutionOwner(execution.projection, commandId);
-            return {
-                execution: {
-                    ...execution,
-                    queued: execution.queued.filter((item) => item.commandId !== commandId),
-                    // Steering starts a command, not a new execution to stop.
-                    turn:
-                        owner !== null && owner !== commandId
-                            ? execution.turn
-                            : transitionCurrentTurn(execution.turn, {
-                                  kind: "running",
-                                  commandId,
-                                  turnId: runningTurnId(execution.turn, commandId),
-                                  startedAt,
-                                  observedAt: startedAt,
-                              }),
-                },
-                delivered: [commandId],
-                leftQueue: [commandId],
-                interactions: keptInteractions,
+/** Moves the Session's execution state by one fact, and says what the fact asks of the pane following the Session. */
+function applyExecutionFact(state: SessionExecutionState, fact: SessionExecutionFact): SessionExecutionTransition {
+    switch (fact.kind) {
+        case "opened": {
+            const opened: SessionExecutionState = {
+                ...state,
+                coverage: { kind: "unread" },
+                queued: [],
+                listing: null,
+                interactions: [],
             };
+            const { running } = fact;
+            if (running === null) {
+                return settled({ ...opened, turn: transitionCurrentTurn(opened.turn, { kind: "nothing-running" }) });
+            }
+            const known = learn(opened, [running.commandId], "holds");
+            return settled({
+                ...known,
+                turn: transitionCurrentTurn(known.turn, {
+                    kind: "running",
+                    commandId: running.commandId,
+                    turnId: running.turnId,
+                    startedAt: null,
+                    observedAt: fact.openedAt,
+                }),
+            });
         }
-        case "turn-delegated":
-            return {
-                execution: {
-                    ...execution,
-                    turn: transitionCurrentTurn(execution.turn, { ...observation, kind: "delegated" }),
-                },
-                delivered: [observation.commandId],
-                leftQueue: [],
-                interactions: keptInteractions,
-            };
-        case "turn-ended": {
-            const { commandId, outcome } = observation;
-            return {
-                execution: {
-                    ...execution,
-                    turn:
-                        outcome.kind === "steered"
-                            ? execution.turn
-                            : transitionCurrentTurn(execution.turn, {
-                                  kind: "ended",
-                                  commandId,
-                                  failure: outcome.kind === "failed" ? outcome.failure : null,
-                              }),
-                },
-                delivered: [commandId],
-                leftQueue: [],
-                interactions: keptInteractions,
-            };
+        case "live":
+            return applyLive(state, fact);
+        case "read":
+            return applyRead(state, fact);
+        case "acknowledged": {
+            const known = learn(state, [fact.commandId], "holds");
+            // A queued message starts no turn yet, and a terminal live event can precede the acceptance response: the
+            // turn it ended stays ended.
+            if (fact.queued || commandEnded(state, fact.commandId)) {
+                return settled(known);
+            }
+            return settled({
+                ...known,
+                turn: transitionCurrentTurn(known.turn, {
+                    kind: "accepted",
+                    commandId: fact.commandId,
+                    turnId: fact.turnId,
+                    startedAt: fact.startedAt,
+                }),
+            });
         }
+        case "turn-submitted": {
+            const turn = transitionCurrentTurn(state.turn, { kind: "new-turn-submitted" });
+            return settled(turn === state.turn ? state : { ...state, turn });
+        }
+        case "history":
+            return settled(learn(learn(state, fact.recorded, "holds"), fact.shown, "shows"));
         case "closed":
             return {
-                execution: {
-                    projection: observeSessionProjectionExecution(execution.projection, { running: null, queued: [] }),
-                    turn: transitionCurrentTurn(execution.turn, { kind: "nothing-running" }),
+                state: {
+                    ...state,
+                    turn: transitionCurrentTurn(state.turn, { kind: "nothing-running" }),
                     queued: [],
+                    interactions: [],
                 },
-                delivered: [],
-                leftQueue: execution.queued.map((item) => item.commandId),
-                interactions: { kind: "cleared" },
+                effects: [{ kind: "mark-timeline", running: null, queued: [] }],
             };
         default:
-            return observation satisfies never;
+            return fact satisfies never;
     }
 }
+
+/** What a read that begins now passes back as its `basis`: the commands it can know of are those learned before. */
+export function executionReadBasis(state: SessionExecutionState): number {
+    return state.learned;
+}
+
+/** Whether the Runtime has shown it holds the command: listed, running, ended, recorded or confirmed by a receipt. */
+export function runtimeHoldsCommand(state: SessionExecutionState, commandId: string): boolean {
+    return state.commands.has(commandId);
+}
+
+/**
+ * Whether the Runtime's own account now shows a message the service accepted, so the page no longer needs its copy.
+ * A message that runs as a turn is covered once the timeline shows it; history names each turn's command. A message
+ * shown in the queue keeps its files there until it starts or a read that could see it no longer lists it.
+ */
+export function runtimeCoversMessage(
+    state: SessionExecutionState,
+    message: { readonly commandId: string; readonly placement: DeliveryPlacement },
+): boolean {
+    const command = state.commands.get(message.commandId);
+    if (command === undefined) {
+        return false;
+    }
+    if (command.shown) {
+        return true;
+    }
+    if (message.placement === "turn") {
+        return false;
+    }
+    return (
+        acceptedTurn(state.turn)?.commandId === message.commandId ||
+        (state.listing !== null &&
+            command.learnedAt < state.listing.basis &&
+            !state.listing.queued.has(message.commandId))
+    );
+}
+
+/** The questions the Agent asks that are still pending. */
+export function pendingQuestionIds(interactions: readonly SessionInteraction[]): ReadonlySet<string> {
+    return new Set(
+        interactions.flatMap((interaction) =>
+            interaction.kind === "elicitation" && interaction.elicitation.state.kind === "pending"
+                ? [interaction.elicitation.interactionId]
+                : [],
+        ),
+    );
+}
+
+/** Whether the Agent waits for the user to answer one of its requests. */
+export function waitingForInput(interactions: readonly SessionInteraction[]): boolean {
+    return interactions.some(
+        (interaction) =>
+            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
+            (interaction.kind === "elicitation" &&
+                (interaction.elicitation.state.kind === "pending" ||
+                    interaction.elicitation.state.kind === "submitted")),
+    );
+}
+
+/**
+ * The command of the new turn this page is submitting and the service has not reported yet: a message sent as a new
+ * turn while its delivery is being prepared or submitted. A message queued behind a running turn starts none, and
+ * once the service reports the command running or ended, the turn is the service's account.
+ */
+function submittingCommandId(
+    execution: Pick<SessionExecutionState, "turn" | "commands">,
+    delivery: DeliveryState,
+): string | null {
+    if (execution.turn.kind === "current") {
+        return null;
+    }
+    const commandId =
+        delivery.kind === "preparing" && delivery.message.placement === "turn"
+            ? delivery.message.commandId
+            : delivery.kind === "submitting" && delivery.journal.placement === "turn"
+              ? delivery.journal.commandId
+              : null;
+    return commandId !== null && commandEnded(execution, commandId) ? null : commandId;
+}
+
+/**
+ * What the page reports for the Session: working while a command is current or this page submits a new turn;
+ * otherwise failed while a message that would have started a turn keeps the failure of its preparation, or after the
+ * service reported a failed turn; otherwise idle. A message the service rejected reports its failure on the message
+ * alone.
+ */
+export function sessionActivity(
+    execution: Pick<SessionExecutionState, "turn" | "commands">,
+    delivery: DeliveryState,
+): SessionActivityState {
+    const { turn } = execution;
+    if (turn.kind === "current") {
+        return { kind: "working", commandId: turn.commandId };
+    }
+    const submitting = submittingCommandId(execution, delivery);
+    if (submitting !== null) {
+        return { kind: "working", commandId: submitting };
+    }
+    if (delivery.kind === "preparation-failed" && delivery.message.placement === "turn") {
+        return { kind: "failed", commandId: delivery.message.commandId, ...delivery.failure };
+    }
+    return turn.failure === null ? { kind: "idle" } : { kind: "failed", ...turn.failure };
+}
+
+/** The Session's execution state on this page, which only `apply` moves. */
+export interface SessionExecutionStore {
+    readonly state: SessionExecutionState;
+    /** Applies one fact and returns what it asks of the pane following the Session. */
+    readonly apply: (fact: SessionExecutionFact) => readonly SessionExecutionEffect[];
+}
+
+export function createSessionExecutionStore(ports: {
+    /** The state moved, which what the page derives from the Runtime's account follows. */
+    readonly changed: (previous: SessionExecutionState, next: SessionExecutionState) => void;
+}) {
+    return createStore<SessionExecutionStore>()((set, get) => ({
+        state: initialSessionExecution,
+        apply: (fact) => {
+            const previous = get().state;
+            const { state, effects } = applyExecutionFact(previous, fact);
+            if (state !== previous) {
+                set({ state });
+                ports.changed(previous, state);
+            }
+            return effects;
+        },
+    }));
+}
+
+/** The execution of no Session, for a view that follows the open Session's execution when none is open. */
+export const noSessionExecution = createStore<Pick<SessionExecutionStore, "state">>()(() => ({
+    state: initialSessionExecution,
+}));

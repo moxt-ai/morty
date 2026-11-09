@@ -1,13 +1,7 @@
-import type { SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import type { ElicitationFieldValue } from "../../services/chat/elicitation-form.ts";
 import { formatError } from "../format-error.ts";
-import {
-    requestedInteraction,
-    type SessionInteractionRecovery,
-    type SessionLifecycleFact,
-} from "./session-lifecycle.ts";
 import type {
     ElicitationInteractionResponse,
     PermissionInteraction,
@@ -16,77 +10,9 @@ import type {
 } from "./session-pane-types.ts";
 import type { SessionMessage } from "./session-presentation.ts";
 
-// The Session's interaction contract: the requests the Agent made, how each
-// was resolved, and the user's in-flight responses. The pane following the
-// Session forwards lifecycle facts here instead of tracking interactions itself;
-// a response belongs to the Session, so switching panes does not end it.
-
-/** A lifecycle fact that changes the interactions. */
-type SessionInteractionFact = Extract<
-    SessionLifecycleFact,
-    { readonly kind: "interaction-requested" | "permission-resolved" | "elicitation-resolved" }
->;
-
-function interactionId(interaction: SessionInteraction): string {
-    return interaction.kind === "permission"
-        ? interaction.permission.interactionId
-        : interaction.elicitation.interactionId;
-}
-
-function transitionSessionInteractions(
-    current: readonly SessionInteraction[],
-    fact: SessionInteractionFact,
-): readonly SessionInteraction[] {
-    switch (fact.kind) {
-        case "interaction-requested": {
-            const id = interactionId(fact.interaction);
-            return [...current.filter((interaction) => interactionId(interaction) !== id), fact.interaction];
-        }
-        case "permission-resolved":
-            return current.map((interaction): SessionInteraction => {
-                if (
-                    interaction.kind !== "permission" ||
-                    interaction.permission.interactionId !== fact.interactionId ||
-                    interaction.permission.state.kind === "resolved"
-                ) {
-                    return interaction;
-                }
-                return {
-                    kind: "permission",
-                    permission: {
-                        ...interaction.permission,
-                        state: { kind: "resolved", optionId: fact.optionId, outcome: fact.outcome },
-                    },
-                };
-            });
-        case "elicitation-resolved":
-            return current.map((interaction): SessionInteraction => {
-                if (
-                    interaction.kind !== "elicitation" ||
-                    interaction.elicitation.interactionId !== fact.interactionId ||
-                    interaction.elicitation.state.kind === "resolved"
-                ) {
-                    return interaction;
-                }
-                return {
-                    kind: "elicitation",
-                    elicitation: {
-                        ...interaction.elicitation,
-                        state: {
-                            action: fact.action,
-                            content:
-                                interaction.elicitation.state.kind === "submitted"
-                                    ? interaction.elicitation.state.content
-                                    : "",
-                            kind: "resolved",
-                        },
-                    },
-                };
-            });
-        default:
-            return fact satisfies never;
-    }
-}
+// What the user does with the Agent's requests: the answers typed into its questions and the responses in flight. The
+// requests themselves, and how each was resolved, are the Session's execution state (`session-execution.ts`). A
+// response belongs to the Session, so switching panes does not end it.
 
 type InteractionOperation =
     | { readonly kind: "submitting" }
@@ -97,23 +23,15 @@ type InteractionOperation =
 export type ElicitationAnswerDrafts = ReadonlyMap<string, Readonly<Record<string, ElicitationFieldValue>>>;
 
 export interface SessionInteractionStore {
-    /** The Agent's requests in arrival order, each with its latest resolution. */
-    readonly interactions: readonly SessionInteraction[];
     /** What the user typed into questions not yet answered; it belongs to the Session, not to this pane. */
     readonly answerDrafts: ElicitationAnswerDrafts;
     readonly editAnswer: (interactionId: string, fieldName: string, value: ElicitationFieldValue) => void;
     readonly submissions: ReadonlyMap<string, InteractionOperation>;
-    readonly coverage: { readonly sessionGenerationId: string; readonly throughPosition: string } | null;
-    /** Applies a lifecycle fact; `read` recovers the interactions through the connection the fact arrived on. */
-    readonly apply: (
-        fact: SessionInteractionFact,
-        event: SessionLiveEvent,
-        read: (signal: AbortSignal) => Promise<SessionInteractionRecovery>,
-        signal: AbortSignal,
-    ) => Promise<void>;
-    readonly recover: (recovery: SessionInteractionRecovery) => void;
-    /** Replaces the interactions with those the Runtime reports for the Session now. */
-    readonly restore: (interactions: readonly SessionInteraction[]) => void;
+    /**
+     * The Runtime's account now leaves `pending` the questions still waiting for an answer. Drafts last only while
+     * their question is pending; an answered or withdrawn question drops its draft.
+     */
+    readonly questionsChanged: (pending: ReadonlySet<string>) => void;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => void;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => void;
 }
@@ -129,20 +47,6 @@ export function createSessionInteractionStore(ports: {
         const replaceAnswerDrafts = (drafts: ElicitationAnswerDrafts): void => {
             set({ answerDrafts: drafts });
             ports.answerDraftsChanged(drafts);
-        };
-        /** Drafts last only while their question is pending; an answered or withdrawn question drops its draft. */
-        const keepPendingDrafts = (): void => {
-            const pending = new Set(
-                get().interactions.flatMap((interaction) =>
-                    interaction.kind === "elicitation" && interaction.elicitation.state.kind === "pending"
-                        ? [interaction.elicitation.interactionId]
-                        : [],
-                ),
-            );
-            const drafts = get().answerDrafts;
-            if ([...drafts.keys()].some((id) => !pending.has(id))) {
-                replaceAnswerDrafts(new Map([...drafts].filter(([id]) => pending.has(id))));
-            }
         };
         const record = (id: string, operation: InteractionOperation): void => {
             set((current) => ({ submissions: new Map(current.submissions).set(id, operation) }));
@@ -175,7 +79,6 @@ export function createSessionInteractionStore(ports: {
             );
         };
         return {
-            interactions: [],
             answerDrafts: ports.answerDrafts,
             editAnswer: (interactionId, fieldName, value) => {
                 const current = get().answerDrafts;
@@ -183,43 +86,13 @@ export function createSessionInteractionStore(ports: {
                     new Map(current).set(interactionId, { ...(current.get(interactionId) ?? {}), [fieldName]: value }),
                 );
             },
-            coverage: null,
             submissions: new Map(),
-            apply: async (fact, event, read, signal) => {
-                signal.throwIfAborted();
-                const previous = get().coverage;
-                if (previous !== null && previous.sessionGenerationId !== event.sessionGenerationId) {
-                    const recovery = await read(signal);
-                    signal.throwIfAborted();
-                    get().recover(recovery);
+            questionsChanged: (pending) => {
+                const drafts = get().answerDrafts;
+                if ([...drafts.keys()].some((id) => !pending.has(id))) {
+                    replaceAnswerDrafts(new Map([...drafts].filter(([id]) => pending.has(id))));
                 }
-                const coverage = get().coverage;
-                if (
-                    coverage !== null &&
-                    (coverage.sessionGenerationId !== event.sessionGenerationId ||
-                        BigInt(event.position) <= BigInt(coverage.throughPosition))
-                ) {
-                    return;
-                }
-                set((current) => ({
-                    interactions: transitionSessionInteractions(current.interactions, fact),
-                    coverage: { sessionGenerationId: event.sessionGenerationId, throughPosition: event.position },
-                }));
             },
-            recover: (snapshot) => {
-                set({
-                    interactions: snapshot === null ? [] : snapshot.interactions.map(requestedInteraction),
-                    coverage:
-                        snapshot === null
-                            ? null
-                            : {
-                                  sessionGenerationId: snapshot.sessionGenerationId,
-                                  throughPosition: snapshot.throughPosition,
-                              },
-                });
-                keepPendingDrafts();
-            },
-            restore: (interactions) => set({ interactions, coverage: null }),
             respondToPermission: (response, signal) =>
                 submit(response.interactionId, signal, () => ports.permission(response, signal)),
             respondToElicitation: (response, signal) =>
@@ -250,8 +123,12 @@ function requestedFileChanges(
     return announced?.content.flatMap((content) => (content.type === "diff" ? [content] : [])) ?? [];
 }
 
-export function sessionInteractionPresentation(model: SessionInteractionStore, messages: readonly SessionMessage[]) {
-    const interactions = model.interactions;
+/** What the interaction cards show of the Agent's pending `interactions` and the user's responses to them. */
+export function sessionInteractionPresentation(
+    model: SessionInteractionStore,
+    interactions: readonly SessionInteraction[],
+    messages: readonly SessionMessage[],
+) {
     const permissions = interactions.flatMap((interaction) =>
         interaction.kind === "permission" &&
         interaction.permission.state.kind === "pending" &&

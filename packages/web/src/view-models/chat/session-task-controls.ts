@@ -4,7 +4,7 @@ import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import type { SessionOperationConnection } from "./session-operation-connection.ts";
 
-/** The turn the service reports running, as the Session pane's current turn holds it. */
+/** The turn the service reports running, as the Session's execution state holds it. */
 export interface RunningTurn {
     readonly commandId: string;
     readonly turnId: string;
@@ -15,18 +15,16 @@ type TaskControlFeedback =
     | { readonly kind: "failed"; readonly commandId: string; readonly message: string };
 
 /**
- * The stop control. Which turn runs belongs to the current turn of the pane following the Session; this store keeps
- * what the user asked of it: a stop request for a command, and why the last request failed. The request is the
- * Session's: switching to another pane neither ends it nor forgets it.
+ * The stop control. Which turn runs belongs to the Session's execution state; this store keeps what the user asked of
+ * it: a stop request for a command, and why the last request failed. Both describe that command only while it runs.
+ * The request is the Session's: switching to another pane neither ends it nor forgets it.
  */
 export interface SessionTaskControlsStore {
     readonly feedback: TaskControlFeedback;
-    /** The command the user asked to stop, while that request is in flight or until its turn ends. */
+    /** The command the user last asked to stop; it applies while that command's turn runs. */
     readonly stopRequest: { readonly commandId: string } | null;
     readonly dismissFailure: () => void;
-    /** A different turn or confirmed idle state retires the previous command's stop feedback. */
-    readonly turnChanged: (commandId: string | null) => void;
-    /** Asks the Runtime to stop `running`, the turn the following pane shows running. */
+    /** Asks the Runtime to stop `running`, the turn the Session's execution state holds running. */
     readonly stop: (running: RunningTurn | null, signal: AbortSignal) => Promise<void>;
 }
 
@@ -38,9 +36,14 @@ export function stopRequested(
     return running !== null && tasks.stopRequest?.commandId === running.commandId;
 }
 
-/** The stop control's failure while the targeted turn still runs. */
-export function stopFailure(tasks: Pick<SessionTaskControlsStore, "feedback">): string | null {
-    return tasks.feedback.kind === "failed" ? tasks.feedback.message : null;
+/** The stop control's failure while the targeted turn still runs; another turn, or none, retires it. */
+export function stopFailure(
+    tasks: Pick<SessionTaskControlsStore, "feedback">,
+    running: RunningTurn | null,
+): string | null {
+    return tasks.feedback.kind === "failed" && tasks.feedback.commandId === running?.commandId
+        ? tasks.feedback.message
+        : null;
 }
 
 export const createSessionTaskControlsStore = (options: {
@@ -52,17 +55,6 @@ export const createSessionTaskControlsStore = (options: {
         feedback: { kind: "none" },
         stopRequest: null,
         dismissFailure: () => set({ feedback: { kind: "none" } }),
-        turnChanged: (commandId) => {
-            const { feedback, stopRequest } = get();
-            const staleFeedback = feedback.kind === "failed" && feedback.commandId !== commandId;
-            const staleRequest = stopRequest !== null && stopRequest.commandId !== commandId;
-            if (staleFeedback || staleRequest) {
-                set({
-                    ...(staleFeedback ? { feedback: { kind: "none" as const } } : {}),
-                    ...(staleRequest ? { stopRequest: null } : {}),
-                });
-            }
-        },
         stop: async (running, parent) => {
             if (running === null || stopRequested(get(), running)) {
                 return;
@@ -83,8 +75,8 @@ export const createSessionTaskControlsStore = (options: {
                 if (signal.aborted && parent.aborted) {
                     throw cause;
                 }
-                // The turn can end while the request is in flight, which retires the request: its failure then has
-                // nothing left to report.
+                // A request for a later turn replaced this one, whose failure then has nothing left to report. A turn
+                // that ended while the request was in flight hides the failure through `stopFailure`.
                 if (get().stopRequest !== request) {
                     return;
                 }

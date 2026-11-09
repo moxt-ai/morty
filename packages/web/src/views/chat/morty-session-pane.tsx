@@ -809,9 +809,10 @@ function MortySessionPaneBody({
     const titleEdit = sessionTitleEdit(composer.titleDraft, rename.rename);
     const title = useStore(workspace.titles, (state) => sessionTitle(state.titles, pane.session.result.ready.target));
     const attachmentModel = useStore(pane.composerAttachments);
+    const execution = useStore(pane.execution, (state) => state.state);
     const interactionModel = useStore(pane.interactions);
     const settingsModel = useStore(pane.settings);
-    const interactions = sessionInteractionPresentation(interactionModel, timeline.messages);
+    const interactions = sessionInteractionPresentation(interactionModel, execution.interactions, timeline.messages);
     const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
@@ -839,13 +840,13 @@ function MortySessionPaneBody({
     const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const presentation = sessionPanePresentation(
         model,
+        execution,
         composer,
         rename,
         delivery,
         taskControls,
         messageQueue,
         attachmentModel,
-        interactionModel,
         settingsModel,
         executionContext.available,
     );
