@@ -1,8 +1,18 @@
-import { test as base } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import { E2EHarness } from "./harness.ts";
 import { createTestRuntime } from "./test-runtime.ts";
 
 export { expect } from "@playwright/test";
+
+/**
+ * Waits for the opened conversation to finish loading its messages. Its composer is already enabled while they load,
+ * so an enabled composer alone does not mean the conversation a scenario starts from is open.
+ */
+export async function conversationLoaded(page: Page): Promise<void> {
+    await expect(
+        page.getByRole("log", { name: "Messages" }).getByRole("status", { name: "Loading messages" }),
+    ).toBeHidden();
+}
 
 function runtimeTest() {
     return base.extend<{

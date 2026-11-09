@@ -3,7 +3,7 @@ import { connect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import type { WebSocket } from "playwright-core";
 import { dataTestId } from "../web/src/data-testid.ts";
-import { test as base, expect } from "./infra/test.ts";
+import { test as base, conversationLoaded, expect } from "./infra/test.ts";
 
 type Network = {
     readonly url: string;
@@ -155,6 +155,7 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("Establish a healthy conversation.");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
@@ -199,6 +200,7 @@ test("Given an interrupted browser connection, when a task completes before fore
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("hold after first delta");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" })).toContainText("Partial reply");
@@ -255,6 +257,7 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
         await page.goto(connected.url);
         const composer = page.getByRole("textbox", { name: "Message" });
         await expect(composer).toBeEnabled();
+        await conversationLoaded(page);
         await composer.fill("Keep this conversation available.");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
@@ -272,12 +275,18 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
         if (recovery !== "automatic") {
             // Spend the bounded reconnect retry budget before an explicit wakeup.
             await page.clock.runFor(300000);
+            // Hold time while the network returns, so only the wakeup reconnects: an automatic retry still scheduled
+            // would otherwise recover first. Restoring ends any attempt still waiting on the outage.
+            await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
         }
         network.restore();
         if (recovery === "online") {
             await page.evaluate(() => window.dispatchEvent(new Event("online")));
         } else if (recovery === "manual") {
             await page.getByRole("button", { name: "Retry now", exact: true }).click();
+        }
+        if (recovery !== "automatic") {
+            await page.clock.resume();
         }
         await page.clock.runFor(6000);
         await expect(composer).toBeEnabled();
@@ -304,6 +313,7 @@ for (const route of ["session", "suspended"] as const) {
         await page.goto(connected.url);
         const composer = page.getByRole("textbox", { name: "Message" });
         await expect(composer).toBeEnabled();
+        await conversationLoaded(page);
         await composer.fill("Remember the first response.");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
@@ -354,6 +364,7 @@ test("Given a silently stalled session without a lifecycle event, when its liven
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("Establish the conversation before the network stalls.");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
@@ -393,6 +404,7 @@ test("Given a live Session stream with stalled requests, when foreground hints p
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("Establish a live stream before stalling requests.");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
