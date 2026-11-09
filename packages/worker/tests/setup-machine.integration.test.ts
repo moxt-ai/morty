@@ -286,5 +286,5 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     );
     expect(again.ready.botId).toBe(first.ready.botId);
     expect(after.identity).toEqual(before.identity);
-    expect(after.computerId).not.toBe(before.computerId);
+    expect(after.computerId).toBe(before.computerId);
 });

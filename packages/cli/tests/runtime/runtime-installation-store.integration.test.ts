@@ -144,9 +144,9 @@ describe("Runtime installation storage", () => {
             if (!(resumed instanceof VerifiedRuntimeConnection)) {
                 throw new Error("Expected a verified Runtime connection");
             }
-            expect(resumed.computerId).toBe("runtime_moxt");
+            expect(resumed.computerId).toBe(computerId);
             await expect(moxt.listConnections(signal)).resolves.toEqual([resumed]);
-            await expect(moxt.readConnectionForPairing("pairing_moxt", signal)).resolves.toEqual(resumed);
+            await expect(moxt.currentConnection(signal)).resolves.toEqual(resumed);
             expect(morty.pairingPath).not.toContain("moxt-data");
             expect(moxt.pairingPath).toContain("moxt-data");
             expect(morty.pairingPath).not.toContain(computerId);

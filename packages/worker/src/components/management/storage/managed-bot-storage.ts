@@ -94,12 +94,11 @@ export class ManagedBotStorage {
         };
     };
 
-    /** Binds the Machine to a Runtime: one it has none of, or in place of `replaced`, a Runtime that was revoked. */
+    /** Configures the Agent on the computer that owns this chat. */
     readonly configureBot = async (
         userId: string,
         botId: string,
         configuration: BotConfiguration,
-        replaced: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<ConfigureManagedBotResult> => {
@@ -114,7 +113,7 @@ export class ManagedBotStorage {
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
                     or(
-                        replaced === null ? isNull(managedBot.computerId) : eq(managedBot.computerId, replaced),
+                        isNull(managedBot.computerId),
                         eq(managedBot.computerId, value.computerId),
                     ),
                 ),

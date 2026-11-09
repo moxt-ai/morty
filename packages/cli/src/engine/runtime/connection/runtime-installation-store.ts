@@ -336,14 +336,6 @@ export class RuntimeInstallationStore {
         return current === null ? [] : [current];
     };
 
-    readonly readConnectionForPairing = async (
-        computerId: string,
-        signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection | null> => {
-        const normalizedComputerId = validateIdentifier(computerId, "invalid_computer_id");
-        const connections = await this.listConnections(signal);
-        return connections.find((connection) => connection.computerId === normalizedComputerId) ?? null;
-    };
 
     readonly setConnectionActivation = async (
         connectionId: string,

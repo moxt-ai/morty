@@ -13,7 +13,7 @@ export function registerPairAction(command: Command, context: CliContext): void 
         .addOption(
             new Option("--code-stdin", "read the pairing code from standard input instead of --code").conflicts("code"),
         )
-        .addOption(valueOption("--computer <runtime-pairing-id>", "Runtime pairing identifier"))
+        .addOption(valueOption("--computer <computer-id>", "computer to pair"))
         .addOption(valueOption("--workspace <directory>", "default workspace directory"))
         .action(async (options: ParsedPairOptions) => {
             const requested = await requirePairOptions(options, command, process.stdin, context.shutdownSignal);

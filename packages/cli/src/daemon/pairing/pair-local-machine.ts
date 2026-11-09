@@ -10,13 +10,11 @@ import {
     pairRuntimeConnection,
     parsePairingCode,
     parseRelayOrigin,
-    prepareRuntimeConnection,
     validateComputerId,
 } from "../../engine/runtime/pairing.ts";
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
-import { resolveMaxAcpProcesses } from "../config.ts";
 
 function readSingleOption(arguments_: readonly string[], option: string): string {
     const values: string[] = [];
@@ -80,19 +78,6 @@ export async function pairLocalMachine(
 ): Promise<VerifiedRuntimeConnection> {
     const requested = parsePairCommand(arguments_, "");
     const installation = await openMortyInstallation(signal, process.env);
-    if (requested.computerId.length > 0) {
-        const existing = await installation.readConnectionForPairing(requested.computerId, signal);
-        if (existing !== null && existing.relayOrigin.origin === requested.relayOrigin.origin) {
-            await prepareRuntimeConnection(
-                installation,
-                existing,
-                signal,
-                process.env,
-                resolveMaxAcpProcesses(process.env),
-            );
-            return existing;
-        }
-    }
     return await pairRuntimeConnection(
         installation,
         {

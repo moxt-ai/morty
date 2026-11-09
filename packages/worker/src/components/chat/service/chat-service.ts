@@ -204,10 +204,7 @@ export class ChatService {
     };
 
     readonly setupRuntimes = async (scope: ChatScope) => {
-        const bot = await this.#bot(scope);
-        if (bot.configuration !== null && !(await this.#runtimeRevoked(scope))) {
-            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine already has a configured Runtime.", 409);
-        }
+        await this.#bot(scope);
         return { runtimes: await this.#platform.chatRuntimes(scope.computerId, scope.signal) };
     };
 
@@ -226,18 +223,6 @@ export class ChatService {
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         return bot;
-    };
-
-    readonly #runtimeRevoked = async (scope: ChatScope): Promise<boolean> => {
-        try {
-            await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
-            return false;
-        } catch (cause) {
-            if (cause instanceof PlatformProjectError && cause.code === "RUNTIME_REVOKED") {
-                return true;
-            }
-            throw cause;
-        }
     };
 
     readonly localRuntime = async (scope: ChatScope) => {
@@ -733,18 +718,9 @@ export class ChatService {
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
-        const current = await this.#bot(scope);
-        // A Machine keeps its Runtime until that Runtime is revoked; setup then pairs the Machine with another.
-        const replaced =
-            current.configuration === null || current.configuration.computerId === input.computerId
-                ? null
-                : current.configuration.computerId;
-        if (replaced !== null && !(await this.#runtimeRevoked(scope))) {
-            throw new PlatformProjectError(
-                "BOT_RUNTIME_FIXED",
-                "Create a new Machine to pair a different Runtime.",
-                409,
-            );
+        await this.#bot(scope);
+        if (input.computerId !== scope.computerId) {
+            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This chat belongs to a different computer.", 409);
         }
         await this.#requireRuntimeAgent(scope, input.agentRef);
         await this.#platform.discoverChatAgentSettings(
@@ -756,7 +732,6 @@ export class ChatService {
             scope.userId,
             scope.botId,
             { computerId: decodeIdentifier(input.computerId) },
-            replaced,
             Date.now(),
             scope.signal,
         );

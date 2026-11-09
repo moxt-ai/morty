@@ -4,7 +4,7 @@ import type { Command } from "commander";
 export interface ParsedPairOptions {
     readonly code?: string;
     readonly codeStdin?: boolean;
-    readonly pairing?: string;
+    readonly computer?: string;
     readonly url?: string;
     readonly workspace?: string;
 }
@@ -80,7 +80,7 @@ export function pairArguments(options: PairOptions): readonly string[] {
         options.url,
         "--code",
         options.code,
-        ...(options.pairing === undefined ? [] : ["--computer", options.pairing]),
+        ...(options.computer === undefined ? [] : ["--computer", options.computer]),
         ...(options.workspace === undefined ? [] : ["--workspace", options.workspace]),
     ];
 }

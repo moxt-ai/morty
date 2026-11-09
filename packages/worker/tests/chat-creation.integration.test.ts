@@ -138,8 +138,8 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
         runtime: { computerId: fixture.runtime.computerId, online: true, agents: [{ agentRef: "codex" }] },
     });
     const configuredSetupRuntimes = await fixture.request(`chat/bots/${fixture.botId}/setup/runtimes`, {});
-    expect(configuredSetupRuntimes.status).toBe(409);
-    expect(await configuredSetupRuntimes.json()).toMatchObject({ error: { code: "BOT_RUNTIME_FIXED" } });
+    expect(configuredSetupRuntimes.status).toBe(200);
+    expect(await configuredSetupRuntimes.json()).toMatchObject({runtimes: [{computerId: fixture.computerId}]});
 
     const rebound = await fixture.request(`chat/bots/${fixture.botId}/setup`, {
         ...setup,
