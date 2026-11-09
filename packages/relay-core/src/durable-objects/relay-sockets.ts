@@ -6,15 +6,14 @@ import { logger } from "../infra/logger.ts";
 function socketLogContext(webSocket: WebSocket) {
     try {
         const identity = new CloudflareChannelSocket(webSocket).identity();
-        const { projectId, runtimeId, role } = identity;
+        const { computerId, role } = identity;
         return {
-            projectId,
-            runtimeId,
+            computerId,
             role,
             ...("connectionEpoch" in identity
                 ? { connectionEpoch: identity.connectionEpoch, connectionId: identity.connectionId }
-                : "channelId" in identity
-                  ? { channelId: identity.channelId }
+                : "computerId" in identity
+                  ? { computerId: identity.computerId }
                   : {}),
         };
     } catch {
@@ -23,7 +22,7 @@ function socketLogContext(webSocket: WebSocket) {
     }
 }
 
-export class RuntimeRelay {
+export class RelaySockets {
     readonly #dependencies: DurableObjectContext;
     readonly #logger: typeof logger;
 

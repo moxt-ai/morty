@@ -1,46 +1,52 @@
-import { DurableObject } from "cloudflare:workers";
 import * as v from "valibot";
-import application from "../../application.ts";
+import { computerApplication as application } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
-import { cloudProjectId } from "../../middleware/project-context.ts";
+import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
+import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
 import { platformIdentifier } from "../management/entity/platform-project.ts";
-import { projectBootstrap } from "../management/entity/project-bootstrap.ts";
 
 /**
- * One Project's storage. Only the Project's bootstrap binds the object and creates its schema; a request for a Project
+ * One computer's storage. Only the computer's bootstrap binds the object and creates its schema; a request for an computer
  * the object does not hold leaves no storage behind.
  */
-export class ProjectDurableObject extends DurableObject<CloudBindings> {
+export class ComputerChat {
+    readonly #storage: DurableObjectStorage;
+    readonly #owns: (id: string) => boolean;
+    constructor(storage: DurableObjectStorage, owns: (id: string) => boolean) {
+        this.#storage = storage;
+        this.#owns = owns;
+    }
+
     #database: DurableObjectDatabase | undefined;
     readonly #sessionOperations = new ManagedSessionOperations();
 
-    override async fetch(request: Request): Promise<Response> {
+    async fetch(request: Request, env: CloudBindings): Promise<Response> {
         const url = new URL(request.url);
-        if (url.origin === "https://project.internal" && url.pathname === "/__project/bootstrap") {
-            return await this.#bootstrap(request);
+        if (url.origin === "https://computer.internal" && url.pathname === "/__computer/bootstrap") {
+            return await this.#bootstrap(request, env);
         }
-        const projectId = await cloudProjectId(request);
-        if (projectId === null) {
+        const computerId = await cloudComputerId(request);
+        if (computerId === null) {
             return json({ error: { code: "PROJECT_REQUIRED", message: "Morty context is required." } }, 400);
         }
-        const validatedProjectId = v.parse(platformIdentifier, projectId);
-        const bound: unknown = await this.ctx.storage.get("project-id");
+        const validatedComputerId = v.parse(platformIdentifier, computerId);
+        const bound: unknown = await this.#storage.get("computer-id");
         if (bound === undefined) {
-            return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty project does not exist." } }, 404);
+            return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty computer does not exist." } }, 404);
         }
-        if (bound !== validatedProjectId) {
-            throw new Error("Durable Object project identity does not match the request.");
+        if (!this.#owns(validatedComputerId) || bound !== validatedComputerId) {
+            throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await application.fetch(request, this.#bindings(validatedProjectId));
+        return await application.fetch(request, this.#bindings(validatedComputerId, env));
     }
 
-    readonly #bootstrap = async (request: Request): Promise<Response> => {
+    readonly #bootstrap = async (request: Request, env: CloudBindings): Promise<Response> => {
         const input: unknown = await request.json();
-        const parsed = v.parse(projectBootstrap, input);
-        await this.#bindProject(parsed.project.projectId);
+        const parsed = v.parse(computerBootstrap, input);
+        await this.#bindComputer(parsed.computer.computerId);
         return await application.fetch(
             new Request(request.url, {
                 body: JSON.stringify(parsed),
@@ -48,13 +54,13 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
                 method: "POST",
                 signal: request.signal,
             }),
-            this.#bindings(parsed.project.projectId),
+            this.#bindings(parsed.computer.computerId, env),
         );
     };
 
     readonly #credentialKey = async (signal: AbortSignal): Promise<Uint8Array> => {
         signal.throwIfAborted();
-        const result = await this.ctx.storage.transaction(async (storage) => {
+        const result = await this.#storage.transaction(async (storage) => {
             // The stored name predates created identities; renaming it would change credentials a retry derives.
             const stored: unknown = await storage.get("replacement-key-v1");
             signal.throwIfAborted();
@@ -78,22 +84,25 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
         return result;
     };
 
-    readonly #bindProject = async (projectId: string): Promise<void> => {
-        const stored: unknown = await this.ctx.storage.get("project-id");
+    readonly #bindComputer = async (computerId: string): Promise<void> => {
+        if (!this.#owns(computerId)) {
+            throw new Error("Computer ID does not match this relay");
+        }
+        const stored: unknown = await this.#storage.get("computer-id");
         if (stored === undefined) {
-            await this.ctx.storage.put("project-id", projectId);
+            await this.#storage.put("computer-id", computerId);
             return;
         }
-        if (stored !== projectId) {
-            throw new Error("Durable Object project identity does not match the request.");
+        if (stored !== computerId) {
+            throw new Error("Durable Object computer identity does not match the request.");
         }
     };
 
-    readonly #bindings = (projectId: string): CloudBindings => {
-        this.#database ??= new DurableObjectDatabase(this.ctx.storage);
+    readonly #bindings = (computerId: string, env: CloudBindings): CloudBindings => {
+        this.#database ??= new DurableObjectDatabase(this.#storage);
         return {
-            ...this.env,
-            CHAT_PROJECT_ID: projectId,
+            ...env,
+            CHAT_COMPUTER_ID: computerId,
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,
             DATABASE: this.#database,

@@ -47,18 +47,16 @@ interface RuntimeConnection {
 }
 
 async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<RuntimeConnection>) => Promise<void>) {
-    const runtimeId = `close-notice-${crypto.randomUUID()}`;
-    const projectId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    const { hostCredentialId } = await registerRuntimeFixture(projectId, runtimeId);
-    const relay = env.RUNTIME_RELAY.getByName(runtimeId);
+    const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    const { hostCredentialId } = await registerRuntimeFixture(computerId);
+    const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
     const connect = async (path: string): Promise<RuntimeConnection> => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
-        const response = await relay.fetch(`https://runtime.internal/projects/${projectId}/${path}`, {
+        const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
-                "x-morty-channel-id": "close-notice-channel",
-                "x-morty-runtime-id": runtimeId,
+
                 "x-morty-host-credential-id": hostCredentialId,
                 "x-morty-host-credential-kind": "project",
             },

@@ -161,7 +161,7 @@ describe("daemon narration delivery", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_beta",
+                computerId: "channel_beta",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("e".repeat(43)),

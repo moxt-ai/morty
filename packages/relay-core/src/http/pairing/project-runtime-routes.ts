@@ -47,7 +47,7 @@ const createSessionSchema = v.strictObject({
     bindingId: v.optional(identifier),
     // The Runtime validates each selection; the Relay only bounds the request.
     configurations: v.pipe(v.array(v.unknown()), v.maxLength(100)),
-    runtimeId: identifier,
+    computerId: identifier,
     sessionId: identifier,
 });
 const nativeEventsSchema = v.strictObject({
@@ -100,11 +100,11 @@ export function createProjectRuntimeRoutes() {
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .route("/", createProjectRuntimeSessionControlRoutes())
-        .post("/projects/:projectId/browser-credentials", bodyParser<RelayHttpEnvironment>(), async (context) => {
+        .post("/computers/:computerId/browser-credentials", bodyParser<RelayHttpEnvironment>(), async (context) => {
             const body = validated(browserCredentialSchema, context.req.valid("json"));
             return context.json(
                 await context.env.services.runtimePairings.createBrowserCredential(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(context.req.raw),
                     body.expiresInSeconds * 1_000,
                     context.req.raw.signal,
@@ -112,64 +112,61 @@ export function createProjectRuntimeRoutes() {
                 201,
             );
         })
-        .delete("/projects/:projectId/browser-credentials/:credentialId", async (context) => {
+        .delete("/computers/:computerId/browser-credentials/:credentialId", async (context) => {
             await context.env.services.runtimePairings.revokeBrowserCredential(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 validateIdentifier(context.req.param("credentialId"), "credential_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             return new Response(null, { status: 204 });
         })
-        .get("/projects/:projectId/latency", async (context) => {
+        .get("/computers/:computerId/latency", async (context) => {
             await context.env.services.runtimePairings.probeProject(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
             return context.body(null, 204);
         })
-        .get("/projects/:projectId/runtimes", async (context) => {
+        .get("/computers/:computerId/runtimes", async (context) => {
             const runtimes = await context.env.services.runtimePairings.listProjectRuntimes(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
             return context.json({ runtimes });
         })
-        .get("/projects/:projectId/runtimes/:runtimeId/agents", async (context) => {
+        .get("/computers/:computerId/daemon/agents", async (context) => {
             const runtime = await context.env.services.runtimePairings.getRuntimeAgents(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
             return context.json(runtime);
         })
-        .get("/projects/:projectId/runtimes/:runtimeId/diagnostics", async (context) => {
+        .get("/computers/:computerId/daemon/diagnostics", async (context) => {
             const result = await context.env.services.runtimePairings.readRuntimeDiagnostics(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
             return context.json(result);
         })
-        .get("/projects/:projectId/runtimes/:runtimeId/latency", async (context) => {
+        .get("/computers/:computerId/daemon/latency", async (context) => {
             const latencyMs = await context.env.services.runtimePairings.measureRuntimeLatency(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
             return context.json({ latencyMs });
         })
-        .get("/projects/:projectId/runtimes/:runtimeId/sessions", async (context) => {
+        .get("/computers/:computerId/daemon/sessions", async (context) => {
             const query = validated(sessionListQuerySchema, { limit: context.req.query("limit") ?? "100" });
             const command = decodeSessionListCommand(
                 JSON.stringify({
@@ -179,8 +176,51 @@ export function createProjectRuntimeRoutes() {
                 }),
             );
             const result = await context.env.services.runtimePairings.requestControl(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
+                bearerToken(context.req.raw),
+                command,
+                context.req.raw.signal,
+            );
+            context.header("Cache-Control", "no-store");
+            return context.json(result);
+        })
+        .post("/computers/:computerId/daemon/sessions/query", bodyParser<RelayHttpEnvironment>(), async (context) => {
+            const body = validated(sessionQuerySchema, context.req.valid("json"));
+            const command = decodeSessionQueryCommand(
+                JSON.stringify({
+                    kind: "session.query",
+                    requestId: crypto.randomUUID(),
+                    sessionIds: body.sessionIds,
+                }),
+            );
+            const result = await context.env.services.runtimePairings.requestControl(
+                validateIdentifier(context.req.param("computerId"), "project_id"),
+                bearerToken(context.req.raw),
+                command,
+                context.req.raw.signal,
+            );
+            context.header("Cache-Control", "no-store");
+            return context.json(result);
+        })
+        .post("/computers/:computerId/daemon/sessions", bodyParser<RelayHttpEnvironment>(), async (context) => {
+            const body = validated(createSessionSchema, context.req.valid("json"));
+            if (body.computerId !== context.req.param("computerId")) {
+                throw new PairingDirectoryError("invalid_request", "The Runtime identifier does not match");
+            }
+            const command = decodeSessionPrepareCommand(
+                JSON.stringify({
+                    additionalDirectoryIds: body.additionalDirectoryIds,
+                    agentId: body.agentId,
+                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
+                    configurations: body.configurations,
+                    directoryId: body.directoryId,
+                    kind: "session.prepare",
+                    requestId: crypto.randomUUID(),
+                    sessionId: body.sessionId,
+                }),
+            );
+            const result = await context.env.services.runtimePairings.requestControl(
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(context.req.raw),
                 command,
                 context.req.raw.signal,
@@ -189,61 +229,7 @@ export function createProjectRuntimeRoutes() {
             return context.json(result);
         })
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/query",
-            bodyParser<RelayHttpEnvironment>(),
-            async (context) => {
-                const body = validated(sessionQuerySchema, context.req.valid("json"));
-                const command = decodeSessionQueryCommand(
-                    JSON.stringify({
-                        kind: "session.query",
-                        requestId: crypto.randomUUID(),
-                        sessionIds: body.sessionIds,
-                    }),
-                );
-                const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
-                    bearerToken(context.req.raw),
-                    command,
-                    context.req.raw.signal,
-                );
-                context.header("Cache-Control", "no-store");
-                return context.json(result);
-            },
-        )
-        .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions",
-            bodyParser<RelayHttpEnvironment>(),
-            async (context) => {
-                const body = validated(createSessionSchema, context.req.valid("json"));
-                if (body.runtimeId !== context.req.param("runtimeId")) {
-                    throw new PairingDirectoryError("invalid_request", "The Runtime identifier does not match");
-                }
-                const command = decodeSessionPrepareCommand(
-                    JSON.stringify({
-                        additionalDirectoryIds: body.additionalDirectoryIds,
-                        agentId: body.agentId,
-                        bindingId: RUNTIME_WORKSPACE_BINDING_ID,
-                        configurations: body.configurations,
-                        directoryId: body.directoryId,
-                        kind: "session.prepare",
-                        requestId: crypto.randomUUID(),
-                        sessionId: body.sessionId,
-                    }),
-                );
-                const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
-                    bearerToken(context.req.raw),
-                    command,
-                    context.req.raw.signal,
-                );
-                context.header("Cache-Control", "no-store");
-                return context.json(result);
-            },
-        )
-        .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/load",
+            "/computers/:computerId/daemon/sessions/:sessionId/load",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = validated(sessionIdentitySchema, context.req.valid("json"));
@@ -258,8 +244,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -269,7 +254,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/restore",
+            "/computers/:computerId/daemon/sessions/:sessionId/restore",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 validated(sessionRestoreSchema, context.req.valid("json"));
@@ -281,8 +266,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -292,7 +276,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/close",
+            "/computers/:computerId/daemon/sessions/:sessionId/close",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 validated(sessionRestoreSchema, context.req.valid("json"));
@@ -304,8 +288,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -314,13 +297,13 @@ export function createProjectRuntimeRoutes() {
                 return context.json(result);
             },
         )
-        .get("/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/configuration", async (context) => {
+        .get("/computers/:computerId/daemon/sessions/:sessionId/configuration", async (context) => {
             const result = await sessionControl(context).readConfiguration();
             context.header("Cache-Control", "no-store");
             return context.json(result);
         })
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/configuration",
+            "/computers/:computerId/daemon/sessions/:sessionId/configuration",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = decodeSessionRequest(sessionConfigurationRequest, context.req.valid("json"));
@@ -330,7 +313,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/rename",
+            "/computers/:computerId/daemon/sessions/:sessionId/rename",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = decodeSessionRequest(sessionRenameRequest, context.req.valid("json"));
@@ -340,7 +323,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/native-events-preview",
+            "/computers/:computerId/daemon/sessions/:sessionId/native-events-preview",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = validated(nativeEventsSchema, context.req.valid("json"));
@@ -350,7 +333,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/active-turn",
+            "/computers/:computerId/daemon/sessions/:sessionId/active-turn",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = validated(sessionBindingSchema, context.req.valid("json"));
@@ -360,7 +343,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/sessions/:sessionId/turns",
+            "/computers/:computerId/daemon/sessions/:sessionId/turns",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = decodeSessionRequest(runtimeTurnRequest, context.req.valid("json"));
@@ -374,7 +357,7 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/agents/:agentId/settings",
+            "/computers/:computerId/daemon/agents/:agentId/settings",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const body = context.req.valid("json");
@@ -396,8 +379,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.discoverAgentSettings(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -407,12 +389,11 @@ export function createProjectRuntimeRoutes() {
             },
         )
         .post(
-            "/projects/:projectId/runtimes/:runtimeId/native-session-forks/:operationId",
+            "/computers/:computerId/daemon/native-session-forks/:operationId",
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const result = await context.env.services.runtimePairings.forkNativeSession(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(context.req.raw),
                     validateIdentifier(context.req.param("operationId"), "operation_id"),
                     validated(nativeForkSchema, context.req.valid("json")),
@@ -422,76 +403,66 @@ export function createProjectRuntimeRoutes() {
                 return context.json(result);
             },
         )
-        .post(
-            "/projects/:projectId/runtimes/:runtimeId/native-sessions",
-            bodyParser<RelayHttpEnvironment>(),
-            async (context) => {
-                const body = context.req.valid("json");
-                if (body["action"] !== "list" && body["action"] !== "find" && body["action"] !== "import") {
-                    throw new PairingDirectoryError("invalid_request", "Choose a supported native session operation");
-                }
-                assertRequiredKeys(
-                    body,
-                    body["action"] === "list"
-                        ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "cursor", "discoveryId"]
-                        : body["action"] === "find"
-                          ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "nativeSessionId"]
-                          : ["action", "agentId", "directoryId", "additionalDirectoryIds", "entryId", "discoveryId"],
-                );
-                const { discoveryId, ...input } = body;
-                const sessionId =
-                    (input["action"] === "list" && discoveryId === null) || input["action"] === "find"
-                        ? crypto.randomUUID()
-                        : validateIdentifier(readString(body, "discoveryId"), "discovery_id");
-                const command = decodeNativeSessionRequest(
-                    JSON.stringify({
-                        ...input,
-                        kind: "native.session.request",
-                        requestId: crypto.randomUUID(),
-                        sessionId,
-                        bindingId: RUNTIME_WORKSPACE_BINDING_ID,
-                        ...(body["action"] === "import" ? { targetSessionId: crypto.randomUUID() } : {}),
-                    }),
-                );
-                const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
-                    bearerToken(context.req.raw),
-                    command,
-                    context.req.raw.signal,
-                );
-                context.header("Cache-Control", "no-store");
-                return context.json(result);
-            },
-        )
-        .post(
-            "/projects/:projectId/runtimes/:runtimeId/workspace",
-            bodyParser<RelayHttpEnvironment>(),
-            async (context) => {
-                const body = context.req.valid("json");
-                assertRequiredKeys(body, ["directoryId"]);
-                const view = body["view"];
-                if (view !== undefined && view !== "metadata") {
-                    throw new PairingDirectoryError("invalid_request", "The workspace view is invalid");
-                }
-                const command = decodeWorkspaceListCommand(
-                    JSON.stringify({
-                        bindingId: RUNTIME_WORKSPACE_BINDING_ID,
-                        directoryId: readString(body, "directoryId", MAX_DIRECTORY_IDENTIFIER_LENGTH),
-                        kind: "workspace.list",
-                        requestId: crypto.randomUUID(),
-                        ...(view === undefined ? {} : { view }),
-                    }),
-                );
-                const result = await context.env.services.runtimePairings.listWorkspace(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
-                    bearerToken(context.req.raw),
-                    command,
-                    context.req.raw.signal,
-                );
-                context.header("Cache-Control", "no-store");
-                return context.json(result);
-            },
-        );
+        .post("/computers/:computerId/daemon/native-sessions", bodyParser<RelayHttpEnvironment>(), async (context) => {
+            const body = context.req.valid("json");
+            if (body["action"] !== "list" && body["action"] !== "find" && body["action"] !== "import") {
+                throw new PairingDirectoryError("invalid_request", "Choose a supported native session operation");
+            }
+            assertRequiredKeys(
+                body,
+                body["action"] === "list"
+                    ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "cursor", "discoveryId"]
+                    : body["action"] === "find"
+                      ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "nativeSessionId"]
+                      : ["action", "agentId", "directoryId", "additionalDirectoryIds", "entryId", "discoveryId"],
+            );
+            const { discoveryId, ...input } = body;
+            const sessionId =
+                (input["action"] === "list" && discoveryId === null) || input["action"] === "find"
+                    ? crypto.randomUUID()
+                    : validateIdentifier(readString(body, "discoveryId"), "discovery_id");
+            const command = decodeNativeSessionRequest(
+                JSON.stringify({
+                    ...input,
+                    kind: "native.session.request",
+                    requestId: crypto.randomUUID(),
+                    sessionId,
+                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
+                    ...(body["action"] === "import" ? { targetSessionId: crypto.randomUUID() } : {}),
+                }),
+            );
+            const result = await context.env.services.runtimePairings.requestControl(
+                validateIdentifier(context.req.param("computerId"), "project_id"),
+                bearerToken(context.req.raw),
+                command,
+                context.req.raw.signal,
+            );
+            context.header("Cache-Control", "no-store");
+            return context.json(result);
+        })
+        .post("/computers/:computerId/daemon/workspace", bodyParser<RelayHttpEnvironment>(), async (context) => {
+            const body = context.req.valid("json");
+            assertRequiredKeys(body, ["directoryId"]);
+            const view = body["view"];
+            if (view !== undefined && view !== "metadata") {
+                throw new PairingDirectoryError("invalid_request", "The workspace view is invalid");
+            }
+            const command = decodeWorkspaceListCommand(
+                JSON.stringify({
+                    bindingId: RUNTIME_WORKSPACE_BINDING_ID,
+                    directoryId: readString(body, "directoryId", MAX_DIRECTORY_IDENTIFIER_LENGTH),
+                    kind: "workspace.list",
+                    requestId: crypto.randomUUID(),
+                    ...(view === undefined ? {} : { view }),
+                }),
+            );
+            const result = await context.env.services.runtimePairings.listWorkspace(
+                validateIdentifier(context.req.param("computerId"), "project_id"),
+                bearerToken(context.req.raw),
+                command,
+                context.req.raw.signal,
+            );
+            context.header("Cache-Control", "no-store");
+            return context.json(result);
+        });
 }

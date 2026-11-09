@@ -1,8 +1,8 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import type { BootstrapOrigin } from "../entity/computer-bootstrap.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
-import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
@@ -12,7 +12,7 @@ import type { AuthenticationService } from "./authentication-service.ts";
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
-    readonly #accountId: string | undefined;
+    readonly #computerId: string | undefined;
     readonly #platform: PlatformProjectGateway;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
 
@@ -26,7 +26,7 @@ export class ManagementService {
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
-        this.#accountId = cx.config.bindings.CHAT_PROJECT_ID;
+        this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID;
         this.#platform = cx.gateways.platformProjects;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
     }
@@ -41,8 +41,8 @@ export class ManagementService {
         signal: AbortSignal,
         origin: BootstrapOrigin,
     ) => {
-        const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin, signal);
-        const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
+        const token = await bootstrapToken(this.#credentialKey, userId, project.computerId, origin, signal);
+        const identity = await this.#authentication.createAnonymous(userId, project.computerId, signal, token);
         const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, bot: { botId, displayName } };
     };
@@ -85,14 +85,14 @@ export class ManagementService {
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { botId: bot.botId, runtimeId: bot.configuration?.runtimeId ?? null };
+        return { botId: bot.botId, computerId: bot.configuration?.computerId ?? null };
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {
         const machine = await this.#managedBots.readMachine(userId, signal);
-        return machine === null || this.#accountId === undefined
+        return machine === null || this.#computerId === undefined
             ? null
-            : { projectId: this.#accountId, displayName: machine.displayName };
+            : { computerId: this.#computerId, displayName: machine.displayName };
     };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
@@ -104,12 +104,12 @@ export class ManagementService {
         // A successor needs its own Platform reference: clientReference is unique per (app, reference)
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
-        const reference = `${userId}.${previous.projectId}`;
+        const reference = `${userId}.${previous.computerId}`;
         const project = await this.#platform.create(
             userId,
             "Morty",
             signal,
-            projectRegion(previous.projectId),
+            projectRegion(previous.computerId),
             reference,
         );
         return project;
@@ -117,13 +117,13 @@ export class ManagementService {
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        const pairing = await this.#platform.createPairing(project.projectId, idempotencyKey, signal);
+        const pairing = await this.#platform.createPairing(project.computerId, idempotencyKey, signal);
         return pairing;
     };
 
-    readonly readRuntimePairing = async (userId: string, pairingId: string, signal: AbortSignal) => {
+    readonly readRuntimePairing = async (userId: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        return await this.#platform.readPairing(project.projectId, pairingId, signal);
+        return await this.#platform.readPairing(project.computerId, signal);
     };
 
     /**
@@ -164,7 +164,7 @@ export class ManagementService {
 async function bootstrapToken(
     serverKey: CloudBindings["CHAT_CREDENTIAL_KEY"],
     userId: string,
-    projectId: string,
+    computerId: string,
     origin: BootstrapOrigin,
     signal: AbortSignal,
 ) {
@@ -173,13 +173,13 @@ async function bootstrapToken(
         case "created":
             return await derivedToken(
                 serverKey,
-                ["morty-anonymous-user-v1", userId, projectId, origin.creationKey],
+                ["morty-anonymous-user-v1", userId, computerId, origin.creationKey],
                 signal,
             );
         case "replacement":
             return await derivedToken(
                 serverKey,
-                ["morty-project-replacement-v1", userId, origin.previousProjectId, projectId, origin.token],
+                ["morty-project-replacement-v1", userId, origin.previousComputerId, computerId, origin.token],
                 signal,
             );
     }

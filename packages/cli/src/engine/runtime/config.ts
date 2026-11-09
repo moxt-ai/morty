@@ -52,7 +52,7 @@ export interface RuntimeConfig {
     readonly defaultWorkspace: string;
     readonly bindingId: string;
     readonly catalog: LocalAgentCatalog;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly localContext: RuntimeLocalContext;
     readonly reconnectTarget: RuntimeReconnectTarget | null;
     readonly relayUrl: URL;
@@ -77,7 +77,7 @@ export interface RuntimeConfig {
 
 export interface RuntimeConnectionConfig {
     readonly defaultWorkspace: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly relayUrl: URL;
     readonly credentials: RuntimeCredentials;
 }
@@ -99,7 +99,7 @@ export function createRuntimeConfig(
         defaultWorkspace: connection.defaultWorkspace,
         bindingId: RUNTIME_WORKSPACE_BINDING_ID,
         catalog: new LocalAgentCatalog(runtimeAgents),
-        channelId: connection.channelId,
+        computerId: connection.computerId,
         localContext,
         reconnectTarget,
         relayUrl: connection.relayUrl,

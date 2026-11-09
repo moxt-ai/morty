@@ -59,7 +59,7 @@ export interface ChatWorkspace {
     /** The Bot this workspace talks to; also scopes diagnostics sources. */
     readonly botId: string;
     /** The project location label source for the sidebar, when known. */
-    readonly projectId: string | null;
+    readonly computerId: string | null;
     readonly home: BotChatHomeStoreApi;
     readonly titles: SessionTitlesStore;
     readonly directory: StoreApi<ConversationDirectoryStore>;
@@ -129,7 +129,7 @@ export function createChatWorkspace(options: {
     readonly accessNotice?: string | null;
     readonly entry?: "address" | "restore";
     readonly bugReportDialog: BugReportDialogStore;
-    readonly projectId?: string;
+    readonly computerId?: string;
     readonly requests: BotChatApi;
     readonly url?: string;
     readonly createTransfer?: ((terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
@@ -469,12 +469,12 @@ export function createChatWorkspace(options: {
     };
 
     const linkedDevices =
-        options.projectId === undefined ||
+        options.computerId === undefined ||
         options.linkedDevices === undefined ||
         options.waitForLinkedDevicesChange === undefined
             ? null
             : createLinkedDevicesStore({
-                  projectId: options.projectId,
+                  computerId: options.computerId,
                   linkedDevices: options.linkedDevices,
                   waitForChange: options.waitForLinkedDevicesChange,
                   waitForBridge: requests.waitForBridge,
@@ -482,10 +482,10 @@ export function createChatWorkspace(options: {
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
     const endDeviceAccess = options.endDeviceAccess;
     const accessExpiry =
-        options.projectId === undefined || options.accessExpiresAt === undefined
+        options.computerId === undefined || options.accessExpiresAt === undefined
             ? null
             : createAccessExpiryStore({
-                  projectId: options.projectId,
+                  computerId: options.computerId,
                   accessExpiresAt: options.accessExpiresAt,
                   clock: options.clock,
               });
@@ -535,7 +535,7 @@ export function createChatWorkspace(options: {
         requests,
         botId,
         bugReportDialog: options.bugReportDialog,
-        projectId: options.projectId ?? null,
+        computerId: options.computerId ?? null,
         directory,
         home,
         titles,

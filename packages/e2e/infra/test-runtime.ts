@@ -55,11 +55,11 @@ export async function createTestRuntime(
                 "anonymous identity",
             );
             const token = text(identity["token"], "anonymous token");
-            const projectId = text(identity["projectId"], "projectId");
+            const computerId = text(identity["computerId"], "computerId");
             const userId = text(identity["userId"], "userId");
             const botId = text(object(identity["bot"], "anonymous bot")["botId"], "botId");
             const url = new URL(stack.chatOrigin);
-            url.searchParams.set("identity", encodeIdentityScope({ botId, projectId, userId }));
+            url.searchParams.set("identity", encodeIdentityScope({ botId, computerId, userId }));
             await page.addInitScript(
                 ({ key, raw }) => {
                     if (window === window.top) {
@@ -76,8 +76,8 @@ export async function createTestRuntime(
                 },
             );
             await page.goto(url.href);
-            const user = await chat.useBrowserIdentity({ projectId, token });
-            return { botId: user.botId, projectId: user.projectId };
+            const user = await chat.useBrowserIdentity({ computerId, token });
+            return { botId: user.botId, computerId: user.computerId };
         };
 
         return {
@@ -116,16 +116,16 @@ export async function createTestRuntime(
                         "pair",
                         "--url",
                         text(pairing["relayUrl"], "relay URL"),
-                        "--pairing",
-                        text(pairing["pairingId"], "pairing ID"),
+                        "--computer",
+                        text(pairing["computerId"], "pairing ID"),
                         "--code-stdin",
                     ],
                     stack.directories.workspace,
                     harness.signal,
                     text(pairing["pairingCode"], "pairing code"),
                 );
-                const paired = await chat.readPairedAgent(text(pairing["pairingId"], "pairing ID"), agentId);
-                await chat.bindAgent(paired.runtimeId, agentId);
+                const paired = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), agentId);
+                await chat.bindAgent(paired.computerId, agentId);
                 await chat.readBinding(agentId);
                 await page.reload();
             },
@@ -149,15 +149,15 @@ export async function createTestRuntime(
                         "pair",
                         "--url",
                         text(pairing["relayUrl"], "relay URL"),
-                        "--pairing",
-                        text(pairing["pairingId"], "pairing ID"),
+                        "--computer",
+                        text(pairing["computerId"], "pairing ID"),
                         "--code-stdin",
                     ],
                     stack.directories.workspace,
                     harness.signal,
                     text(pairing["pairingCode"], "pairing code"),
                 );
-                await unrelated.readPairedAgent(text(pairing["pairingId"], "unrelated pairingId"), agentId);
+                await unrelated.readPairedAgent(text(pairing["computerId"], "unrelated computerId"), agentId);
             },
             followInstructions: async (
                 instructionUrl: string,

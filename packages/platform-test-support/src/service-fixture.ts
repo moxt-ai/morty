@@ -30,7 +30,7 @@ export async function seedMortyCredential(
     database: D1Database,
     appId: string,
     permissions: readonly string[],
-    projectIds: readonly string[] = [],
+    computerIds: readonly string[] = [],
 ) {
     const db = drizzle(database);
     const credentialId = `credential_${createRandomToken(18)}`;
@@ -42,11 +42,11 @@ export async function seedMortyCredential(
         appId,
         secretDigest: await hashSecret(credential),
         permissionsJson: JSON.stringify(permissions),
-        allProjects: projectIds.length === 0 ? 1 : 0,
+        allProjects: computerIds.length === 0 ? 1 : 0,
         issuedAt: Date.now(),
     });
-    for (const projectId of projectIds) {
-        await db.insert(machineAccountGrant).values({ credentialId, projectId, createdAt: Date.now() });
+    for (const computerId of computerIds) {
+        await db.insert(machineAccountGrant).values({ credentialId, computerId, createdAt: Date.now() });
     }
     return { credentialId, credential };
 }

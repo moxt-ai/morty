@@ -1,47 +1,44 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { PLATFORM_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { eq } from "drizzle-orm";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
-import { runtimeIdentity, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
+import { pairedDaemon, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
+import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
-export async function registerRuntimeFixture(
-    projectId: string,
-    runtimeId: string,
-): Promise<{ readonly hostCredentialId: string }> {
+export async function registerRuntimeFixture(computerId: string): Promise<{ readonly hostCredentialId: string }> {
     const registeredAt = Date.UTC(2026, 9, 27);
-    const appId = `app_${projectId}`;
+    const appId = `app_${computerId}`;
     const directory = platformDrizzle(env.PLATFORM_DIRECTORY_DATABASE);
     await directory.batch([
         directory
             .insert(machineAccount)
             .values({
-                projectId,
+                computerId,
                 appId,
                 displayName: "Registered test Project",
-                clientReference: projectId,
-                idempotencyKey: projectId,
+                clientReference: computerId,
+                idempotencyKey: computerId,
                 lifecycle: "active",
                 createdAt: registeredAt,
                 updatedAt: registeredAt,
             })
             .onConflictDoNothing(),
     ]);
-    await runInDurableObject(env.PROJECT_RELAY.getByName(projectId), async (_instance, state) => {
+    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
+        applyDurableObjectMigrations(state.storage, computerDurableObjectMigrations);
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         await database.batch([
-            database
-                .insert(runtimeIdentity)
-                .values({ runtimeId, projectId, channelId: runtimeId, createdAt: registeredAt })
-                .onConflictDoNothing(),
+            database.insert(pairedDaemon).values({ computerId, createdAt: registeredAt }).onConflictDoNothing(),
             database
                 .insert(runtimeRegistration)
                 .values({
-                    runtimeId,
+                    computerId,
                     claimedAt: registeredAt,
                     machineName: "Registered test Runtime",
                     workspaceName: "Registered test workspace",
@@ -53,7 +50,7 @@ export async function registerRuntimeFixture(
     const project = await directory
         .select({ appId: machineAccount.appId })
         .from(machineAccount)
-        .where(eq(machineAccount.projectId, projectId))
+        .where(eq(machineAccount.computerId, computerId))
         .get();
     if (project === undefined) {
         throw new Error("Missing fixture project");

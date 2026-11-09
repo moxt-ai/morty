@@ -35,15 +35,13 @@ describe("Morty daemon lifecycle", () => {
             const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
             const signal = AbortSignal.timeout(30_000);
             const installation = await openMortyInstallation(signal, environment);
-            const channelId = "channel_start_failure";
+            const computerId = "channel_start_failure";
             await installation.saveConnection(
                 {
-                    channelId,
+                    computerId,
                     defaultWorkspace: workspace,
-                    pairingId: "",
                     relayOrigin: new URL("http://127.0.0.1:1"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_failure",
                 },
                 signal,
             );
@@ -53,7 +51,7 @@ describe("Morty daemon lifecycle", () => {
             } else {
                 const sessions = join(installation.stateDirectory, "sessions");
                 await mkdir(sessions, { recursive: true });
-                const hash = createHash("sha256").update(channelId).digest("hex");
+                const hash = createHash("sha256").update(computerId).digest("hex");
                 await writeFile(join(sessions, `${hash}.sqlite`), "invalid SQLite database");
             }
             try {
@@ -111,7 +109,8 @@ describe("Morty daemon lifecycle", () => {
         const deadline = AbortSignal.timeout(60_000);
         let heldConnection: Socket | undefined;
         try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
+            const started = await runCli(["start"], environment, deadline);
+            expect(started.code, started.stderr).toBe(0);
             const control = await openMortyInstallation(deadline, environment);
             heldConnection = await holdControlConnection(control.stateDirectory, deadline);
             expect(await runCli(["quit"], environment, deadline)).toEqual({
@@ -149,22 +148,21 @@ describe("Morty pairing lifecycle", () => {
         const control = await openMortyInstallation(deadline, environment);
         const connection = await installation.saveConnection(
             {
-                channelId: "channel_test",
+                computerId: "computer_test",
                 defaultWorkspace: workspace,
-                pairingId: "",
                 relayOrigin: relay.origin,
                 runtimeCredential: "a".repeat(43),
-                runtimeId: "runtime_test",
             },
             deadline,
         );
 
         try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
+            const started = await runCli(["start"], environment, deadline);
+            expect(started.code, started.stderr).toBe(0);
             const initiallyListed = await runCli(["pair", "list"], environment, deadline);
             expect(initiallyListed.code).toBe(0);
             expect(initiallyListed.stdout).toContain("| connection_id");
-            expect(initiallyListed.stdout).not.toContain("channel_id");
+            expect(initiallyListed.stdout).toContain("computer_id");
             expect(initiallyListed.stdout).toContain(connection.connectionId);
 
             const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
@@ -175,7 +173,7 @@ describe("Morty pairing lifecycle", () => {
             expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual([
                 {
                     connection_id: connection.connectionId,
-                    runtime_id: "runtime_test",
+                    computer_id: "computer_test",
                     status: "active",
                     workspace,
                 },

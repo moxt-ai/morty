@@ -3,7 +3,7 @@ import { createResponseLossProxy } from "@morty-build/platform-test-support/resp
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import legacyMapping from "../migrations/project-do/0003_platform_project.sql?raw";
-import platformProjectIdentity from "../migrations/project-do/0033_platform_project_identity.sql?raw";
+import platformComputerIdentity from "../migrations/project-do/0033_platform_project_identity.sql?raw";
 import ownerKeyedMapping from "../migrations/project-do/0051_key_project_mapping_by_owner.sql?raw";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
@@ -24,7 +24,7 @@ test("Given a Project mapping saved under an old origin and service setting, Whe
             1793059200000,
         );
 
-    for (const migration of [platformProjectIdentity, ownerKeyedMapping]) {
+    for (const migration of [platformComputerIdentity, ownerKeyedMapping]) {
         database.exec("BEGIN");
         database.exec(migration);
         database.exec("COMMIT");
@@ -43,16 +43,16 @@ test("Given a machine owner and a deployment service credential, When the owner 
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
-        const projectUrl = `${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management`;
+        const projectUrl = `${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management`;
         const headers = { authorization: `Bearer ${identity.token}` };
 
         const environment = fixture.environment();
 
-        const project = await worker.fetch(new Request(`${projectUrl}/project`, { headers }), environment);
+        const project = await worker.fetch(new Request(`${projectUrl}/computer`, { headers }), environment);
         expect(project.status).toBe(200);
-        expect(await project.json()).toMatchObject({ project: { projectId: identity.projectId } });
+        expect(await project.json()).toMatchObject({ computer: { computerId: identity.computerId } });
         const pairing = await worker.fetch(
-            new Request(`${projectUrl}/runtime-pairings`, {
+            new Request(`${projectUrl}/pairing`, {
                 method: "POST",
                 headers: { ...headers, "content-type": "application/json" },
                 body: JSON.stringify({ idempotencyKey: "reconfigured-service-pairing" }),
@@ -60,7 +60,7 @@ test("Given a machine owner and a deployment service credential, When the owner 
             environment,
         );
         expect(pairing.status).toBe(201);
-        expect(await pairing.json()).toMatchObject({ projectId: identity.projectId });
+        expect(await pairing.json()).toMatchObject({ computerId: identity.computerId });
     } finally {
         await fixture.close();
     }
@@ -73,10 +73,10 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
-        const projectUrl = `${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management`;
+        const projectUrl = `${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management`;
         const headers = { authorization: `Bearer ${identity.token}` };
         const originalProject = await worker.fetch(
-            new Request(`${projectUrl}/project`, { headers }),
+            new Request(`${projectUrl}/computer`, { headers }),
             fixture.environment(),
         );
         expect(originalProject.status).toBe(200);
@@ -90,18 +90,18 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
         try {
             await fixture.changePlatformOrigin(relocated.origin);
             const environment = fixture.environment();
-            const session = await worker.fetch(accountRequest(identity.token, identity.projectId), environment);
+            const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);
             expect(await session.json()).toMatchObject({ userId: identity.userId });
             const currentBot = await worker.fetch(new Request(`${projectUrl}/bot`, { headers }), environment);
             expect(currentBot.status).toBe(200);
             expect(await currentBot.json()).toEqual(bot);
-            const currentProject = await worker.fetch(new Request(`${projectUrl}/project`, { headers }), environment);
+            const currentProject = await worker.fetch(new Request(`${projectUrl}/computer`, { headers }), environment);
             expect(currentProject.status).toBe(200);
             expect(await currentProject.json()).toEqual(project);
 
             const pairing = await worker.fetch(
-                new Request(`${projectUrl}/runtime-pairings`, {
+                new Request(`${projectUrl}/pairing`, {
                     method: "POST",
                     headers: { ...headers, "content-type": "application/json" },
                     body: JSON.stringify({ idempotencyKey: "relocated-platform-pairing" }),
@@ -109,10 +109,10 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
                 environment,
             );
             expect(pairing.status).toBe(201);
-            expect(await pairing.json()).toMatchObject({ projectId: identity.projectId, relayUrl: relocated.origin });
+            expect(await pairing.json()).toMatchObject({ computerId: identity.computerId, relayUrl: relocated.origin });
 
             const replaced = await worker.fetch(
-                new Request(`${projectUrl}/project/replacement`, {
+                new Request(`${projectUrl}/computer/replacement`, {
                     method: "POST",
                     headers,
                 }),
@@ -120,13 +120,13 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
             );
             expect(replaced.status).toBe(201);
             const replacement = v.parse(
-                v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
+                v.object({ userId: v.string(), computerId: v.string(), token: v.string() }),
                 await replaced.json(),
             );
             expect(replacement.userId).toBe(identity.userId);
-            expect(replacement.projectId).not.toBe(identity.projectId);
+            expect(replacement.computerId).not.toBe(identity.computerId);
             expect(
-                (await worker.fetch(accountRequest(replacement.token, replacement.projectId), environment)).status,
+                (await worker.fetch(accountRequest(replacement.token, replacement.computerId), environment)).status,
             ).toBe(200);
         } finally {
             await relocated.close();

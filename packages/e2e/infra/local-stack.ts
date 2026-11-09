@@ -88,6 +88,9 @@ export class LocalStack {
                 mortyRepository,
             );
         });
+        const application = await this.harness.stage("provision-morty-service", () =>
+            provisionLocalService(platformConfiguration, this.directories.platform, this.harness.signal),
+        );
         await this.harness.stage("start-platform", async () => {
             await this.harness.startWorker(
                 "morty-platform",
@@ -96,6 +99,12 @@ export class LocalStack {
                     "dev",
                     "--config",
                     platformConfiguration,
+                    "--var",
+                    `APP_ORIGIN:${this.chatOrigin}`,
+                    "--var",
+                    `MORTY_RELAY_URL:${this.platformOrigin}`,
+                    "--var",
+                    `MORTY_SERVICE_SECRET:${application.appSecret}`,
                     "--ip",
                     "127.0.0.1",
                     "--port",
@@ -109,9 +118,7 @@ export class LocalStack {
             );
             await this.harness.checkHttp(`${this.platformOrigin}/morty/api/dashboard/health`, "morty-platform health");
         });
-        return await this.harness.stage("provision-morty-service", () =>
-            provisionLocalService(platformConfiguration, this.directories.platform, this.harness.signal),
-        );
+        return application;
     }
 
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {

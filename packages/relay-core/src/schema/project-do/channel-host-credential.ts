@@ -5,7 +5,7 @@ export const channelHostCredential = sqliteTable(
     "channel_host_credentials",
     {
         credentialId: text("credential_id").primaryKey(),
-        channelId: text("channel_id").notNull(),
+        computerId: text("computer_id").notNull(),
         tokenHash: text("token_hash").notNull().unique(),
         authority: text("authority", { enum: ["owner", "linked"] }).notNull(),
         createdAt: integer("created_at").notNull(),
@@ -16,7 +16,7 @@ export const channelHostCredential = sqliteTable(
     (table) => [
         check("channel_host_credentials_authority_check", sql`${table.authority} in ('owner', 'linked')`),
         index("channel_host_credentials_channel").on(
-            table.channelId,
+            table.computerId,
             table.authority,
             table.revokedAt,
             table.createdAt,

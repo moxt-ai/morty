@@ -14,7 +14,7 @@ const MAXIMUM_REPORT_BYTES = 60_000;
 const REMOTE_DIAGNOSTIC_FIELDS = [
     "agentId",
     "operation",
-    "runtimeId",
+    "computerId",
     "closeCode",
     "timeoutMilliseconds",
     "attempt",
@@ -26,7 +26,7 @@ const REMOTE_DIAGNOSTIC_FIELDS = [
     "proxyRoute",
     "timestamp",
     "event",
-    "channelId",
+    "computerId",
     "requestId",
     "commandId",
     "sessionId",

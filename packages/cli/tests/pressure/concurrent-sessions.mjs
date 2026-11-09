@@ -185,8 +185,7 @@ async function exercise(count) {
                     script: await bundle("packages/platform-test-support/src/platform-worker-entry.ts"),
                     compatibilityDate: "2026-09-03",
                     durableObjects: {
-                        RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                        PROJECT_RELAY: { className: "ProjectDO", useSQLite: true },
+                        COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                     },
                     d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
                     r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
@@ -238,9 +237,9 @@ async function exercise(count) {
             undefined,
             201,
         );
-        const base = `/v1/projects/${project.projectId}`;
-        const pairing = await api(`${base}/runtime-pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
-        const claimed = await api(`/v1/runtime-pairings/${pairing.pairingId}/redeem`, "POST", {
+        const base = `/v1/computers/${project.computerId}`;
+        const pairing = await api(`${base}/pairings`, "POST", { idempotencyKey: "pressure" }, credential, 201);
+        const claimed = await api(`/v1/pairings/${pairing.computerId}/redeem`, "POST", {
             pairingCode: pairing.pairingCode,
             agents: [],
             machineName: "Isolated pressure test",
@@ -251,7 +250,7 @@ async function exercise(count) {
         const connectionStates = [];
         child = fork(
             join(here, "runtime-process.mjs"),
-            [state, pairing.channelId, relay.href, claimed.runtimeCredential, controlPath, repository],
+            [state, pairing.computerId, relay.href, claimed.runtimeCredential, controlPath, repository],
             {
                 env: { PATH: process.env.PATH, HOME: join(state, "home") },
                 stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -278,7 +277,7 @@ async function exercise(count) {
         });
         stage("connecting Runtime");
         await check(() => connectionStates.includes("online"), "Runtime online");
-        const hostUrl = new URL(`${origin}/morty/api${base}/runtimes/${claimed.runtimeId}/host`);
+        const hostUrl = new URL(`${origin}/morty/api${base}/daemon/host`);
         hostUrl.protocol = "ws:";
         host = new WebSocket(hostUrl, { headers: { authorization: `Bearer ${credential}` } });
         const live = new Map();

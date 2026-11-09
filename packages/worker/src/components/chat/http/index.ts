@@ -6,7 +6,7 @@ import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 export function createChatApplication() {
     return new Hono<ChatHttpEnvironment>()
-        .basePath("/morty/api/chat/projects/:projectId")
+        .basePath("/morty/api/chat/computers/:computerId")
         .onError(errorHandler<ChatHttpEnvironment>((context) => context.env.logger))
         .use("*", requestHeaders)
         .route("/", createBotChatRoutes());

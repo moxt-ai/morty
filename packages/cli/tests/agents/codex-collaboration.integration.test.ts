@@ -100,7 +100,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "real-codex-collaboration",
+            computerId: "real-codex-collaboration",
             defaultWorkspace: workspace,
             relayUrl,
         },

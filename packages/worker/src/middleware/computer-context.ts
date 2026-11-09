@@ -4,42 +4,42 @@ import { ManagementError } from "../components/management/entity/management-erro
 import { platformIdentifier } from "../components/management/entity/platform-project.ts";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
-import { projectBindings } from "../composition/project-bindings.ts";
-import { routeProjectObject } from "../gateway/project-object-routing.ts";
+import { computerBindings } from "../composition/computer-bindings.ts";
+import { routeComputerObject } from "../gateway/computer-object-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { readJsonBody } from "./body-parser.ts";
 
-export const cloudProjectContext = createMiddleware<{
+export const cloudComputerContext = createMiddleware<{
     readonly Bindings: CloudBindings;
     readonly Variables: { readonly dependencies: ApplicationContext };
 }>(async (context, next) => {
     const request = context.req.raw;
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
-    const projectId = await cloudProjectId(request);
-    const routed = await routeProjectObject(request, context.env, projectId);
+    const computerId = await cloudComputerId(request);
+    const routed = await routeComputerObject(request, context.env, computerId);
     if (routed !== null) {
         return routed;
     }
-    const bindings = projectId === null ? context.env : await projectBindings(context.env, projectId, signal);
+    const bindings = computerId === null ? context.env : await computerBindings(context.env, computerId, signal);
     context.set("dependencies", createApplicationDependencies(bindings));
     return await next();
 });
 
-export async function cloudProjectId(request: Request): Promise<string | null> {
+export async function cloudComputerId(request: Request): Promise<string | null> {
     const path = new URL(request.url).pathname;
-    if (path.startsWith("/morty/api/projects/")) {
-        const projectId = path.split("/")[4];
-        if (projectId === undefined || projectId === "") {
+    if (path.startsWith("/morty/api/computers/")) {
+        const computerId = path.split("/")[4];
+        if (computerId === undefined || computerId === "") {
             throw new ManagementError("PROJECT_REQUIRED", "Morty context is required.", 400);
         }
-        return v.parse(platformIdentifier, projectId);
+        return v.parse(platformIdentifier, computerId);
     }
-    if (path.startsWith("/morty/api/chat/projects/")) {
-        const projectId = path.split("/")[5];
-        if (projectId === undefined || projectId === "") {
+    if (path.startsWith("/morty/api/chat/computers/")) {
+        const computerId = path.split("/")[5];
+        if (computerId === undefined || computerId === "") {
             throw new ManagementError("PROJECT_REQUIRED", "Morty context is required.", 400);
         }
-        return v.parse(platformIdentifier, projectId);
+        return v.parse(platformIdentifier, computerId);
     }
     if (path === "/morty/api/identity/anonymous-users") {
         return null;
@@ -50,7 +50,7 @@ export async function cloudProjectId(request: Request): Promise<string | null> {
         const parsed = v.safeParse(v.record(v.string(), v.unknown()), input);
         const ticket = parsed.success ? readProjectCredential(parsed.output[inputKey]) : null;
         if (ticket?.kind === "morty_transfer_v1") {
-            return ticket.projectId;
+            return ticket.computerId;
         }
     }
     return null;

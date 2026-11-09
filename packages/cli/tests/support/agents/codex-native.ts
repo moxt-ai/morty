@@ -62,7 +62,7 @@ export async function codexFixture(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
             defaultWorkspace: workspace,
-            channelId: "test-channel",
+            computerId: "test-channel",
             relayUrl: new URL("ws://localhost/"),
         },
         new RuntimeAgentDependencies([agent]),

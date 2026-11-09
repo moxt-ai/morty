@@ -9,7 +9,7 @@ test("Given a Session still applying initial settings, When another caller creat
     const release = Promise.withResolvers<void>();
     try {
         const identity = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(identity.projectId, [
+        await using runtime = await cloud.connectAgent(identity.computerId, [
             {
                 id: "configuration-test",
                 label: "Settings Agent",
@@ -27,7 +27,7 @@ test("Given a Session still applying initial settings, When another caller creat
             additionalDirectoryIds: [],
             agentId: "configuration-test",
             directoryId: "default",
-            runtimeId: runtime.runtimeId,
+            computerId: runtime.computerId,
             sessionId,
         };
         const refused = runtime.client.sessions
@@ -56,10 +56,10 @@ test("Given a Session still applying initial settings, When another caller creat
             release.resolve();
         }
         expect(await refused).toMatchObject({ ok: false, cause: { code: "session_configuration_conflict" } });
-        expect(await runtime.client.runtimes.querySessions(runtime.runtimeId, [sessionId], signal)).toHaveLength(0);
+        expect(await runtime.client.runtimes.querySessions([sessionId], signal)).toHaveLength(0);
         const successful = await runtime.client.sessions.create({ ...input, configurations: [] }, signal);
         expect(successful.sessionId).toBe(sessionId);
-        expect(await runtime.client.runtimes.querySessions(runtime.runtimeId, [sessionId], signal)).toHaveLength(1);
+        expect(await runtime.client.runtimes.querySessions([sessionId], signal)).toHaveLength(1);
     } finally {
         release.resolve();
         await cloud.close();

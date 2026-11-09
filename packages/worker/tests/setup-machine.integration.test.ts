@@ -177,26 +177,26 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     expect(await run()).not.toBe(0);
     const pairing = await lost;
     expect(pairing.status).toBe(201);
-    const lostPairing = v.parse(v.object({ runtimeId: v.string(), pairingId: v.string() }), JSON.parse(pairing.body));
-    const pairedRuntime = lostPairing.runtimeId;
+    const lostPairing = v.parse(v.object({ computerId: v.string() }), JSON.parse(pairing.body));
+    const pairedRuntime = lostPairing.computerId;
 
     expect(await run()).toBe(0);
     const saved = v.parse(
         v.object({ identity: v.object({ user_token: v.string(), project_id: v.string() }) }),
         JSON.parse(await readFile(join(state, "config.json"), "utf8")),
     );
-    const machine = await fetch(`${fixture.origin}/morty/api/projects/${saved.identity.project_id}/management/bot`, {
+    const machine = await fetch(`${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/bot`, {
         headers: { authorization: `Bearer ${saved.identity.user_token}` },
     });
     const actual: unknown = await machine.json();
     const original = await fetch(
-        `${fixture.origin}/morty/api/projects/${saved.identity.project_id}/management/runtime-pairings/${lostPairing.pairingId}`,
+        `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/pairing`,
         { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
     );
     expect(original.status).toBe(200);
     const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
     expect(originalStatus).toBe("paired");
-    expect(actual).toMatchObject({ runtimeId: pairedRuntime });
+    expect(actual).toMatchObject({ computerId: pairedRuntime });
 });
 
 test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
@@ -257,24 +257,24 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const machineRuntime = async () => {
         const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
         const response = await worker.fetch(
-            new Request(`${fixture.origin}/morty/api/projects/${identity.project_id}/management/bot`, {
+            new Request(`${fixture.origin}/morty/api/computers/${identity.project_id}/management/bot`, {
                 headers: { authorization: `Bearer ${identity.user_token}` },
             }),
             fixture.environment(fixture.origin),
         );
         expect(response.status).toBe(200);
-        return { identity, runtimeId: v.parse(v.object({ runtimeId: v.string() }), await response.json()).runtimeId };
+        return {
+            identity,
+            computerId: v.parse(v.object({ computerId: v.string() }), await response.json()).computerId,
+        };
     };
     const first = await run();
     const before = await machineRuntime();
     const revoked = await fixture.platformRequest(
-        new Request(
-            `https://platform.test/morty/api/v1/projects/${before.identity.project_id}/runtimes/${before.runtimeId}`,
-            {
-                method: "DELETE",
-                headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
-            },
-        ),
+        new Request(`https://platform.test/morty/api/v1/computers/${before.identity.project_id}/pairing`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
+        }),
     );
     expect(revoked.status).toBe(204);
 
@@ -282,9 +282,9 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const after = await machineRuntime();
 
     expect(again.events).toContainEqual(
-        expect.objectContaining({ status: "runtime_revoked", runtimeId: before.runtimeId }),
+        expect.objectContaining({ status: "runtime_revoked", computerId: before.computerId }),
     );
     expect(again.ready.botId).toBe(first.ready.botId);
     expect(after.identity).toEqual(before.identity);
-    expect(after.runtimeId).not.toBe(before.runtimeId);
+    expect(after.computerId).toBe(before.computerId);
 });

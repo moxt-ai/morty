@@ -49,9 +49,8 @@ describe("daemon environment proxy", () => {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
-                    channelId: "proxy-channel",
+                    computerId: "proxy-computer",
                     runtimeCredential: "a".repeat(32),
-                    runtimeId: "proxy-runtime",
                 }),
             );
         });
@@ -177,14 +176,14 @@ describe("daemon environment proxy", () => {
                 {
                     defaultWorkspace: process.cwd(),
                     pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
-                    pairingId: "proxy-pairing",
+                    computerId: "proxy-computer",
                     relayOrigin: `http://127.0.0.1:${pairingPort}`,
                 },
                 AbortSignal.timeout(2_000),
             );
             expect(
-                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).runtimeId,
-            ).toBe("proxy-runtime");
+                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).computerId,
+            ).toBe("proxy-computer");
 
             const relayPort = port(relayServer);
             expect(describeEnvironmentProxyRoute(new URL(`ws://127.0.0.1:${relayPort}/daemon`))).toEqual({
@@ -201,7 +200,7 @@ describe("daemon environment proxy", () => {
 
             expect(tunnelTargets).toContain(`127.0.0.1:${pairingPort}`);
             expect(tunnelTargets).toContain(`127.0.0.1:${relayPort}`);
-            expect(pairingPaths).toEqual([`${MORTY_API_PREFIX}/v1/runtime-pairings/proxy-pairing/redeem`]);
+            expect(pairingPaths).toEqual([`${MORTY_API_PREFIX}/v1/pairings/proxy-computer/redeem`]);
             await environmentProxyDispatcher.close();
         } finally {
             if (previousHttpProxy === undefined) {

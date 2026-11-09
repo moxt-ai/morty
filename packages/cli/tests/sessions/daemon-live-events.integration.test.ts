@@ -266,7 +266,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "channel_alpha",
+            computerId: "channel_alpha",
             defaultWorkspace: workspace,
             relayUrl,
         },

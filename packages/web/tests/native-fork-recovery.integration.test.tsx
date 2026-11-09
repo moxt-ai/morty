@@ -40,7 +40,7 @@ test("Given a Fork completes before Morty loses its response, When the user retr
         const managed = async (): Promise<unknown> => {
             const response = await app.transport.fetch(
                 new Request(
-                    `${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/managed-sessions`,
+                    `${app.origin}/morty/api/chat/computers/${app.identity.computerId}/bots/${app.botId}/managed-sessions`,
                     {
                         method: "POST",
                         headers: {

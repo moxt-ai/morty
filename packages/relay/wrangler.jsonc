@@ -7,12 +7,8 @@
     "durable_objects": {
         "bindings": [
             {
-                "name": "RUNTIME_RELAY",
-                "class_name": "RuntimeRelay"
-            },
-            {
-                "name": "PROJECT_RELAY",
-                "class_name": "ProjectDO"
+                "name": "COMPUTER_RELAY",
+                "class_name": "ComputerRelay"
             }
         ]
     },
@@ -61,7 +57,8 @@
         {
             "tag": "platform-runtime-browser-transport",
             "deleted_classes": ["WebSocketTransport"]
-        }
+        },
+        { "tag": "computer-relay", "new_sqlite_classes": ["ComputerRelay"] }
     ],
     "d1_databases": [
         {

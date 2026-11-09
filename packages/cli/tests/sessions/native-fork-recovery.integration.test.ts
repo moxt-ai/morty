@@ -31,7 +31,7 @@ test.each(["request", "result"] as const)(
             credential: platform.appCredential,
             origin: platform.baseUrl,
             relayOrigin: proxy.origin,
-            projectId: project.projectId,
+            computerId: project.computerId,
             server: platform.app,
             signal,
             nativeSessionIds: new Set(["native-fork-source"]),
@@ -51,7 +51,6 @@ test.each(["request", "result"] as const)(
         });
         await connected.promise;
         await runtime.client.runtimes.nativeSessions(
-            runtime.runtimeId,
             {
                 action: "list",
                 agentId: "claude",
@@ -70,7 +69,7 @@ test.each(["request", "result"] as const)(
             additionalDirectoryIds: [],
             nativeSessionId: "native-fork-source",
         };
-        const fork = () => runtime.client.runtimes.forkNativeSession(runtime.runtimeId, operationId, input, signal);
+        const fork = () => runtime.client.runtimes.forkNativeSession(operationId, input, signal);
         await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
         const targetSessionId = await proxy.lost;
         await disconnected.promise;
@@ -79,7 +78,7 @@ test.each(["request", "result"] as const)(
         if (loss === "request") {
             await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
             await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
-            expect(await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal)).toEqual([]);
+            expect(await runtime.client.runtimes.listSessions(100, signal)).toEqual([]);
         } else {
             const [first, concurrent] = await Promise.all([fork(), fork()]);
             expect(concurrent).toEqual(first);
@@ -87,7 +86,7 @@ test.each(["request", "result"] as const)(
             expect(first.result.ready).toMatchObject({ sessionId: targetSessionId, agentId: "claude", restored: true });
             expect(first.entry.nativeSessionId).toBe(input.nativeSessionId);
             expect(await fork()).toEqual(first);
-            const sessions = await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal);
+            const sessions = await runtime.client.runtimes.listSessions(100, signal);
             expect(sessions).toHaveLength(1);
             expect(sessions[0]?.sessionId).toBe(targetSessionId);
         }
@@ -107,7 +106,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.projectId, undefined, new Set(["recovery-native-source"]));
+    const runtime = await platform.connectAgent(project.computerId, undefined, new Set(["recovery-native-source"]));
     const listingInput = {
         action: "list" as const,
         additionalDirectoryIds: [],
@@ -116,7 +115,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         directoryId: "default",
         discoveryId: null,
     };
-    const directory = await runtime.client.runtimes.nativeSessions(runtime.runtimeId, listingInput, signal);
+    const directory = await runtime.client.runtimes.nativeSessions(listingInput, signal);
     if (directory.action !== "list" || directory.entries[0] === undefined) {
         throw new Error("No native source");
     }
@@ -152,7 +151,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     });
     await listen(proxy);
     try {
-        const url = `http://127.0.0.1:${port(proxy)}/morty/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/native-session-forks/${crypto.randomUUID()}`;
+        const url = `http://127.0.0.1:${port(proxy)}/morty/api/v1/computers/${project.computerId}/daemon/native-session-forks/${crypto.randomUUID()}`;
         const send = () =>
             fetch(url, {
                 method: "POST",
@@ -189,7 +188,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         });
         expect(conflict.status).toBe(409);
         expect(await conflict.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
-        const after = await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal);
+        const after = await runtime.client.runtimes.listSessions(100, signal);
         expect(after).toHaveLength(1); // One tracked fork for the user's one intent; the native source was never imported.
     } finally {
         proxy.closeAllConnections();

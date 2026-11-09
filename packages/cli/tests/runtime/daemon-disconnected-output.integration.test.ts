@@ -278,7 +278,7 @@ async function startRuntime() {
     const activity = new RuntimeTurnActivity();
     const config = createRuntimeConfig(
         {
-            channelId: "disconnected-output",
+            computerId: "disconnected-output",
             defaultWorkspace: workspace,
             relayUrl: new URL(`ws://127.0.0.1:${port(http).toString()}/daemon`),
             credentials: memoryRuntimeCredentials("r".repeat(43)),

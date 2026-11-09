@@ -38,11 +38,11 @@ export function createIdentityAccess(options: {
     readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly waitForChange: ApiTransport["waitForChange"];
     readonly origin: string;
-    readonly identity: { readonly projectId: string; readonly getToken: (signal: AbortSignal) => Promise<string> };
+    readonly identity: { readonly computerId: string; readonly getToken: (signal: AbortSignal) => Promise<string> };
     readonly onAccessEnded: () => void;
     readonly currentAccess: (
         signal: AbortSignal,
-    ) => Promise<{ readonly projectId: string; readonly token: string } | null>;
+    ) => Promise<{ readonly computerId: string; readonly token: string } | null>;
     readonly credentialRejected: () => Promise<void>;
 }): IdentityAccess {
     const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
@@ -76,7 +76,7 @@ export function createIdentityAccess(options: {
         createTransfer: async (terms, signal) => {
             const localIdentity = await options.currentAccess(signal);
             signal.throwIfAborted();
-            if (localIdentity === null || localIdentity.projectId !== options.identity.projectId) {
+            if (localIdentity === null || localIdentity.computerId !== options.identity.computerId) {
                 throw new IdentitySharingUnavailable();
             }
             return await api.createTransfer(localIdentity.token, terms, signal);

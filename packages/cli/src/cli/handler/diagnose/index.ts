@@ -24,8 +24,7 @@ const workerMessage = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("prepared"),
         role: z.enum(["direct", "proxy"]),
-        channelId: z.string(),
-        runtimeId: z.string(),
+        computerId: z.string(),
         routesBefore: z.array(routeEvidenceSchema),
     }),
     z.object({
@@ -50,8 +49,7 @@ const workerMessage = z.discriminatedUnion("kind", [
 
 interface LegReport {
     readonly role: RelayProbeRole;
-    readonly channelId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
     readonly onlineCount: number;
     readonly routesBefore: readonly RouteEvidence[];
     readonly routesAfter: readonly RouteEvidence[];
@@ -66,10 +64,9 @@ class ProbeLeg {
     readonly role: RelayProbeRole;
     readonly #child: ChildProcess;
     readonly #directory: string;
-    readonly #prepared = Promise.withResolvers<{ readonly channelId: string; readonly runtimeId: string }>();
+    readonly #prepared = Promise.withResolvers<{ readonly computerId: string }>();
     readonly closed: Promise<number | null>;
-    #channelId = "";
-    #runtimeId = "";
+    #computerId = "";
     #routesBefore: readonly RouteEvidence[] = [];
     #routesAfter: readonly RouteEvidence[] = [];
     #onlineCount = 0;
@@ -126,7 +123,7 @@ class ProbeLeg {
                         const event = z
                             .record(z.string(), z.string())
                             .safeParse(JSON.parse(line.slice("Morty relay diagnostic ".length)));
-                        if (event.success && event.data["channelId"] === this.#channelId) {
+                        if (event.success && event.data["computerId"] === this.#computerId) {
                             this.#events.push(event.data);
                             if (this.#events.length > 2_000) {
                                 this.#events.shift();
@@ -150,8 +147,8 @@ class ProbeLeg {
             const event = message.data;
             switch (event.kind) {
                 case "prepared":
-                    this.#channelId = event.channelId;
-                    this.#runtimeId = event.runtimeId;
+                    this.#computerId = event.computerId;
+                    this.#computerId = event.computerId;
                     this.#routesBefore = event.routesBefore;
                     this.#prepared.resolve(event);
                     break;
@@ -205,8 +202,7 @@ class ProbeLeg {
         await writeProbeEvents(this.#directory, events);
         return {
             role: this.role,
-            channelId: this.#channelId,
-            runtimeId: this.#runtimeId,
+            computerId: this.#computerId,
             onlineCount: this.#onlineCount,
             routesBefore: this.#routesBefore,
             routesAfter: this.#routesAfter,
@@ -247,7 +243,7 @@ async function compare(configPath: string, output: string, duration: number, con
         deadline.addEventListener("abort", abortPreparation, { once: true });
         const prepared = await Promise.race([Promise.all(legs.map((leg) => leg.prepare())), cancelled.promise]);
         context.shutdownSignal.throwIfAborted();
-        if (prepared[0]?.channelId === prepared[1]?.channelId || prepared[0]?.runtimeId === prepared[1]?.runtimeId) {
+        if (prepared[0]?.computerId === prepared[1]?.computerId) {
             throw new RelayProbeError(
                 "probe_runtime_reused",
                 "The Relay returned the same Runtime for distinct pairings",
@@ -337,7 +333,7 @@ export function registerDiagnoseCommand(program: Command, context: CliContext): 
         .description("compare fresh direct and proxied Runtime channels over the same observation window")
         .requiredOption(
             "--config <path>",
-            "private JSON with relayOrigin and distinct direct/proxy pairingId and pairingCode",
+            "private JSON with relayOrigin and distinct direct/proxy computerId and pairingCode",
         )
         .requiredOption("--output <directory>", "new directory for sanitized report.json and transport logs")
         .option("--duration <seconds>", "observation duration after both pairings are prepared", "600")

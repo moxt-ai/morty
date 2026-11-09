@@ -94,7 +94,7 @@ export class MortyPlatformProject {
     readonly deletedAt: string;
     readonly displayName: string;
     readonly lifecycle: string;
-    readonly projectId: string;
+    readonly computerId: string;
     readonly updatedAt: string;
 
     constructor(value: Readonly<Record<string, unknown>>) {
@@ -103,7 +103,7 @@ export class MortyPlatformProject {
         this.deletedAt = timestamp(value, "deletedAt");
         this.displayName = string(value, "displayName", 120);
         this.lifecycle = string(value, "lifecycle", 32);
-        this.projectId = identifier(value, "projectId");
+        this.computerId = identifier(value, "computerId");
         this.updatedAt = timestamp(value, "updatedAt");
     }
 }
@@ -146,4 +146,4 @@ export class MortyPlatformAppClient {
         );
 }
 
-export { runtimeRequestTarget } from "./transport/runtime-request-target.ts";
+export { computerRequestTarget } from "./transport/computer-request-target.ts";

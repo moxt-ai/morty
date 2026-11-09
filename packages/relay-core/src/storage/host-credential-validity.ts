@@ -1,6 +1,6 @@
 import { and, eq, exists, isNull, type SQL } from "drizzle-orm";
 import type { RelayDrizzleDatabase } from "../infra/drizzle-database.ts";
-import { channelHostCredential, runtimeIdentity, runtimeRegistration } from "../schema/project-do/index.ts";
+import { channelHostCredential, pairedDaemon, runtimeRegistration } from "../schema/project-do/index.ts";
 
 /**
  * Whether the `channel_host_credentials` row in scope authenticates now. A host credential authenticates while it is
@@ -12,14 +12,11 @@ export function hostCredentialValid(database: RelayDrizzleDatabase): SQL | undef
         isNull(channelHostCredential.revokedAt),
         exists(
             database
-                .select({ runtimeId: runtimeIdentity.runtimeId })
-                .from(runtimeIdentity)
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.runtimeId, runtimeIdentity.runtimeId))
+                .select({ computerId: pairedDaemon.computerId })
+                .from(pairedDaemon)
+                .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
                 .where(
-                    and(
-                        eq(runtimeIdentity.channelId, channelHostCredential.channelId),
-                        isNull(runtimeIdentity.revokedAt),
-                    ),
+                    and(eq(pairedDaemon.computerId, channelHostCredential.computerId), isNull(pairedDaemon.revokedAt)),
                 ),
         ),
     );

@@ -116,7 +116,7 @@ export type ChatDiagnostics =
     | {
           readonly kind: "available";
           readonly view: "draft" | "session";
-          readonly runtimeId: string | null;
+          readonly computerId: string | null;
           readonly runtimeOnline: boolean;
           readonly agent: { readonly id: string; readonly version: string | null };
           readonly catalog: {

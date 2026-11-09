@@ -19,10 +19,9 @@ const relayOrigin = "https://platform.test";
 function bindings(): PlatformRelayBindings {
     return {
         PLATFORM_DIRECTORY_DATABASE: env.PLATFORM_DIRECTORY_DATABASE,
-        PROJECT_RELAY: env.PROJECT_RELAY,
+        COMPUTER_RELAY: env.COMPUTER_RELAY,
         R2_BUCKET_APAC: env.R2_BUCKET_APAC,
         R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
-        RUNTIME_RELAY: env.RUNTIME_RELAY,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
 }
@@ -64,21 +63,18 @@ async function pairedRuntime(name: string) {
     );
     const pairing = await responseJson(
         await worker.fetch(
-            new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${text(project, "projectId")}/runtime-pairings`,
-                {
-                    body: JSON.stringify({ idempotencyKey: name }),
-                    headers,
-                    method: "POST",
-                },
-            ),
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${text(project, "computerId")}/pairing`, {
+                body: JSON.stringify({ idempotencyKey: name }),
+                headers,
+                method: "POST",
+            }),
             environment,
         ),
         201,
     );
     const claimed = await responseJson(
         await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtime-pairings/${text(pairing, "pairingId")}/redeem`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                 body: JSON.stringify({
                     agents: [],
                     machineName: "Owner laptop",

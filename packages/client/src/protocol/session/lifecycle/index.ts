@@ -239,7 +239,7 @@ export type SessionCommandsUpdatedEvent = z.infer<typeof sessionCommandsUpdatedE
 const sessionInfoUpdatedEventSchema = z
     .object({
         kind: z.literal(SESSION_INFO_UPDATED_KIND),
-        projectId: IDENTIFIER.optional(),
+        computerId: IDENTIFIER.optional(),
         sessionId: IDENTIFIER,
         title: z.string().max(500).nullable(),
         updatedAt: z.string().max(128),

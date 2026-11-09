@@ -14,6 +14,7 @@ const LEDGER = "_durable_object_migrations";
 export function applyDurableObjectMigrations(
     storage: DurableObjectStorage,
     migrations: readonly DurableObjectMigration[],
+    prefix = "",
 ): void {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${LEDGER} (
         name TEXT PRIMARY KEY NOT NULL,
@@ -26,12 +27,13 @@ export function applyDurableObjectMigrations(
             .map((row) => row["name"]),
     );
     for (const migration of migrations) {
-        if (applied.has(migration.name)) {
+        const name = prefix + migration.name;
+        if (applied.has(name)) {
             continue;
         }
         storage.transactionSync(() => {
             storage.sql.exec(migration.sql);
-            storage.sql.exec(`INSERT INTO ${LEDGER} (name, applied_at) VALUES (?, ?)`, migration.name, Date.now());
+            storage.sql.exec(`INSERT INTO ${LEDGER} (name, applied_at) VALUES (?, ?)`, name, Date.now());
         });
     }
 }

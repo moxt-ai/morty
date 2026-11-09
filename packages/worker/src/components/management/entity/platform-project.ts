@@ -4,7 +4,7 @@ import type { HttpError } from "../../../infra/http-error.ts";
 
 export const platformIdentifier = v.custom<Identifier>(isIdentifier);
 export const platformProjectSchema = v.pipe(
-    v.object({ projectId: platformIdentifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
+    v.object({ computerId: platformIdentifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
     v.readonly(),
 );
 export type PlatformProject = v.InferOutput<typeof platformProjectSchema>;

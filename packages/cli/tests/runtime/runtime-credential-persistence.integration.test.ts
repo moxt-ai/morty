@@ -10,21 +10,19 @@ test("Given a rotated connection, When replacement pairing is cancelled, Then th
     try {
         const installation = await RuntimeInstallationStore.open(root, signal);
         const input = {
-            channelId: "channel_scan",
+            computerId: "computer_scan",
             defaultWorkspace: root,
-            pairingId: "pairing_scan",
             relayOrigin: new URL("https://relay.example.com/"),
             runtimeCredential: "a".repeat(43),
-            runtimeId: "runtime_scan",
         };
         const connection = await installation.saveConnection(input, signal);
         const credentials = installation.runtimeCredentials(connection.connectionId);
         const rotation = await credentials.prepare(signal);
         await credentials.complete(rotation, signal);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
-        await expect(
-            installation.saveConnection({ ...input, pairingId: "pairing_replacement" }, AbortSignal.abort()),
-        ).rejects.toMatchObject({ name: "AbortError" });
+        await expect(installation.saveConnection(input, AbortSignal.abort())).rejects.toMatchObject({
+            name: "AbortError",
+        });
         expect((await installation.currentConnection(signal))?.connectionId).toBe(connection.connectionId);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
     } finally {
@@ -38,19 +36,17 @@ test("Given a running credential rotation, When the pairing is replaced concurre
     try {
         const installation = await RuntimeInstallationStore.open(root, signal);
         const input = {
-            channelId: "channel_scan",
+            computerId: "computer_scan",
             defaultWorkspace: root,
-            pairingId: "pairing_scan",
             relayOrigin: new URL("https://relay.example.com/"),
             runtimeCredential: "a".repeat(43),
-            runtimeId: "runtime_scan",
         };
         const old = await installation.saveConnection(input, signal);
         const credentials = installation.runtimeCredentials(old.connectionId);
         const rotated = await credentials.prepare(signal);
         await credentials.complete(rotated, signal);
         const replacementHost = await RuntimeInstallationStore.open(root, signal);
-        const replacementInput = { ...input, pairingId: "pairing_new", runtimeCredential: "b".repeat(43) };
+        const replacementInput = { ...input, runtimeCredential: "b".repeat(43) };
         const [rotation, pairing] = await Promise.allSettled([
             credentials.prepare(signal),
             replacementHost.saveConnection(replacementInput, signal),

@@ -97,7 +97,7 @@ export async function runRuntime(
     const signal = AbortSignal.any([parentSignal, shutdown.signal]);
     const stateDirectory = config.localContext.stateDirectory;
     const diagnostics = new RelayConnectionDiagnostics(
-        config.channelId,
+        config.computerId,
         config.relayUrl,
         new RuntimeDiagnosticLog(stateDirectory, {
             ...(options.processLogsDirectory === undefined
@@ -132,7 +132,7 @@ export async function runRuntime(
         processes,
         ...(options.turnActivity === undefined ? {} : { turnActivity: options.turnActivity }),
         bindingId: config.bindingId,
-        channelId: config.channelId,
+        computerId: config.computerId,
         defaultWorkspace: config.defaultWorkspace,
         resolveAgent,
         sink: publisher,

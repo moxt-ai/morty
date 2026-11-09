@@ -10,7 +10,7 @@ export const PAIRING_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
 export const ACCESS_GRANT_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
 export const MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS = 60 * 1_000;
 export const MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS = 60 * 60 * 1_000;
-export const MAX_RUNTIMES_PER_PROJECT = 64;
+export const MAX_DAEMONS_PER_COMPUTER = 1;
 
 const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
@@ -24,37 +24,22 @@ export interface AgentDescriptor {
 }
 
 export class CreatedRuntimePairing {
-    readonly channelId: string;
     readonly expiresAt: string;
     readonly pairingCode: string;
-    readonly pairingId: string;
     readonly pollToken: string;
-    readonly projectId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
 
-    constructor(
-        channelId: string,
-        expiresAt: string,
-        pairingCode: string,
-        pairingId: string,
-        pollToken: string,
-        projectId: string,
-        runtimeId: string,
-    ) {
-        this.channelId = channelId;
+    constructor(expiresAt: string, pairingCode: string, pollToken: string, computerId: string) {
+        this.computerId = computerId;
         this.expiresAt = expiresAt;
         this.pairingCode = pairingCode;
-        this.pairingId = pairingId;
         this.pollToken = pollToken;
-        this.projectId = projectId;
-        this.runtimeId = runtimeId;
     }
 }
 
 export interface ClaimedPairing {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly daemonToken: string;
-    readonly runtimeId: string;
 }
 
 export interface CreatedChannelAccessGrant {
@@ -64,9 +49,8 @@ export interface CreatedChannelAccessGrant {
 }
 
 export interface RedeemedChannelAccessGrant {
-    readonly channelId: string;
     readonly hostToken: string;
-    readonly projectId: string;
+    readonly computerId: string;
 }
 
 export class LinkedChannelDevice {
@@ -83,23 +67,19 @@ export class LinkedChannelDevice {
 
 export class VerifiedChannelAccess {
     readonly agents: readonly AgentDescriptor[];
-    readonly channelId: string;
-    readonly projectId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
 
-    constructor(channelId: string, runtimeId: string, projectId: string, agents: readonly AgentDescriptor[]) {
+    constructor(computerId: string, agents: readonly AgentDescriptor[]) {
         this.agents = agents;
-        this.channelId = channelId;
-        this.projectId = projectId;
-        this.runtimeId = runtimeId;
+        this.computerId = computerId;
     }
 }
 
 export class ChannelHostCredential extends VerifiedChannelAccess {
     readonly credentialId: string;
 
-    constructor(channelId: string, runtimeId: string, projectId: string, credentialId: string) {
-        super(channelId, runtimeId, projectId, []);
+    constructor(computerId: string, credentialId: string) {
+        super(computerId, []);
         this.credentialId = credentialId;
     }
 }
@@ -112,8 +92,8 @@ export class ChannelHostCredential extends VerifiedChannelAccess {
 export class ProjectCredentialHostAccess extends VerifiedChannelAccess {
     readonly credentialId: string;
 
-    constructor(channelId: string, runtimeId: string, projectId: string, credentialId: string) {
-        super(channelId, runtimeId, projectId, []);
+    constructor(computerId: string, credentialId: string) {
+        super(computerId, []);
         this.credentialId = credentialId;
     }
 }
@@ -127,29 +107,18 @@ export type HostCredential =
 
 export class ChannelDescriptor {
     readonly agents: readonly AgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
-    readonly projectId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
     readonly workspaceName: string;
 
-    constructor(
-        agents: readonly AgentDescriptor[],
-        channelId: string,
-        machineName: string,
-        workspaceName: string,
-        projectId: string,
-        runtimeId: string,
-    ) {
+    constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
         this.agents = agents.map((agent) => ({
             ...agent,
             agentSettingsDiscovery: true,
             sessionTurnConfiguration: true,
         }));
-        this.channelId = channelId;
+        this.computerId = computerId;
         this.machineName = machineName;
-        this.projectId = projectId;
-        this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }
 }
@@ -157,13 +126,13 @@ export class ChannelDescriptor {
 export class CreatedBrowserCredential {
     readonly credentialId: string;
     readonly expiresAt: string;
-    readonly projectId: string;
+    readonly computerId: string;
     readonly token: string;
 
-    constructor(credentialId: string, expiresAt: string, projectId: string, token: string) {
+    constructor(credentialId: string, expiresAt: string, computerId: string, token: string) {
         this.credentialId = credentialId;
         this.expiresAt = expiresAt;
-        this.projectId = projectId;
+        this.computerId = computerId;
         this.token = token;
     }
 }
@@ -195,27 +164,16 @@ export class ExpiredPairingStatus extends PairingStatus {
 
 export class PairedPairingStatus extends PairingStatus {
     readonly agents: readonly AgentDescriptor[];
-    readonly channelId: string;
     readonly machineName: string;
-    readonly projectId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
     readonly status = PairingLifecycle.Paired;
     readonly workspaceName: string;
 
-    constructor(
-        agents: readonly AgentDescriptor[],
-        channelId: string,
-        machineName: string,
-        workspaceName: string,
-        projectId: string,
-        runtimeId: string,
-    ) {
+    constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
         super();
         this.agents = agents;
-        this.channelId = channelId;
+        this.computerId = computerId;
         this.machineName = machineName;
-        this.projectId = projectId;
-        this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }
 }

@@ -83,12 +83,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         try {
             const saved = await engine.getConnectionManager().save(
                 {
-                    channelId: "environment-channel",
+                    computerId: "environment-channel",
                     defaultWorkspace: workspace,
-                    pairingId: "environment-pairing",
                     relayOrigin: new URL(origin),
                     runtimeCredential: "r".repeat(43),
-                    runtimeId: "environment-runtime",
                 },
                 signal,
             );
@@ -98,7 +96,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                     : {
                           kind,
                           connection: {
-                              channelId: saved.channelId,
+                              computerId: saved.computerId,
                               defaultWorkspace: workspace,
                               relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
                               credentials: memoryRuntimeCredentials(saved.credentials.current),

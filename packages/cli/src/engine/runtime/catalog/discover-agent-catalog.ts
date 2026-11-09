@@ -28,13 +28,13 @@ function failureDetails(failure: unknown): Readonly<Record<string, string>> {
 }
 
 /** Persist discovery evidence before the Runtime connects, including recovered probe timeouts. */
-export async function discoverRuntimeAgentInventory(options: DiscoverLocalAgentInventoryOptions, channelId: string) {
+export async function discoverRuntimeAgentInventory(options: DiscoverLocalAgentInventoryOptions, computerId: string) {
     const log = new RuntimeDiagnosticLog(options.dataDirectory);
     const record = (details: Readonly<Record<string, string | number>>): void => {
         log.record(
             `Morty agent discovery diagnostic ${JSON.stringify({
                 timestamp: new Date().toISOString(),
-                channelId,
+                computerId,
                 ...details,
             })}`,
         );

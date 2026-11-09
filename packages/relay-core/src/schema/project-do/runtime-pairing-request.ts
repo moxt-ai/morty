@@ -3,8 +3,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const runtimePairingRequest = sqliteTable(
     "runtime_pairing_requests",
     {
-        pairingId: text("pairing_id").primaryKey(),
-        runtimeId: text("runtime_id").notNull().unique(),
+        computerId: text("computer_id").primaryKey(),
         pairingCodeHash: text("pairing_code_hash").notNull().unique(),
         pollTokenHash: text("poll_token_hash").notNull(),
         expiresAt: integer("expires_at").notNull(),

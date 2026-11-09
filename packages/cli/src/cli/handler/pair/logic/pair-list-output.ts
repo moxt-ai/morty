@@ -3,7 +3,7 @@ import { writeExistingFile } from "../../../../storage/files/output-file.ts";
 
 export interface SavedPairSummary {
     readonly connectionId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
     readonly status: VerifiedRuntimeConnection["activation"];
     readonly workspace: string;
 }
@@ -11,15 +11,15 @@ export interface SavedPairSummary {
 export function savedPairSummary(connection: VerifiedRuntimeConnection): SavedPairSummary {
     return {
         connectionId: connection.connectionId,
-        runtimeId: connection.runtimeId,
+        computerId: connection.computerId,
         workspace: connection.defaultWorkspace,
         status: connection.activation,
     };
 }
 
 export function formatPairTable(pairs: readonly SavedPairSummary[]): string {
-    const headers = ["connection_id", "runtime_id", "workspace", "status"];
-    const rows = pairs.map((pair) => [pair.connectionId, pair.runtimeId, pair.workspace, pair.status]);
+    const headers = ["connection_id", "computer_id", "workspace", "status"];
+    const rows = pairs.map((pair) => [pair.connectionId, pair.computerId, pair.workspace, pair.status]);
     const widths = headers.map((header, index) =>
         Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
     );
@@ -37,7 +37,7 @@ export async function writePairList(
     signal.throwIfAborted();
     const output = pairs.map((pair) => ({
         connection_id: pair.connectionId,
-        runtime_id: pair.runtimeId,
+        computer_id: pair.computerId,
         status: pair.status,
         workspace: pair.workspace,
     }));

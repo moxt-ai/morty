@@ -152,7 +152,7 @@ describe("acp commands environment", () => {
         const config = createRuntimeConfig(
             {
                 credentials: memoryRuntimeCredentials("r".repeat(43)),
-                channelId: "login-shell-environment",
+                computerId: "login-shell-environment",
                 defaultWorkspace: workspace,
                 relayUrl: new URL("ws://127.0.0.1:8787/v1/runtimes/connect"),
             },

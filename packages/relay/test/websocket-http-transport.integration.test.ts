@@ -37,7 +37,7 @@ function nextMessage(socket: WebSocket): Promise<string> {
 
 it("Given a browser connection, When it heartbeats through the public Platform transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/projects/project/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -58,7 +58,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
                 kind: "http.request",
                 requestId: "after-heartbeat",
                 method: "GET",
-                path: "/morty/api/v1/projects/project/runtimes/runtime/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/daemon/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -73,9 +73,9 @@ it("Given a browser connection, When it heartbeats through the public Platform t
     }
 });
 
-it("Given a Runtime-bound browser, When it addresses another Runtime, Then the request is rejected without closing the browser connection", async () => {
+it("Given a Runtime-bound browser, When it addresses another computer, Then the request is rejected without closing the browser connection", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/projects/project/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -93,7 +93,7 @@ it("Given a Runtime-bound browser, When it addresses another Runtime, Then the r
                 kind: "http.request",
                 requestId: "request-identity",
                 method: "GET",
-                path: "/morty/api/v1/projects/project/runtimes/another-runtime/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000002/daemon/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -134,7 +134,7 @@ it("Given two browser connections to one Runtime, When their pending uploads exc
             kind: "http.request",
             requestId,
             method: "POST",
-            path: "/morty/api/v1/projects/upload-project/runtimes/upload-runtime/content",
+            path: "/morty/api/v1/computers/upload-project/daemon/content",
             headers: [],
             body: "",
             bodyByteLength: 8 * 1024 * 1024,
@@ -174,7 +174,7 @@ it.each([
     { name: "missing", authorization: null, code: "session_access_required" },
     { name: "malformed", authorization: "Bearer invalid-session-credential", code: "project_credential_invalid" },
 ])(
-    "Given a $name Session credential, When the public event-stream upgrade crosses ProjectDO, Then it returns the authentication error without another public handoff",
+    "Given a $name Session credential, When the public event-stream upgrade crosses ComputerRelay, Then it returns the authentication error without another public handoff",
     { timeout: 5_000 },
     async ({ authorization, code }) => {
         const headers = new Headers({ Upgrade: "websocket" });
@@ -182,7 +182,7 @@ it.each([
             headers.set("Authorization", authorization);
         }
         const response = await SELF.fetch(
-            "https://platform.test/morty/api/v1/projects/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/sessions/session-unauthorized/events-v2",
+            "https://platform.test/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/sessions/session-unauthorized/events-v2",
             { headers },
         );
         expect(response.status).toBe(401);
@@ -237,7 +237,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
                 JSON.stringify({
                     kind: "session.events.subscribe",
                     subscriptionId,
-                    path: "/morty/api/v1/projects/project/sessions/session/events-v2",
+                    path: "/morty/api/v1/computers/project/sessions/session/events-v2",
                     headers: [],
                 }),
             );
@@ -315,7 +315,7 @@ it("Given a Unicode JSON request and response, When the relay carries them over 
             headers: [["content-type", "application/json"]],
             kind: "http.request",
             method: "POST",
-            path: "/morty/api/v1/projects/project/sessions",
+            path: "/morty/api/v1/computers/project/sessions",
             requestId: "text-body",
         }),
     );
@@ -365,7 +365,7 @@ it("Given an invalid binary declaration, When the request ID is reused for a val
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/morty/api/v1/projects/project/sessions",
+            path: "/morty/api/v1/computers/project/sessions",
             requestId: "reused-upload",
         }),
     );
@@ -400,7 +400,7 @@ it("Given a binary upload sends an invalid chunk, When it retries the same reque
         headers: [],
         kind: "http.request",
         method: "POST",
-        path: "/morty/api/v1/projects/project/sessions",
+        path: "/morty/api/v1/computers/project/sessions",
         requestId: "retry-upload",
     };
     const invalid = nextMessage(socket);
@@ -440,7 +440,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/computers/project/sessions",
                 requestId: "abandoned-upload",
             }),
         );
@@ -452,7 +452,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/computers/project/sessions",
                 requestId: "next-upload",
             }),
         );
@@ -478,7 +478,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/computers/project/sessions",
                 requestId: "next-upload",
             }),
         );
@@ -516,7 +516,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/computers/project/sessions",
                 requestId: `pending-${index}`,
             }),
         );
@@ -529,7 +529,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/morty/api/v1/projects/project/sessions",
+            path: "/morty/api/v1/computers/project/sessions",
             requestId: "pending-overflow",
         }),
     );
@@ -598,7 +598,7 @@ it("Given an established event subscription, When the browser transport closes, 
         JSON.stringify({
             headers: [],
             kind: "session.events.subscribe",
-            path: "/morty/api/v1/projects/project/sessions/session/events-v2",
+            path: "/morty/api/v1/computers/project/sessions/session/events-v2",
             subscriptionId: "subscription-1",
         }),
     );
@@ -641,7 +641,7 @@ it("Given two live subscriptions, When each receives event batches, Then deliver
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: `/morty/api/v1/projects/project/sessions/${subscriptionId}/events-v2`,
+                path: `/morty/api/v1/computers/project/sessions/${subscriptionId}/events-v2`,
                 subscriptionId,
             }),
         );
@@ -705,7 +705,7 @@ it("Given an established event subscription is quiet, When the transport idle de
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: "/morty/api/v1/projects/project/sessions/session/events-v2",
+                path: "/morty/api/v1/computers/project/sessions/session/events-v2",
                 subscriptionId: "subscription-1",
             }),
         );
@@ -747,7 +747,7 @@ it("Given a finite request is in flight, When the browser transport closes, Then
             headers: [],
             kind: "http.request",
             method: "GET",
-            path: "/morty/api/v1/projects/project/runtimes/runtime/agents",
+            path: "/morty/api/v1/computers/project/daemon/agents",
             requestId: "pending-request",
         }),
     );

@@ -10,13 +10,11 @@ import {
     pairRuntimeConnection,
     parsePairingCode,
     parseRelayOrigin,
-    prepareRuntimeConnection,
-    validatePairingId,
+    validateComputerId,
 } from "../../engine/runtime/pairing.ts";
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
-import { resolveMaxAcpProcesses } from "../config.ts";
 
 function readSingleOption(arguments_: readonly string[], option: string): string {
     const values: string[] = [];
@@ -40,13 +38,15 @@ function readSingleOption(arguments_: readonly string[], option: string): string
 function parsePairCommand(arguments_: readonly string[], defaultWorkspace: string) {
     for (let index = 0; index < arguments_.length; index += 2) {
         const option = arguments_[index];
-        if (option !== "--url" && option !== "--code" && option !== "--pairing" && option !== "--workspace") {
+        if (option !== "--url" && option !== "--code" && option !== "--computer" && option !== "--workspace") {
             throw new PairingClientError("invalid_arguments", `Unknown pairing option: ${option ?? "missing option"}`);
         }
     }
     return {
         code: parsePairingCode(readSingleOption(arguments_, "--code")),
-        pairingId: arguments_.includes("--pairing") ? validatePairingId(readSingleOption(arguments_, "--pairing")) : "",
+        computerId: arguments_.includes("--computer")
+            ? validateComputerId(readSingleOption(arguments_, "--computer"))
+            : "",
         relayOrigin: parseRelayOrigin(readSingleOption(arguments_, "--url")),
         workspace: arguments_.includes("--workspace") ? readSingleOption(arguments_, "--workspace") : defaultWorkspace,
     };
@@ -78,24 +78,11 @@ export async function pairLocalMachine(
 ): Promise<VerifiedRuntimeConnection> {
     const requested = parsePairCommand(arguments_, "");
     const installation = await openMortyInstallation(signal, process.env);
-    if (requested.pairingId.length > 0) {
-        const existing = await installation.readConnectionForPairing(requested.pairingId, signal);
-        if (existing !== null && existing.relayOrigin.origin === requested.relayOrigin.origin) {
-            await prepareRuntimeConnection(
-                installation,
-                existing,
-                signal,
-                process.env,
-                resolveMaxAcpProcesses(process.env),
-            );
-            return existing;
-        }
-    }
     return await pairRuntimeConnection(
         installation,
         {
             pairingCode: requested.code,
-            pairingId: requested.pairingId,
+            computerId: requested.computerId,
             relayOrigin: requested.relayOrigin.toString(),
             defaultWorkspace: arguments_.includes("--workspace")
                 ? requested.workspace

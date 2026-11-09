@@ -1,7 +1,7 @@
 import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
 
-function dataRegionFromProjectId(projectId: string): DataRegion {
-    const code = projectId.split("_", 3)[1];
+function dataRegionFromComputerId(computerId: string): DataRegion {
+    const code = computerId.split("_", 3)[1];
     switch (code) {
         case "en":
             return "enam";
@@ -28,8 +28,8 @@ function dataRegionFromProjectId(projectId: string): DataRegion {
     }
 }
 
-export function projectLocationLabel(projectId: string): string {
-    switch (dataRegionFromProjectId(projectId)) {
+export function projectLocationLabel(computerId: string): string {
+    switch (dataRegionFromComputerId(computerId)) {
         case "wnam":
             return "Western North America";
         case "enam":

@@ -6,7 +6,7 @@ import {
     decodeSessionRestoreCommand,
     RUNTIME_WORKSPACE_BINDING_ID,
 } from "@morty-build/client/protocol";
-import { type ProjectScope, RuntimeOperationFailedError } from "../../entity/do/session.ts";
+import { type ComputerScope, RuntimeOperationFailedError } from "../../entity/do/session.ts";
 import { hashSecret, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
 import type { NativeSessionForkStorage } from "../../storage/native-session-fork-storage.ts";
@@ -63,11 +63,10 @@ export class NativeSessionForks {
     }
 
     async #recover(
-        scope: ProjectScope,
-        runtimeId: string,
+        scope: ComputerScope,
         input: ForkMortyNativeSessionRequest,
         attemptJson: string,
-        request: SessionRuntimeOperations["requestProjectScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) {
         try {
@@ -92,7 +91,7 @@ export class NativeSessionForks {
                 }),
             );
             // Restore only an existing committed Session. Unlike prepare, this cannot create a missing target.
-            const restored = await request(scope, runtimeId, restore, signal);
+            const restored = await request(scope, restore, signal);
             if (
                 restored.kind !== "session.restored" ||
                 restored.entry.sessionId !== restore.sessionId ||
@@ -125,16 +124,14 @@ export class NativeSessionForks {
 
     /** Whether a Runtime that has finished handling a Fork command holds no Session for its target. */
     async #targetAbsent(
-        scope: ProjectScope,
-        runtimeId: string,
+        scope: ComputerScope,
         targetSessionId: string,
-        request: SessionRuntimeOperations["requestProjectScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) {
         try {
             const queried = await request(
                 scope,
-                runtimeId,
                 decodeSessionQueryCommand(
                     JSON.stringify({
                         kind: "session.query",
@@ -155,19 +152,18 @@ export class NativeSessionForks {
     }
 
     readonly fork = async (
-        scope: ProjectScope,
-        runtimeId: string,
+        scope: ComputerScope,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
-        request: SessionRuntimeOperations["requestProjectScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) => {
         const requestHash = await hashSecret(
             JSON.stringify([input.agentId, input.nativeSessionId, input.directoryId, input.additionalDirectoryIds]),
         );
         signal.throwIfAborted();
-        const key = JSON.stringify([scope.projectId, operationId]);
-        const prior = this.#storage.read(scope.projectId, operationId);
+        const key = JSON.stringify([scope.computerId, operationId]);
+        const prior = this.#storage.read(scope.computerId, operationId);
         const running = this.#running.get(key);
         if (
             (prior !== undefined && prior.requestHash !== requestHash) ||
@@ -193,19 +189,17 @@ export class NativeSessionForks {
                 if (prior !== undefined) {
                     const receipt = await this.#recover(
                         scope,
-                        runtimeId,
                         input,
                         prior.attemptJson ?? "null",
                         request,
                         controller.signal,
                     );
-                    this.#storage.complete(scope.projectId, operationId, JSON.stringify(receipt));
+                    this.#storage.complete(scope.computerId, operationId, JSON.stringify(receipt));
                     return receipt;
                 }
                 // Resolve and authorize the native identity before recording any possible side effect.
                 const found = await request(
                     scope,
-                    runtimeId,
                     decodeNativeSessionRequest(
                         JSON.stringify({
                             ...input,
@@ -249,7 +243,7 @@ export class NativeSessionForks {
                     throw new PairingDirectoryError("invalid_request", "The Fork request is invalid");
                 }
                 this.#storage.start(
-                    scope.projectId,
+                    scope.computerId,
                     operationId,
                     requestHash,
                     JSON.stringify({
@@ -258,9 +252,7 @@ export class NativeSessionForks {
                     }),
                 );
                 try {
-                    const result = forkResult(
-                        JSON.stringify(await request(scope, runtimeId, command, controller.signal)),
-                    );
+                    const result = forkResult(JSON.stringify(await request(scope, command, controller.signal)));
                     if (result.targetSessionId !== command.targetSessionId || result.ready.agentId !== input.agentId) {
                         throw new PairingDirectoryError(
                             "invalid_native_session_response",
@@ -268,22 +260,16 @@ export class NativeSessionForks {
                         );
                     }
                     const receipt = { source: found, result };
-                    this.#storage.complete(scope.projectId, operationId, JSON.stringify(receipt));
+                    this.#storage.complete(scope.computerId, operationId, JSON.stringify(receipt));
                     return receipt;
                 } catch (cause) {
                     // The Runtime's own failure reply is final only without a target: it can still report an abort
                     // after committing one. A rejected Fork created no Session, so forget it and let it run again.
                     if (
                         cause instanceof RuntimeOperationFailedError &&
-                        (await this.#targetAbsent(
-                            scope,
-                            runtimeId,
-                            command.targetSessionId,
-                            request,
-                            controller.signal,
-                        ))
+                        (await this.#targetAbsent(scope, command.targetSessionId, request, controller.signal))
                     ) {
-                        this.#storage.abandon(scope.projectId, operationId);
+                        this.#storage.abandon(scope.computerId, operationId);
                         throw cause;
                     }
                     throw unknownOutcome(cause);

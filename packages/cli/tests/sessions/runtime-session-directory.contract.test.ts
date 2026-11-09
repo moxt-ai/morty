@@ -19,32 +19,29 @@ for (const client of ["SDK", "HTTP"] as const) {
                 },
                 cancellation.signal,
             );
-            const runtime = await platform.connectAgent(project.projectId);
+            const runtime = await platform.connectAgent(project.computerId);
             const sessionId = `session-${crypto.randomUUID()}`;
             const request = {
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
-                runtimeId: runtime.runtimeId,
+                computerId: runtime.computerId,
                 sessionId,
             };
             if (client === "SDK") {
                 await runtime.client.sessions.create(request, cancellation.signal);
             } else {
                 const response = await platform.app.request(
-                    new Request(
-                        `${platform.baseUrl}/morty/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/sessions`,
-                        {
-                            method: "POST",
-                            headers: {
-                                authorization: `Bearer ${platform.appCredential}`,
-                                "content-type": "application/json",
-                            },
-                            body: JSON.stringify(request),
-                            signal: cancellation.signal,
+                    new Request(`${platform.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`, {
+                        method: "POST",
+                        headers: {
+                            authorization: `Bearer ${platform.appCredential}`,
+                            "content-type": "application/json",
                         },
-                    ),
+                        body: JSON.stringify(request),
+                        signal: cancellation.signal,
+                    }),
                 );
                 expect(response.status).toBe(200);
                 expect(await response.json()).toMatchObject({
@@ -55,7 +52,6 @@ for (const client of ["SDK", "HTTP"] as const) {
                 });
             }
             await runtime.client.turns.submitToRuntime(
-                runtime.runtimeId,
                 sessionId,
                 {
                     additionalDirectoryIds: [],
@@ -68,9 +64,7 @@ for (const client of ["SDK", "HTTP"] as const) {
                 cancellation.signal,
             );
 
-            await expect(
-                runtime.client.runtimes.listSessions(runtime.runtimeId, 100, cancellation.signal),
-            ).resolves.toEqual([
+            await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
                 expect.objectContaining({
                     agentId: "claude",
                     directoryId: expect.any(String),
@@ -98,14 +92,12 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.projectId);
+    const runtime = await platform.connectAgent(project.computerId);
     for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         const path = join(tmpdir(), `missing-${crypto.randomUUID()}`, ...Array.from({ length: 8 }, () => segment));
         const directoryId = `path-${Buffer.from(path).toString("base64url")}`;
         expect(directoryId.length).toBeGreaterThan(2048);
-        await expect(
-            runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal),
-        ).rejects.toMatchObject({
+        await expect(runtime.client.runtimes.listWorkspace(directoryId, signal)).rejects.toMatchObject({
             code: "local_authorization_failed",
             message: "This directory is missing or unavailable to your user account",
         });
@@ -132,9 +124,9 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
+        const runtime = await platform.connectAgent(project.computerId);
         const directoryId = `path-${Buffer.from(canonical).toString("base64url")}`;
-        const listing = await runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal);
+        const listing = await runtime.client.runtimes.listWorkspace(directoryId, signal);
         expect(listing.directoryId).toBe(directoryId);
         expect(listing.directoryLabel).toBe(canonical);
         if (process.platform === "linux") {
@@ -146,13 +138,12 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             {
                 ...identity,
                 configurations: [],
-                runtimeId: runtime.runtimeId,
+                computerId: runtime.computerId,
                 sessionId,
             },
             signal,
         );
         await runtime.client.turns.submitToRuntime(
-            runtime.runtimeId,
             sessionId,
             {
                 ...identity,
@@ -162,11 +153,10 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        expect(await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal)).toContainEqual(
+        expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({ sessionId, directoryId, directoryLabel: canonical, prompted: true }),
         );
         const discovery = await runtime.client.runtimes.nativeSessions(
-            runtime.runtimeId,
             { ...identity, action: "list", cursor: null, discoveryId: null },
             signal,
         );
@@ -175,7 +165,6 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         }
         expect(discovery.entries[0]).toMatchObject({ directoryId, directoryLabel: canonical });
         const events = await runtime.client.sessions.previewRuntimeNativeEvents(
-            runtime.runtimeId,
             discovery.entries[0].nativeSessionId,
             identity,
             { cursor: null, eventLimit: 100 },
@@ -202,7 +191,7 @@ it("Given a Session with an additional directory, When the App prompts it and re
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
+        const runtime = await platform.connectAgent(project.computerId);
         const sessionId = `session-${crypto.randomUUID()}`;
         await runtime.client.sessions.create(
             {
@@ -210,15 +199,15 @@ it("Given a Session with an additional directory, When the App prompts it and re
                 agentId: "claude",
                 configurations: [],
                 directoryId: "default",
-                runtimeId: runtime.runtimeId,
+                computerId: runtime.computerId,
                 sessionId,
             },
             signal,
         );
-        const access = await runtime.client.sessions.createAccess(runtime.runtimeId, sessionId, 900, signal);
+        const access = await runtime.client.sessions.createAccess(sessionId, 900, signal);
         const session = new MortyClient({
             endpoint: platform.baseUrl,
-            projectId: project.projectId,
+            computerId: project.computerId,
             credentialProvider: new StaticMortyCredentialProvider(access.credential),
             transport: { fetch: async (request: Request) => await platform.app.request(request) },
         });
@@ -236,7 +225,7 @@ it("Given a Session with an additional directory, When the App prompts it and re
             "command",
         );
 
-        expect(await runtime.client.runtimes.listSessions(runtime.runtimeId, 100, signal)).toContainEqual(
+        expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
             expect.objectContaining({
                 additionalDirectories: [expect.objectContaining({ directoryId: additionalDirectoryId })],
                 agentId: "claude",

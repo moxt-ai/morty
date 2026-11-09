@@ -67,7 +67,7 @@ function catalogEndpoint(config: RuntimeConfig): URL {
     }
     const runtimePath = "/v1/runtimes/connect";
     if (endpoint.pathname.endsWith(runtimePath)) {
-        endpoint.pathname = `${endpoint.pathname.slice(0, -runtimePath.length)}/channels/${encodeURIComponent(config.channelId)}/catalog`;
+        endpoint.pathname = `${endpoint.pathname.slice(0, -runtimePath.length)}/channels/${encodeURIComponent(config.computerId)}/catalog`;
         return endpoint;
     }
     throw new AgentCatalogPublishError("The Relay URL is invalid");

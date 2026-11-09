@@ -1,7 +1,5 @@
 export interface PairingScopeRow {
-    readonly channel_id: string;
-    readonly runtime_id: string;
-    readonly project_id: string;
+    readonly computer_id: string;
 }
 
 /** What presenting a Runtime credential with its successor found, after any rotation it caused. */
@@ -21,15 +19,13 @@ export interface AuthorizedChannelRow extends PairingScopeRow {
 }
 
 export interface ChannelCredentialIdentity {
-    readonly channelId: string;
     readonly credentialId: string;
-    readonly projectId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
 }
 
 /** A stored credential matching an identity lookup; only browser credentials carry their own lifetime. */
 export interface CredentialMatch {
-    readonly project_id: string;
+    readonly computer_id: string;
     readonly expires_at: number | null;
     readonly revoked_at: number | null;
 }
@@ -55,7 +51,6 @@ export interface RuntimeDirectoryRow extends PairingScopeRow {
 }
 
 export interface PairingChannelRow extends RuntimeDirectoryRow {
-    readonly pairing_id: string;
     readonly expires_at: number;
 }
 
@@ -64,7 +59,6 @@ export interface PairingClaimRow extends PairingChannelRow {
 }
 
 export interface RuntimePairingRow extends PairingScopeRow {
-    readonly pairing_id: string;
     readonly pairing_code_hash: string;
     readonly poll_token_hash: string;
     readonly expires_at: number;
@@ -73,9 +67,7 @@ export interface RuntimePairingRow extends PairingScopeRow {
 
 export interface RuntimePairingAudit {
     readonly auditId: string;
-    readonly projectId: string;
-    readonly pairingId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
     readonly actorKind: string;
     readonly actorId: string;
     readonly action:

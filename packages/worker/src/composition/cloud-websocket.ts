@@ -13,7 +13,7 @@ const permittedHeaders = new Set([
     "x-morty-file-name",
 ]);
 const STATUS_SUBSCRIPTION_PATH =
-    /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
+    /^\/morty\/api\/chat\/computers\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
 const statusSubscriptionPath = v.pipe(v.string(), v.regex(STATUS_SUBSCRIPTION_PATH));
 
 interface CloudWebSocketDependencies {

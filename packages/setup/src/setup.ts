@@ -62,7 +62,7 @@ const harnessSessionVariables: ReadonlyMap<string, string> = new Map([
 
 interface RetiringIdentity {
     readonly kind: "pending";
-    readonly projectId: string;
+    readonly computerId: string;
     readonly token: string;
 }
 
@@ -71,14 +71,14 @@ type ReplacementState =
     | { readonly kind: "unknown" }
     | {
           readonly kind: "revoked";
-          readonly previous: RetiringIdentity | { readonly kind: "retired"; readonly projectId: string };
+          readonly previous: RetiringIdentity | { readonly kind: "retired"; readonly computerId: string };
       };
 
 /** The identity that a bootstrap or replacement returned. */
 interface IssuedIdentity {
     readonly userToken: string;
     readonly userId: string;
-    readonly projectId: string;
+    readonly computerId: string;
 }
 
 /** The key naming an identity being created, saved before the request so a retried run resumes the same identity. */
@@ -90,7 +90,7 @@ interface CreatingIdentity {
 type PairingIntent =
     | { readonly kind: "none" }
     | { readonly kind: "requesting"; readonly requestKey: string }
-    | { readonly kind: "paired"; readonly runtimeId: string };
+    | { readonly kind: "paired"; readonly computerId: string };
 
 interface ReadyIdentity extends IssuedIdentity {
     readonly kind: "ready";
@@ -118,8 +118,8 @@ function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
     return { kind: "ready", ...issued, pairing: { kind: "none" }, replacement: { kind: "unchanged" } };
 }
 
-function withPairedRuntime(identity: ReadyIdentity, runtimeId: string): ReadyIdentity {
-    return { ...identity, pairing: { kind: "paired", runtimeId } };
+function withPairedRuntime(identity: ReadyIdentity, computerId: string): ReadyIdentity {
+    return { ...identity, pairing: { kind: "paired", computerId } };
 }
 
 function withoutPairingIntent(identity: ReadyIdentity): ReadyIdentity {
@@ -139,7 +139,7 @@ function replacedIdentity(previous: ReadyIdentity, successor: IssuedIdentity): R
         pairing: { kind: "none" },
         replacement: {
             kind: "revoked",
-            previous: { kind: "pending", projectId: previous.projectId, token: previous.userToken },
+            previous: { kind: "pending", computerId: previous.computerId, token: previous.userToken },
         },
     };
 }
@@ -147,7 +147,7 @@ function replacedIdentity(previous: ReadyIdentity, successor: IssuedIdentity): R
 function withPreviousRetired(identity: ReadyIdentity, previous: RetiringIdentity): ReadyIdentity {
     return {
         ...identity,
-        replacement: { kind: "revoked", previous: { kind: "retired", projectId: previous.projectId } },
+        replacement: { kind: "revoked", previous: { kind: "retired", computerId: previous.computerId } },
     };
 }
 
@@ -168,10 +168,10 @@ function encodeReplacement(replacement: ReplacementState) {
                     replacement.previous.kind === "pending"
                         ? {
                               kind: "pending",
-                              project_id: replacement.previous.projectId,
+                              project_id: replacement.previous.computerId,
                               user_token: replacement.previous.token,
                           }
-                        : { kind: "retired", project_id: replacement.previous.projectId },
+                        : { kind: "retired", project_id: replacement.previous.computerId },
             };
         default: {
             const exhaustive: never = replacement;
@@ -197,7 +197,7 @@ function encodeSavedState(state: SavedState) {
                     kind: "ready",
                     user_id: identity.userId,
                     user_token: identity.userToken,
-                    project_id: identity.projectId,
+                    project_id: identity.computerId,
                     pairing: identity.pairing,
                     replacement: encodeReplacement(identity.replacement),
                 },
@@ -229,28 +229,25 @@ type RuntimeSelection =
     | {
           readonly kind: "existing";
           readonly connectionId: string;
-          readonly runtimeId: string;
+          readonly computerId: string;
           /** Whether the Worker binds the Machine to this Runtime. The Worker's binding is the only record of it. */
           readonly bound: boolean;
       }
     | {
           readonly kind: "pairing";
-          readonly channelId: string;
           readonly pairingCode: string;
-          readonly pairingId: string;
-          readonly projectId: string;
+          readonly computerId: string;
           readonly relayUrl: string;
-          readonly runtimeId: string;
       };
 
 interface ManagedConnection {
     readonly connectionId: string;
-    readonly runtimeId: string;
+    readonly computerId: string;
 }
 
 interface VerifiedIdentity {
     readonly context: MachineContext;
-    readonly expectedRuntimeId: string | null;
+    readonly expectedComputerId: string | null;
 }
 
 /**
@@ -279,33 +276,33 @@ interface SetupOptions {
 
 type ReplacementAccess =
     | { readonly kind: "unchanged" }
-    | { readonly kind: "unknown"; readonly previousProjectId: string }
-    | { readonly kind: "revoked"; readonly previousProjectId: string; readonly projectId: string };
+    | { readonly kind: "unknown"; readonly previousComputerId: string }
+    | { readonly kind: "revoked"; readonly previousComputerId: string; readonly computerId: string };
 
 type ReplacementReason = "managed_runtime_missing" | "replacement_result_unknown";
 
 class ProjectReplacementRequiredError extends Error {
     readonly code = "PROJECT_REPLACEMENT_REQUIRED";
-    readonly projectId: string;
+    readonly computerId: string;
     readonly reason: ReplacementReason;
 
-    constructor(projectId: string, reason: ReplacementReason) {
+    constructor(computerId: string, reason: ReplacementReason) {
         super(
             reason === "managed_runtime_missing"
                 ? "The saved connection is missing. Replacing it will revoke earlier sharing links and browser access."
                 : "An earlier replacement has an unknown result. Continue only with approval for that same Project.",
         );
         this.name = "ProjectReplacementRequiredError";
-        this.projectId = projectId;
+        this.computerId = computerId;
         this.reason = reason;
     }
 
     readonly diagnostic = () => ({
-        projectId: this.projectId,
+        computerId: this.computerId,
         reason: this.reason,
         nextStep:
             "Explain the access impact and ask the user whether to continue, unless they already explicitly approved this same replacement. " +
-            `Only after explicit approval, rerun the same setup command with --replace-project ${this.projectId}. ` +
+            `Only after explicit approval, rerun the same setup command with --replace-computer ${this.computerId}. ` +
             "Do not remove local state or create another identity to bypass this confirmation.",
     });
 }
@@ -726,7 +723,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                                 kind: "revoked",
                                 previous: {
                                     kind: "pending",
-                                    projectId: savedIdentifier(fields["project_id"]),
+                                    computerId: savedIdentifier(fields["project_id"]),
                                     token: savedCredential(fields["user_token"]),
                                 },
                             };
@@ -735,7 +732,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                             const fields = exactly(previous, ["kind", "project_id"]);
                             return {
                                 kind: "revoked",
-                                previous: { kind: "retired", projectId: savedIdentifier(fields["project_id"]) },
+                                previous: { kind: "retired", computerId: savedIdentifier(fields["project_id"]) },
                             };
                         }
                         default:
@@ -756,8 +753,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     return { kind: "requesting", requestKey: savedIdentifier(fields["requestKey"]) };
                 }
                 case "paired": {
-                    const fields = exactly(value, ["kind", "runtimeId"]);
-                    return { kind: "paired", runtimeId: savedIdentifier(fields["runtimeId"]) };
+                    const fields = exactly(value, ["kind", "computerId"]);
+                    return { kind: "paired", computerId: savedIdentifier(fields["computerId"]) };
                 }
                 default:
                     return invalid();
@@ -792,7 +789,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         kind: "ready",
                         userId: savedIdentifier(ready["user_id"]),
                         userToken: savedCredential(ready["user_token"]),
-                        projectId: savedIdentifier(ready["project_id"]),
+                        computerId: savedIdentifier(ready["project_id"]),
                         pairing: pairingIntent(ready["pairing"]),
                         replacement: replacement(ready["replacement"]),
                     },
@@ -866,13 +863,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 replacementAccess = { kind: "unchanged" };
                 return;
             case "unknown":
-                replacementAccess = { kind: "unknown", previousProjectId: identity.projectId };
+                replacementAccess = { kind: "unknown", previousComputerId: identity.computerId };
                 return;
             case "revoked":
                 replacementAccess = {
                     kind: "revoked",
-                    previousProjectId: identity.replacement.previous.projectId,
-                    projectId: identity.projectId,
+                    previousComputerId: identity.replacement.previous.computerId,
+                    computerId: identity.computerId,
                 };
                 return;
             default: {
@@ -920,10 +917,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     /** Sends a request as the saved identity, to its Project unless the route names one. */
     async function request(context: Context, route: string, body?: unknown) {
         const headers: Record<string, string> = { authorization: `Bearer ${context.identity.userToken}` };
-        if (route === "/management/project/replacement") {
+        if (route === "/management/computer/replacement") {
             headers["x-morty-setup-run-id"] = runId;
         }
-        const path = route.startsWith("/chat/projects/") ? route : `/projects/${context.identity.projectId}${route}`;
+        const path = route.startsWith("/chat/computers/") ? route : `/computers/${context.identity.computerId}${route}`;
         return await send(context.base, path, headers, body);
     }
 
@@ -947,7 +944,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         const previous = replacement.previous;
         const response = await fetch(
-            new URL(`/morty/api/projects/${previous.projectId}/identity/v1/local-credential`, context.base),
+            new URL(`/morty/api/computers/${previous.computerId}/identity/v1/local-credential`, context.base),
             {
                 method: "DELETE",
                 headers: { authorization: `Bearer ${previous.token}` },
@@ -970,7 +967,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 harness: { type: "string" },
                 "base-url": { type: "string" },
                 "session-id": { type: "string" },
-                "replace-project": { type: "string" },
+                "replace-computer": { type: "string" },
                 "device-access": { type: "string" },
             },
         });
@@ -987,7 +984,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return {
             base: origin(values["base-url"]),
             deviceAccess: values["device-access"] ?? null,
-            replaceProject: values["replace-project"] === undefined ? null : identifier(values["replace-project"]),
+            replaceProject: values["replace-computer"] === undefined ? null : identifier(values["replace-computer"]),
             cwd: text(values.cwd),
             harness,
             sessionId: currentSessionId(harness, values["session-id"]),
@@ -1066,7 +1063,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const identity = createdIdentity({
             userToken: credential(created["token"]),
             userId: identifier(created["userId"]),
-            projectId: identifier(created["projectId"]),
+            computerId: identifier(created["computerId"]),
         });
         await writeSavedState(location, identity);
         return { kind: "setup", context: { ...location, identity }, project: "created" };
@@ -1081,7 +1078,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const bot = await request(context, "/management/bot");
         return {
             context: { ...context, botId: identifier(bot["botId"]) },
-            expectedRuntimeId: bot["runtimeId"] === null ? null : identifier(bot["runtimeId"]),
+            expectedComputerId: bot["computerId"] === null ? null : identifier(bot["computerId"]),
         };
     }
 
@@ -1197,7 +1194,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 const connection = object(item);
                 return {
                     connectionId: identifier(connection["connection_id"]),
-                    runtimeId: identifier(connection["runtime_id"]),
+                    computerId: identifier(connection["computer_id"]),
                 };
             });
         } finally {
@@ -1209,17 +1206,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: MachineContext,
         requestKey: string,
     ): Promise<{ readonly runtime: RuntimeSelection; readonly expiresAt: number }> {
-        const pairing = await request(context, "/management/runtime-pairings", { idempotencyKey: requestKey });
+        const pairing = await request(context, "/management/pairing", { idempotencyKey: requestKey });
         const selection: RuntimeSelection = {
             kind: "pairing",
-            channelId: identifier(pairing["channelId"]),
             pairingCode: text(pairing["pairingCode"], /^[A-Za-z0-9-]+$/u),
-            pairingId: identifier(pairing["pairingId"]),
-            projectId: identifier(pairing["projectId"]),
+            computerId: identifier(pairing["computerId"]),
             relayUrl: origin(pairing["relayUrl"]),
-            runtimeId: identifier(pairing["runtimeId"]),
         };
-        if (selection.projectId !== context.identity.projectId) {
+        if (selection.computerId !== context.identity.computerId) {
             fail("PROJECT_CONFLICT");
         }
         const expiresAt = Date.parse(text(pairing["expiresAt"], /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u));
@@ -1231,19 +1225,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function replaceProject(context: MachineContext): Promise<MachineContext> {
-        const previousProjectId = context.identity.projectId;
+        const previousComputerId = context.identity.computerId;
         // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
         const prepared = await commit(context, withReplacementRequested(context.identity));
-        replacementAccess = { kind: "unknown", previousProjectId };
+        replacementAccess = { kind: "unknown", previousComputerId };
         progress("replacement", "Replacing the saved connection with approval. Earlier shared access will be revoked.");
-        const replacement = await request(prepared, "/management/project/replacement", {});
-        const projectId = identifier(replacement["projectId"]);
-        replacementAccess = { kind: "revoked", previousProjectId, projectId };
+        const replacement = await request(prepared, "/management/computer/replacement", {});
+        const computerId = identifier(replacement["computerId"]);
+        replacementAccess = { kind: "revoked", previousComputerId, computerId };
         // Report the access change immediately, even if saving or connecting the successor fails next.
         emit({
             status: "replacement_access_revoked",
-            previousProjectId,
-            projectId,
+            previousComputerId,
+            computerId,
             message:
                 "Earlier sharing links and browser access have been revoked. The new connection is still being set up.",
         });
@@ -1253,35 +1247,35 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             replacedIdentity(prepared.identity, {
                 userToken: credential(replacement["token"]),
                 userId: identifier(replacement["userId"]),
-                projectId,
+                computerId,
             }),
         );
-        emit({ status: "project_replaced", botId: saved.botId, projectId: saved.identity.projectId });
+        emit({ status: "project_replaced", botId: saved.botId, computerId: saved.identity.computerId });
         return await retireReplacedIdentity(saved);
     }
 
     async function prepareRuntime(
         context: MachineContext,
         cwd: string,
-        expectedRuntimeId: string | null,
-        confirmedProjectId: string | null,
+        expectedComputerId: string | null,
+        confirmedComputerId: string | null,
     ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const replaceWithApproval = async (reason: ReplacementReason, managedConnectionCount: number | null) => {
-            const projectId = context.identity.projectId;
+            const computerId = context.identity.computerId;
             emit({
                 status: "replacement_check",
                 reason,
-                projectId,
-                expectedRuntimeId,
+                computerId,
+                expectedComputerId,
                 managedConnectionCount,
-                approved: confirmedProjectId === projectId,
+                approved: confirmedComputerId === computerId,
                 platform: process.platform,
                 nodeVersion: process.versions.node,
                 runtimeStateSource: process.env["MORTY_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
             });
-            if (confirmedProjectId !== projectId) {
-                throw new ProjectReplacementRequiredError(projectId, reason);
+            if (confirmedComputerId !== computerId) {
+                throw new ProjectReplacementRequiredError(computerId, reason);
             }
             return await pairRuntime(await replaceProject(context));
         };
@@ -1291,30 +1285,30 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return await replaceWithApproval("replacement_result_unknown", null);
         }
         // Runtime IDs are unique, so the Runtime's own connection list names the connection that serves one.
-        const reusable = async (runtimeId: string) => {
+        const reusable = async (computerId: string) => {
             const connections = await listManagedConnections(context.directory, cwd);
-            const existing = connections.find((connection) => connection.runtimeId === runtimeId);
+            const existing = connections.find((connection) => connection.computerId === computerId);
             if (existing !== undefined) {
                 emit({
                     status: "runtime_reused",
-                    runtimeId: existing.runtimeId,
+                    computerId: existing.computerId,
                     connectionId: existing.connectionId,
                 });
             }
             return { existing, managedConnectionCount: connections.length };
         };
-        if (expectedRuntimeId !== null && !(await machineRuntimeRevoked(context))) {
-            const { existing, managedConnectionCount } = await reusable(expectedRuntimeId);
+        if (expectedComputerId !== null && !(await machineRuntimeRevoked(context))) {
+            const { existing, managedConnectionCount } = await reusable(expectedComputerId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: true } };
             }
             // Losing the local pairing does not itself authorize ending shared access.
             return await replaceWithApproval("managed_runtime_missing", managedConnectionCount);
         }
-        if (expectedRuntimeId !== null) {
+        if (expectedComputerId !== null) {
             // Morty disconnected this computer because a copy of its connection key was used. The Machine and the
             // browsers that open it stay; only the computer's connection is paired again.
-            emit({ status: "runtime_revoked", runtimeId: expectedRuntimeId });
+            emit({ status: "runtime_revoked", computerId: expectedComputerId });
             progress(
                 "pairing",
                 "Morty disconnected this computer because its connection key was used somewhere else. Pairing it again.",
@@ -1324,7 +1318,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // the Project's Runtime slots, so continue on it while this machine still manages its connection.
         const pairing = context.identity.pairing;
         if (pairing.kind === "paired") {
-            const { existing } = await reusable(pairing.runtimeId);
+            const { existing } = await reusable(pairing.computerId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
@@ -1356,7 +1350,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 continue;
             }
             return {
-                context: await commit(requesting, withPairedRuntime(requesting.identity, runtime.runtimeId)),
+                context: await commit(requesting, withPairedRuntime(requesting.identity, runtime.computerId)),
                 runtime,
             };
         }
@@ -1377,8 +1371,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "pair",
                 "--url",
                 runtime.relayUrl,
-                "--pairing",
-                runtime.pairingId,
+                "--computer",
+                runtime.computerId,
                 "--code-stdin",
                 "--workspace",
                 cwd,
@@ -1397,7 +1391,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
                 return false;
             }
-            emit({ status: "runtime_already_online", runtimeId: runtime.runtimeId, harness });
+            emit({ status: "runtime_already_online", computerId: runtime.computerId, harness });
             return true;
         };
         // Starting a saved connection is idempotent. Redeeming a one-time pairing is not.
@@ -1436,9 +1430,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         fail("RUNTIME_START_FAILED");
     }
 
-    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
+    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, computerId: string, agentRef: string): boolean {
         return (
-            runtime["runtimeId"] === runtimeId &&
+            runtime["computerId"] === computerId &&
             runtime["online"] === true &&
             Array.isArray(runtime["agents"]) &&
             runtime["agents"].some((agent) => object(agent)["agentRef"] === agentRef)
@@ -1448,7 +1442,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     /** Whether the Machine's Runtime was revoked, so this computer pairs the Machine with a new one. */
     async function machineRuntimeRevoked(context: MachineContext): Promise<boolean> {
         try {
-            await request(context, `/chat/projects/${context.identity.projectId}/bots/${context.botId}/workspace`, {});
+            await request(
+                context,
+                `/chat/computers/${context.identity.computerId}/bots/${context.botId}/workspace`,
+                {},
+            );
             return false;
         } catch (cause) {
             if (errorCode(cause) === "RUNTIME_REVOKED") {
@@ -1463,7 +1461,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: MachineContext,
         runtime: RuntimeSelection,
     ): Promise<readonly string[] | null> {
-        const botPath = `/chat/projects/${context.identity.projectId}/bots/${context.botId}`;
+        const botPath = `/chat/computers/${context.identity.computerId}/bots/${context.botId}`;
         // A bound Machine's Runtime is read through the Machine; an unbound one is among the setup candidates.
         const alreadyConfigured = runtime.kind === "existing" && runtime.bound;
         const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
@@ -1473,7 +1471,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
               ? state["runtimes"].map(object)
               : [];
         const current = candidates.find(
-            (candidate) => candidate["runtimeId"] === runtime.runtimeId && candidate["online"] === true,
+            (candidate) => candidate["computerId"] === runtime.computerId && candidate["online"] === true,
         );
         if (current === undefined || !Array.isArray(current["agents"])) {
             return null;
@@ -1545,12 +1543,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function waitForRuntime(context: MachineContext, runtime: RuntimeSelection, harness: string, cwd: string) {
-        const runtimeId = runtime.runtimeId;
+        const computerId = runtime.computerId;
         let attempts = 0;
         if (runtime.kind === "pairing") {
             while (true) {
                 signal.throwIfAborted();
-                const status = await request(context, `/management/runtime-pairings/${runtime.pairingId}`);
+                const status = await request(context, `/management/pairing`);
                 if (status["status"] !== "pending" && status["status"] !== "paired") {
                     fail("RUNTIME_PAIRING_UNAVAILABLE");
                 }
@@ -1558,11 +1556,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     progress("runtime", "Waiting for Runtime pairing to complete.");
                 }
                 if (status["status"] === "paired") {
-                    if (status["runtimeId"] !== runtimeId || !Array.isArray(status["agents"])) {
+                    if (status["computerId"] !== computerId || !Array.isArray(status["agents"])) {
                         fail("INVALID_RESPONSE");
                     }
                     if (status["agents"].some((agent) => object(agent)["id"] === harness)) {
-                        emit({ status: "runtime_paired", runtimeId, harness });
+                        emit({ status: "runtime_paired", computerId, harness });
                         break;
                     }
                     await harnessUnavailable(
@@ -1585,9 +1583,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             const agents = await onlineRuntimeAgents(context, runtime);
             if (agents?.includes(harness) === true) {
                 if (runtime.kind === "existing") {
-                    emit({ status: "runtime_paired", runtimeId, harness });
+                    emit({ status: "runtime_paired", computerId, harness });
                 }
-                emit({ status: "runtime_online", runtimeId, harness });
+                emit({ status: "runtime_online", computerId, harness });
                 return;
             }
             if (agents === null) {
@@ -1608,11 +1606,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function bindAgent(context: MachineContext, runtime: RuntimeSelection, harness: string) {
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
-        const runtimeId = runtime.runtimeId;
+        const computerId = runtime.computerId;
         const agentRef = identifier(harness);
         try {
-            await request(context, `/chat/projects/${context.identity.projectId}/bots/${context.botId}/setup`, {
-                runtimeId,
+            await request(context, `/chat/computers/${context.identity.computerId}/bots/${context.botId}/setup`, {
+                computerId,
                 agentRef,
             });
         } catch (cause) {
@@ -1643,10 +1641,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             signal.throwIfAborted();
             const configuration = await request(
                 context,
-                `/chat/projects/${context.identity.projectId}/bots/${context.botId}/workspace`,
+                `/chat/computers/${context.identity.computerId}/bots/${context.botId}/workspace`,
                 {},
             );
-            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.runtimeId, agentRef)) {
+            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.computerId, agentRef)) {
                 return;
             }
             if (attempts++ % 10 === 0) {
@@ -1776,7 +1774,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         emit({
             status: "access_revoked",
-            projectId: context.identity.projectId,
+            computerId: context.identity.computerId,
             sessionAccess,
             message:
                 sessionAccess === "revoked"
@@ -1825,7 +1823,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const verified = await verifyIdentityAndBot(await retireReplacedIdentity(identity.context));
         let machine = verified.context;
         emit({ status: "identity_ready", userId: machine.identity.userId, botId: machine.botId });
-        const prepared = await prepareRuntime(machine, cwd, verified.expectedRuntimeId, options.replaceProject);
+        const prepared = await prepareRuntime(machine, cwd, verified.expectedComputerId, options.replaceProject);
         machine = prepared.context;
         await startRuntime(machine, prepared.runtime, cwd, options.harness);
         await waitForRuntime(machine, prepared.runtime, options.harness, cwd);

@@ -28,11 +28,9 @@ export function projectRuntimePairingStatus(row: PairingChannelRow, now: number)
     if (row.registration !== null) {
         return new PairedPairingStatus(
             parseAgents(row.registration.agents_json),
-            row.channel_id,
             row.registration.machine_name,
             row.registration.workspace_name,
-            row.project_id,
-            row.runtime_id,
+            row.computer_id,
         );
     }
     if (!Number.isSafeInteger(row.expires_at) || row.expires_at < 0) {

@@ -26,12 +26,10 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
         expect(engine.getConnectionManager()).toBe(store);
         const connection = await store.save(
             {
-                channelId: "embedded_channel",
+                computerId: "embedded_channel",
                 defaultWorkspace: join(directory, "workspace"),
-                pairingId: "embedded_pairing",
                 relayOrigin: new URL("https://relay.example.com/"),
                 runtimeCredential: "a".repeat(43),
-                runtimeId: "embedded_runtime",
             },
             signal,
         );
@@ -104,12 +102,10 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
             Array.from({ length: 32 }, (_, index) =>
                 manager.save(
                     {
-                        channelId: `concurrent_channel_${index}`,
+                        computerId: `concurrent_channel_${index}`,
                         defaultWorkspace: join(directory, "workspace"),
-                        pairingId: `concurrent_pairing_${index}`,
                         relayOrigin: new URL("https://relay.example.com/"),
                         runtimeCredential: "a".repeat(43),
-                        runtimeId: `concurrent_runtime_${index}`,
                     },
                     signal,
                 ),
@@ -204,12 +200,10 @@ it("Given saved and provided connections with opaque credentials, When a host se
         const manager = engine.getConnectionManager();
         const saved = await manager.save(
             {
-                channelId: "loop_channel",
+                computerId: "loop_channel",
                 defaultWorkspace: join(directory, "workspace"),
-                pairingId: "loop_pairing",
                 relayOrigin: new URL(origin),
                 runtimeCredential: "a".repeat(73),
-                runtimeId: "loop_runtime",
             },
             deadline,
         );
@@ -218,7 +212,7 @@ it("Given saved and provided connections with opaque credentials, When a host se
             {
                 kind: "provided",
                 connection: {
-                    channelId: "provided_channel",
+                    computerId: "provided_channel",
                     defaultWorkspace: saved.defaultWorkspace,
                     relayUrl: `ws://127.0.0.1:${port(http)}/morty/api/v1/runtimes/connect`,
                     credentials: memoryRuntimeCredentials("b".repeat(73)),

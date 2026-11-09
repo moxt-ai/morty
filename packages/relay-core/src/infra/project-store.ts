@@ -1,4 +1,4 @@
-import type { PairingIdentityCredential } from "../entity/pairing/pairing-identity.ts";
+import type { ComputerIdentityCredential } from "../entity/pairing/pairing-identity.ts";
 import type {
     AuthorizedChannelRow,
     ChannelCredentialIdentity,
@@ -15,7 +15,7 @@ import type { ProjectStoragePlacement } from "./project-storage-directory.ts";
 
 export interface CreateAccessGrant {
     readonly grantId: string;
-    readonly channelId: string;
+    readonly computerId: string;
     readonly secretHash: string;
     readonly ownerCredentialId: string;
     readonly now: number;
@@ -23,7 +23,7 @@ export interface CreateAccessGrant {
 }
 
 export interface RedeemAccessGrant {
-    readonly channelId: string;
+    readonly computerId: string;
     readonly grantId: string;
     readonly secretHash: string;
     readonly credentialId: string;
@@ -33,7 +33,7 @@ export interface RedeemAccessGrant {
 
 /** The outcome of redeeming an access grant; anything but `redeemed` issued no credential. */
 export type AccessGrantRedemption =
-    | { readonly kind: "redeemed"; readonly projectId: string }
+    | { readonly kind: "redeemed"; readonly computerId: string }
     | { readonly kind: "invalid" }
     | { readonly kind: "already_redeemed" }
     | { readonly kind: "runtime_revoked" }
@@ -50,11 +50,9 @@ export interface CreateBrowserCredential {
 }
 
 export interface RequestRuntimePairing {
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly codeHash: string;
     readonly pollHash: string;
-    readonly channelId: string;
-    readonly runtimeId: string;
     readonly now: number;
     readonly expiresAt: number;
     readonly idempotencyKey: string;
@@ -72,7 +70,7 @@ export type RuntimePairingRequest =
     | { readonly kind: "quota_exceeded" };
 
 export interface ClaimPairing {
-    readonly pairingId: string;
+    readonly computerId: string;
     readonly codeHash: string;
     readonly daemonHash: string;
     readonly now: number;
@@ -84,7 +82,7 @@ export interface ClaimPairing {
 }
 
 export interface RevokeRuntime {
-    readonly runtimeId: string;
+    readonly computerId: string;
     /** The owner credential that revoked the Runtime; null when the Relay revoked it for a reused credential. */
     readonly ownerId: string | null;
     readonly now: number;
@@ -101,16 +99,16 @@ export interface RevokeRuntime {
 export interface ProjectStore {
     /** Authenticates a host credential of a channel and records its use. */
     readonly authenticateHost: (
-        channelId: string,
+        computerId: string,
         tokenHash: string,
         now: number,
         signal: AbortSignal,
     ) => Promise<AuthorizedChannelRow | null>;
     readonly isHostCredentialActive: (identity: ChannelCredentialIdentity, signal: AbortSignal) => Promise<boolean>;
-    readonly listLinkedDevices: (channelId: string, signal: AbortSignal) => Promise<readonly LinkedDeviceRow[]>;
+    readonly listLinkedDevices: (computerId: string, signal: AbortSignal) => Promise<readonly LinkedDeviceRow[]>;
     /** Revokes a linked device; false when the channel has no such device. Repeating it succeeds. */
     readonly revokeLinkedDevice: (
-        channelId: string,
+        computerId: string,
         credentialId: string,
         now: number,
         signal: AbortSignal,
@@ -121,15 +119,15 @@ export interface ProjectStore {
     /** Revokes a browser credential; false when the Project has no such credential. Repeating it succeeds. */
     readonly revokeBrowserCredential: (credentialId: string, now: number, signal: AbortSignal) => Promise<boolean>;
     readonly updateAgentCatalog: (
-        channelId: string,
+        computerId: string,
         tokenHash: string,
         agents: string,
         signal: AbortSignal,
     ) => Promise<boolean>;
-    readonly isRuntimeActive: (runtimeId: string, signal: AbortSignal) => Promise<boolean>;
-    readonly readRuntime: (runtimeId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
+    readonly isRuntimeActive: (computerId: string, signal: AbortSignal) => Promise<boolean>;
+    readonly readRuntime: (computerId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     readonly listRuntimes: (signal: AbortSignal) => Promise<readonly RuntimeChannelRow[]>;
-    readonly readChannel: (channelId: string, signal: AbortSignal) => Promise<RuntimeChannelRow | null>;
+    readonly readChannel: (computerId: string, signal: AbortSignal) => Promise<RuntimeChannelRow | null>;
     /**
      * Returns the pairing request created under the idempotency key, or creates one within the Runtime quota. A
      * refused request is audited.
@@ -138,7 +136,7 @@ export interface ProjectStore {
         value: RequestRuntimePairing,
         signal: AbortSignal,
     ) => Promise<RuntimePairingRequest>;
-    readonly readRuntimePairing: (pairingId: string, signal: AbortSignal) => Promise<PairingChannelRow | null>;
+    readonly readRuntimePairing: (computerId: string, signal: AbortSignal) => Promise<PairingChannelRow | null>;
     readonly readPairingCode: (codeHash: string, signal: AbortSignal) => Promise<PairingClaimRow | null>;
     /**
      * Claims a pairing for a daemon. A replay with the credential it committed succeeds while the pairing is
@@ -149,7 +147,7 @@ export interface ProjectStore {
     readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
     readonly findCredential: (
-        credential: PairingIdentityCredential,
+        credential: ComputerIdentityCredential,
         signal: AbortSignal,
     ) => Promise<readonly CredentialMatch[]>;
     readonly rotateRuntimeCredential: (

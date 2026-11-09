@@ -1,28 +1,31 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { logger } from "@morty-build/relay-core/logging";
-import type { ProjectDO } from "../durable-objects/project-do.ts";
-import { decodePlatformProjectPlacement, projectIdFromPrefixedValue } from "../entity/platform-project-id.ts";
-import { encodeProjectDurableObjectPath } from "../entity/project-durable-object-path.ts";
+import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
+import { encodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
+import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 
-export interface ProjectWorkerRoutingBindings {
-    readonly PROJECT_RELAY: DurableObjectNamespace<ProjectDO>;
+export interface ComputerWorkerRoutingBindings {
+    readonly COMPUTER_RELAY: DurableObjectNamespace<ComputerRelay>;
 }
 
-/** A request executing inside the Project Durable Object, beside the Project's own store. */
-export interface ProjectDurableObjectExecutionBindings extends ProjectWorkerRoutingBindings {
-    readonly MORTY_PROJECT_STORE: PlatformProjectStore;
-    readonly MORTY_PROJECT_ID: string;
+/** A request executing inside the Account Durable Object, beside the Project's own store. */
+export interface ComputerDurableObjectExecutionBindings extends ComputerWorkerRoutingBindings {
+    readonly MORTY_LOCAL_CHANNEL?: (computerId: string, request: Request) => Promise<Response>;
+    readonly MORTY_COMPUTER_STORE: PlatformProjectStore;
+    readonly MORTY_COMPUTER_ID: string;
 }
 
-export type ProjectDurableObjectRoutingBindings = ProjectWorkerRoutingBindings | ProjectDurableObjectExecutionBindings;
+export type ComputerDurableObjectRoutingBindings =
+    | ComputerWorkerRoutingBindings
+    | ComputerDurableObjectExecutionBindings;
 
 function failure(code: string, status: number): Response {
-    return Response.json({ error: { code, message: "Project routing is unavailable" } }, { status });
+    return Response.json({ error: { code, message: "Account routing is unavailable" } }, { status });
 }
 
-function projectIdFromPath(pathname: string): string | null {
-    const prefix = `${MORTY_API_PREFIX}/v1/projects/`;
+function computerIdFromPath(pathname: string): string | null {
+    const prefix = `${MORTY_API_PREFIX}/v1/computers/`;
     if (!pathname.startsWith(prefix)) {
         return null;
     }
@@ -33,7 +36,7 @@ function projectIdFromPath(pathname: string): string | null {
     }
 }
 
-async function projectIdFromUnscopedRequest(request: Request): Promise<string | null> {
+async function computerIdFromUnscopedRequest(request: Request): Promise<string | null> {
     const pathname = new URL(request.url).pathname;
     for (const segment of pathname.split("/")) {
         let value: string;
@@ -42,16 +45,16 @@ async function projectIdFromUnscopedRequest(request: Request): Promise<string | 
         } catch {
             return "";
         }
-        const projectId = projectIdFromPrefixedValue(value);
-        if (projectId !== null) {
-            return projectId;
+        const computerId = computerIdFromPrefixedValue(value);
+        if (computerId !== null) {
+            return computerId;
         }
     }
-    const pairingPrefix = `${MORTY_API_PREFIX}/v1/runtime-pairings/`;
+    const pairingPrefix = `${MORTY_API_PREFIX}/v1/pairings/`;
     if (pathname.startsWith(pairingPrefix) && pathname.endsWith("/redeem")) {
         try {
-            const pairingId = decodeURIComponent(pathname.slice(pairingPrefix.length, -"/redeem".length));
-            return projectIdFromPrefixedValue(pairingId) ?? "";
+            const computerId = decodeURIComponent(pathname.slice(pairingPrefix.length, -"/redeem".length));
+            return computerIdFromPrefixedValue(computerId) ?? "";
         } catch {
             return "";
         }
@@ -59,31 +62,31 @@ async function projectIdFromUnscopedRequest(request: Request): Promise<string | 
     if (pathname === `${MORTY_API_PREFIX}/v1/runtimes/connect`) {
         const authorization = request.headers.get("authorization") ?? "";
         const token = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-        return projectIdFromPrefixedValue(token) ?? "";
+        return computerIdFromPrefixedValue(token) ?? "";
     }
     const authorization = request.headers.get("authorization") ?? "";
     const bearer = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-    const credentialProject = projectIdFromPrefixedValue(bearer);
+    const credentialProject = computerIdFromPrefixedValue(bearer);
     if (credentialProject !== null) {
         return credentialProject;
     }
     return null;
 }
 
-export async function routeProjectDurableObject(
+export async function routeComputerDurableObject(
     request: Request,
-    bindings: ProjectDurableObjectRoutingBindings,
+    bindings: ComputerDurableObjectRoutingBindings,
     allowedOrigins: ReadonlySet<string>,
 ): Promise<Response | null> {
-    if ("MORTY_PROJECT_STORE" in bindings) {
+    if ("MORTY_COMPUTER_STORE" in bindings) {
         return null;
     }
     const pathname = new URL(request.url).pathname;
     if (pathname === `${MORTY_API_PREFIX}/dashboard` || pathname.startsWith(`${MORTY_API_PREFIX}/dashboard/`)) {
         return null;
     }
-    const projectId = projectIdFromPath(pathname) ?? (await projectIdFromUnscopedRequest(request));
-    if (projectId === null) {
+    const computerId = computerIdFromPath(pathname) ?? (await computerIdFromUnscopedRequest(request));
+    if (computerId === null) {
         return null;
     }
     const origin = request.headers.get("origin");
@@ -93,17 +96,17 @@ export async function routeProjectDurableObject(
             { status: 403 },
         );
     }
-    const placement = decodePlatformProjectPlacement(projectId);
+    const placement = decodeComputerPlacement(computerId);
     if (placement === null) {
         return failure("project_id_invalid", 400);
     }
     request.signal.throwIfAborted();
     const durableObjectUrl = new URL(request.url);
-    durableObjectUrl.pathname = encodeProjectDurableObjectPath(projectId, durableObjectUrl.pathname);
+    durableObjectUrl.pathname = encodeComputerDurableObjectPath(computerId, durableObjectUrl.pathname);
     const body = request.body === null ? undefined : await request.arrayBuffer();
     request.signal.throwIfAborted();
     try {
-        return await bindings.PROJECT_RELAY.getByName(projectId, { locationHint: placement.locationHint }).fetch(
+        return await bindings.COMPUTER_RELAY.getByName(computerId, { locationHint: placement.locationHint }).fetch(
             durableObjectUrl,
             {
                 method: request.method,
@@ -117,9 +120,9 @@ export async function routeProjectDurableObject(
         logger.error(
             {
                 event: "project_relay_request_failed",
-                durableObjectClass: "ProjectDO",
-                durableObjectId: bindings.PROJECT_RELAY.idFromName(projectId).toString(),
-                projectId,
+                durableObjectClass: "ComputerRelay",
+                durableObjectId: bindings.COMPUTER_RELAY.idFromName(computerId).toString(),
+                computerId,
                 cfRay: request.headers.get("cf-ray")?.slice(0, 128) ?? null,
                 method: request.method,
                 path: durableObjectUrl.pathname,

@@ -10,39 +10,39 @@ import { RuntimeDirectoryStorage } from "./runtime-directory-storage.ts";
  * operation runs there as one unit, so its reads, writes and audit events cannot interleave with another operation.
  */
 export class SqliteProjectStore implements ProjectStore {
-    readonly #projectId: string;
+    readonly #computerId: string;
     readonly #database: SqlDatabase;
     readonly #pairings: PairingStorage;
     readonly #runtimes: RuntimeDirectoryStorage;
     readonly #credentials: ChannelCredentialStorage;
 
-    constructor(projectId: string, database: SqlDatabase) {
-        this.#projectId = projectId;
+    constructor(computerId: string, database: SqlDatabase) {
+        this.#computerId = computerId;
         this.#database = database;
         this.#pairings = new PairingStorage(database);
-        this.#runtimes = new RuntimeDirectoryStorage(projectId, database);
+        this.#runtimes = new RuntimeDirectoryStorage(computerId, database);
         this.#credentials = new ChannelCredentialStorage(database);
     }
 
-    readonly authenticateHost: ProjectStore["authenticateHost"] = async (channelId, tokenHash, now, signal) => {
-        const row = await this.#pairings.readHost(channelId, tokenHash, signal);
+    readonly authenticateHost: ProjectStore["authenticateHost"] = async (computerId, tokenHash, now, signal) => {
+        const row = await this.#pairings.readHost(computerId, tokenHash, signal);
         return row !== null && (await this.#pairings.touchHost(row.credential_id, now, signal)) ? row : null;
     };
 
     readonly isHostCredentialActive: ProjectStore["isHostCredentialActive"] = async (identity, signal) =>
-        identity.projectId === this.#projectId && (await this.#credentials.readActive(identity, signal));
+        identity.computerId === this.#computerId && (await this.#credentials.readActive(identity, signal));
 
-    readonly listLinkedDevices: ProjectStore["listLinkedDevices"] = async (channelId, signal) =>
-        await this.#pairings.listLinked(channelId, signal);
+    readonly listLinkedDevices: ProjectStore["listLinkedDevices"] = async (computerId, signal) =>
+        await this.#pairings.listLinked(computerId, signal);
 
-    readonly revokeLinkedDevice: ProjectStore["revokeLinkedDevice"] = async (channelId, credentialId, now, signal) =>
-        (await this.#pairings.revokeLinked(channelId, credentialId, now, signal)) ||
-        (await this.#pairings.hasLinked(channelId, credentialId, signal));
+    readonly revokeLinkedDevice: ProjectStore["revokeLinkedDevice"] = async (computerId, credentialId, now, signal) =>
+        (await this.#pairings.revokeLinked(computerId, credentialId, now, signal)) ||
+        (await this.#pairings.hasLinked(computerId, credentialId, signal));
 
     readonly createAccessGrant: ProjectStore["createAccessGrant"] = async (value, signal) =>
         await this.#pairings.createGrant(
             value.grantId,
-            value.channelId,
+            value.computerId,
             value.secretHash,
             value.ownerCredentialId,
             value.now,
@@ -52,7 +52,7 @@ export class SqliteProjectStore implements ProjectStore {
 
     readonly redeemAccessGrant: ProjectStore["redeemAccessGrant"] = async (value, signal) => {
         const results = await this.#pairings.redeemGrant(
-            value.channelId,
+            value.computerId,
             value.grantId,
             value.secretHash,
             value.credentialId,
@@ -61,7 +61,7 @@ export class SqliteProjectStore implements ProjectStore {
             signal,
         );
         if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {
-            const state = await this.#pairings.readGrant(value.channelId, value.grantId, value.secretHash, signal);
+            const state = await this.#pairings.readGrant(value.computerId, value.grantId, value.secretHash, signal);
             if (state === null) {
                 return { kind: "invalid" };
             }
@@ -76,14 +76,14 @@ export class SqliteProjectStore implements ProjectStore {
             }
             return { kind: "not_redeemed" };
         }
-        const channel = await this.#runtimes.readChannel(value.channelId, signal);
-        return channel === null ? { kind: "channel_missing" } : { kind: "redeemed", projectId: channel.project_id };
+        const channel = await this.#runtimes.readChannel(value.computerId, signal);
+        return channel === null ? { kind: "channel_missing" } : { kind: "redeemed", computerId: channel.computer_id };
     };
 
     readonly createBrowserCredential: ProjectStore["createBrowserCredential"] = async (value, signal) =>
         await this.#pairings.createBrowser(
             value.credentialId,
-            this.#projectId,
+            this.#computerId,
             value.tokenHash,
             value.ownerCredentialId,
             value.now,
@@ -92,21 +92,21 @@ export class SqliteProjectStore implements ProjectStore {
         );
 
     readonly revokeBrowserCredential: ProjectStore["revokeBrowserCredential"] = async (credentialId, now, signal) =>
-        await this.#pairings.revokeBrowser(this.#projectId, credentialId, now, signal);
+        await this.#pairings.revokeBrowser(this.#computerId, credentialId, now, signal);
 
-    readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (channelId, tokenHash, agents, signal) =>
-        (await this.#runtimes.updateAgents(channelId, tokenHash, agents, signal)).meta.changes === 1;
+    readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (computerId, tokenHash, agents, signal) =>
+        (await this.#runtimes.updateAgents(computerId, tokenHash, agents, signal)).meta.changes === 1;
 
-    readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (runtimeId, signal) =>
-        await this.#credentials.readActiveRuntime({ projectId: this.#projectId, runtimeId }, signal);
+    readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (computerId, signal) =>
+        computerId === this.#computerId && (await this.#credentials.readActiveRuntime({ computerId }, signal));
 
-    readonly readRuntime: ProjectStore["readRuntime"] = async (runtimeId, signal) =>
-        await this.#runtimes.readRuntime(runtimeId, signal);
+    readonly readRuntime: ProjectStore["readRuntime"] = async (computerId, signal) =>
+        await this.#runtimes.readRuntime(computerId, signal);
 
     readonly listRuntimes: ProjectStore["listRuntimes"] = async (signal) => await this.#runtimes.listRuntimes(signal);
 
-    readonly readChannel: ProjectStore["readChannel"] = async (channelId, signal) =>
-        await this.#runtimes.readChannel(channelId, signal);
+    readonly readChannel: ProjectStore["readChannel"] = async (computerId, signal) =>
+        await this.#runtimes.readChannel(computerId, signal);
 
     readonly requestRuntimePairing: ProjectStore["requestRuntimePairing"] = async (value, signal) => {
         const existing = await this.#runtimes.readRuntimePairingRequest(value.idempotencyKey, signal);
@@ -119,9 +119,7 @@ export class SqliteProjectStore implements ProjectStore {
         await this.#runtimes.recordAudit(
             {
                 auditId: value.rejectionAuditId,
-                projectId: this.#projectId,
-                pairingId: value.pairingId,
-                runtimeId: value.runtimeId,
+                computerId: this.#computerId,
                 actorKind: value.actorKind,
                 actorId: value.actorId,
                 action: "runtime_pairing.rejected",
@@ -133,8 +131,8 @@ export class SqliteProjectStore implements ProjectStore {
         return { kind: "quota_exceeded" };
     };
 
-    readonly readRuntimePairing: ProjectStore["readRuntimePairing"] = async (pairingId, signal) =>
-        await this.#runtimes.readProjectPairing(pairingId, signal);
+    readonly readRuntimePairing: ProjectStore["readRuntimePairing"] = async (computerId, signal) =>
+        await this.#runtimes.readProjectPairing(computerId, signal);
 
     readonly readPairingCode: ProjectStore["readPairingCode"] = async (codeHash, signal) =>
         await this.#runtimes.readPairingCode(codeHash, signal);
@@ -145,22 +143,20 @@ export class SqliteProjectStore implements ProjectStore {
         }
         // Replays prove possession of the original code and must match the committed credential. Never rotate an
         // retired credential, extend the pairing deadline, or resurrect a revoked Runtime.
-        const pairing = await this.#runtimes.readProjectPairing(value.pairingId, signal);
+        const pairing = await this.#runtimes.readProjectPairing(value.computerId, signal);
         if (
             pairing !== null &&
             pairing.expires_at > value.now &&
-            (await this.#runtimes.readDaemon(pairing.channel_id, value.daemonHash, signal)) !== null
+            (await this.#runtimes.readDaemon(pairing.computer_id, value.daemonHash, signal)) !== null
         ) {
             return true;
         }
         await this.#runtimes.recordAudit(
             {
                 auditId: value.rejectionAuditId,
-                projectId: this.#projectId,
-                pairingId: value.pairingId,
-                runtimeId: pairing?.runtime_id ?? "",
+                computerId: this.#computerId,
                 actorKind: "pairing_code",
-                actorId: value.pairingId,
+                actorId: value.computerId,
                 action: "runtime_pairing.rejected",
                 details: { code: "invalid_pairing_code" },
                 recordedAt: value.now,

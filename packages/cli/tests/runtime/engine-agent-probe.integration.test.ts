@@ -131,12 +131,10 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     });
     const saved = await engine.getConnectionManager().save(
         {
-            channelId: "output-drain",
+            computerId: "output-drain",
             defaultWorkspace: workspace,
-            pairingId: "probe-pairing",
             relayOrigin: new URL(`http://127.0.0.1:${port(http)}`),
             runtimeCredential: "r".repeat(43),
-            runtimeId: "probe-runtime",
         },
         signal,
     );
@@ -146,7 +144,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
             : {
                   kind: "provided",
                   connection: {
-                      channelId: saved.channelId,
+                      computerId: saved.computerId,
                       defaultWorkspace: workspace,
                       relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
                       credentials: memoryRuntimeCredentials(saved.credentials.current),
@@ -389,7 +387,7 @@ test.for([
                     attempt: "1",
                     timeoutMilliseconds: expected.source === "acp_readiness" ? "60000" : "10000",
                     timestamp: "2026-10-29T00:00:00.000Z",
-                    channelId: "output-drain",
+                    computerId: "output-drain",
                 }),
             );
             expect(report.entries).toContainEqual(

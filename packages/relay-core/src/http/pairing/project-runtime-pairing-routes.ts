@@ -16,21 +16,17 @@ export function createProjectRuntimePairingRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
-        .use("/runtime-pairings/:pairingId/redeem", pairingTimeoutMiddleware("Runtime pairing redemption timed out"))
-        .use("/projects/:projectId/runtime-pairings", pairingTimeoutMiddleware("Runtime pairing creation timed out"))
-        .use(
-            "/projects/:projectId/runtime-pairings/:pairingId",
-            pairingTimeoutMiddleware("Runtime pairing lookup timed out"),
-        )
-        .use("/projects/:projectId/runtimes/:runtimeId", pairingTimeoutMiddleware("Runtime revocation timed out"))
+        .use("/pairings/:computerId/redeem", pairingTimeoutMiddleware("Runtime pairing redemption timed out"))
+        .use("/computers/:computerId/pairing", pairingTimeoutMiddleware("Runtime pairing creation timed out"))
+        .use("/computers/:computerId/pairing", pairingTimeoutMiddleware("Pairing lookup or revocation timed out"))
         .post(
-            "/runtime-pairings/:pairingId/redeem",
+            "/pairings/:computerId/redeem",
             bodyParser<RelayHttpEnvironment>(["agents", "machineName", "pairingCode", "workspaceName"]),
             async (context) => {
                 const body = context.req.valid("json");
                 const agents = validateAgents(body["agents"]);
                 const redeemed = await context.env.services.runtimePairings.redeemRuntimePairing(
-                    validateIdentifier(context.req.param("pairingId"), "pairing_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     validatePairingCode(body["pairingCode"]),
                     validateDisplayName(body["machineName"], "machine_name"),
                     validateDisplayName(body["workspaceName"], "workspace_name"),
@@ -38,9 +34,8 @@ export function createProjectRuntimePairingRoutes() {
                     context.var.signal,
                 );
                 return context.json({
-                    channelId: redeemed.channelId,
+                    computerId: redeemed.computerId,
                     runtimeCredential: redeemed.daemonToken,
-                    runtimeId: redeemed.runtimeId,
                 });
             },
         )
@@ -63,14 +58,14 @@ export function createProjectRuntimePairingRoutes() {
             }
         })
         .post(
-            "/projects/:projectId/runtime-pairings",
+            "/computers/:computerId/pairing",
             bodyParser<RelayHttpEnvironment>(["idempotencyKey"]),
             async (context) => {
                 const request = context.req.raw;
                 const body = context.req.valid("json");
                 return context.json(
                     await context.env.services.runtimePairings.createProjectRuntimePairing(
-                        validateIdentifier(context.req.param("projectId"), "project_id"),
+                        validateIdentifier(context.req.param("computerId"), "project_id"),
                         bearerToken(request),
                         validateIdentifier(readString(body, "idempotencyKey"), "idempotency_key"),
                         context.var.signal,
@@ -79,32 +74,29 @@ export function createProjectRuntimePairingRoutes() {
                 );
             },
         )
-        .get("/projects/:projectId/runtime-pairings/:pairingId", async (context) => {
+        .get("/computers/:computerId/pairing", async (context) => {
             const request = context.req.raw;
             return context.json(
                 await context.env.services.runtimePairings.readProjectRuntimePairing(
-                    validateIdentifier(context.req.param("projectId"), "project_id"),
-                    validateIdentifier(context.req.param("pairingId"), "pairing_id"),
+                    validateIdentifier(context.req.param("computerId"), "project_id"),
                     bearerToken(request),
                     context.var.signal,
                 ),
             );
         })
-        .get("/projects/:projectId/runtimes/:runtimeId/host", async (context) => {
+        .get("/computers/:computerId/daemon/host", async (context) => {
             const request = context.req.raw;
-            const access = await context.env.services.runtimePairings.authorizeProjectRuntimeHost(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+            const access = await context.env.services.runtimePairings.authorizePairedHost(
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(request),
                 request.signal,
             );
             return await context.env.gateways.channelGateway.acceptHost(access, request, request.signal);
         })
-        .delete("/projects/:projectId/runtimes/:runtimeId", async (context) => {
+        .delete("/computers/:computerId/pairing", async (context) => {
             const request = context.req.raw;
             await context.env.services.runtimePairings.revokeProjectRuntime(
-                validateIdentifier(context.req.param("projectId"), "project_id"),
-                validateIdentifier(context.req.param("runtimeId"), "runtime_id"),
+                validateIdentifier(context.req.param("computerId"), "project_id"),
                 bearerToken(request),
                 context.var.signal,
             );

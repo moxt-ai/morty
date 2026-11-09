@@ -178,8 +178,7 @@ export class ChannelActor {
                 event: "relay_message_skipped",
                 reason,
                 skippedCount: this.#skippedCount,
-                runtimeId: this.#runtimeId,
-                projectId: this.#projectId,
+                computerId: this.#computerId,
             },
             "Relay skipped unsupported input",
         );
@@ -187,23 +186,21 @@ export class ChannelActor {
         this.#skippedCount = 0;
     };
     readonly #peers: ChannelPeers;
-    readonly #projectId: string;
-    readonly #runtimeId: string;
+    readonly #computerId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
-        readonly config: { readonly projectId: string; readonly runtimeId: string };
+        readonly config: { readonly computerId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
-        const { projectId, runtimeId } = cx.config;
+        const { computerId } = cx.config;
         const { peers, notifications } = cx.gateways;
         this.#peers = peers;
-        this.#projectId = projectId;
-        this.#runtimeId = runtimeId;
-        this.#liveEvents = new SessionLiveEventRelay(projectId, runtimeId, peers, notifications);
+        this.#computerId = computerId;
+        this.#liveEvents = new SessionLiveEventRelay(computerId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {
@@ -218,7 +215,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online: this.hasOnlineDaemon(),
-                runtimeId: this.#runtimeId,
+                computerId: this.#computerId,
             }),
         );
         return Promise.resolve();
@@ -289,7 +286,7 @@ export class ChannelActor {
             if (kind === SESSION_INFO_UPDATED_KIND) {
                 this.broadcast(
                     this.#peers.hosts(),
-                    JSON.stringify({ ...JSON.parse(wire), projectId: this.#projectId }),
+                    JSON.stringify({ ...JSON.parse(wire), computerId: this.#computerId }),
                     message.sessionId,
                 );
                 return;
@@ -817,7 +814,7 @@ export class ChannelActor {
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
                 online,
-                runtimeId: this.#runtimeId,
+                computerId: this.#computerId,
             }),
         );
     };

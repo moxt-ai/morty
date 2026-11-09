@@ -100,7 +100,7 @@ afterEach(async () => {
 /** One ordinary API call through the bridge, reporting only its status. */
 async function fetchWorkspace(transport: WebSocketApiTransport, origin: string): Promise<number> {
     const response = await transport.fetch(
-        new Request(`${origin}/morty/api/chat/projects/p/bots/b/workspace`, { method: "POST" }),
+        new Request(`${origin}/morty/api/chat/computers/p/bots/b/workspace`, { method: "POST" }),
     );
     return response.status;
 }

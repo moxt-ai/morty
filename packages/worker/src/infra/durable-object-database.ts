@@ -1,5 +1,5 @@
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import { projectDurableObjectMigrations } from "../generated/project-do-migrations.ts";
+import { computerDurableObjectMigrations } from "../generated/project-do-migrations.ts";
 
 type BoundValue = ArrayBuffer | string | number | null;
 
@@ -58,7 +58,7 @@ export class DurableObjectDatabase {
 
     constructor(storage: DurableObjectStorage) {
         this.#storage = storage;
-        applyDurableObjectMigrations(storage, projectDurableObjectMigrations);
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations, "chat/");
     }
 
     readonly prepare = (query: string) => new DurableObjectStatement(this.#storage.sql, query);

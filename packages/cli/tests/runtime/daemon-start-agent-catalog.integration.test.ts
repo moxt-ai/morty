@@ -103,9 +103,7 @@ it("Given a running daemon with a long temporary directory whose Agent catalog w
     const installation = await openMortyInstallation(AbortSignal.timeout(10_000), environment);
     await installation.saveConnection(
         {
-            channelId: "start-catalog-channel",
-            runtimeId: "runtime_start_catalog",
-            pairingId: "",
+            computerId: "start-catalog-channel",
             defaultWorkspace: directory,
             relayOrigin: relay.origin,
             runtimeCredential: "r".repeat(43),

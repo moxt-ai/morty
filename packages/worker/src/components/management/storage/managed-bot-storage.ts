@@ -16,7 +16,7 @@ const listedBotSchema = v.pipe(
     v.object({
         botId: identifier,
         displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
-        runtimeId: v.nullable(identifier),
+        computerId: v.nullable(identifier),
     }),
     v.readonly(),
 );
@@ -43,7 +43,7 @@ export class ManagedBotStorage {
     readonly readMachine = async (userId: string, signal: AbortSignal): Promise<ListedManagedBot | null> => {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
-            .select({ botId: managedBot.botId, displayName: managedBot.displayName, runtimeId: managedBot.runtimeId })
+            .select({ botId: managedBot.botId, displayName: managedBot.displayName, computerId: managedBot.computerId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
             .get();
@@ -77,7 +77,7 @@ export class ManagedBotStorage {
             .select({
                 botId: managedBot.botId,
                 displayName: managedBot.displayName,
-                runtimeId: managedBot.runtimeId,
+                computerId: managedBot.computerId,
             })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
@@ -94,12 +94,11 @@ export class ManagedBotStorage {
         };
     };
 
-    /** Binds the Machine to a Runtime: one it has none of, or in place of `replaced`, a Runtime that was revoked. */
+    /** Configures the Agent on the computer that owns this chat. */
     readonly configureBot = async (
         userId: string,
         botId: string,
         configuration: BotConfiguration,
-        replaced: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<ConfigureManagedBotResult> => {
@@ -108,15 +107,12 @@ export class ManagedBotStorage {
         const database = this.#requireDatabase();
         const result = await database
             .update(managedBot)
-            .set({ runtimeId: value.runtimeId, updatedAt: now })
+            .set({ computerId: value.computerId, updatedAt: now })
             .where(
                 and(
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
-                    or(
-                        replaced === null ? isNull(managedBot.runtimeId) : eq(managedBot.runtimeId, replaced),
-                        eq(managedBot.runtimeId, value.runtimeId),
-                    ),
+                    or(isNull(managedBot.computerId), eq(managedBot.computerId, value.computerId)),
                 ),
             )
             .run();
@@ -125,7 +121,7 @@ export class ManagedBotStorage {
             return "configured";
         }
         const current = await database
-            .select({ runtimeId: managedBot.runtimeId })
+            .select({ computerId: managedBot.computerId })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
             .get();
@@ -133,7 +129,9 @@ export class ManagedBotStorage {
         if (current === undefined) {
             return "not-found";
         }
-        return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "not-found";
+        return current.computerId !== null && current.computerId !== value.computerId
+            ? "runtime-mismatch"
+            : "not-found";
     };
 
     /**

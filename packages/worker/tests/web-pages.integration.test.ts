@@ -81,7 +81,7 @@ test("Given an old Slack attachment in storage, When an unauthenticated client r
     await bucket.put(key, "security-audit-private-attachment");
     for (const requested of [key, encodeURIComponent(key)]) {
         const response = await runtime.dispatchFetch(
-            `https://morty.example/morty-slack/api/files/${requested}?projectId=prj_wn_01_audit`,
+            `https://morty.example/morty-slack/api/files/${requested}?computerId=prj_wn_01_audit`,
         );
         expect(response.status).toBe(404);
         expect(await response.text()).not.toContain("security-audit-private-attachment");

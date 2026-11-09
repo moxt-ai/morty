@@ -124,7 +124,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "interaction",
+            computerId: "interaction",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -306,7 +306,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "announced-permission",
+            computerId: "announced-permission",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -419,7 +419,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "null-input-permission",
+            computerId: "null-input-permission",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -532,7 +532,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "orphan-update-permission",
+            computerId: "orphan-update-permission",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -645,7 +645,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "session-query",
+            computerId: "session-query",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -734,7 +734,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "session-restore",
+            computerId: "session-restore",
             defaultWorkspace: workspace,
             relayUrl,
         },
@@ -901,7 +901,7 @@ test("Given queued prompts from the running Agent identity and another one, When
     const config = createRuntimeConfig(
         {
             credentials: memoryRuntimeCredentials("r".repeat(43)),
-            channelId: "queued-identity",
+            computerId: "queued-identity",
             defaultWorkspace: workspace,
             relayUrl,
         },

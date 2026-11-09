@@ -1,6 +1,6 @@
 import { isIdentifier } from "@morty-build/client/protocol";
 import { Hono } from "hono";
-import { ProjectScope } from "../../entity/do/session.ts";
+import { ComputerScope } from "../../entity/do/session.ts";
 import type { HostCredential } from "../../entity/pairing/pairing.ts";
 import type { RuntimeAdmission, RuntimeService } from "../../service/channel/runtime-service.ts";
 
@@ -23,39 +23,37 @@ function hostCredential(credentialId: string | null, kind: string | null): HostC
 }
 
 export function createRuntimeRoutes(runtime: RuntimeService) {
-    return new Hono().all("/projects/:projectId/*", async (c) => {
+    return new Hono().all("/computers/:computerId/*", async (c) => {
         const request = c.req.raw;
         if (request.method === "DELETE" && new URL(request.url).pathname.endsWith("/session-viewers/revoke")) {
             const revokedThrough = Number(request.headers.get("x-morty-session-access-revoked-through"));
             if (!Number.isSafeInteger(revokedThrough)) {
                 return unauthorized("A verified Session access revocation is required");
             }
-            runtime.revokeSessionViewers(new ProjectScope(c.req.param("projectId")), revokedThrough);
+            runtime.revokeSessionViewers(new ComputerScope(c.req.param("computerId")), revokedThrough);
             return new Response(null, { status: 204 });
         }
-        const channelId = request.headers.get("x-morty-channel-id");
-        const runtimeId = request.headers.get("x-morty-runtime-id");
-        const projectId = c.req.param("projectId");
-        if (channelId === null || runtimeId === null || projectId === null) {
+        const computerId = c.req.param("computerId");
+        if (!computerId) {
             return unauthorized("Verified channel access is required");
         }
-        const scope = new ProjectScope(projectId);
+        const scope = new ComputerScope(computerId);
         const url = new URL(request.url);
         const credentialId = request.headers.get("x-morty-host-credential-id");
         if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
-            await runtime.revokeRuntime(channelId, runtimeId, scope, request.signal);
+            await runtime.revokeRuntime(scope, request.signal);
             return new Response(null, { status: 204 });
         }
         if (request.method === "DELETE" && url.pathname.endsWith("/host-credentials/revoke")) {
             if (credentialId === null) {
                 return unauthorized("Verified host credential access is required");
             }
-            runtime.revokeHost(channelId, credentialId, runtimeId, scope);
+            runtime.revokeHost(credentialId, scope);
             return new Response(null, { status: 204 });
         }
         if (request.method === "GET" && url.pathname.endsWith("/runtime-status")) {
             await runtime.expireSilentDaemons();
-            return Response.json({ online: runtime.isOnline(runtimeId) });
+            return Response.json({ online: runtime.isOnline(computerId) });
         }
         const revoked = () =>
             Response.json(
@@ -67,7 +65,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return new Response("WebSocket upgrade required", { status: 426 });
         }
         if (url.pathname.endsWith("/daemon")) {
-            const result = await runtime.acceptDaemon(runtimeId, scope, request.signal);
+            const result = await runtime.acceptDaemon(scope, request.signal);
             switch (result.kind) {
                 case "accepted":
                     return result.response;
@@ -77,7 +75,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                     return Response.json(
                         {
                             error: {
-                                code: "runtime_identity_conflict",
+                                code: "computer_identity_conflict",
                                 message: "The Channel is already assigned to another Runtime",
                             },
                         },
@@ -104,10 +102,8 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                 await runtime.acceptHost(
                     {
                         role: "host",
-                        channelId,
                         credential,
-                        runtimeId,
-                        projectId,
+                        computerId,
                         ...(nativeRequestId === null ? {} : { nativeRequestId }),
                         ...(sessionFilter === null ? {} : { sessionFilter }),
                     },
@@ -116,9 +112,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             );
         }
         if (url.pathname.endsWith("/live-history")) {
-            return admitted(
-                await runtime.acceptHost({ role: "relay", channelId, runtimeId, projectId }, request.signal),
-            );
+            return admitted(await runtime.acceptHost({ role: "relay", computerId }, request.signal));
         }
         return new Response(null, { status: 404 });
     });

@@ -64,8 +64,8 @@ async function openSessionView(slug: string) {
             }),
             env,
         );
-    const { projectId } = v.parse(
-        v.object({ projectId: v.string() }),
+    const { computerId } = v.parse(
+        v.object({ computerId: v.string() }),
         await (
             await dashboard("machine-accounts", {
                 displayName: `Viewer check Project ${slug}`,
@@ -74,12 +74,11 @@ async function openSessionView(slug: string) {
             })
         ).json(),
     );
-    const runtimeId = `viewer-check-runtime-${slug}`;
     const sessionId = "viewer-check-session";
-    await registerRuntimeFixture(projectId, runtimeId);
-    const daemonResponse = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
-        `https://runtime.internal/projects/${projectId}/daemon`,
-        { headers: { Upgrade: "websocket", "x-morty-channel-id": runtimeId, "x-morty-runtime-id": runtimeId } },
+    await registerRuntimeFixture(computerId);
+    const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
+        `https://runtime.internal/computers/${computerId}/daemon`,
+        { headers: { Upgrade: "websocket" } },
     );
     expect(daemonResponse.status).toBe(101);
     const daemon = daemonResponse.webSocket;
@@ -91,10 +90,10 @@ async function openSessionView(slug: string) {
     expect(await daemonInbox.next()).toEqual({ kind: "runtime.liveness.ready" });
 
     const issued = await worker.fetch(
-        new Request(`${origin}/v1/projects/${projectId}/sessions/${sessionId}/access-credentials`, {
+        new Request(`${origin}/v1/computers/${computerId}/sessions/${sessionId}/access-credentials`, {
             method: "POST",
             headers: { authorization: `Bearer ${defaultCredential.credential}`, "content-type": "application/json" },
-            body: JSON.stringify({ expiresInSeconds: 900, runtimeId }),
+            body: JSON.stringify({ expiresInSeconds: 900 }),
         }),
         env,
     );
@@ -102,7 +101,7 @@ async function openSessionView(slug: string) {
     const { credential: sessionCredential } = v.parse(v.object({ credential: v.string() }), await issued.json());
 
     const opened = await worker.fetch(
-        new Request(`${origin}/v1/projects/${projectId}/sessions/${sessionId}/events-v2`, {
+        new Request(`${origin}/v1/computers/${computerId}/sessions/${sessionId}/events-v2`, {
             headers: { authorization: `Bearer ${sessionCredential}`, Upgrade: "websocket" },
         }),
         env,
@@ -115,7 +114,7 @@ async function openSessionView(slug: string) {
     const viewInbox = new Inbox(view);
     view.accept();
 
-    return { daemon, dashboard, defaultCredential, projectId, runtimeId, sessionId, viewInbox };
+    return { daemon, dashboard, defaultCredential, computerId, sessionId, viewInbox };
 }
 
 const liveEvent = (sessionId: string, eventId: string) => ({
@@ -129,19 +128,19 @@ const liveEvent = (sessionId: string, eventId: string) => ({
 });
 
 it("Given a live Session view, When the AppCredential that issued its Session credential is revoked, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, defaultCredential, runtimeId, sessionId, viewInbox } = await openSessionView("app");
+    const { daemon, defaultCredential, computerId, sessionId, viewInbox } = await openSessionView("app");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
     await revokeMortyCredential(env.PLATFORM_DIRECTORY_DATABASE, defaultCredential.credentialId);
-    expect(await runDurableObjectAlarm(env.RUNTIME_RELAY.getByName(runtimeId))).toBe(true);
+    expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });
     daemon.close(1000, "done");
 });
 
 it("Given a live Session view the revocation push missed, When the Project's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, projectId, runtimeId, sessionId, viewInbox } = await openSessionView("missed");
+    const { daemon, computerId, sessionId, viewInbox } = await openSessionView("missed");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
@@ -149,9 +148,9 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
     await env.PLATFORM_DIRECTORY_DATABASE.prepare(
         "INSERT INTO machine_access_revocations (account_id, revoked_at) VALUES (?, ?)",
     )
-        .bind(projectId, Date.now())
+        .bind(computerId, Date.now())
         .run();
-    expect(await runDurableObjectAlarm(env.RUNTIME_RELAY.getByName(runtimeId))).toBe(true);
+    expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });
     daemon.close(1000, "done");

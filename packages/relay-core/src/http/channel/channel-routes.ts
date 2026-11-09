@@ -10,12 +10,12 @@ export function createChannelRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
-        .put("/:channelId/catalog", bodyParser<RelayHttpEnvironment>(["agents"]), async (context) => {
+        .put("/:computerId/catalog", bodyParser<RelayHttpEnvironment>(["agents"]), async (context) => {
             const useCases = context.env.services.channels;
             const body = context.req.valid("json");
             const agents = validateAgents(body["agents"]);
             await useCases.updateAgentCatalog(
-                validateIdentifier(context.req.param("channelId"), "channel_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 context.req.header(RUNTIME_SUCCESSOR_CREDENTIAL_HEADER) ?? null,
                 agents,
@@ -23,11 +23,11 @@ export function createChannelRoutes() {
             );
             return new Response(null, { status: 204 });
         })
-        .post("/:channelId/access-grants", async (context) => {
+        .post("/:computerId/access-grants", async (context) => {
             const useCases = context.env.services.channels;
             return context.json(
                 await useCases.createAccessGrant(
-                    validateIdentifier(context.req.param("channelId"), "channel_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     context.req.raw.signal,
                 ),
@@ -35,14 +35,14 @@ export function createChannelRoutes() {
             );
         })
         .post(
-            "/:channelId/access-grants/:grantId/redeem",
+            "/:computerId/access-grants/:grantId/redeem",
             bodyParser<RelayHttpEnvironment>(["grantSecret"]),
             async (context) => {
                 const useCases = context.env.services.channels;
                 const body = context.req.valid("json");
                 return context.json(
                     await useCases.redeemAccessGrant(
-                        validateIdentifier(context.req.param("channelId"), "channel_id"),
+                        validateIdentifier(context.req.param("computerId"), "computer_id"),
                         validateIdentifier(context.req.param("grantId"), "grant_id"),
                         readString(body, "grantSecret", 256),
                         context.req.raw.signal,
@@ -50,41 +50,41 @@ export function createChannelRoutes() {
                 );
             },
         )
-        .get("/:channelId/linked-devices", async (context) => {
+        .get("/:computerId/linked-devices", async (context) => {
             const useCases = context.env.services.channels;
             return context.json({
                 devices: await useCases.listLinkedDevices(
-                    validateIdentifier(context.req.param("channelId"), "channel_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     context.req.raw.signal,
                 ),
             });
         })
-        .delete("/:channelId/linked-devices/:credentialId", async (context) => {
+        .delete("/:computerId/linked-devices/:credentialId", async (context) => {
             const useCases = context.env.services.channels;
             await useCases.revokeLinkedDevice(
-                validateIdentifier(context.req.param("channelId"), "channel_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 validateIdentifier(context.req.param("credentialId"), "credential_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
             return new Response(null, { status: 204 });
         })
-        .get("/:channelId", async (context) => {
+        .get("/:computerId", async (context) => {
             const useCases = context.env.services.channels;
             return context.json(
                 await useCases.readChannel(
-                    validateIdentifier(context.req.param("channelId"), "channel_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     context.req.raw.signal,
                 ),
             );
         })
-        .get("/:channelId/host", async (context) => {
+        .get("/:computerId/host", async (context) => {
             const useCases = context.env.services.channels;
             const request = context.req.raw;
             const access = await useCases.authorizeHost(
-                validateIdentifier(context.req.param("channelId"), "channel_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(request),
                 request.signal,
             );

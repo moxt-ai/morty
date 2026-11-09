@@ -1,5 +1,5 @@
 import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../entity/authentication/project-authentication.ts";
-import { ProjectScope } from "../entity/do/session.ts";
+import { ComputerScope } from "../entity/do/session.ts";
 import type { ProjectCredentialAuthority } from "../gateway/project-access-authorizer.ts";
 import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
@@ -31,20 +31,20 @@ function createRuntimeRelayDependencies(cx: {
     };
 }) {
     /** Null when the Project is no longer served: none of its credentials remain active. */
-    const credentialService = async (scope: ProjectScope, signal: AbortSignal) => {
-        const project = await cx.storages.projectDirectory.resolve(scope.projectId, signal);
+    const credentialService = async (scope: ComputerScope, signal: AbortSignal) => {
+        const project = await cx.storages.projectDirectory.resolve(scope.computerId, signal);
         signal.throwIfAborted();
         if (project === null) {
             return null;
         }
-        if (project.projectId !== scope.projectId) {
+        if (project.computerId !== scope.computerId) {
             throw new Error("The Project placement is invalid");
         }
         return new ChannelCredentialService(cx.storages.projectStores.resolve(project.storagePlacement));
     };
     const credentials: RuntimeCredentials = {
         authorizeHostMessage: async (identity, permission, signal) => {
-            const service = await credentialService(new ProjectScope(identity.projectId), signal);
+            const service = await credentialService(new ComputerScope(identity.computerId), signal);
             if (service === null) {
                 return "revoked";
             }
@@ -61,7 +61,7 @@ function createRuntimeRelayDependencies(cx: {
                     if (
                         !(await service.isRuntimeActive(identity, signal)) ||
                         !(await cx.gateways.projectCredentials.grants(
-                            identity.projectId,
+                            identity.computerId,
                             credentialId,
                             PROJECT_HOST_PERMISSIONS,
                             signal,
@@ -73,7 +73,7 @@ function createRuntimeRelayDependencies(cx: {
                         return "granted";
                     }
                     return (await cx.gateways.projectCredentials.grants(
-                        identity.projectId,
+                        identity.computerId,
                         credentialId,
                         [permission],
                         signal,
@@ -89,7 +89,7 @@ function createRuntimeRelayDependencies(cx: {
                 return "revoked";
             }
             return (await cx.gateways.projectCredentials.grantsSessionCredential(
-                identity.projectId,
+                identity.computerId,
                 identity.credential.credentialId,
                 identity.credential.issuedAt,
                 [ProjectPermission.SessionRead],
@@ -99,16 +99,16 @@ function createRuntimeRelayDependencies(cx: {
                 : "revoked";
         },
         isRuntimeActive: async (identity, signal) => {
-            const service = await credentialService(new ProjectScope(identity.projectId), signal);
+            const service = await credentialService(new ComputerScope(identity.computerId), signal);
             return service !== null && (await service.isRuntimeActive(identity, signal));
         },
     };
     const services = {
         credentials,
         connections: new RuntimeConnectionService(new RuntimeConnectionStorage(cx.database)),
-        channel: (runtimeId: string, scope: ProjectScope) =>
+        channel: (scope: ComputerScope) =>
             new ChannelActor({
-                config: { projectId: scope.projectId, runtimeId },
+                config: { computerId: scope.computerId },
                 gateways: {
                     peers: cx.gateways.peers,
                     ...(cx.gateways.notifications === undefined ? {} : { notifications: cx.gateways.notifications }),

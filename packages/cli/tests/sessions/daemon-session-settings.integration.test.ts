@@ -257,7 +257,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),
@@ -361,7 +361,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),
@@ -472,7 +472,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),
@@ -593,7 +593,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),
@@ -697,7 +697,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),
@@ -809,7 +809,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),
@@ -931,7 +931,7 @@ describe("daemon session configuration boundary", () => {
         );
         const config = createRuntimeConfig(
             {
-                channelId: "channel_alpha",
+                computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
                 credentials: memoryRuntimeCredentials("d".repeat(43)),

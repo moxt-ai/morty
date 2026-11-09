@@ -309,6 +309,13 @@
             "when": 1794201285355,
             "tag": "0055_drop_machine_instructions",
             "breakpoints": true
+        },
+        {
+            "idx": 56,
+            "version": "6",
+            "when": 1794208946048,
+            "tag": "0056_computer_authorization",
+            "breakpoints": true
         }
     ]
 }

@@ -17,7 +17,7 @@ it("Given a credential outside the Runtime token format, When an embedding host 
                 connection: {
                     kind: "provided",
                     connection: {
-                        channelId: "channel-1",
+                        computerId: "channel-1",
                         defaultWorkspace: join(directory, "workspace"),
                         relayUrl: "wss://relay.example.com/morty/api/v1/runtimes/connect",
                         credentials: memoryRuntimeCredentials("a".repeat(31)),

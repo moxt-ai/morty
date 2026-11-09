@@ -1,11 +1,11 @@
 import { SESSION_CLOSED_ERROR_CODE, type SessionOperationFailedEvent } from "@morty-build/client/protocol";
 import type { HttpError } from "../http-error.ts";
 
-export class ProjectScope {
-    readonly projectId: string;
+export class ComputerScope {
+    readonly computerId: string;
 
-    constructor(projectId: string) {
-        this.projectId = projectId;
+    constructor(computerId: string) {
+        this.computerId = computerId;
     }
 }
 

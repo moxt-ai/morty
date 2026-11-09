@@ -31,10 +31,10 @@ const recoveryTokenSchema = v.pipe(
     v.string(),
     v.regex(/^morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
 );
-const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
+const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const botIdSchema = v.custom<Identifier>(isIdentifier);
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
-const identityFields = { token: tokenSchema, botId: botIdSchema, userId: userIdSchema, projectId: projectIdSchema };
+const identityFields = { token: tokenSchema, botId: botIdSchema, userId: userIdSchema, computerId: computerIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
 /**
  * The Project a well-formed transfer code names, or null when the code cannot
@@ -224,7 +224,7 @@ export class AnonymousIdentityApi {
         const management = new ManagementApi({
             fetchRequest: this.#fetchRequest,
             origin: this.#origin,
-            projectId: identity.projectId,
+            computerId: identity.computerId,
             getToken: async (requestSignal) => {
                 requestSignal.throwIfAborted();
                 return identity.token;
@@ -282,8 +282,8 @@ export class AnonymousIdentityApi {
         await withStoredAccessLock(signal, () => this.#redeemTransfer(code, signal));
 
     readonly #redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
-        const projectId = transferCodeProject(code);
-        const replaces = projectId === null ? null : storedTokenForProject(projectId);
+        const computerId = transferCodeProject(code);
+        const replaces = computerId === null ? null : storedTokenForProject(computerId);
         const redemptionKey = transferRedemptionKey(code);
         const identity = v.parse(
             identitySchema,
@@ -389,13 +389,13 @@ export class AnonymousIdentityApi {
 
     readonly createRecoveryToken = async (
         accessToken: string,
-        projectId: string,
+        computerId: string,
         signal: AbortSignal,
     ): Promise<string> => {
         const result = v.parse(
             v.object({ token: recoveryTokenSchema }),
             await this.#request(
-                `/projects/${encodeURIComponent(v.parse(projectIdSchema, projectId))}/identity/recovery-token`,
+                `/computers/${encodeURIComponent(v.parse(computerIdSchema, computerId))}/identity/recovery-token`,
                 { method: "POST", headers: { authorization: `Bearer ${v.parse(tokenSchema, accessToken)}` } },
                 signal,
             ),
@@ -407,7 +407,7 @@ export class AnonymousIdentityApi {
         this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
-        const scope = { botId: identity.botId, projectId: identity.projectId, userId: identity.userId };
+        const scope = { botId: identity.botId, computerId: identity.computerId, userId: identity.userId };
         saveAccess(scope, identity.token);
         writeIdentityScope(scope);
     };
@@ -420,7 +420,7 @@ export class AnonymousIdentityApi {
             return v.parse(
                 anonymousSessionSchema,
                 await this.#request(
-                    `/projects/${encodeURIComponent(identity.projectId)}/session`,
+                    `/computers/${encodeURIComponent(identity.computerId)}/session`,
                     {
                         method: "GET",
                         headers: {
@@ -452,8 +452,8 @@ export class AnonymousIdentityApi {
     readonly #url = (path: string): URL => {
         const scope = readIdentityScope();
         const scopedPath =
-            scope !== null && !path.startsWith("/projects/") && path !== "/identity/transfers/redeem"
-                ? `/projects/${encodeURIComponent(scope.projectId)}${path}`
+            scope !== null && !path.startsWith("/computers/") && path !== "/identity/transfers/redeem"
+                ? `/computers/${encodeURIComponent(scope.computerId)}${path}`
                 : path;
         return new URL(`/morty/api${scopedPath}`, this.#origin);
     };

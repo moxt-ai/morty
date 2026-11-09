@@ -4,12 +4,12 @@ import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const nativeSessionFork = sqliteTable(
     "native_session_forks",
     {
-        projectId: text("project_id").notNull(),
+        computerId: text("project_id").notNull(),
         operationId: text("operation_id").notNull(),
         requestHash: text("request_hash").notNull(),
         // The first attempt's identity survives losing the Runtime reply. Older rows remain unrecoverable.
         attemptJson: text("attempt_json"),
         resultJson: text("result_json"),
     },
-    (table) => [primaryKey({ columns: [table.projectId, table.operationId] })],
+    (table) => [primaryKey({ columns: [table.computerId, table.operationId] })],
 );

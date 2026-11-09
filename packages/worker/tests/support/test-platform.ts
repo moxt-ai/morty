@@ -37,7 +37,7 @@ export async function startTestPlatform(
             baseUrl: bindings.origin,
             service,
             connectAgent: async (
-                projectId: string,
+                computerId: string,
                 agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],
                 nativeSessionIds?: ReadonlySet<string>,
             ) => {
@@ -59,7 +59,7 @@ export async function startTestPlatform(
                         ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
                     },
                     origin: bindings.origin,
-                    projectId,
+                    computerId,
                     server: app,
                     signal: cancellation.signal,
                 });

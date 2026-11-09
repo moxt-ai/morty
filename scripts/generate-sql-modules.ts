@@ -74,11 +74,11 @@ await writeMigrationModule(
 );
 await writeMigrationModule(
     join(platform, "src/generated/project-do-migrations.ts"),
-    "projectDurableObjectMigrations",
+    "computerDurableObjectMigrations",
     await sqlFiles(join(platform, "migrations/project-do")),
 );
 await writeMigrationModule(
     join(worker, "src/generated/project-do-migrations.ts"),
-    "projectDurableObjectMigrations",
+    "computerDurableObjectMigrations",
     await sqlFiles(join(worker, "migrations/project-do")),
 );

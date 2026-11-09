@@ -1,12 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
-import type { ProjectDO } from "../../../relay/src/durable-objects/project-do.ts";
-import { RuntimeRelay as PlatformRuntimeRelay } from "../../../relay/src/durable-objects/runtime-relay.ts";
+
+import { ComputerRelay as PlatformRuntimeRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
 import type { ConfiguredPlatformRelayBindings } from "../../../relay/src/platform-worker.ts";
 import { errorMiddleware, rethrowHonoError } from "../../../relay-core/src/http/middleware/error-middleware.ts";
 import platform from "../../src/platform-worker-entry.ts";
-
-export { ProjectDO } from "../../../relay/src/durable-objects/project-do.ts";
 
 function failure(kind: string): unknown {
     if (kind === "primitive") {
@@ -48,17 +46,20 @@ function failure(kind: string): unknown {
 }
 
 // The exported Cloudflare callback is the platform fault-injection boundary.
-export class RuntimeRelay extends PlatformRuntimeRelay {
+export class ComputerRelay extends PlatformRuntimeRelay {
     override async webSocketClose(socket: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
         await super.webSocketClose(socket, code, reason, wasClean);
         console.debug({ event: "test_websocket_close_completed", closeCode: code });
     }
 
     override async fetch(request: Request): Promise<Response> {
-        if (request.headers.get("x-test-runtime-failure") === "1") {
+        if (
+            request.headers.get("x-test-runtime-failure") === "1" &&
+            new URL(request.url).pathname.endsWith("/daemon")
+        ) {
             throw Object.assign(new Error("Runtime DO overloaded"), { overloaded: true });
         }
-        if (new URL(request.url).pathname === "/inject-websocket-error") {
+        if (new URL(request.url).pathname.endsWith("/inject-websocket-error")) {
             const socket = this.ctx.getWebSockets("daemon")[0];
             if (socket === undefined) {
                 throw new Error("Expected a connected daemon");
@@ -85,9 +86,8 @@ export class UnavailableProject extends DurableObject {
 }
 
 interface TestBindings extends ConfiguredPlatformRelayBindings {
-    readonly RUNTIME_RELAY: DurableObjectNamespace<RuntimeRelay>;
-    // Stands in for PROJECT_RELAY: every request and operation sent to it fails.
-    readonly UNAVAILABLE_PROJECT: DurableObjectNamespace<ProjectDO>;
+    // Stands in for COMPUTER_RELAY: every request and operation sent to it fails.
+    readonly UNAVAILABLE_PROJECT: DurableObjectNamespace<ComputerRelay>;
 }
 
 const application = new Hono<{ Bindings: TestBindings }>()
@@ -96,7 +96,9 @@ const application = new Hono<{ Bindings: TestBindings }>()
     .post("/failure/:kind", (context) => {
         throw failure(context.req.param("kind"));
     })
-    .all("*", (context) => context.env.RUNTIME_RELAY.getByName("runtime-logging").fetch(context.req.raw));
+    .all("/computers/:computerId/*", (context) =>
+        context.env.COMPUTER_RELAY.getByName(context.req.param("computerId")).fetch(context.req.raw),
+    );
 
 export default {
     fetch: (request: Request, environment: TestBindings) => {
@@ -104,7 +106,7 @@ export default {
             return platform.fetch(
                 request,
                 request.headers.has("x-test-project-failure")
-                    ? { ...environment, PROJECT_RELAY: environment.UNAVAILABLE_PROJECT }
+                    ? { ...environment, COMPUTER_RELAY: environment.UNAVAILABLE_PROJECT }
                     : environment,
             );
         }

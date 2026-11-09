@@ -151,7 +151,7 @@ def main():
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
-    secrets_by_component = {'platform': {'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    secrets_by_component = {'platform': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET'], 'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
     if len(secrets_by_component['platform']['MORTY_SESSION_SIGNING_SECRET']) < 32:
         raise ValueError('The Session credential signing secret must be at least 32 characters')
     app_secret = secrets_by_component['morty'].get('MORTY_SERVICE_SECRET')
@@ -234,7 +234,7 @@ def main():
                     raise ValueError('Active Worker deployment does not match the accepted source')
                 deployed[component] = deployment
             platform_secrets = cloud('/workers/scripts/' + expected['platform'] + '/secrets')
-            if 'MORTY_SESSION_SIGNING_SECRET' not in {item['name'] for item in platform_secrets}:
+            if not secrets_by_component['platform'].keys() <= {item['name'] for item in platform_secrets}:
                 raise ValueError('The deployed Session signing secret binding is missing')
             run(['python3', str(ROOT / 'deployment/verify-session-access.py')], env)
         except Exception:

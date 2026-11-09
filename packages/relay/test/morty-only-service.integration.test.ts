@@ -30,21 +30,21 @@ it("Given a scoped service credential, When its authoritative grant is removed, 
     if (
         typeof project !== "object" ||
         project === null ||
-        !("projectId" in project) ||
-        typeof project.projectId !== "string"
+        !("computerId" in project) ||
+        typeof project.computerId !== "string"
     ) {
         throw new Error("Expected a created Project");
     }
-    const { projectId } = project;
+    const { computerId } = project;
     const scoped = await seedMortyCredential(
         env.PLATFORM_DIRECTORY_DATABASE,
         service.appId,
         ["runtime:read"],
-        [projectId],
+        [computerId],
     );
     const read = () =>
         worker.fetch(
-            new Request(`https://relay.test${MORTY_API_PREFIX}/v1/projects/${projectId}/runtimes`, {
+            new Request(`https://relay.test${MORTY_API_PREFIX}/v1/computers/${computerId}/runtimes`, {
                 headers: { authorization: `Bearer ${scoped.credential}` },
             }),
             env,
@@ -55,7 +55,7 @@ it("Given a scoped service credential, When its authoritative grant is removed, 
     expect((await read()).status).toBe(403);
     await db
         .insert(machineAccountGrant)
-        .values({ credentialId: scoped.credentialId, projectId, createdAt: Date.now() });
+        .values({ credentialId: scoped.credentialId, computerId, createdAt: Date.now() });
     expect((await read()).status).toBe(200);
 });
 

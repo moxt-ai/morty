@@ -27,15 +27,13 @@ const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const INSTALLATION_POINTER_KEYS: readonly string[] = ["installationId", "version"];
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
-    "channelId",
+    "computerId",
     "connectionId",
     "defaultWorkspace",
     "installationId",
     "kind",
-    "pairingId",
     "relayOrigin",
     "credentials",
-    "runtimeId",
     "version",
 ];
 
@@ -137,27 +135,23 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
-    const channelId = value["channelId"];
     const connectionId = value["connectionId"];
     const defaultWorkspace = value["defaultWorkspace"];
     const storedInstallationId = value["installationId"];
-    const pairingId = value["pairingId"];
+    const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];
     const credentials = value["credentials"];
-    const runtimeId = value["runtimeId"];
     if (
         (activation !== "active" && activation !== "stopped") ||
-        typeof channelId !== "string" ||
+        typeof computerId !== "string" ||
         typeof connectionId !== "string" ||
         typeof defaultWorkspace !== "string" ||
         typeof storedInstallationId !== "string" ||
-        typeof pairingId !== "string" ||
         typeof relayOrigin !== "string" ||
         !isRecord(credentials) ||
         !hasExactKeys(credentials, ["current", "successor"]) ||
         typeof credentials["current"] !== "string" ||
-        (credentials["successor"] !== null && typeof credentials["successor"] !== "string") ||
-        typeof runtimeId !== "string"
+        (credentials["successor"] !== null && typeof credentials["successor"] !== "string")
     ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
@@ -165,15 +159,13 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         activation,
         validateInstallationId(storedInstallationId),
         validateConnectionId(connectionId),
-        validateIdentifier(channelId, "invalid_connection"),
+        validateIdentifier(computerId, "invalid_connection"),
         defaultWorkspace,
-        pairingId.length === 0 ? "" : validateIdentifier(pairingId, "invalid_connection"),
         parseRelayOrigin(relayOrigin),
         {
             current: validateRuntimeCredential(credentials["current"]),
             successor: credentials["successor"] === null ? null : validateRuntimeCredential(credentials["successor"]),
         },
-        validateIdentifier(runtimeId, "invalid_connection"),
     );
 }
 
@@ -319,12 +311,10 @@ export class RuntimeInstallationStore {
             "active",
             this.installationId,
             connectionId(),
-            validateIdentifier(input.channelId, "invalid_connection"),
+            validateIdentifier(input.computerId, "invalid_connection"),
             input.defaultWorkspace,
-            input.pairingId.length === 0 ? "" : validateIdentifier(input.pairingId, "invalid_pairing_id"),
             parseRelayOrigin(input.relayOrigin.toString()),
             { current: validateRuntimeCredential(input.runtimeCredential), successor: null },
-            validateIdentifier(input.runtimeId, "invalid_connection"),
         );
         await this.changePairing(async () => {
             await this.overwriteConnection(stored, signal);
@@ -348,15 +338,6 @@ export class RuntimeInstallationStore {
         return current === null ? [] : [current];
     };
 
-    readonly readConnectionForPairing = async (
-        pairingId: string,
-        signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection | null> => {
-        const normalizedPairingId = validateIdentifier(pairingId, "invalid_pairing_id");
-        const connections = await this.listConnections(signal);
-        return connections.find((connection) => connection.pairingId === normalizedPairingId) ?? null;
-    };
-
     readonly setConnectionActivation = async (
         connectionId: string,
         activation: RuntimeConnectionActivation,
@@ -368,12 +349,10 @@ export class RuntimeInstallationStore {
                 activation,
                 connection.installationId,
                 connection.connectionId,
-                connection.channelId,
+                connection.computerId,
                 connection.defaultWorkspace,
-                connection.pairingId,
                 connection.relayOrigin,
                 connection.credentials,
-                connection.runtimeId,
             );
             await this.overwriteConnection(updated, signal);
             return updated;
@@ -427,12 +406,10 @@ export class RuntimeInstallationStore {
                 connection.activation,
                 connection.installationId,
                 connection.connectionId,
-                connection.channelId,
+                connection.computerId,
                 connection.defaultWorkspace,
-                connection.pairingId,
                 connection.relayOrigin,
                 credentials,
-                connection.runtimeId,
             ),
             signal,
         );
@@ -454,15 +431,13 @@ export class RuntimeInstallationStore {
             this.pairingPath,
             {
                 activation: connection.activation,
-                channelId: connection.channelId,
+                computerId: connection.computerId,
                 connectionId: connection.connectionId,
                 defaultWorkspace: connection.defaultWorkspace,
                 installationId: connection.installationId,
                 kind: connection.kind,
-                pairingId: connection.pairingId,
                 relayOrigin: connection.relayOrigin.toString(),
                 credentials: connection.credentials,
-                runtimeId: connection.runtimeId,
                 version: 7,
             },
             signal,

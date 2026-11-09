@@ -17,12 +17,10 @@ describe("Runtime installation storage", () => {
             const installation = await RuntimeInstallationStore.open(join(directory, "data"), signal);
             const connection = await installation.saveConnection(
                 {
-                    channelId: "channel_directory",
+                    computerId: "channel_directory",
                     defaultWorkspace: join(directory, "workspace"),
-                    pairingId: "pairing_directory",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_directory",
                 },
                 signal,
             );
@@ -46,12 +44,10 @@ describe("Runtime installation storage", () => {
             );
             const connection = await original.saveConnection(
                 {
-                    channelId: "channel_context",
+                    computerId: "channel_context",
                     defaultWorkspace: join(stateRoot, "workspace"),
-                    pairingId: "pairing_context",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_context",
                 },
                 signal,
             );
@@ -63,12 +59,10 @@ describe("Runtime installation storage", () => {
             await expect(engine.readConnection(connection.connectionId, signal)).resolves.toEqual(connection);
             const saved = await engine.saveConnection(
                 {
-                    channelId: "channel_new",
+                    computerId: "channel_new",
                     defaultWorkspace: join(stateRoot, "workspace"),
-                    pairingId: "pairing_new",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "b".repeat(43),
-                    runtimeId: "runtime_new",
                 },
                 signal,
             );
@@ -98,15 +92,13 @@ describe("Runtime installation storage", () => {
                 JSON.stringify({
                     activation: "active",
                     applicationId: "build.morty.cli",
-                    channelId: "old_channel",
+                    computerId: "old_channel",
                     connectionId,
                     defaultWorkspace: "/workspace/old",
                     installationId: installation.installationId,
                     kind: "verified",
-                    pairingId: "old_pairing",
                     relayOrigin: "https://relay.example.com/",
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "old_runtime",
                     version: 4,
                 }),
                 { mode: 0o600 },
@@ -122,47 +114,43 @@ describe("Runtime installation storage", () => {
     it("Given two isolated Engine data directories, When each saves a Runtime connection, Then each resumes only its own opaque connection", async () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-runtime-installations-"));
         const signal = new AbortController().signal;
-        const channelId = "shared:channel";
+        const computerId = "shared:channel";
         try {
             const morty = await RuntimeInstallationStore.open(join(stateRoot, "morty-data"), signal);
             const moxt = await RuntimeInstallationStore.open(join(stateRoot, "moxt-data"), signal);
             await morty.saveConnection(
                 {
-                    channelId,
+                    computerId,
                     defaultWorkspace: "/workspace/morty",
-                    pairingId: "pairing_morty",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_morty",
                 },
                 signal,
             );
             const moxtConnection = await moxt.saveConnection(
                 {
-                    channelId,
+                    computerId,
                     defaultWorkspace: "/workspace/moxt",
-                    pairingId: "pairing_moxt",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "b".repeat(43),
-                    runtimeId: "runtime_moxt",
                 },
                 signal,
             );
 
             const resumed = await moxt.readConnection(moxtConnection.connectionId, signal);
 
-            expect(resumed.channelId).toBe(channelId);
+            expect(resumed.computerId).toBe(computerId);
             expect(resumed).toBeInstanceOf(VerifiedRuntimeConnection);
             if (!(resumed instanceof VerifiedRuntimeConnection)) {
                 throw new Error("Expected a verified Runtime connection");
             }
-            expect(resumed.runtimeId).toBe("runtime_moxt");
+            expect(resumed.computerId).toBe(computerId);
             await expect(moxt.listConnections(signal)).resolves.toEqual([resumed]);
-            await expect(moxt.readConnectionForPairing("pairing_moxt", signal)).resolves.toEqual(resumed);
+            await expect(moxt.currentConnection(signal)).resolves.toEqual(resumed);
             expect(morty.pairingPath).not.toContain("moxt-data");
             expect(moxt.pairingPath).toContain("moxt-data");
-            expect(morty.pairingPath).not.toContain(channelId);
-            expect(moxt.pairingPath).not.toContain(channelId);
+            expect(morty.pairingPath).not.toContain(computerId);
+            expect(moxt.pairingPath).not.toContain(computerId);
 
             await expect(morty.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
                 code: "connection_not_found",

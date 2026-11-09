@@ -100,11 +100,11 @@ function NetworkLatencyCard({ children }: { readonly children: ReactNode }) {
     );
 }
 
-function NetworkLatencyIntro({ projectId }: { readonly projectId: string | null }) {
+function NetworkLatencyIntro({ computerId }: { readonly computerId: string | null }) {
     return (
         <div className="text-14 leading-5 text-muted-foreground">
             <p>Round-trip latency for this browser and its connected Runtime.</p>
-            <p className="mt-1">Relay location: {projectLocationLabel(projectId ?? "")}</p>
+            <p className="mt-1">Relay location: {projectLocationLabel(computerId ?? "")}</p>
         </div>
     );
 }
@@ -987,7 +987,7 @@ export function ConversationSidebar({
                                                 onClose={diagnostic.close}
                                             >
                                                 <div className="flex flex-col gap-0">
-                                                    <NetworkLatencyIntro projectId={workspace.projectId} />
+                                                    <NetworkLatencyIntro computerId={workspace.computerId} />
                                                     {diagnostic.state.kind === "measuring" ? (
                                                         <NetworkLatencySkeleton />
                                                     ) : diagnostic.state.kind === "failed" ? (

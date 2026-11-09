@@ -37,9 +37,8 @@ async function createPairingRelay(): Promise<PairingRelay> {
             response.writeHead(200, { "content-type": "application/json" });
             response.end(
                 JSON.stringify({
-                    channelId: "unattended-channel",
+                    computerId: "unattended-computer",
                     runtimeCredential: "u".repeat(32),
-                    runtimeId: "unattended-runtime",
                 }),
             );
         });
@@ -107,15 +106,15 @@ async function runCli(
 
 describe("pairing a machine without a local Agent", () => {
     it("Given a pairing code piped to the CLI, When the user pairs with --code-stdin, Then the machine redeems that code without it appearing in the command line", async () => {
-        const home = await mkdtemp(join(tmpdir(), "morty-piped-pairing-"));
+        const home = await mkdtemp(join(tmpdir(), "morty-unattended-computer-"));
         const relay = await createPairingRelay();
         const environment = { ...agentlessEnvironment(join(home, "state")), HOME: home, TMPDIR: home };
         const pairing = [
             "pair",
             "--url",
             relay.origin,
-            "--pairing",
-            "piped-pairing",
+            "--computer",
+            "unattended-computer",
             "--workspace",
             join(home, "workspace"),
             "--code-stdin",
@@ -140,7 +139,7 @@ describe("pairing a machine without a local Agent", () => {
     });
 
     it("Given no supported Agent is discoverable, When the machine redeems its pairing, Then it pairs and advertises an empty Agent directory", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-unattended-pairing-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-unattended-computer-"));
         const relay = await createPairingRelay();
 
         try {
@@ -154,7 +153,7 @@ describe("pairing a machine without a local Agent", () => {
                 {
                     defaultWorkspace: join(stateDirectory, "workspace"),
                     pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
-                    pairingId: "unattended-pairing",
+                    computerId: "unattended-computer",
                     relayOrigin: relay.origin,
                 },
                 AbortSignal.timeout(20_000),
@@ -163,8 +162,7 @@ describe("pairing a machine without a local Agent", () => {
             expect(
                 await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(5_000)),
             ).toMatchObject({
-                channelId: "unattended-channel",
-                runtimeId: "unattended-runtime",
+                computerId: "unattended-computer",
             });
             expect(relay.claims).toHaveLength(1);
             expect(relay.claims[0]).toMatchObject({
@@ -192,7 +190,7 @@ describe("pairing a machine without a local Agent", () => {
                 {
                     defaultWorkspace: join(stateDirectory, "workspace"),
                     pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV",
-                    pairingId: "unattended-pairing",
+                    computerId: "unattended-computer",
                     relayOrigin: relay.origin,
                 },
                 AbortSignal.timeout(20_000),

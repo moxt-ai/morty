@@ -16,7 +16,7 @@ type NativeSessionDirectory =
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
-          readonly runtimeId: string;
+          readonly computerId: string;
           readonly discoveryId: string;
           readonly agentRef: string;
           readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
@@ -47,7 +47,7 @@ type ForkIntent = {
 };
 
 export interface NativeSessionStore {
-    /** The agent tab the user chose, by `runtimeId:agentRef`; the tabs themselves come from the Runtime configuration. */
+    /** The agent tab the user chose, by `computerId:agentRef`; the tabs themselves come from the Runtime configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -185,7 +185,7 @@ export const createNativeSessionStore = (
                 set({ selected });
                 const result = await requests.nativeSessions(
                     botId,
-                    agent.runtimeId,
+                    agent.computerId,
                     {
                         action: "list",
                         agentId: agent.agentRef,
@@ -204,7 +204,7 @@ export const createNativeSessionStore = (
                 set({
                     directory: {
                         kind: "ready",
-                        runtimeId: agent.runtimeId,
+                        computerId: agent.computerId,
                         discoveryId: result.sessionId,
                         agentRef: agent.agentRef,
                         capabilities: result.capabilities,
@@ -246,7 +246,7 @@ export const createNativeSessionStore = (
                     : directory.kind === "agent-unavailable"
                       ? `agent-unavailable:${selected}`
                       : directory.kind === "ready"
-                        ? `ready:${harnessValue(directory.runtimeId, directory.agentRef)}`
+                        ? `ready:${harnessValue(directory.computerId, directory.agentRef)}`
                         : directory.kind === "loading"
                           ? directory.listing
                           : null;
@@ -275,7 +275,7 @@ export const createNativeSessionStore = (
             try {
                 const content = await requests.nativeSession(
                     botId,
-                    directory.runtimeId,
+                    directory.computerId,
                     {
                         agentId: directory.agentRef,
                         directoryId: entry.directoryId,
@@ -323,7 +323,7 @@ export const createNativeSessionStore = (
                     nativeSessionId: preview.entry.nativeSessionId,
                 };
                 const retained = get().forkIntent;
-                const target = JSON.stringify([directory.runtimeId, input]);
+                const target = JSON.stringify([directory.computerId, input]);
                 const forkIntent =
                     retained !== null && retained.target === target
                         ? retained
@@ -335,14 +335,14 @@ export const createNativeSessionStore = (
                     action === "fork"
                         ? await requests.forkNativeSession(
                               botId,
-                              directory.runtimeId,
+                              directory.computerId,
                               forkIntent.operationId,
                               input,
                               signal,
                           )
                         : await requests.nativeSessions(
                               botId,
-                              directory.runtimeId,
+                              directory.computerId,
                               {
                                   action,
                                   discoveryId: directory.discoveryId,
@@ -387,7 +387,7 @@ export const createNativeSessionStore = (
             try {
                 const result = await requests.nativeSessions(
                     botId,
-                    directory.runtimeId,
+                    directory.computerId,
                     {
                         action: "list",
                         agentId: directory.agentRef,
