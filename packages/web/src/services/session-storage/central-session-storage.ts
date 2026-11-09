@@ -131,34 +131,37 @@ export const transferRedemptionEntry = customSessionStorageEntry({
 
 /** Carries first-visit guidance from a successful native handoff to its session. */
 export const sessionWelcomeEntry = (
-    botId: string,
+    computerId: string,
     sessionTarget: NativeSessionTarget,
 ): SessionStorageEntry<"pending"> => ({
-    key: scopedKey("morty:session-welcome:v2:", botId, nativeSessionKey(sessionTarget)),
+    key: scopedKey("morty:session-welcome:v2:", computerId, nativeSessionKey(sessionTarget)),
     schema: v.literal("pending"),
     encode: (value) => v.parse(v.literal("pending"), value),
     decode: (raw) => (raw === "pending" ? "pending" : null),
 });
 
-export const newConversationDraftEntry = (botId: string): SessionStorageEntry<string> =>
+export const newConversationDraftEntry = (computerId: string): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
-        key: scopedKey("morty:message-draft:new:v1:", botId),
+        key: scopedKey("morty:message-draft:new:v1:", computerId),
         schema: messageDraftSchema,
     });
 
-export const sessionDraftEntry = (botId: string, sessionTarget: NativeSessionTarget): SessionStorageEntry<string> =>
+export const sessionDraftEntry = (
+    computerId: string,
+    sessionTarget: NativeSessionTarget,
+): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
-        key: scopedKey("morty:message-draft:session:v2:", botId, nativeSessionKey(sessionTarget)),
+        key: scopedKey("morty:message-draft:session:v2:", computerId, nativeSessionKey(sessionTarget)),
         schema: messageDraftSchema,
     });
 
 /** A submitted message the Runtime never took; a reload returns it to the Session's composer. */
 export const sessionUnsentMessageEntry = (
-    botId: string,
+    computerId: string,
     sessionTarget: NativeSessionTarget,
 ): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
-        key: scopedKey("morty:unsent-message:session:v2:", botId, nativeSessionKey(sessionTarget)),
+        key: scopedKey("morty:unsent-message:session:v2:", computerId, nativeSessionKey(sessionTarget)),
         schema: messageDraftSchema,
     });
 
@@ -179,11 +182,11 @@ export type ElicitationAnswerDrafts = v.InferOutput<typeof elicitationAnswerDraf
 
 /** Answers typed into the Agent's pending questions in a Session, by question; a reload returns them to the form. */
 export const elicitationAnswerDraftsEntry = (
-    botId: string,
+    computerId: string,
     sessionTarget: NativeSessionTarget,
 ): SessionStorageEntry<ElicitationAnswerDrafts> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:elicitation-answers:v2:", botId, nativeSessionKey(sessionTarget)),
+        key: scopedKey("morty:elicitation-answers:v2:", computerId, nativeSessionKey(sessionTarget)),
         schema: elicitationAnswerDraftsSchema,
         encode: (value) => JSON.stringify(v.parse(elicitationAnswerDraftsSchema, value)),
         decode: (raw) => {
@@ -214,11 +217,11 @@ export type AgentQuestionChoicesByMessage = v.InferOutput<typeof agentQuestionCh
  * position; returning to the Session or reloading keeps them until they are sent.
  */
 export const agentQuestionChoicesEntry = (
-    botId: string,
+    computerId: string,
     sessionTarget: NativeSessionTarget,
 ): SessionStorageEntry<AgentQuestionChoicesByMessage> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:agent-question-choices:v2:", botId, nativeSessionKey(sessionTarget)),
+        key: scopedKey("morty:agent-question-choices:v2:", computerId, nativeSessionKey(sessionTarget)),
         schema: agentQuestionChoicesSchema,
         encode: (value) => JSON.stringify(v.parse(agentQuestionChoicesSchema, value)),
         decode: (raw) => {
@@ -242,9 +245,9 @@ const unsentFirstMessageSchema = v.pipe(
 type UnsentFirstMessage = v.InferOutput<typeof unsentFirstMessageSchema>;
 
 /** A first message whose Session does not exist yet; a reload returns it to the new-conversation composer. */
-export const newConversationUnsentMessageEntry = (botId: string): SessionStorageEntry<UnsentFirstMessage> =>
+export const newConversationUnsentMessageEntry = (computerId: string): SessionStorageEntry<UnsentFirstMessage> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:unsent-message:new:v1:", botId),
+        key: scopedKey("morty:unsent-message:new:v1:", computerId),
         schema: unsentFirstMessageSchema,
         encode: (value) => JSON.stringify(v.parse(unsentFirstMessageSchema, value)),
         decode: (raw) => {
@@ -322,11 +325,11 @@ export type SessionPendingSubmission = v.InferOutput<typeof pendingSubmissionSch
 
 /** The unconfirmed request is a historical intent, separate from the next editable draft. */
 export const sessionPendingSubmissionEntry = (
-    botId: string,
+    computerId: string,
     sessionTarget: NativeSessionTarget,
 ): SessionStorageEntry<SessionPendingSubmission> =>
     customSessionStorageEntry({
-        key: scopedKey("morty:pending-submission:v2:", botId, nativeSessionKey(sessionTarget)),
+        key: scopedKey("morty:pending-submission:v2:", computerId, nativeSessionKey(sessionTarget)),
         schema: pendingSubmissionSchema,
         encode: (value) => JSON.stringify(v.parse(pendingSubmissionSchema, value)),
         decode: (raw) => {

@@ -31,7 +31,7 @@ export class ManagedSessionStorage {
         return database;
     };
 
-    readonly list = async (computerId: string, userId: string, botId: string, signal: AbortSignal) => {
+    readonly list = async (computerId: string, userId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
             .select({
@@ -46,7 +46,6 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
                     isNotNull(chatManagedSession.harness),
                     isNotNull(chatManagedSession.sessionId),
                 ),
@@ -59,13 +58,7 @@ export class ManagedSessionStorage {
         }));
     };
 
-    readonly save = async (
-        computerId: string,
-        userId: string,
-        botId: string,
-        target: NativeSessionTarget,
-        signal: AbortSignal,
-    ) => {
+    readonly save = async (computerId: string, userId: string, target: NativeSessionTarget, signal: AbortSignal) => {
         const value = v.parse(summarySchema, {
             ...decodeNativeSessionTarget(target),
             createdAt: Date.now(),
@@ -78,7 +71,6 @@ export class ManagedSessionStorage {
             .values({
                 computerId: value.computerId,
                 userId: value.userId,
-                botId,
                 resourceId: nativeSessionKey(target),
                 harness: value.harness,
                 sessionId: value.sessionId,
@@ -92,7 +84,6 @@ export class ManagedSessionStorage {
     readonly ownsSession = async (
         computerId: string,
         userId: string,
-        botId: string,
         target: NativeSessionTarget,
         signal: AbortSignal,
     ): Promise<boolean> => {
@@ -104,7 +95,6 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
                     eq(chatManagedSession.harness, decodeNativeSessionTarget(target).harness),
                     eq(chatManagedSession.sessionId, target.sessionId),
                 ),
@@ -117,7 +107,6 @@ export class ManagedSessionStorage {
     readonly findNative = async (
         projectId: string,
         userId: string,
-        botId: string,
         target: NativeSessionTarget,
         signal: AbortSignal,
     ): Promise<NativeSessionTarget | null> => {
@@ -129,7 +118,6 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, projectId),
                     eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
                     eq(chatManagedSession.harness, target.harness),
                     eq(chatManagedSession.sessionId, target.sessionId),
                 ),
@@ -142,7 +130,6 @@ export class ManagedSessionStorage {
     readonly archive = async (
         computerId: string,
         userId: string,
-        botId: string,
         target: NativeSessionTarget,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -153,7 +140,6 @@ export class ManagedSessionStorage {
                 and(
                     eq(chatManagedSession.computerId, computerId),
                     eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
                     eq(chatManagedSession.harness, decodeNativeSessionTarget(target).harness),
                     eq(chatManagedSession.sessionId, target.sessionId),
                 ),

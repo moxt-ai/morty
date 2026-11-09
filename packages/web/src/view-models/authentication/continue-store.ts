@@ -95,10 +95,7 @@ function initialState(): ContinueState {
 /** A same-origin destination that carries the redeemed identity in its query string. */
 function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): URL {
     const url = new URL(path, window.location.origin);
-    url.searchParams.set(
-        "identity",
-        encodeIdentityScope({ botId: identity.botId, computerId: identity.computerId, userId: identity.userId }),
-    );
+    url.searchParams.set("identity", encodeIdentityScope({ computerId: identity.computerId, userId: identity.userId }));
     return url;
 }
 
@@ -152,42 +149,32 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             });
             set({
                 diagnostics: {
-                    botId: identity.botId,
+                    computerId: identity.computerId,
                     harness: handoff.harness,
                     sessionId: handoff.sessionId,
-                    read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
-                    readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
+                    read: (parent) => chat.daemonDiagnostics(parent),
+                    readNetwork: (parent) => chat.networkDiagnostic(parent),
                 },
             });
             try {
                 // A handoff supplies a requested path, never filesystem authority.
                 // Resolve it through the Runtime before recording a browser preference.
-                const configuration = await chat.runtimeConfiguration(identity.botId, signal);
-                const directory = await chat.directory(identity.botId, handoff.workspace, signal);
+                const configuration = await chat.runtimeConfiguration(signal);
+                const directory = await chat.directory(handoff.workspace, signal);
                 signal.throwIfAborted();
-                saveLastCwdPreference(
-                    identity.botId,
-                    configuration.runtime.computerId,
-                    handoff.harness,
-                    directory.directory,
-                );
-                saveRecentCwdPreference(identity.botId, {
+                saveLastCwdPreference(configuration.runtime.computerId, handoff.harness, directory.directory);
+                saveRecentCwdPreference(identity.computerId, {
                     directory: directory.directory,
                     directoryLabel: directory.directoryLabel,
                 });
-                const session = await chat.continueNativeSession(
-                    identity.botId,
-                    handoff.harness,
-                    handoff.sessionId,
-                    signal,
-                );
+                const session = await chat.continueNativeSession(handoff.harness, handoff.sessionId, signal);
                 signal.throwIfAborted();
                 const visited = rememberedComputers().some(
                     (computer) => computerKey(computer.scope) === computerKey(identity) && computer.lastUsedAt > 0,
                 );
                 if (!visited) {
                     centralSessionStorage.write(
-                        sessionWelcomeEntry(identity.botId, session.result.ready.target),
+                        sessionWelcomeEntry(identity.computerId, session.result.ready.target),
                         "pending",
                     );
                 }

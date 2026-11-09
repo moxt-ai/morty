@@ -63,7 +63,7 @@ export interface SessionSettingsStore {
 
 /** The Session's settings on this page and the change the user asked of them, whichever pane shows them. */
 export function createSessionSettingsStore(options: {
-    readonly botId: string;
+    readonly computerId: string;
     readonly sessionTarget: NativeSessionTarget;
     readonly connection: SessionOperationConnection;
 }) {
@@ -157,7 +157,7 @@ export function createSessionSettingsStore(options: {
                     );
                     signal.throwIfAborted();
                     rememberAgentSettingChoice(
-                        options.botId,
+                        options.computerId,
                         binding.agentId,
                         option.type === "boolean"
                             ? { configId: option.id, kind: "boolean", value: booleanValue }

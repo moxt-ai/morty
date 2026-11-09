@@ -79,7 +79,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         const token = text(identity["token"], "token");
         const computerId = text(identity["computerId"], "project ID");
         const userId = text(identity["userId"], "user ID");
-        const botId = text(object(identity["bot"], "bot")["botId"], "bot ID");
+
         const chat = new ChatApi(stack.chatOrigin, signal);
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.
         await chat.useBrowserIdentity({ computerId, token });
@@ -118,7 +118,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
             { key: ANONYMOUS_CREDENTIAL_KEY_NAME, userId, token },
         );
         const url = new URL(stack.chatOrigin);
-        url.searchParams.set("identity", encodeIdentityScope({ botId, computerId, userId }));
+        url.searchParams.set("identity", encodeIdentityScope({ computerId, userId }));
         await page.goto(url.href);
         await page.getByRole("button", { name: "Open Session", exact: true }).click();
         const dialog = page.getByRole("dialog", { name: "Open Session" });

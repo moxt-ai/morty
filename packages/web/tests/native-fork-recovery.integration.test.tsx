@@ -39,15 +39,12 @@ test("Given a Fork completes before Morty loses its response, When the user retr
         await app.waitForView(() => getByRole(dialog, "alert"));
         const managed = async (): Promise<unknown> => {
             const response = await app.transport.fetch(
-                new Request(
-                    `${app.origin}/morty/api/chat/computers/${app.identity.computerId}/bots/${app.botId}/managed-sessions`,
-                    {
-                        method: "POST",
-                        headers: {
-                            authorization: `Bearer ${await app.identity.getToken(new AbortController().signal)}`,
-                        },
+                new Request(`${app.origin}/morty/api/chat/computers/${app.identity.computerId}/managed-sessions`, {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${await app.identity.getToken(new AbortController().signal)}`,
                     },
-                ),
+                }),
             );
             expect(response.status).toBe(200);
             return await response.json();

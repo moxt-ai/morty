@@ -6,7 +6,7 @@ import { computerObject } from "../src/gateway/computer-object-routing.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const replacementSchema = v.object({
-    bot: v.object({ botId: v.string(), displayName: v.string() }),
+    bot: v.object({ displayName: v.string() }),
     computerId: v.string(),
     // Independently retained setup decoder from main at 81157fb4: no new token format is required.
     token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
@@ -48,7 +48,6 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     expect(retryResponse.status).toBe(201);
     const retry = v.parse(replacementSchema, await retryResponse.json());
     expect(retry.computerId).toBe(replacement.computerId);
-    expect(retry.bot.botId).toBe(replacement.bot.botId);
     expect(retry.token).toBe(replacement.token);
 
     const sessionResponse = await worker.fetch(
@@ -68,14 +67,13 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     expect(previousCredential.status).toBe(401);
 
     const bindingResponse = await worker.fetch(
-        new Request(
-            `${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/management/bots/${replacement.bot.botId}/runtime-binding`,
-            { headers: { authorization: `Bearer ${replacement.token}` } },
-        ),
+        new Request(`${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/management/machine/runtime-binding`, {
+            headers: { authorization: `Bearer ${replacement.token}` },
+        }),
         environment,
     );
     expect(bindingResponse.status).toBe(200);
-    expect(await bindingResponse.json()).toMatchObject({ botId: replacement.bot.botId, computerId: null });
+    expect(await bindingResponse.json()).toMatchObject({ computerId: null });
 });
 
 test("Given a revoked successor local credential, When the previous Machine retries replacement, Then it cannot reactivate that credential", async () => {
@@ -151,11 +149,7 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     expect(
         (
             await worker.fetch(
-                projectRequest(
-                    completed.computerId,
-                    `/management/bots/${completed.bot.botId}/runtime-binding`,
-                    completed.token,
-                ),
+                projectRequest(completed.computerId, `/management/machine/runtime-binding`, completed.token),
                 fixture.environment(),
             )
         ).status,

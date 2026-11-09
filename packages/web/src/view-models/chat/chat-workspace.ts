@@ -58,10 +58,8 @@ export interface ChatWorkspace {
     readonly requests: BotChatApi;
     /** The application-owned bug-report dialog state, flowing to entry points. */
     readonly bugReportDialog: BugReportDialogStore;
-    /** The Bot this workspace talks to; also scopes diagnostics sources. */
-    readonly botId: string;
-    /** The project location label source for the sidebar, when known. */
-    readonly computerId: string | null;
+    /** The authenticated computer; scopes browser persistence and diagnostics. */
+    readonly computerId: string;
     readonly home: BotChatHomeStoreApi;
     readonly titles: SessionTitlesStore;
     readonly directory: StoreApi<ConversationDirectoryStore>;
@@ -125,7 +123,6 @@ function historyNavigation(onDraft: () => void) {
  */
 export function createChatWorkspace(options: {
     readonly clock: Clock;
-    readonly botId: string;
     /** Starts the page over once its Machine's revoked Runtime was replaced; see the home store's announcement. */
     readonly onRuntimeReplaced: () => void;
     readonly rememberedIdentity?: IdentityScope;
@@ -133,7 +130,7 @@ export function createChatWorkspace(options: {
     readonly accessNotice?: string | null;
     readonly entry?: "address" | "restore";
     readonly bugReportDialog: BugReportDialogStore;
-    readonly computerId?: string;
+    readonly computerId: string;
     readonly requests: BotChatApi;
     readonly url?: string;
     readonly createTransfer?: ((terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
@@ -151,7 +148,7 @@ export function createChatWorkspace(options: {
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
     };
 }): ChatWorkspace {
-    const botId = options.botId;
+    const computerId = options.computerId;
     const requests = options.requests;
     let rememberedSessionTarget: NativeSessionTarget | null = null;
     let initialVisitPending = true;
@@ -165,7 +162,7 @@ export function createChatWorkspace(options: {
         options.rememberedIdentity === undefined ? null : encodeIdentityScope(options.rememberedIdentity),
     );
     const home: BotChatHomeStoreApi = createBotChatHomeStore(requests, {
-        botId,
+        computerId,
         titles,
         draftConfiguration: () => draftConfiguration(draftControls.getState().settings),
         connectionAvailable: () => connectionPresentation(home.getState(), null).available,
@@ -230,7 +227,6 @@ export function createChatWorkspace(options: {
         url: options.url ?? window.location.href,
     });
     const directory = createConversationDirectoryStore(
-        botId,
         requests,
         (sessions) => {
             statuses.getState().directoryLoaded(sessions);
@@ -250,7 +246,7 @@ export function createChatWorkspace(options: {
     );
     const statuses = createConversationStatusStore(() => selectedConversationTarget(home.getState().selection));
     const draftControls = createDraftControlsStore(
-        botId,
+        computerId,
         requests,
         () => home.getState().runtimeConfiguration,
         () => runtimeRecovery.failed(),
@@ -262,7 +258,6 @@ export function createChatWorkspace(options: {
         dialogs: createSidebarDialogs({
             clock: options.clock,
             signal: () => operationsLifetime.signal,
-            botId,
             requests,
             runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
             createTransfer: (terms, signal) => {
@@ -306,7 +301,7 @@ export function createChatWorkspace(options: {
                 }
                 return options.networkDiagnostics.measureBrowserMorty(signal);
             },
-            measureServerHops: (signal) => requests.networkDiagnostic(botId, signal),
+            measureServerHops: (signal) => requests.networkDiagnostic(signal),
         }),
     };
     let chatLifetime = new AbortController();
@@ -405,7 +400,7 @@ export function createChatWorkspace(options: {
             return existing;
         }
         const state = createSessionPageState({
-            botId,
+            computerId,
             sessionTarget,
             clock: options.clock,
             lifetime: operationsLifetime.signal,
@@ -451,7 +446,7 @@ export function createChatWorkspace(options: {
             session: selection.session,
             sessionPage,
             attachmentSignal: operationsLifetime.signal,
-            botId,
+            computerId,
             requests,
             onReleased: (activity) => statuses.getState().paneReleased(sessionTarget, activity),
             titles,
@@ -464,9 +459,7 @@ export function createChatWorkspace(options: {
     };
 
     const linkedDevices =
-        options.computerId === undefined ||
-        options.linkedDevices === undefined ||
-        options.waitForLinkedDevicesChange === undefined
+        options.linkedDevices === undefined || options.waitForLinkedDevicesChange === undefined
             ? null
             : createLinkedDevicesStore({
                   computerId: options.computerId,
@@ -476,7 +469,7 @@ export function createChatWorkspace(options: {
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
     const endDeviceAccess = options.endDeviceAccess;
     const accessExpiry =
-        options.computerId === undefined || options.accessExpiresAt === undefined
+        options.accessExpiresAt === undefined
             ? null
             : createAccessExpiryStore({
                   computerId: options.computerId,
@@ -531,9 +524,8 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         requests,
-        botId,
+        computerId,
         bugReportDialog: options.bugReportDialog,
-        computerId: options.computerId ?? null,
         directory,
         home,
         titles,

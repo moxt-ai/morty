@@ -49,7 +49,7 @@ test("Given an identity creation whose reply was lost, When the client retries i
                 token: v.string(),
                 userId: v.string(),
                 computerId: v.string(),
-                bot: v.object({ botId: v.string() }),
+                bot: v.object({ displayName: v.string() }),
             }),
             await response.json(),
         );
@@ -323,21 +323,21 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         accessExpiresAt: null,
     });
     const served = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bot`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
     );
     expect(served.status).toBe(200);
-    const bot = v.parse(v.object({ botId: v.string(), computerId: v.null() }), await served.json());
+    expect(await served.json()).toEqual({ computerId: null, displayName: "My Machine", configured: false });
     const persisted = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bots/${bot.botId}`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
     );
     expect(await persisted.json()).toEqual({
-        botId: bot.botId,
+        computerId: null,
         configured: false,
         displayName: "My Machine",
     });
@@ -364,14 +364,14 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const served = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bot`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
-    const { botId } = v.parse(v.object({ botId: v.string() }), await served.json());
+    expect(served.status).toBe(200);
     const response = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/chat/computers/${identity.computerId}/bots/${botId}/setup/runtimes`, {
+        new Request(`${APP_ORIGIN}/morty/api/chat/computers/${identity.computerId}/setup/runtimes`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${identity.token}`,
@@ -454,17 +454,17 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
     expect((await worker.fetch(accountRequest(owner.token, owner.computerId), environment)).status).toBe(200);
 });
 
-test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the user's Bot", async () => {
+test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the same computer identity", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const servedResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/bot`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
     expect(servedResponse.status).toBe(200);
-    const served = v.parse(v.object({ botId: v.string() }), await servedResponse.json());
+    expect(await servedResponse.json()).not.toHaveProperty("botId");
     const transfer = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/transfers`, {
             method: "POST",
@@ -488,7 +488,6 @@ test("Given an anonymous user with a Machine, When a transfer link is redeemed, 
     expect(await redeemed.json()).toMatchObject({
         userId: identity.userId,
         computerId: identity.computerId,
-        botId: served.botId,
     });
 });
 
@@ -569,7 +568,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
     expect(revoked.status).toBe(200);
     const management = (token: string) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/management/bot`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/management/machine`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
             environment,

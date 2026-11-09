@@ -49,9 +49,13 @@ export interface SessionComposerStore {
  * The Session's composer, persisted for the next page where it is today: the draft and the picked answers. A message an
  * earlier page left unsent comes back ahead of the draft, never delivered implicitly.
  */
-export function createSessionComposerStore(botId: string, sessionTarget: NativeSessionTarget, unsent: string | null) {
-    const draftEntry = sessionDraftEntry(botId, sessionTarget);
-    const answerChoicesEntry = agentQuestionChoicesEntry(botId, sessionTarget);
+export function createSessionComposerStore(
+    computerId: string,
+    sessionTarget: NativeSessionTarget,
+    unsent: string | null,
+) {
+    const draftEntry = sessionDraftEntry(computerId, sessionTarget);
+    const answerChoicesEntry = agentQuestionChoicesEntry(computerId, sessionTarget);
     const saveDraft = (draft: string): void => {
         if (draft === "") {
             centralSessionStorage.remove(draftEntry);

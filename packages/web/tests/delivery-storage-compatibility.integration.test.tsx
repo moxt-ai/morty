@@ -34,7 +34,7 @@ test("Given a Machine-scoped draft beside retired scalar drafts and a completed 
         "Legacy unsent message",
     );
     window.sessionStorage.setItem(
-        `morty:pending-submission:v1:${encodeURIComponent(app.botId)}:${encodeURIComponent(sessionId)}`,
+        `morty:pending-submission:v1:${encodeURIComponent(app.computerId)}:${encodeURIComponent(sessionId)}`,
         JSON.stringify({ commandId: idempotencyKey, placement: "turn", request }),
     );
     const submissions = network.submissions.length;

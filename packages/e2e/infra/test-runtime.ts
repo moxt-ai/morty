@@ -57,9 +57,9 @@ export async function createTestRuntime(
             const token = text(identity["token"], "anonymous token");
             const computerId = text(identity["computerId"], "computerId");
             const userId = text(identity["userId"], "userId");
-            const botId = text(object(identity["bot"], "anonymous bot")["botId"], "botId");
+
             const url = new URL(stack.chatOrigin);
-            url.searchParams.set("identity", encodeIdentityScope({ botId, computerId, userId }));
+            url.searchParams.set("identity", encodeIdentityScope({ computerId, userId }));
             await page.addInitScript(
                 ({ key, raw }) => {
                     if (window === window.top) {
@@ -77,7 +77,7 @@ export async function createTestRuntime(
             );
             await page.goto(url.href);
             const user = await chat.useBrowserIdentity({ computerId, token });
-            return { botId: user.botId, computerId: user.computerId };
+            return { computerId: user.computerId };
         };
 
         return {
@@ -197,7 +197,7 @@ export async function createTestRuntime(
                     agentEnvironment: sessionId === undefined ? {} : { CLAUDE_CODE_SESSION_ID: sessionId },
                 });
                 return {
-                    botId: text(result.ready["botId"], "ready Bot"),
+                    computerId: text(result.ready["computerId"], "ready computer"),
                     configuration: result.configuration,
                     events: result.events,
                     url: text(result.ready["url"], "Chat URL"),

@@ -1,10 +1,9 @@
-import { type Identifier, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 /**
  * The anonymous identity scope a Morty page carries in its URL query string
- * (`identity=<botId>~<computerId>~<userId>`). The scope names which user,
- * Project, and Bot the page serves; the matching access token lives in local
+ * (`identity=<computerId>~<userId>`). The scope names the user and
+ * computer the page serves; the matching access token lives in local
  * storage. Every component is schema-validated before use; anything that does
  * not decode is treated as absent.
  */
@@ -14,7 +13,6 @@ const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 
 export const identityScopeSchema = v.pipe(
     v.object({
-        botId: v.custom<Identifier>(isIdentifier),
         computerId: computerIdSchema,
         userId: userIdSchema,
     }),
@@ -23,22 +21,18 @@ export const identityScopeSchema = v.pipe(
 
 export type IdentityScope = v.InferOutput<typeof identityScopeSchema>;
 
-const scopeSchema = v.tuple([v.custom<Identifier>(isIdentifier), computerIdSchema, userIdSchema]);
+const scopeSchema = v.tuple([computerIdSchema, userIdSchema]);
 
 /** Serializes a scope into its URL query value, validating it first; components cannot contain `~`. */
-export function encodeIdentityScope(scope: {
-    readonly botId: string;
-    readonly computerId: string;
-    readonly userId: string;
-}): string {
+export function encodeIdentityScope(scope: { readonly computerId: string; readonly userId: string }): string {
     const parsed = v.parse(identityScopeSchema, scope);
-    return [parsed.botId, parsed.computerId, parsed.userId].map((part) => encodeURIComponent(part)).join("~");
+    return [parsed.computerId, parsed.userId].map((part) => encodeURIComponent(part)).join("~");
 }
 
 /** Parses a query value back into a scope, or null when it cannot represent one. */
 function decodeIdentityScope(value: string): IdentityScope | null {
     const parts = value.split("~");
-    if (parts.length !== 3) {
+    if (parts.length !== 2) {
         return null;
     }
     let decoded: readonly unknown[];
@@ -48,7 +42,7 @@ function decodeIdentityScope(value: string): IdentityScope | null {
         return null;
     }
     const parsed = v.safeParse(scopeSchema, decoded);
-    return parsed.success ? { botId: parsed.output[0], computerId: parsed.output[1], userId: parsed.output[2] } : null;
+    return parsed.success ? { computerId: parsed.output[0], userId: parsed.output[1] } : null;
 }
 
 export function hasIdentityScope(): boolean {

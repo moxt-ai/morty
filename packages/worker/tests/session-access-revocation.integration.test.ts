@@ -40,11 +40,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
                 env,
             );
         const project = `computers/${owner.computerId}`;
-        const { botId } = v.parse(
-            v.object({ botId: v.string() }),
-            await (await request(`${project}/management/bot`, owner.token)).json(),
-        );
-        const chat = `chat/computers/${owner.computerId}/bots/${botId}`;
+        const chat = `chat/computers/${owner.computerId}`;
         expect(
             (
                 await request(`${chat}/setup`, owner.token, {

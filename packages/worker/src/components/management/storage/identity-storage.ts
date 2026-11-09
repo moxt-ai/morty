@@ -781,7 +781,7 @@ export class IdentityStorage {
             return false;
         }
         const row = await requireIdentityDatabase(this.#database)
-            .select({ botId: managedBot.botId })
+            .select({ userId: managedBot.userId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
             .get();
