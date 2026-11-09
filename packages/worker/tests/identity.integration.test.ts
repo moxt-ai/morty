@@ -100,6 +100,72 @@ test("Given a device that opened a link and opens the next one, When the reply i
     expect((await redeem(next, anonymousCreationKey())).status).toBe(410);
 });
 
+test("Given a device that shared links before and after renewing its credential, When the owner removes it, Then its unused links cannot restore access while other devices and fresh invitations still work", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, method = "GET") =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            environment,
+        );
+    const share = async (token: string) => {
+        const response = await request("/identity/transfers", token, "POST");
+        expect(response.status).toBe(201);
+        return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
+    };
+    const redeem = (code: string, redemptionKey = anonymousCreationKey(), replaces?: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, redemptionKey, ...(replaces === undefined ? {} : { replaces }) }),
+            }),
+            environment,
+        );
+    const tokenOf = async (response: Response) => {
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const original = await tokenOf(await redeem(await share(owner.token)));
+    const listed = v.parse(
+        v.object({ devices: v.array(v.object({ id: v.string() })) }),
+        await (await request("/identity/devices", owner.token)).json(),
+    );
+    const device = listed.devices[0];
+    if (device === undefined) {
+        throw new Error("Missing joined device");
+    }
+    const unusedBeforeRenewal = await share(original);
+    const openedAfterRenewal = await share(original);
+    const renewed = await tokenOf(await redeem(await share(owner.token), anonymousCreationKey(), original));
+    expect((await request("/session", original)).status).toBe(401);
+    // Credential replacement does not end the sharing device's access or invalidate its invitations.
+    const childRedemptionKey = anonymousCreationKey();
+    const child = await tokenOf(await redeem(openedAfterRenewal, childRedemptionKey));
+    const unusedAfterRenewal = await share(renewed);
+    const independentInvitation = await share(owner.token);
+
+    const removed = await request(`/identity/v1/devices/${device.id}`, owner.token, "DELETE");
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toMatchObject({ sessionAccess: "revoked" });
+    expect((await request("/session", renewed)).status).toBe(401);
+    expect((await redeem(unusedBeforeRenewal)).status).toBe(410);
+    expect((await redeem(unusedAfterRenewal)).status).toBe(410);
+    expect((await request(`/identity/v1/devices/${device.id}`, owner.token, "DELETE")).status).toBe(200);
+
+    // Already joined devices keep their own grants, including a retry whose first redemption reply was lost.
+    expect((await request("/session", child)).status).toBe(200);
+    expect(await tokenOf(await redeem(openedAfterRenewal, childRedemptionKey))).toBe(child);
+    expect((await request("/session", await tokenOf(await redeem(independentInvitation)))).status).toBe(200);
+    const rejoined = await tokenOf(await redeem(await share(owner.token), anonymousCreationKey(), renewed));
+    expect((await request("/session", rejoined)).status).toBe(200);
+    expect((await redeem(unusedBeforeRenewal)).status).toBe(410);
+    expect((await redeem(unusedAfterRenewal)).status).toBe(410);
+});
+
 test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Platform preserves every placement", {
     timeout: 30_000,
 }, async () => {

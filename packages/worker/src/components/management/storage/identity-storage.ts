@@ -38,21 +38,26 @@ function deviceAccessExpiresAt(database: IdentityDatabase, deviceId: SQLiteColum
         .where(eq(openedCredential.deviceId, deviceId))})`;
 }
 
-/**
- * A credential that authenticates now, apart from its device's term: one the machine holds or a recovery credential not
- * revoked, or a browser credential not replaced whose device's access was not ended.
- */
+/** Credential replacement keeps the same device; ending that device's access reaches all of its credentials. */
+function credentialDeviceNotEnded(database: IdentityDatabase) {
+    return or(
+        isNull(anonymousCredential.deviceId),
+        inArray(
+            anonymousCredential.deviceId,
+            database
+                .select({ id: browserDevice.id })
+                .from(browserDevice)
+                .where(and(eq(browserDevice.userId, anonymousCredential.userId), isNull(browserDevice.endedAt))),
+        ),
+    );
+}
+
+/** A credential that authenticates now, apart from its device's term. */
 function credentialInForce(database: IdentityDatabase) {
     return and(
         isNull(anonymousCredential.revokedAt),
         isNull(anonymousCredential.replacedAt),
-        or(
-            isNull(anonymousCredential.deviceId),
-            inArray(
-                anonymousCredential.deviceId,
-                database.select({ id: browserDevice.id }).from(browserDevice).where(isNull(browserDevice.endedAt)),
-            ),
-        ),
+        credentialDeviceNotEnded(database),
     );
 }
 
@@ -434,6 +439,20 @@ export class IdentityStorage {
             gt(continueLink.expiresAt, now),
             gt(continueLink.accessExpiresAt, now),
             unusedLink(database),
+            // Recheck the sharing device in the issuing write. A replaced credential still belongs to that device;
+            // using credentialInForce here would invalidate invitations on ordinary credential renewal.
+            exists(
+                database
+                    .select({ id: anonymousCredential.id })
+                    .from(anonymousCredential)
+                    .where(
+                        and(
+                            eq(anonymousCredential.id, continueLink.createdByCredentialId),
+                            eq(anonymousCredential.userId, continueLink.userId),
+                            credentialDeviceNotEnded(database),
+                        ),
+                    ),
+            ),
         );
         const replacedHash = replaces === null ? null : await digest(replaces);
         const tokenHash = await digest(token);
@@ -563,8 +582,8 @@ export class IdentityStorage {
 
     /**
      * Ends the access of one of the user's browser devices, and with it every credential of that device, including one
-     * a retried or concurrent redemption issued. Returns false when the user has no such device; a device whose access
-     * already ended stays ended, so repeating the request is harmless.
+     * a retried or concurrent redemption issued, and voids its unused invitations in the same transaction. Returns false
+     * when the user has no such device; a device whose access already ended stays ended, so repeating is harmless.
      */
     readonly endDeviceAccess = async (
         userId: string,
@@ -580,7 +599,31 @@ export class IdentityStorage {
             signal.throwIfAborted();
             return false;
         }
-        await endDevices(database, device, now).run();
+        await database.batch([
+            endDevices(database, device, now),
+            database
+                .update(continueLink)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        eq(continueLink.userId, userId),
+                        isNull(continueLink.revokedAt),
+                        unusedLink(database),
+                        inArray(
+                            continueLink.createdByCredentialId,
+                            database
+                                .select({ id: anonymousCredential.id })
+                                .from(anonymousCredential)
+                                .where(
+                                    and(
+                                        eq(anonymousCredential.userId, userId),
+                                        eq(anonymousCredential.deviceId, deviceId),
+                                    ),
+                                ),
+                        ),
+                    ),
+                ),
+        ]);
         signal.throwIfAborted();
         return true;
     };
