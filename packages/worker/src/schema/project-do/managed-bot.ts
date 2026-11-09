@@ -6,7 +6,6 @@ export const managedBot = sqliteTable("managed_bot", {
     botId: text("bot_id").notNull().unique(),
     displayName: text("display_name").notNull(),
     runtimeId: text("runtime_id"),
-    instructions: text("instructions").notNull().default(""),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
 });

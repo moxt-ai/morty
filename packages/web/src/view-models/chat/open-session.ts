@@ -3,7 +3,6 @@ import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot
 
 export interface OpenMortySession {
     readonly agentRef: string;
-    readonly instructions?: string;
     readonly result:
         | Extract<NativeSessionResult, { readonly ready: unknown }>
         | {

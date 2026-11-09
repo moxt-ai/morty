@@ -69,7 +69,6 @@ export class ManagedBotStorage {
     ): Promise<
         | (ManagedBot & {
               readonly configuration: BotConfiguration | null;
-              readonly instructions: string;
           })
         | null
     > => {
@@ -79,7 +78,6 @@ export class ManagedBotStorage {
                 botId: managedBot.botId,
                 displayName: managedBot.displayName,
                 runtimeId: managedBot.runtimeId,
-                instructions: managedBot.instructions,
             })
             .from(managedBot)
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
@@ -93,7 +91,6 @@ export class ManagedBotStorage {
         return {
             ...bot,
             configuration: configuration.success ? configuration.output : null,
-            instructions: row.instructions,
         };
     };
 

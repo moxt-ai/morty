@@ -76,7 +76,6 @@ export class ManagementService {
         return {
             botId: bot.botId,
             displayName: bot.displayName,
-            instructions: bot.instructions,
             configured: bot.configuration !== null,
         };
     };

@@ -492,7 +492,7 @@ export class ChatService {
                 : await this.#withOwnedManagedSession(scope, input.conversationId, notInRecentSessions, (session) =>
                       this.#reopenManagedSession(session, runtimeId),
                   );
-        return { ...access, instructions: bot.instructions };
+        return access;
     };
 
     /**
@@ -570,13 +570,11 @@ export class ChatService {
     };
 
     readonly managedSession = async (scope: ChatScope, sessionId: string) => {
-        const bot = await this.#bot(scope);
+        // Only the caller's own Machine serves its Sessions.
+        await this.#bot(scope);
         return await this.#withOwnedManagedSession(scope, sessionId, notInRecentSessions, async (session) => {
             const runtime = await this.localRuntime(scope);
-            return {
-                ...(await this.#platform.readChatSession(scope.computerId, runtime, session.sessionId, scope.signal)),
-                instructions: bot.instructions,
-            };
+            return await this.#platform.readChatSession(scope.computerId, runtime, session.sessionId, scope.signal);
         });
     };
 
@@ -667,7 +665,7 @@ export class ChatService {
         if (result.action !== "import") {
             throw new PlatformProjectError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
         }
-        const stored = { agentRef: agent.agentRef, result, entry, instructions: bot.instructions };
+        const stored = { agentRef: agent.agentRef, result, entry };
         await this.#chatSessions.save(
             scope.computerId,
             scope.userId,

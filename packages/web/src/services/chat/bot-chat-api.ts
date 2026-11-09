@@ -42,7 +42,6 @@ const accessSchema = v.pipe(
         ready: v.unknown(),
         agentRef: identifier,
         workspaceRef: v.custom<string>(isDirectoryIdentifier),
-        instructions: v.pipe(v.string(), v.maxLength(100000)),
     }),
     v.readonly(),
 );
@@ -162,13 +161,11 @@ const localSessionEntrySchema = v.object({
 });
 const managedSdkSessionSchema = v.object({
     agentRef: identifier,
-    instructions: v.string(),
     ready: v.unknown(),
     entry: localSessionEntrySchema,
 });
 const localSessionSchema = v.object({
     agentRef: identifier,
-    instructions: v.string(),
     result: v.unknown(),
     entry: localSessionEntrySchema,
 });
@@ -367,7 +364,6 @@ export class BotChatApi {
         title = "Untitled session",
     ) => ({
         agentRef: access.agentRef,
-        instructions: access.instructions,
         result: {
             action: "conversation" as const,
             access,
@@ -447,7 +443,6 @@ export class BotChatApi {
         }
         return {
             agentRef: stored.agentRef,
-            instructions: stored.instructions,
             entry: stored.entry,
             result: {
                 action: "managed" as const,

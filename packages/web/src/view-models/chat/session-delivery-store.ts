@@ -68,17 +68,11 @@ export function deliveryMessagePresentation(message: SubmittedMessage) {
     return {
         ...message,
         displayPrompt:
-            message.content.trim() ||
-            message.attachments.values
-                .filter((attachment) => attachment.uri !== "morty://bot/instructions")
-                .map((attachment) => attachment.name)
-                .join(", "),
+            message.content.trim() || message.attachments.values.map((attachment) => attachment.name).join(", "),
         attachments: message.attachments.kind === "local" ? message.attachments.values : [],
         attachmentLabels:
             message.attachments.kind === "uploaded"
-                ? message.attachments.values
-                      .filter((attachment) => attachment.uri !== "morty://bot/instructions")
-                      .map((attachment) => ({ name: attachment.name, uri: attachment.uri }))
+                ? message.attachments.values.map((attachment) => ({ name: attachment.name, uri: attachment.uri }))
                 : [],
     };
 }
