@@ -134,7 +134,9 @@ jobs:
           MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
           EXPECTED_REVISION: ${{ steps.archive.outputs.revision }}
           MORTY_ALLOW_RESTORE: 'true'
-        run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release .release/cloud --cli-release .release/release.json
+        run: |
+          python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release .release/cloud --cli-release .release/release.json
+          python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release .release/cloud --cli-release .release/release.json --activate-setup
       - name: Archive deployment evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -144,5 +146,6 @@ jobs:
             deployment-evidence.json
             account-token-evidence.json
             session-access-evidence.json
+            setup-evidence.json
           if-no-files-found: ignore
           retention-days: 90

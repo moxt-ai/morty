@@ -32,13 +32,31 @@ def run(command, env):
     subprocess.run(command, cwd=ROOT, env=env, check=True, timeout=600)
 
 
+def served_versions(deployment):
+    return [(version['version_id'], version['percentage']) for version in deployment['versions']]
+
+
+def restore_workers(expected, previous):
+    """Return each Worker to the deployment that served before this release. Database migrations stay applied."""
+    for component in ['morty', 'platform']:
+        path = '/workers/scripts/' + expected[component] + '/deployments'
+        before = previous[component]
+        if served_versions(cloud(path)['deployments'][0]) == served_versions(before):
+            continue
+        # Keep the restored deployment's message, which names the source revision it serves.
+        cloud(path, {'strategy': 'percentage', 'versions': [{'version_id': version_id, 'percentage': percentage} for version_id, percentage in served_versions(before)], 'annotations': {'workers/message': before.get('annotations', {}).get('workers/message', '')}}, method='POST')
+        if served_versions(cloud(path)['deployments'][0]) != served_versions(before):
+            raise RuntimeError('The restored Worker deployment is not active: ' + component)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('environment', choices=['production'])
     parser.add_argument('--release', type=Path, required=True)
     parser.add_argument('--cli-release', type=Path, help='Accepted CLI manifest and adjacent archive, including for legacy cloud releases')
     parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
-    parser.add_argument('--preflight-only', action='store_true', help='Verify deployment credentials and resources before npm publication, without writes')
+    parser.add_argument('--preflight-only', action='store_true', help='Verify deployment credentials and resources before any write')
+    parser.add_argument('--activate-setup', action='store_true', help='Replace the hosted setup once npm serves the accepted CLI archive')
     args = parser.parse_args()
     release = args.release.resolve()
     manifest = read(release / 'release.json')
@@ -75,7 +93,6 @@ def main():
     if args.verify_release_only:
         print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
         return
-    # Production setup may name a release only after the accepted bytes are available.
     if args.environment == 'production':
         version = manifest['cliVersion']
         import re
@@ -95,18 +112,36 @@ def main():
         cli_bytes = archive.read_bytes()
         if archive.is_symlink() or hashlib.sha256(cli_bytes).hexdigest() != accepted.get('sha256') or 'sha512-' + base64.b64encode(hashlib.sha512(cli_bytes).digest()).decode() != accepted['integrity']:
             raise ValueError('CLI archive checksum differs from the acceptance record')
-        if not args.preflight_only:
+        if not args.preflight_only and os.environ.get('MORTY_ALLOW_RESTORE') != 'true':
+            with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/latest', headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
+                latest = json.load(response)['version']
+            if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', latest):
+                raise ValueError('Unexpected npm latest version')
+            # The Workers deploy before npm moves latest; setup activation follows publication.
+            published, accepted_version = (tuple(map(int, item.split('.'))) for item in (latest, version))
+            if published > accepted_version or (args.activate_setup and published != accepted_version):
+                raise ValueError('A superseded release cannot automatically replace production')
+        if args.activate_setup:
+            # The hosted setup installs the CLI from npm, so it may change only after the accepted bytes are available.
             with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/' + version, headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
                 package = json.load(response)
             if package.get('name') != '@morty-build/cli' or package.get('version') != version or package.get('bin', {}).get('morty') != 'dist/cli.js':
                 raise ValueError('The exact Morty CLI release is unavailable')
             if package.get('dist', {}).get('integrity') != accepted['integrity']:
                 raise ValueError('Published CLI bytes differ from the accepted release')
-            if os.environ.get('MORTY_ALLOW_RESTORE') != 'true':
-                with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/latest', headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
-                    latest = json.load(response)['version']
-                if latest != version:
-                    raise ValueError('A superseded release cannot automatically replace production')
+    env = dict(os.environ, WRANGLER_SEND_METRICS='false')
+    for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
+        env.pop(key, None)
+    if args.activate_setup:
+        run(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
+        with urllib.request.urlopen(urllib.request.Request(expected['morty_origin'] + '/setup.mjs', headers={'User-Agent': 'Morty-Deployment/1.0', 'Cache-Control': 'no-cache'}), timeout=40) as response:
+            served = hashlib.sha256(response.read()).hexdigest()
+            if response.status != 200 or served != manifest['files']['setup.mjs']:
+                raise ValueError('Hosted setup differs from the accepted cloud release')
+        evidence = {'passed': True, 'revision': manifest['revision'], 'cliVersion': manifest['cliVersion'], 'setupSha256': served}
+        (ROOT / 'setup-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+        print(json.dumps(evidence))
+        return
     # Check lifecycle history before uploading assets, applying D1 migrations,
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
@@ -138,9 +173,6 @@ def main():
     if args.preflight_only:
         print(json.dumps({'preflightPassed': True, 'revision': manifest['revision'], 'deploymentAttempted': False}))
         return
-    env = dict(os.environ, WRANGLER_SEND_METRICS='false')
-    for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
-        env.pop(key, None)
     previous = {component: cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0] for component in configs}
     types = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8'}
     with tempfile.TemporaryDirectory(prefix='morty-deploy-') as temporary:
@@ -158,55 +190,61 @@ def main():
             upload = temporary / ('assets' + extension + '.json')
             upload.write_text(json.dumps(entries))
             run(WRANGLER + ['r2', 'bulk', 'put', expected['buckets']['web_assets'], '--filename', str(upload), '--content-type', types[extension], '--cache-control', 'public, max-age=31536000, immutable', '--concurrency', '10', '--remote', '--force', '--config', str(configs['morty'])], env)
-        run(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
         run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['platform'])], env)
-        for component in ['platform', 'morty']:
-            command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'morty ' + manifest['revision']]
-            if secrets_by_component.get(component):
-                secrets = secrets_by_component[component]
-                if not secrets or not all(isinstance(k, str) and isinstance(v, str) and v for k, v in secrets.items()):
-                    raise ValueError('Missing deployment secret')
-                secret_file = temporary / (component + '.secrets.json')
-                secret_file.touch(mode=0o600)
-                secret_file.write_text(json.dumps(secrets))
-                command += ['--secrets-file', str(secret_file)]
-            run(command, env)
-        checks = []
-        for url, content in [(expected['platform_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
-                body = response.read()
-                if response.status != 200 or content and content not in body.decode():
-                    raise ValueError('Post-deployment health verification failed')
-                if url.endswith('/setup.mjs') and hashlib.sha256(body).hexdigest() != manifest['files']['setup.mjs']:
-                    raise ValueError('Hosted setup differs from the accepted cloud release')
-                checks.append({'url': url, 'status': response.status, 'sha256': hashlib.sha256(body).hexdigest()})
-        for extension in ['.js', '.css', '.woff2']:
-            entry = groups[extension][0]
-            with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
-                if hashlib.sha256(response.read()).hexdigest() != hashlib.sha256(Path(entry['file']).read_bytes()).hexdigest() or response.headers.get('Access-Control-Allow-Origin') != expected['morty_origin'] or 'immutable' not in response.headers.get('Cache-Control', ''):
-                    raise ValueError('Asset content, CORS, or cache verification failed')
-        # The launch reset does not retain an unused secret binding from old Workers.
-        secrets_path = '/workers/scripts/' + expected['morty'] + '/secrets'
-        secret_names = {item['name'] for item in cloud(secrets_path)}
-        if 'MORTY_SERVICE_SECRET' not in secret_names:
-            raise ValueError('The deployed Morty service secret binding is missing')
-        if 'MOBIUS_APP_SECRET' in secret_names:
-            cloud(secrets_path + '/MOBIUS_APP_SECRET', method='DELETE')
-        if 'MOBIUS_APP_SECRET' in {item['name'] for item in cloud(secrets_path)}:
-            raise ValueError('The retired service secret binding still exists')
+        # From the first Worker activation on, a failed check restores the Workers that served before this release.
+        try:
+            for component in ['platform', 'morty']:
+                command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'morty ' + manifest['revision']]
+                if secrets_by_component.get(component):
+                    secrets = secrets_by_component[component]
+                    if not secrets or not all(isinstance(k, str) and isinstance(v, str) and v for k, v in secrets.items()):
+                        raise ValueError('Missing deployment secret')
+                    secret_file = temporary / (component + '.secrets.json')
+                    secret_file.touch(mode=0o600)
+                    secret_file.write_text(json.dumps(secrets))
+                    command += ['--secrets-file', str(secret_file)]
+                run(command, env)
+            checks = []
+            for url, content in [(expected['platform_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty')]:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
+                    body = response.read()
+                    if response.status != 200 or content and content not in body.decode():
+                        raise ValueError('Post-deployment health verification failed')
+                    checks.append({'url': url, 'status': response.status, 'sha256': hashlib.sha256(body).hexdigest()})
+            for extension in ['.js', '.css', '.woff2']:
+                entry = groups[extension][0]
+                with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
+                    if hashlib.sha256(response.read()).hexdigest() != hashlib.sha256(Path(entry['file']).read_bytes()).hexdigest() or response.headers.get('Access-Control-Allow-Origin') != expected['morty_origin'] or 'immutable' not in response.headers.get('Cache-Control', ''):
+                        raise ValueError('Asset content, CORS, or cache verification failed')
+            # The launch reset does not retain an unused secret binding from old Workers.
+            secrets_path = '/workers/scripts/' + expected['morty'] + '/secrets'
+            secret_names = {item['name'] for item in cloud(secrets_path)}
+            if 'MORTY_SERVICE_SECRET' not in secret_names:
+                raise ValueError('The deployed Morty service secret binding is missing')
+            if 'MOBIUS_APP_SECRET' in secret_names:
+                cloud(secrets_path + '/MOBIUS_APP_SECRET', method='DELETE')
+            if 'MOBIUS_APP_SECRET' in {item['name'] for item in cloud(secrets_path)}:
+                raise ValueError('The retired service secret binding still exists')
+            deployed = {}
+            for component in configs:
+                deployment = cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0]
+                if len(deployment['versions']) != 1 or deployment['versions'][0]['percentage'] != 100:
+                    raise ValueError('Unexpected gradual deployment')
+                if deployment.get('annotations', {}).get('workers/message') != 'morty ' + manifest['revision']:
+                    raise ValueError('Active Worker deployment does not match the accepted source')
+                deployed[component] = deployment
+            platform_secrets = cloud('/workers/scripts/' + expected['platform'] + '/secrets')
+            if 'MORTY_SESSION_SIGNING_SECRET' not in {item['name'] for item in platform_secrets}:
+                raise ValueError('The deployed Session signing secret binding is missing')
+            run(['python3', str(ROOT / 'deployment/verify-session-access.py')], env)
+        except Exception:
+            (ROOT / 'deployment-evidence.json').write_text(json.dumps({'passed': False, 'environment': args.environment, 'revision': manifest['revision'], 'previous': previous, 'restored': False}, indent=2) + '\n')
+            restore_workers(expected, previous)
+            (ROOT / 'deployment-evidence.json').write_text(json.dumps({'passed': False, 'environment': args.environment, 'revision': manifest['revision'], 'previous': previous, 'restored': True}, indent=2) + '\n')
+            print(json.dumps({'passed': False, 'restored': True, 'revision': manifest['revision']}))
+            raise
+        # Revoking superseded service credentials cannot be undone, so it waits for the verified Workers.
         run(['node', str(ROOT / 'deployment/provision-service.ts'), args.environment, 'retire'], env)
-        deployed = {}
-        for component in configs:
-            deployment = cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0]
-            if len(deployment['versions']) != 1 or deployment['versions'][0]['percentage'] != 100:
-                raise ValueError('Unexpected gradual deployment')
-            if deployment.get('annotations', {}).get('workers/message') != 'morty ' + manifest['revision']:
-                raise ValueError('Active Worker deployment does not match the accepted source')
-            deployed[component] = deployment
-        platform_secrets = cloud('/workers/scripts/' + expected['platform'] + '/secrets')
-        if 'MORTY_SESSION_SIGNING_SECRET' not in {item['name'] for item in platform_secrets}:
-            raise ValueError('The deployed Session signing secret binding is missing')
-        run(['python3', str(ROOT / 'deployment/verify-session-access.py')], env)
     evidence = {'passed': True, 'environment': args.environment, 'revision': manifest['revision'], 'cliVersion': manifest['cliVersion'], 'cliIntegrity': accepted['integrity'], 'account': ACCOUNT, 'previous': previous, 'deployed': deployed, 'checks': checks, 'dnsChanged': False}
     (ROOT / 'deployment-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(json.dumps({'passed': True, 'environment': args.environment, 'revision': manifest['revision']}))
