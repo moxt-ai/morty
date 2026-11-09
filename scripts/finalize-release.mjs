@@ -65,6 +65,9 @@ const repository = process.env.GITHUB_REPOSITORY;
 if (process.env.GITHUB_REPOSITORY_ID !== "1446677406" || process.env.GITHUB_REF !== "refs/heads/main") {
     throw new Error("Release finalization requires the protected main workflow");
 }
+if (!/^\d+$/.test(process.env.ACCEPTANCE_RUN_ID ?? "")) {
+    throw new Error("Release finalization requires the accepting workflow run");
+}
 const tag = `v${release.version}`;
 const refs = JSON.parse(gh("api", `repos/${repository}/git/matching-refs/tags/${tag}`));
 const existingTag = refs.find((ref) => ref.ref === `refs/tags/${tag}`);
@@ -136,7 +139,7 @@ if (existing && !existing.draft) {
 }
 await writeFile(
     ".release/notes.txt",
-    `Source: ${release.revision}\n\nCLI: @morty-build/cli@${release.version}\nSHA-256: ${release.sha256}\n\nPublished with npm trusted publishing, verified against the accepted archive, and deployed to production before finalizing this release.\n\nAcceptance and deployment: https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}\n`,
+    `Source: ${release.revision}\n\nCLI: @morty-build/cli@${release.version}\nSHA-256: ${release.sha256}\n\nPublished with npm trusted publishing, verified against the accepted archive, and deployed to production before finalizing this release.\n\nAcceptance: https://github.com/${repository}/actions/runs/${process.env.ACCEPTANCE_RUN_ID}\nDeployment: https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}\n`,
 );
 if (!existing) {
     gh(
