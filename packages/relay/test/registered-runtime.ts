@@ -6,6 +6,7 @@ import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
 import { computer } from "../../relay-core/src/schema/project-do/index.ts";
 import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
+import { migrateComputerStorage } from "../src/storage/migrate-computer-storage.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
@@ -29,6 +30,7 @@ export async function registerRuntimeFixture(computerId: string): Promise<{ read
             .onConflictDoNothing(),
     ]);
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
+        migrateComputerStorage(state.storage);
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         await database.batch([
             database
