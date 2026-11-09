@@ -2,8 +2,8 @@ import { RUNTIME_HEARTBEAT_KIND, type RuntimeHeartbeatEvent } from "@morty-build
 
 import type { ScheduledTask, Timer } from "../../util/timer.ts";
 
-const HEARTBEAT_ACK_TIMEOUT_MILLISECONDS = 10_000;
-const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
+export const HEARTBEAT_ACK_TIMEOUT_MILLISECONDS = 10_000;
+export const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
 
 abstract class RelayLivenessState {}
 
