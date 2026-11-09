@@ -152,26 +152,11 @@ const scopedProjectApplication = createProjectApplication();
 const controlApplication = createPlatformControlApplication();
 const PLATFORM_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 const sessionIdentifier = v.custom<Identifier>(isIdentifier);
-/**
- * A Session binding stated in a query string. Each omitted field is the Session's own. A query cannot tell an empty
- * list from an omitted one; callers that state the binding send no `additionalDirectoryId` for an empty list, so with
- * `agentId` or `directoryId` present an absent list is empty.
- */
-function sessionBindingQuery(request: {
-    readonly query: (name: string) => string | undefined;
-    readonly queries: (name: string) => string[] | undefined;
-}): SessionBindingRequest {
+/** A Session binding stated in a query string. Each omitted field is the Session's own. */
+function sessionBindingQuery(request: { readonly query: (name: string) => string | undefined }): SessionBindingRequest {
     const agentId = request.query("agentId");
     const directoryId = request.query("directoryId");
-    const additionalDirectoryIds = request.queries("additionalDirectoryId");
     return {
-        additionalDirectoryIds:
-            additionalDirectoryIds === undefined && agentId === undefined && directoryId === undefined
-                ? undefined
-                : v.parse(
-                      v.pipe(v.array(v.custom<string>(isDirectoryIdentifier)), v.maxLength(16)),
-                      additionalDirectoryIds ?? [],
-                  ),
         agentId: agentId === undefined ? undefined : v.parse(sessionIdentifier, agentId),
         directoryId:
             directoryId === undefined ? undefined : v.parse(v.custom<string>(isDirectoryIdentifier), directoryId),

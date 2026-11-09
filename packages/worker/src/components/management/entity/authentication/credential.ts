@@ -7,6 +7,9 @@ export const anonymousToken = v.pipe(
     ),
 );
 
+/** The machine's own credential, the only kind its holder may choose: a successor it saved before requesting it. */
+export const localCredentialToken = v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u));
+
 export type Credential = {
     readonly credentialId: string;
     readonly userId: string;
@@ -68,6 +71,19 @@ export interface SharedLinkTerms {
     readonly accessExpiresAt: number;
     /** Whether the sharer's own access ends before the chosen duration, and so ends the device's access too. */
     readonly accessLimitedBySharer: boolean;
+}
+
+/** Reconstructs the committed terms; retrying never moves either deadline forward. */
+export function issuedLinkTerms(
+    duration: DeviceAccessDuration,
+    record: { readonly createdAt: number; readonly expiresAt: number; readonly accessExpiresAt: number },
+): SharedLinkTerms {
+    return {
+        accessDuration: duration,
+        expiresAt: record.expiresAt,
+        accessExpiresAt: record.accessExpiresAt,
+        accessLimitedBySharer: record.accessExpiresAt < record.createdAt + deviceAccessLifetimes[duration],
+    };
 }
 
 /**

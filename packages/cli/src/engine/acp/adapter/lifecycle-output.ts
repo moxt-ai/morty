@@ -6,7 +6,7 @@ import { sessionIdSchema } from "../protocol/native-session.ts";
 import type { AcpExecutionConnection } from "./execution-connections.ts";
 
 export function sessionWorkspace(scope: AdapterSessionScope) {
-    return { cwd: scope.cwd, additionalDirectories: [...scope.additionalDirectories], mcpServers: [] };
+    return { cwd: scope.cwd, mcpServers: [] };
 }
 
 /** Only protocol-level rejection before admission permits repeating Session creation. */

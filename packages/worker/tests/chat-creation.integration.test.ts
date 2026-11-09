@@ -475,7 +475,7 @@ for (const configured of [false, true]) {
             ).toBe(202);
         }
         const computerId = fixture.runtime.computerId;
-        const identity = { agentId: "codex", directoryId: "default", additionalDirectoryIds: [] };
+        const identity = { agentId: "codex", directoryId: "default" };
         // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
         // attributed to a nonexistent Runtime, entry, or discovery.
         const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
@@ -565,7 +565,7 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, { computerId, agentRef: "codex" })).status).toBe(
         202,
     );
-    const identity = { computerId, agentId: "codex", directoryId: "default", additionalDirectoryIds: [] };
+    const identity = { computerId, agentId: "codex", directoryId: "default" };
     const listed = await fixture.request(`chat/bots/${fixture.botId}/native-sessions`, {
         ...identity,
         action: "list",
@@ -618,7 +618,6 @@ test("Given a managed Chat session is still running, When its owner archives it,
     await fixture.runtime.client.turns.submitToRuntime(
         { harness: "codex", sessionId: sessionId },
         {
-            additionalDirectoryIds: [],
             agentId: "codex",
             content: "wait for steering",
             directoryId: "default",
@@ -806,7 +805,9 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         client.events.list(access.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
-    const revoked = await fixture.request("identity/revoke-all-access", {});
+    const revoked = await fixture.request("identity/revoke-all-access", {
+        successor: `morty_anon_v1_${"A".repeat(43)}`,
+    });
     expect(revoked.status).toBe(200);
     expect(await revoked.json()).toEqual({ status: "access_revoked", sessionAccess: "revoked" });
 
@@ -825,7 +826,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
             })
         ).status,
     ).toBe(202);
-    const shared = await fixture.request("identity/transfers", {});
+    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
     const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     const redeemed = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
@@ -856,11 +857,12 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     }
     expect(new TextDecoder().decode((await reader.read()).value)).toContain("managed-session.statuses.following");
 
-    expect((await fixture.request("identity/revoke-all-access", {})).status).toBe(200);
+    expect(
+        (await fixture.request("identity/revoke-all-access", { successor: `morty_anon_v1_${"A".repeat(43)}` })).status,
+    ).toBe(200);
     await fixture.runtime.client.turns.submitToRuntime(
         target,
         {
-            additionalDirectoryIds: [],
             agentId: "codex",
             content: "Reply after revoke",
             directoryId: "default",
@@ -886,7 +888,7 @@ test("Given two browsers joined through links, When one disconnects the other br
         ).status,
     ).toBe(202);
     const share = async () => {
-        const shared = await fixture.request("identity/transfers", {});
+        const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
         return new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     };
     const redeem = async (code: string) =>
@@ -947,7 +949,7 @@ test("Given a browser connecting from a city, When it opens a link, Then the dev
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
-    const shared = await fixture.request("identity/transfers", {});
+    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
     const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
     const redeemed = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
         method: "POST",

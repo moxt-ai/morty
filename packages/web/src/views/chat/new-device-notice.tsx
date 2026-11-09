@@ -41,19 +41,22 @@ function NewDeviceCard({
                             size="xs"
                             variant="outline"
                         >
-                            Review devices
+                            Devices
                         </Button>
                     )}
                 </>
             }
             body={<DeviceSummary device={describeLinkedDevice(device, "notice")} layout="notice" />}
+            bodyClassName="max-sm:hidden"
             detail={
                 onReviewDevices === null
                     ? "Not you? Ask your agent to revoke all link access."
                     : "Not you? Disconnect it in Devices."
             }
+            detailClassName="max-sm:hidden"
             icon={ShieldAlert}
             label="New device connected"
+            mobileTitleSuffix={device.label ?? "Unknown browser"}
             title="New device connected"
         />
     );

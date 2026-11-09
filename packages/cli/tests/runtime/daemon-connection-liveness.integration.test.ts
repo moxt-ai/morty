@@ -1026,7 +1026,6 @@ describe("daemon relay connection liveness", () => {
                         agentId: "codex",
                         bindingId: "workspace",
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         configurations: [],
                     }),
                 );
@@ -1053,7 +1052,6 @@ describe("daemon relay connection liveness", () => {
                             agentId: "codex",
                             bindingId: "workspace",
                             directoryId: "default",
-                            additionalDirectoryIds: [],
                             disposition: "append",
                             attachments: [],
                             prompt: "broadcast without viewers",
@@ -1101,7 +1099,6 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",
                         commandId: `live-command-${turn}`,

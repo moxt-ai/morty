@@ -15,7 +15,6 @@ export interface FakeAgentHarnessDefinition {
 
 export function fakeAgentHarnessCapabilities(definition: FakeAgentHarnessDefinition) {
     return {
-        additionalDirectories: true,
         audioPrompt: false,
         closeSession: true,
         deleteSession: true,

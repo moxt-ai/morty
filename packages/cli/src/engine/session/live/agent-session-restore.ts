@@ -8,7 +8,6 @@ import type { SessionStore, StoredSession } from "../record/session-store.ts";
  * declared beside the restore function documents exactly what the decision tree may touch.
  */
 export interface AgentSessionRestore {
-    readonly additionalDirectories: readonly string[];
     readonly agentId: string;
     readonly capabilities: SessionCapabilities;
     readonly cwd: string;

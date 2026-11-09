@@ -54,13 +54,11 @@ describe("acp commands environment", () => {
 
         try {
             const prepared = await manager.prepareSession({
-                additionalDirectories: [],
                 agent,
                 cwd: process.cwd(),
                 target: await manager.createNativeSession({
                     agent,
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -97,7 +95,6 @@ describe("acp commands environment", () => {
 
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent,
                 commandId: `${agentId}-compact-command`,
                 cwd: process.cwd(),
@@ -107,7 +104,6 @@ describe("acp commands environment", () => {
                 target: await manager.createNativeSession({
                     agent,
                     cwd: process.cwd(),
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,
@@ -168,7 +164,6 @@ describe("acp commands environment", () => {
         );
         try {
             await manager.runPrompt({
-                additionalDirectories: [],
                 agent: config.catalog.find("codex"),
                 commandId: "login-shell-command",
                 cwd: workspace,
@@ -178,7 +173,6 @@ describe("acp commands environment", () => {
                 target: await manager.createNativeSession({
                     agent: config.catalog.find("codex"),
                     cwd: workspace,
-                    additionalDirectories: [],
                     signal: AbortSignal.timeout(10_000),
                 }),
                 signal: new AbortController().signal,

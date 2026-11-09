@@ -1,0 +1,1 @@
+ALTER TABLE `identity_transfer` ADD `request_hash` text;

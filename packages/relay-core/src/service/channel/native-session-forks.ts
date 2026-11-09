@@ -77,9 +77,7 @@ export class NativeSessionForks {
         request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) => {
-        const requestHash = await hashSecret(
-            JSON.stringify([input.agentId, input.sessionId, input.directoryId, input.additionalDirectoryIds]),
-        );
+        const requestHash = await hashSecret(JSON.stringify([input.agentId, input.sessionId, input.directoryId]));
         signal.throwIfAborted();
         const key = JSON.stringify([scope.computerId, operationId]);
         const prior = this.#storage.read(scope.computerId, operationId);
@@ -122,9 +120,7 @@ export class NativeSessionForks {
                         ready.kind !== "session.ready" ||
                         ready.target.harness !== input.agentId ||
                         ready.target.sessionId === input.sessionId ||
-                        ready.directoryId !== source.entry.directoryId ||
-                        JSON.stringify(ready.additionalDirectories.map((directory) => directory.directoryId)) !==
-                            JSON.stringify(source.entry.additionalDirectories.map((directory) => directory.directoryId))
+                        ready.directoryId !== source.entry.directoryId
                     ) {
                         throw unknownOutcome();
                     }
@@ -194,9 +190,6 @@ export class NativeSessionForks {
                         agentId: input.agentId,
                         bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                         directoryId: found.entry.directoryId,
-                        additionalDirectoryIds: found.entry.additionalDirectories.map(
-                            (directory) => directory.directoryId,
-                        ),
                         requestId: operationId,
                         discoveryId: found.discoveryId,
                         entryId: found.entry.entryId,

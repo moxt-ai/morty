@@ -85,7 +85,6 @@ export async function codexFixture(
         }),
     );
     const identity = {
-        additionalDirectoryIds: [],
         agentId: agent.id,
         bindingId: "workspace",
         directoryId: "default",
@@ -97,7 +96,6 @@ export async function codexFixture(
         await sessions.runPrompt({
             agent,
             cwd: workspace,
-            additionalDirectories: [],
             target,
             commandId: crypto.randomUUID(),
             prompt: text,
@@ -110,7 +108,6 @@ export async function codexFixture(
         const sessionTarget = await sessions.createNativeSession({
             agent,
             cwd: workspace,
-            additionalDirectories: [],
             signal: AbortSignal.timeout(30_000),
         });
         await prompt(sessionTarget, title);

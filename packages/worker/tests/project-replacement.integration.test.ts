@@ -109,10 +109,11 @@ test("Given a revoked successor local credential, When the previous Machine retr
     ).toBe(401);
 });
 
-function projectRequest(computerId: string, path: string, token: string, method = "GET"): Request {
+function projectRequest(computerId: string, path: string, token: string, method = "GET", body?: object): Request {
     return new Request(`${APP_ORIGIN}/morty/api/computers/${computerId}${path}`, {
         method,
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 }
 
@@ -163,7 +164,7 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
 
 async function share(computerId: string, token: string): Promise<string> {
     const response = await worker.fetch(
-        projectRequest(computerId, "/identity/transfers", token, "POST"),
+        projectRequest(computerId, "/identity/transfers", token, "POST", { operationId: crypto.randomUUID() }),
         fixture.environment(),
     );
     expect(response.status).toBe(201);

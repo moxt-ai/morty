@@ -109,7 +109,6 @@ async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["targ
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionPrepareCommand({
-            additionalDirectoryIds: [],
             agentId: NATIVE_AGENT_ID,
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -125,7 +124,6 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            additionalDirectoryIds: [],
             agentId: NATIVE_AGENT_ID,
             bindingId: peer.bindingId,
             commandId,

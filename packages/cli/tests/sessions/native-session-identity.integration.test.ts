@@ -25,7 +25,6 @@ describe("native session identity", () => {
             }
             const initial = await f.sessions.loadSessionEvents(
                 {
-                    additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
                     target: first.ready.target,
@@ -52,7 +51,6 @@ describe("native session identity", () => {
             await expect(
                 f.sessions.loadSessionEvents(
                     {
-                        additionalDirectories: [],
                         agent: f.agent,
                         cwd: f.workspace,
                         target: first.ready.target,
@@ -80,7 +78,6 @@ describe("native session identity", () => {
                 }
                 const source = await f.sessions.previewNativeSessionEvents(
                     {
-                        additionalDirectories: [],
                         agent: f.agent,
                         cwd: f.workspace,
                         signal,
@@ -96,7 +93,6 @@ describe("native session identity", () => {
                 }
                 const replayed = await f.sessions.loadSessionEvents(
                     {
-                        additionalDirectories: [],
                         agent: f.agent,
                         cwd: f.workspace,
                         target: result.target,
@@ -164,7 +160,6 @@ describe("native session identity", () => {
             const turn = f.sessions.runPrompt({
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
                 target: first.ready.target,
                 commandId: crypto.randomUUID(),
                 prompt: "interleave progress and hold",
@@ -231,7 +226,6 @@ describe("native session identity", () => {
                 const reply = await f.sessions.runPrompt({
                     agent: f.agent,
                     cwd: f.workspace,
-                    additionalDirectories: [],
                     target: opened.target,
                     commandId: crypto.randomUUID(),
                     prompt: "Continue original context",
@@ -255,7 +249,6 @@ describe("native session identity", () => {
             const target = await f.sessions.createNativeSession({
                 agent: f.agent,
                 cwd: f.workspace,
-                additionalDirectories: [],
                 signal,
             });
             await f.restart();
@@ -263,7 +256,6 @@ describe("native session identity", () => {
             try {
                 await restarted.runPrompt({
                     agent: f.agent,
-                    additionalDirectories: [],
                     cwd: f.workspace,
                     signal,
                     target,
@@ -280,7 +272,6 @@ describe("native session identity", () => {
                 const replay = await restarted.loadSessionEvents(
                     {
                         agent: f.agent,
-                        additionalDirectories: [],
                         cwd: f.workspace,
                         signal,
                         target,
@@ -326,7 +317,6 @@ describe("native session identity", () => {
             }
             await f.sessions.runPrompt({
                 agent: f.agent,
-                additionalDirectories: [],
                 cwd: f.workspace,
                 signal,
                 target: opened.target,
@@ -344,7 +334,6 @@ describe("native session identity", () => {
             const replay = await f.sessions.loadSessionEvents(
                 {
                     agent: f.agent,
-                    additionalDirectories: [],
                     cwd: f.workspace,
                     signal,
                     target: opened.target,

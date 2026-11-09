@@ -1194,7 +1194,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
     });
 });
 
-test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
+test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials, the local credential included, fail while the replacement setup saved and another machine remain usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-"));
     const configurationDirectory = join(directory, "state");
     await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
@@ -1205,14 +1205,17 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         const other = await fixture.createAnonymousUser();
         const configuration = savedSetupState(fixture.origin, owner);
         await writeFile(join(configurationDirectory, "config.json"), configuration, { mode: 0o600 });
-        const request = (computerId: string, path: string, token: string, method = "GET") =>
+        const request = (computerId: string, path: string, token: string, method = "GET", body?: object) =>
             fetch(`${fixture.origin}/morty/api/computers/${computerId}${path}`, {
                 method,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 signal,
             });
         const share = async (computerId: string, token: string) => {
-            const response = await request(computerId, "/identity/transfers", token, "POST");
+            const response = await request(computerId, "/identity/transfers", token, "POST", {
+                operationId: crypto.randomUUID(),
+            });
             expect(response.status).toBe(201);
             return v.parse(v.object({ url: v.string() }), await response.json()).url;
         };
@@ -1238,7 +1241,16 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         expect(recovery.status).toBe(201);
         const recoveryToken = v.parse(v.object({ token: v.string() }), await recovery.json()).token;
         for (const token of [remote, recoveryToken]) {
-            expect((await request(owner.computerId, "/identity/revoke-all-access", token, "POST")).status).toBe(403);
+            const refused = await fetch(
+                `${fixture.origin}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`,
+                {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                    body: JSON.stringify({ successor: `morty_anon_v1_${"A".repeat(43)}` }),
+                    signal,
+                },
+            );
+            expect(refused.status).toBe(403);
         }
         const otherLink = await share(other.computerId, other.token);
         const mismatchEvents: Readonly<Record<string, unknown>>[] = [];
@@ -1264,16 +1276,26 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             }),
         ).toBe(0);
         expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: owner.computerId });
+        const successor = (await savedIdentity(configurationDirectory)).user_token;
         expect(JSON.stringify(events)).not.toContain(owner.token);
+        expect(JSON.stringify(events)).not.toContain(successor);
         for (const link of links) {
             expect((await redeem(link)).status).toBe(410);
         }
-        for (const token of [...tokens, recoveryToken]) {
+        for (const token of [...tokens, recoveryToken, owner.token]) {
             expect((await request(owner.computerId, "/session", token)).status).toBe(401);
-            expect((await request(owner.computerId, "/identity/transfers", token, "POST")).status).toBe(401);
+            expect(
+                (
+                    await request(owner.computerId, "/identity/transfers", token, "POST", {
+                        operationId: crypto.randomUUID(),
+                    })
+                ).status,
+            ).toBe(401);
         }
-        expect(await readFile(join(configurationDirectory, "config.json"), "utf8")).toBe(configuration);
-        expect((await request(owner.computerId, "/session", owner.token)).status).toBe(200);
+        expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
+            JSON.parse(savedSetupState(fixture.origin, { ...owner, token: successor })),
+        );
+        expect((await request(owner.computerId, "/session", successor)).status).toBe(200);
         expect((await redeem(otherLink)).status).toBe(200);
         expect(
             await runSetup(["revoke-all-access", "--base-url", fixture.origin], {
@@ -1282,14 +1304,16 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: () => undefined,
             }),
         ).toBe(0);
-        expect((await redeem(await share(owner.computerId, owner.token))).status).toBe(200);
+        const replacedAgain = (await savedIdentity(configurationDirectory)).user_token;
+        expect((await request(owner.computerId, "/session", successor)).status).toBe(401);
+        expect((await redeem(await share(owner.computerId, replacedAgain))).status).toBe(200);
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
     }
 }, 30000);
 
-test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and the current identity stays usable", async () => {
+test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and only the replacement of the current identity setup saved opens the current one", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
     const configurationDirectory = join(directory, "state");
     await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
@@ -1297,10 +1321,11 @@ test("Given setup replaced the Project but stopped before ending the previous id
     const signal = AbortSignal.timeout(30000);
     try {
         const previous = await fixture.createAnonymousUser();
-        const request = (computerId: string, path: string, token: string, method = "GET") =>
+        const request = (computerId: string, path: string, token: string, method = "GET", body?: object) =>
             fetch(`${fixture.origin}/morty/api/computers/${computerId}${path}`, {
                 method,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                 signal,
             });
         const replaced = await request(previous.computerId, "/management/computer/replacement", previous.token, "POST");
@@ -1331,16 +1356,78 @@ test("Given setup replaced the Project but stopped before ending the previous id
         expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: current.computerId });
         expect(JSON.stringify(events)).not.toContain(previous.token);
         expect((await request(previous.computerId, "/session", previous.token)).status).toBe(401);
-        expect((await request(previous.computerId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
-        expect((await request(current.computerId, "/session", current.token)).status).toBe(200);
+        expect(
+            (
+                await request(previous.computerId, "/identity/transfers", previous.token, "POST", {
+                    operationId: crypto.randomUUID(),
+                })
+            ).status,
+        ).toBe(401);
+        const successor = (await savedIdentity(configurationDirectory)).user_token;
+        expect((await request(current.computerId, "/session", current.token)).status).toBe(401);
+        expect((await request(current.computerId, "/session", successor)).status).toBe(200);
         expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
             JSON.parse(
-                savedSetupState(fixture.origin, current, {
-                    kind: "revoked",
-                    previous: { kind: "retired", project_id: previous.computerId },
-                }),
+                savedSetupState(
+                    fixture.origin,
+                    { ...current, token: successor },
+                    {
+                        kind: "revoked",
+                        previous: { kind: "retired", project_id: previous.computerId },
+                    },
+                ),
             ),
         );
+    } finally {
+        await fixture.close();
+        await rm(directory, { recursive: true, force: true });
+    }
+}, 30000);
+
+test("Given the reply to revoking all access was lost after the Worker replaced the local credential, When the user revokes all access again, Then setup keeps the successor it saved and the earlier credential stays revoked", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-retry-"));
+    const configurationDirectory = join(directory, "state");
+    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
+    const fixture = await createIdentityFixture();
+    const signal = AbortSignal.timeout(30000);
+    try {
+        const owner = await fixture.createAnonymousUser();
+        const successor = `morty_anon_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
+        // What setup saved before the request whose reply was lost.
+        const saved = JSON.parse(savedSetupState(fixture.origin, owner));
+        saved.identity.credential_rotation = { successor_token: successor };
+        await writeFile(join(configurationDirectory, "config.json"), JSON.stringify(saved), { mode: 0o600 });
+        const session = (token: string) =>
+            fetch(`${fixture.origin}/morty/api/computers/${owner.computerId}/session`, {
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const lost = await fetch(
+            `${fixture.origin}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`,
+            {
+                method: "POST",
+                headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+                body: JSON.stringify({ successor }),
+                signal,
+            },
+        );
+        expect(lost.status).toBe(200);
+        expect((await session(owner.token)).status).toBe(401);
+
+        const events: Readonly<Record<string, unknown>>[] = [];
+        const code = await runSetup(["revoke-all-access"], {
+            state: configurationDirectory,
+            signal,
+            emit: (event) => events.push(event),
+        });
+        expect(code, JSON.stringify(events)).toBe(0);
+
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: owner.computerId });
+        expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
+            JSON.parse(savedSetupState(fixture.origin, { ...owner, token: successor })),
+        );
+        expect((await session(successor)).status).toBe(200);
+        expect((await session(owner.token)).status).toBe(401);
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });

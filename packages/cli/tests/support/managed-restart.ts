@@ -24,7 +24,7 @@ const interruptedPrompt = "Begin work that will be interrupted by the runtime re
 
 async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Promise<void> {
     const sessionTarget = await prepareNewRealSession(peer, agentId);
-    const identity = { agentId, bindingId: peer.bindingId, directoryId: "default", additionalDirectoryIds: [] };
+    const identity = { agentId, bindingId: peer.bindingId, directoryId: "default" };
     const prompt = "Remember this conversation across a daemon restart";
     const sendAndFinish = async (text: string): Promise<void> => {
         const commandId = randomUUID();
@@ -170,7 +170,7 @@ async function interruptedJourney(
     let stage = "preparing the original session";
     try {
         const sessionTarget = await prepareNewRealSession(peer, agentId);
-        const identity = { agentId, bindingId: peer.bindingId, directoryId: "default", additionalDirectoryIds: [] };
+        const identity = { agentId, bindingId: peer.bindingId, directoryId: "default" };
         const commandId = randomUUID();
         const sendPrompt = (id: string, prompt: string): void =>
             peer.send(

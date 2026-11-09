@@ -41,7 +41,6 @@ export type RuntimeControl = (
 export interface SessionExecutionIdentity {
     readonly agentId: string;
     readonly directoryId: string;
-    readonly additionalDirectoryIds: readonly string[];
 }
 
 /**
@@ -51,7 +50,6 @@ export interface SessionExecutionIdentity {
 export interface SessionBindingRequest {
     readonly agentId?: string | undefined;
     readonly directoryId?: string | undefined;
-    readonly additionalDirectoryIds?: readonly string[] | undefined;
 }
 
 export interface TurnSubmission extends SessionBindingRequest {
@@ -107,7 +105,6 @@ export class SessionControl {
         try {
             command = decodeSessionPromptCommand(
                 JSON.stringify({
-                    additionalDirectoryIds: binding.additionalDirectoryIds,
                     agentId: binding.agentId,
                     attachments: turn.attachments,
                     bindingId: RUNTIME_WORKSPACE_BINDING_ID,
@@ -269,7 +266,6 @@ export class SessionControl {
             decodeNativeSessionRequest(
                 JSON.stringify({
                     action: "active-turn",
-                    additionalDirectoryIds: identity.additionalDirectoryIds,
                     agentId: identity.agentId,
                     bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     ...(deliveryCommandId === undefined ? {} : { deliveryCommandId }),
@@ -298,7 +294,6 @@ export class SessionControl {
         const result = await this.#control(
             decodeSessionPreviewHistoryPageLoad(
                 JSON.stringify({
-                    additionalDirectoryIds: identity.additionalDirectoryIds,
                     agentId: identity.agentId,
                     bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     cursor: page.cursor,
@@ -348,12 +343,12 @@ export class SessionControl {
         supplied: SessionBindingRequest,
         permission: ProjectPermission,
     ): Promise<SessionExecutionIdentity> => {
-        const { additionalDirectoryIds, agentId, directoryId } = supplied;
+        const { agentId, directoryId } = supplied;
         if (agentId !== undefined && agentId !== this.#target.harness) {
             throw new PairingDirectoryError("invalid_request", "The Session belongs to a different harness");
         }
-        if (agentId !== undefined && directoryId !== undefined && additionalDirectoryIds !== undefined) {
-            return { additionalDirectoryIds, agentId, directoryId };
+        if (agentId !== undefined && directoryId !== undefined) {
+            return { agentId, directoryId };
         }
         const queried = await this.#control(
             decodeSessionQueryCommand(
@@ -373,8 +368,6 @@ export class SessionControl {
             throw new PairingDirectoryError("session_not_found", "The selected Session is unavailable");
         }
         return {
-            additionalDirectoryIds:
-                additionalDirectoryIds ?? session.additionalDirectories.map((directory) => directory.directoryId),
             agentId: agentId ?? session.agentId,
             directoryId: directoryId ?? session.directoryId,
         };

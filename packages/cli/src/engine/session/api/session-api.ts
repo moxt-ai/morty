@@ -28,7 +28,6 @@ import type { NativeSessionOrigin } from "../../acp/protocol/native-session.ts";
 /** A new harness Session has no conversation identity until the harness opens it. */
 export interface SessionCreationOptions {
     readonly adapter: Adapter;
-    readonly additionalDirectories: readonly string[];
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
     readonly signal: AbortSignal;
@@ -46,7 +45,6 @@ export type SessionRecovery = { readonly kind: "history-required" } | { readonly
 
 export interface AgentSettingsInspectionOptions {
     readonly adapter: Adapter;
-    readonly additionalDirectories: readonly string[];
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
     readonly model?: string;

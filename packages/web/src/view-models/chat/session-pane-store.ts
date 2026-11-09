@@ -357,7 +357,6 @@ export function sessionPanePresentation(
 }
 
 interface SessionIdentity {
-    readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly directoryId: string;
 }
@@ -538,11 +537,7 @@ export function createSessionPaneModel(options: {
         queuedMessages(store.getState().queued, messageQueue.getState(), deliveryMessages(delivery.getState())).find(
             (message) => message.commandId === commandId,
         ) ?? null;
-    const request = {
-        additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
-    };
     const sessionIdentity: SessionIdentity = {
-        additionalDirectoryIds: session.entry.additionalDirectories.map((directory) => directory.directoryId),
         agentId: session.agentRef,
         directoryId: session.result.ready.directoryId,
     };
@@ -885,7 +880,6 @@ export function createSessionPaneModel(options: {
                               );
                     // Freeze semantic intent before delivery owns retries, including identity.
                     return {
-                        ...request,
                         agentId: session.agentRef,
                         directoryId: session.result.ready.directoryId,
                         attachments: uploadedAttachments,

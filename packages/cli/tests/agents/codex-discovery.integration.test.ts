@@ -98,7 +98,7 @@ test.skipIf(process.platform === "win32")(
             if (agent === undefined) {
                 throw new Error("Real Codex was not discovered");
             }
-            const options = { agent, cwd: directory, additionalDirectories: [], signal: AbortSignal.timeout(30_000) };
+            const options = { agent, cwd: directory, signal: AbortSignal.timeout(30_000) };
             const sessionTarget = await manager.createNativeSession(options);
             const run = async (): Promise<string> => {
                 observer.events.length = 0;
@@ -106,7 +106,6 @@ test.skipIf(process.platform === "win32")(
                     agent,
                     target: sessionTarget,
                     cwd: directory,
-                    additionalDirectories: [],
                     commandId: crypto.randomUUID(),
                     prompt: "Hello",
                     images: [],

@@ -53,7 +53,9 @@ test("Given a browser opening a Session, When its device is revoked before the R
                 })
             ).status,
         ).toBe(202);
-        const shared = await request(`${project}/identity/transfers`, owner.token, {});
+        const shared = await request(`${project}/identity/transfers`, owner.token, {
+            operationId: crypto.randomUUID(),
+        });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const redeemed = await request("identity/transfers/redeem", owner.token, { code, device: "Revoked browser" });
         expect(redeemed.status).toBe(200);

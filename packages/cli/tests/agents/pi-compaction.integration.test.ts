@@ -28,7 +28,6 @@ test("Given pi compacts the conversation, When the daemon relays the turn, Then 
         const sendPrompt = (prompt: string): void => {
             peer.send(
                 encodeSessionPromptCommand({
-                    additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
@@ -284,7 +283,6 @@ test.each([false, true])(
             const requestId = randomUUID();
             peer.send(
                 encodeSessionPreviewHistoryPageLoad({
-                    additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
                     directoryId: "default",

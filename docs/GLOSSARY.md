@@ -112,10 +112,14 @@ Agent supports it.
 
 ### Workspace and directory
 
-The local filesystem context authorized for Agent work. The browser works with
-opaque directory identities supplied by the Runtime, not arbitrary client-provided
-paths. Additional directories extend a Session's authorized context without
-creating a new Runtime.
+The local filesystem context authorized for Agent work. Clients select explicit
+directory paths, not opaque directory identities. The local execution boundary
+validates the requested paths, resolves their filesystem targets, and authorizes
+the resolved directories before use. Relative paths resolve against the paired
+Computer's configured workspace; home-relative paths select the current local
+user's home. Additional directories extend a Session's authorized context without
+creating a new Runtime. Discovery and previously accepted paths never replace
+current local authorization.
 
 ## Session and history concepts
 
@@ -145,11 +149,12 @@ versus a **Native Session** owned by the Agent.
 
 ### Native Session entry
 
-A discovery result representing one Agent-owned conversation in a particular
-workspace. Its entry ID is an opaque handle for the current discovery operation;
-it is not necessarily the Native Session ID or a Morty Session ID. Refreshing the
-directory can produce a new discovery context, so stale entries must not authorize
-later operations.
+A discovery result describing one Agent-owned conversation in a particular
+workspace, identified by its harness and harness-owned Session ID. Discovery is
+not an authorization grant: opening or forking a conversation resolves its current
+metadata and authorizes its directories locally, without requiring an earlier
+listing or a process-local discovery handle. Pairing authorizes the Computer;
+requests do not carry an additional workspace binding identity.
 
 ### Open / import
 
@@ -173,12 +178,11 @@ must not be assumed to update the source Native Session.
 Fork is a capability, not a fallback implementation for import. If the Agent cannot
 fork reliably, Morty must report that limitation rather than simulate success.
 
-### Session entry ID, Morty Session ID, and Native Session ID
+### Session identity
 
-- A **Session entry ID** selects an item returned by native-session discovery.
-- A **Morty Session ID** addresses live and managed Session operations through the
-  Runtime and Relay.
-- A **Native Session ID** identifies the Agent-owned conversation.
+The harness-owned **Session ID**, together with the harness on the selected
+Computer, identifies the conversation for discovery and subsequent operations.
+Morty does not assign an additional Session entry identity or conversation ID.
 
 Some creation paths deliberately reuse a value across layers. That is an
 implementation choice, not permission to collapse the concepts or skip validation

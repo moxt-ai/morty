@@ -185,7 +185,6 @@ describe("daemon narration delivery", () => {
                     agentId: agent.id,
                     bindingId: config.bindingId,
                     directoryId: "default",
-                    additionalDirectoryIds: [],
                     configurations: [],
                 }),
             );
@@ -197,7 +196,6 @@ describe("daemon narration delivery", () => {
                 created = await frames.next();
             }
             const prompt: SessionPromptCommand = {
-                additionalDirectoryIds: [],
                 agentId: agent.id,
                 bindingId: config.bindingId,
                 commandId: "narration_turn",

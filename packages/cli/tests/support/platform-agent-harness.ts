@@ -57,7 +57,6 @@ export async function createFakeAgentHarnessRuntime(options: {
                 writeFile(
                     join(harnessState, `${encodeURIComponent(sessionId)}.json`),
                     JSON.stringify({
-                        additionalDirectories: [],
                         cwd: workspace,
                         fastMode: false,
                         history: [],

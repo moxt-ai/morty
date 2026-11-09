@@ -27,7 +27,6 @@ if (process.argv.includes("--version")) {
     "--agent-name", "Controlled ACP",
     "--agent-version", "1.0.0",${loadSession ? "" : '\n    "--no-load-session",'}
     "--http-mcp",
-    "--no-additional-directories",
     "--no-delete-session",
     "--no-fork-session",
     "--no-embedded-context",

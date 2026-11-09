@@ -39,7 +39,6 @@ test("Given an existing real Codex conversation, When the process exits or its t
                             agentId: "codex",
                             bindingId: peer.bindingId,
                             directoryId: "default",
-                            additionalDirectoryIds: [],
                             attachments: [],
                             prompt: "Continue the conversation",
                             disposition: SessionPromptDisposition.Append,
@@ -120,7 +119,6 @@ test("Given a real Codex conversation in Plan mode, When its process recovers be
                             agentId: "codex",
                             bindingId: peer.bindingId,
                             directoryId: "default",
-                            additionalDirectoryIds: [],
                             attachments: [],
                             prompt: plan ? "Give me a plan" : "Go.",
                             disposition: SessionPromptDisposition.Append,
@@ -170,7 +168,6 @@ test("Given a real Codex conversation in Plan mode, When its process recovers be
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                     }),
                 );
                 for (;;) {

@@ -113,6 +113,8 @@ export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 /** What a new link grants, and the unopened link from this page it replaces. */
 export interface SharingTerms {
+    /** The same operation is retained until its outcome is known. */
+    readonly operationId: string;
     /** The chosen duration, or null for the Worker's default. */
     readonly accessDuration: DeviceAccessDuration | null;
     /** The code of a link this page shared that no one opened yet; it stops working. */
@@ -266,6 +268,7 @@ export class AnonymousIdentityApi {
                         "content-type": "application/json",
                     },
                     body: JSON.stringify({
+                        operationId: terms.operationId,
                         ...(terms.accessDuration === null ? {} : { accessDuration: terms.accessDuration }),
                         ...(terms.replaces === null ? {} : { replaces: terms.replaces }),
                     }),

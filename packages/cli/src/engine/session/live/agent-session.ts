@@ -32,7 +32,7 @@ import { unsupportedSessionCapabilities } from "../../acp/protocol/session-capab
 import type { SessionConfigurationSelection } from "../../acp/protocol/session-config-protocol.ts";
 import type { OperationMetrics } from "../../infra/operation-metrics.ts";
 import { SerialTaskQueue } from "../../util/serial-task-queue.ts";
-import { arraysEqual, recordsEqual, truncate } from "../../util/value-utils.ts";
+import { recordsEqual, truncate } from "../../util/value-utils.ts";
 import {
     type ElicitationResponseOptions,
     type PermissionResponseOptions,
@@ -103,9 +103,6 @@ type SessionAddress =
 export class AgentSession implements AgentSessionRestore {
     // The restore surface: AgentSessionRestore members expose private state to
     // session-restore.ts only. The class keeps the fields private.
-    get additionalDirectories(): readonly string[] {
-        return this.#additionalDirectories;
-    }
     get agentId(): string {
         return this.#agentId;
     }
@@ -148,7 +145,6 @@ export class AgentSession implements AgentSessionRestore {
         return this.#nativeIdentity.kind === "bound" ? this.#nativeIdentity.sessionId : "";
     }
     readonly #adapter: Adapter;
-    readonly #additionalDirectories: readonly string[];
     readonly #agentId: string;
     readonly #cwd: string;
     readonly #environment: Readonly<Record<string, string>>;
@@ -178,7 +174,6 @@ export class AgentSession implements AgentSessionRestore {
     private constructor(
         agent: AcpAgentDefinition,
         cwd: string,
-        additionalDirectories: readonly string[],
         address: SessionAddress,
         getObserver: () => SessionObserver,
         execution: SessionExecutionRecord,
@@ -189,7 +184,6 @@ export class AgentSession implements AgentSessionRestore {
     ) {
         this.#agentCommand = () => execution.agentCommand(this.target);
         this.#settledTurns = () => execution.settledTurns(this.target);
-        this.#additionalDirectories = [...additionalDirectories];
         this.#adapter = adapter;
         this.#agentId = agent.id;
         this.#commands = [];
@@ -211,7 +205,6 @@ export class AgentSession implements AgentSessionRestore {
         this.#scope = {
             agent,
             cwd,
-            additionalDirectories: this.#additionalDirectories,
             ...(externalize === undefined
                 ? {}
                 : {
@@ -289,7 +282,6 @@ export class AgentSession implements AgentSessionRestore {
                     new AgentSession(
                         options.agent,
                         options.cwd,
-                        options.additionalDirectories,
                         address,
                         getObserver,
                         execution,
@@ -420,10 +412,7 @@ export class AgentSession implements AgentSessionRestore {
             options.adapter,
         );
 
-    readonly belongsTo = (agentId: string, cwd: string, additionalDirectories: readonly string[]): boolean =>
-        this.#agentId === agentId &&
-        this.#cwd === cwd &&
-        arraysEqual(this.#additionalDirectories, additionalDirectories);
+    readonly belongsTo = (agentId: string, cwd: string): boolean => this.#agentId === agentId && this.#cwd === cwd;
 
     readonly usesEnvironment = (environment: Readonly<Record<string, string>>): boolean =>
         recordsEqual(this.#environment, environment);
@@ -433,7 +422,6 @@ export class AgentSession implements AgentSessionRestore {
             new StoredSession(
                 this.target,
                 this.#cwd,
-                this.#additionalDirectories,
                 this.#prompted,
                 this.#sessionTitle ?? "",
                 updatedAt,
@@ -800,7 +788,6 @@ export class AgentSession implements AgentSessionRestore {
     readonly #target = (): AdapterSessionTarget => ({
         sessionId: this.#sessionId,
         cwd: this.#cwd,
-        additionalDirectories: this.#additionalDirectories,
     });
 
     /** Loads what the Agent needs before it can receive a prompt; the Agent does not receive it yet. */

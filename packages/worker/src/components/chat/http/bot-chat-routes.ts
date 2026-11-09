@@ -29,7 +29,6 @@ const nativeIdentity = {
     computerId: platformIdentifier,
     agentId: platformIdentifier,
     directoryId: nativeDirectoryId,
-    additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
 };
 const nativeListInput = v.strictObject({
     ...nativeIdentity,

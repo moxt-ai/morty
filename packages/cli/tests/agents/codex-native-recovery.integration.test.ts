@@ -83,7 +83,6 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                         agentId: "codex",
                         bindingId: peer.bindingId,
                         directoryId: "default",
-                        additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
                         disposition: SessionPromptDisposition.Append,

@@ -55,7 +55,6 @@ test.each(["request", "result"] as const)(
                 action: "list",
                 agentId: "claude",
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 cursor: null,
                 discoveryId: null,
             },
@@ -66,7 +65,6 @@ test.each(["request", "result"] as const)(
         const input = {
             agentId: "claude",
             directoryId: "default",
-            additionalDirectoryIds: [],
             sessionId: "native-fork-source",
         };
         const fork = () => runtime.client.runtimes.forkNativeSession(operationId, input, signal);
@@ -109,7 +107,6 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     const runtime = await platform.connectAgent(project.computerId, undefined, new Set(["recovery-native-source"]));
     const listingInput = {
         action: "list" as const,
-        additionalDirectoryIds: [],
         agentId: "claude",
         cursor: null,
         directoryId: "default",
@@ -120,7 +117,6 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         throw new Error("No native source");
     }
     const body = JSON.stringify({
-        additionalDirectoryIds: [],
         agentId: "claude",
         directoryId: "default",
         sessionId: directory.entries[0].sessionId,
@@ -179,7 +175,6 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
             method: "POST",
             headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
             body: JSON.stringify({
-                additionalDirectoryIds: [],
                 agentId: "claude",
                 directoryId: "default",
                 sessionId: "another-source",

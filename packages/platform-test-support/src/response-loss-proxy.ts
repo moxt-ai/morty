@@ -35,6 +35,9 @@ export async function createResponseLossProxy(upstream: string) {
     const loseNextResponse = async (path: RegExp) => (await loseNextResponseWithBody(path)).status;
     // The next request to lose on its way: the service never receives it.
     let droppedRequest: RegExp | null = null;
+    let holdSharing: {
+        readonly receive: (body: string, disconnect: () => void) => void;
+    } | null = null;
     const server = createServer((incoming, outgoing) => {
         if (droppedRequest !== null && incoming.method === "POST" && droppedRequest.test(incoming.url ?? "")) {
             droppedRequest = null;
@@ -49,6 +52,20 @@ export async function createResponseLossProxy(upstream: string) {
                 headers: { ...incoming.headers, host: new URL(upstream).host },
             },
             (response) => {
+                if (
+                    holdSharing !== null &&
+                    incoming.method === "POST" &&
+                    incoming.url?.endsWith("/identity/transfers")
+                ) {
+                    const held = holdSharing;
+                    holdSharing = null;
+                    const chunks: Buffer[] = [];
+                    response.on("data", (chunk: Buffer) => chunks.push(chunk));
+                    response.on("end", () =>
+                        held.receive(decoded(response.headers["content-encoding"], chunks), () => outgoing.destroy()),
+                    );
+                    return;
+                }
                 if (lostResponse !== null && incoming.method === "POST" && lostResponse.path.test(incoming.url ?? "")) {
                     const { lost } = lostResponse;
                     lostResponse = null;
@@ -91,9 +108,13 @@ export async function createResponseLossProxy(upstream: string) {
         target.protocol = "ws:";
         const remote = new WebSocket(target, {
             ...(incoming.headers.origin === undefined ? {} : { origin: incoming.headers.origin }),
-            ...(incoming.headers.authorization === undefined
-                ? {}
-                : { headers: { authorization: incoming.headers.authorization } }),
+            // Keep the browser's authority and Origin together across this transparent proxy.
+            headers: {
+                ...(incoming.headers.host === undefined ? {} : { host: incoming.headers.host }),
+                ...(incoming.headers.authorization === undefined
+                    ? {}
+                    : { authorization: incoming.headers.authorization }),
+            },
         });
         sockets.add(remote);
         let configurationResponse: { readonly requestId: string; readonly ready: () => void } | null = null;
@@ -224,6 +245,26 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
+        /** Holds a committed Chat sharing response, then loses it when the scenario disconnects the network. */
+        holdNextSharingResponse: () => {
+            const received = Promise.withResolvers<string>();
+            let disconnect: (() => void) | null = null;
+            holdSharing = {
+                receive: (body, close) => {
+                    disconnect = close;
+                    received.resolve(body);
+                },
+            };
+            return {
+                received: received.promise,
+                disconnect: () => {
+                    if (disconnect === null) {
+                        throw new Error("The sharing response has not arrived");
+                    }
+                    disconnect();
+                },
+            };
+        },
         /** Holds one real settings edit response, letting later notifications and reads pass unchanged. */
         holdNextConfigurationResponse: () =>
             new Promise<void>((resolve) => {

@@ -48,7 +48,6 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
         }
 
         const identity = {
-            additionalDirectoryIds: [],
             agentId: "codex",
             bindingId: peer.bindingId,
             directoryId: "default",
@@ -113,7 +112,6 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
                 agentId: "codex",
                 bindingId: peer.bindingId,
                 directoryId: "default",
-                additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Continue this conversation after installation",
                 disposition: SessionPromptDisposition.Append,

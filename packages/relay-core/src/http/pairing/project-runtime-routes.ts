@@ -43,7 +43,6 @@ import {
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const sessionIdentitySchema = v.strictObject({
-    additionalDirectoryIds: v.array(v.custom<string>(isDirectoryIdentifier)),
     agentId: identifier,
     directoryId: v.custom<string>(isDirectoryIdentifier),
 });
@@ -438,10 +437,10 @@ export function createProjectRuntimeRoutes() {
             assertRequiredKeys(
                 body,
                 body["action"] === "list"
-                    ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "cursor", "discoveryId"]
+                    ? ["action", "agentId", "directoryId", "cursor", "discoveryId"]
                     : body["action"] === "find"
-                      ? ["action", "agentId", "directoryId", "additionalDirectoryIds", "sessionId"]
-                      : ["action", "agentId", "directoryId", "additionalDirectoryIds", "entryId", "discoveryId"],
+                      ? ["action", "agentId", "directoryId", "sessionId"]
+                      : ["action", "agentId", "directoryId", "entryId", "discoveryId"],
             );
             const { discoveryId: requestedDiscoveryId, ...input } = body;
             const discoveryId =
