@@ -75,7 +75,7 @@ export function formatError(cause: unknown, fallback: string): string {
  * Whether an operation failed because the Runtime closed the Session and nobody reopened it. The Session is not
  * broken: reopening it makes its operations work again.
  */
-export function isSessionClosedFailure(cause: unknown): boolean {
+export function isSessionClosedFailure(cause: unknown): cause is MortyError {
     return cause instanceof MortyError && cause.code === SESSION_CLOSED_ERROR_CODE;
 }
 

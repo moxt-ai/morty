@@ -82,7 +82,7 @@ export class SessionManager {
     readonly #sessionClosures = new NativeSessionMap<Promise<void>>();
     readonly #sessionRetirements = new NativeSessionMap<Promise<void>>();
     /** Sessions that were closed and not reopened since. Only a prepare or restore of the Session reopens it. */
-    readonly #closedSessions = new NativeSessionSet();
+    readonly #closedSessions = new NativeSessionMap<string>();
     readonly #store: SessionStore;
     readonly #onSessionClosed: (event: SessionCloseNoticeEvent) => void;
     readonly #timer: Timer;
@@ -210,14 +210,15 @@ export class SessionManager {
         if (this.#closedSessions.has(target) || !this.#isKnownSession(target)) {
             return;
         }
-        this.#closedSessions.add(target);
+        this.#closedSessions.set(target, reason);
         this.#onSessionClosed({ kind: SESSION_CLOSE_NOTICE_KIND, reason, target });
     }
 
     /** A closed Session fails the operations that would silently reopen it, so a client learns that its view is stale. */
     #assertOpen(target: NativeSessionTarget): void {
-        if (this.#closedSessions.has(target)) {
-            throw new AcpExecutionError("The Session is closed; reopen it to continue", {}, SESSION_CLOSED_ERROR_CODE);
+        const reason = this.#closedSessions.get(target);
+        if (reason !== undefined) {
+            throw new AcpExecutionError(reason, {}, SESSION_CLOSED_ERROR_CODE);
         }
     }
 

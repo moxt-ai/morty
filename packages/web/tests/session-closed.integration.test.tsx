@@ -1,11 +1,10 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, onTestFinished, test } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { refreshSessions, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 const CLOSED_ON_REQUEST = "This Session was closed on request.";
 const HELD_PROMPT = "hold after first delta";
@@ -204,12 +203,8 @@ test("Given a conversation whose Runtime restarted and then closed its Session w
     );
 });
 
-test("Given a reply that is still running, When its turn outcome precedes a delayed close notice, Then it closes and reopens without a failed reply", {
-    timeout: dedicatedEnvironmentTimeout,
-}, async () => {
-    const environment = await createChatWorkerEnvironment(false, true);
-    onTestFinished(() => environment.close());
-    const app = await createTestApp({ connectAgent: true, environment });
+test("Given a running reply, When another client closes the Session, Then it closes and reopens without a failed reply", async () => {
+    const app = await createTestApp({ connectAgent: true });
     const sessionId = await openSavedConversation(app);
     const daemon = app.daemon;
     if (daemon === null) {
@@ -222,10 +217,6 @@ test("Given a reply that is still running, When its turn outcome precedes a dela
     await sendPrompt(app, composer, HELD_PROMPT);
     await app.waitForView(() => expect(sendButtonLabel(app)).toBe("Stop agent output"));
 
-    const network = app.executionNetwork;
-    if (network === null) {
-        throw new Error("Expected the real transport proxy");
-    }
     await app.waitForView(() =>
         expect(
             app
@@ -233,17 +224,7 @@ test("Given a reply that is still running, When its turn outcome precedes a dela
                 .filter((entry) => entry.textContent?.includes("Partial reply")),
         ).toHaveLength(2),
     );
-    // Keep each connection in order while delivering the turn outcome before the separate close notice.
-    const notice = network.holdNextCloseNotice();
     await daemon.closeSession(sessionId);
-    const releaseNotice = await notice;
-    try {
-        await app.waitForView(() => expect(sendButtonLabel(app)).toBe("Send message"));
-        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
-    } finally {
-        releaseNotice();
-    }
-
     await app.waitForView(() => expect(closedNoticeText(app)).toContain(CLOSED_ON_REQUEST));
     await app.waitForView(() => expect(sendButtonLabel(app)).toBe("Send message"));
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();

@@ -503,7 +503,7 @@ export function createSessionPaneModel(options: {
     // This pane's lending of its connection to the Session's operations, from `start` until `stop`.
     let follower: SessionConnectionFollower | null = null;
     /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
-    const closedNow = (cause: unknown, reopeningsAtStart: number): boolean =>
+    const closedNow = (cause: unknown, reopeningsAtStart: number): cause is MortyError =>
         isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
     /** Wraps an operation on the Session so that failing because the Session closed also closes this pane. */
     const noticingClosure =
@@ -514,7 +514,7 @@ export function createSessionPaneModel(options: {
                 return await operation(...args);
             } catch (cause) {
                 if (closedNow(cause, reopeningsAtStart)) {
-                    store.getState().sessionClosed(null);
+                    store.getState().sessionClosed(cause.message);
                 }
                 throw cause;
             }
@@ -554,7 +554,7 @@ export function createSessionPaneModel(options: {
         const reopeningsAtLending = reopenings;
         follower?.changed(connectionReadiness(connection), (cause) => {
             if (closedNow(cause, reopeningsAtLending)) {
-                store.getState().sessionClosed(null);
+                store.getState().sessionClosed(cause.message);
             }
         });
     };
@@ -959,7 +959,7 @@ export function createSessionPaneModel(options: {
                 }
                 if (closedNow(cause, reopeningsAtStart)) {
                     commitProjection({ kind: "older-page-failed", revision, message: null });
-                    get().sessionClosed(null);
+                    get().sessionClosed(cause.message);
                     return;
                 }
                 commitProjection({
@@ -1233,8 +1233,8 @@ export function createSessionPaneModel(options: {
                         if (signal.aborted) {
                             return;
                         }
-                        if (closure === null && isSessionClosedFailure(cause)) {
-                            closure = { reason: null };
+                        if (isSessionClosedFailure(cause)) {
+                            closure ??= { reason: cause.message };
                         }
                         if (closure !== null) {
                             continue;
@@ -1561,7 +1561,7 @@ export function createSessionPaneModel(options: {
                 }
                 if (closedNow(cause, reopeningsAtStart)) {
                     rename.getState().clear();
-                    store.getState().sessionClosed(null);
+                    store.getState().sessionClosed(cause.message);
                     return;
                 }
                 rename
