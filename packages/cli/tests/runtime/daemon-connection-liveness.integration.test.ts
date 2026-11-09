@@ -947,7 +947,6 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     socket,
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",
@@ -1063,7 +1062,6 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: "workspace",

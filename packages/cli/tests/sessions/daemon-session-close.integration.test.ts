@@ -160,7 +160,6 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                 const promptCommandId = crypto.randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,

@@ -73,10 +73,6 @@ type SessionLoadState =
           readonly history: HistoryReplayCapture;
           readonly kind: "capturing";
       }
-    | {
-          readonly history: HistoryReplayCapture;
-          readonly kind: "execution-only";
-      }
     | LoadedSession;
 
 type NativeHistoryOwnership =
@@ -446,17 +442,6 @@ export class AgentSession implements AgentSessionRestore {
         await this.#completedHistory(signal);
     };
 
-    /** Starts live event capture without asking the native Agent to replay its persisted history. */
-    readonly startExecutionOnlyCapture = (): void => {
-        if (this.#sessionLoad.kind !== "not-requested") {
-            return;
-        }
-        this.#sessionLoad = {
-            history: new HistoryReplayCapture(this.#store.events, this.#mortySessionId),
-            kind: "execution-only",
-        };
-    };
-
     readonly loadHistoryEvents = async (
         eventLimit: number,
         cursor: string | null,
@@ -750,7 +735,7 @@ export class AgentSession implements AgentSessionRestore {
                 },
             };
         }
-        if (this.#capabilities.loadSession && this.#sessionLoad.kind !== "execution-only") {
+        if (this.#capabilities.loadSession) {
             await this.#completedHistory(signal);
         }
     };
@@ -948,7 +933,7 @@ export class AgentSession implements AgentSessionRestore {
     };
 
     readonly recordControlEvent = async (event: SessionEventPayload): Promise<boolean> => {
-        if (this.#sessionLoad.kind !== "loaded" && this.#sessionLoad.kind !== "execution-only") {
+        if (this.#sessionLoad.kind !== "loaded") {
             return false;
         }
         await this.recordLifecycleEvent(event);
@@ -956,10 +941,7 @@ export class AgentSession implements AgentSessionRestore {
     };
 
     readonly recordLifecycleEvent = async (event: SessionEventPayload): Promise<void> => {
-        if (
-            event.type !== "lifecycle-metadata" ||
-            (this.#sessionLoad.kind !== "loaded" && this.#sessionLoad.kind !== "execution-only")
-        ) {
+        if (event.type !== "lifecycle-metadata" || this.#sessionLoad.kind !== "loaded") {
             return;
         }
         const liveEvent = this.#sessionLoad.history.recordLifecycle(event);
@@ -990,7 +972,7 @@ export class AgentSession implements AgentSessionRestore {
         }
         if (this.#sessionLoad.kind === "capturing") {
             this.#sessionLoad.history.replay(event.payload);
-        } else if (this.#sessionLoad.kind === "loaded" || this.#sessionLoad.kind === "execution-only") {
+        } else if (this.#sessionLoad.kind === "loaded") {
             await this.#sessionLoad.history.record(event.payload, async (liveEvent) => {
                 await this.#getObserver().onSessionEvent?.(liveEvent);
             });

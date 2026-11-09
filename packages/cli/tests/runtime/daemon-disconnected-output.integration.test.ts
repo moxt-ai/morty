@@ -319,7 +319,6 @@ async function startRuntime() {
         prompt: async (peer: RelayPeer, sessionId: string): Promise<ControlledTurn> => {
             peer.socket.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "controlled",
                     bindingId: config.bindingId,

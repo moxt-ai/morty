@@ -34,14 +34,6 @@ export const SessionPromptDisposition = Object.freeze({
     Steer: "steer",
 });
 
-/** Controls whether starting a prompt may ask the native Agent to replay history. */
-export const SessionHistoryPolicy = Object.freeze({
-    Eager: "eager",
-    ExecutionOnly: "execution-only",
-} as const);
-
-export type SessionHistoryPolicy = (typeof SessionHistoryPolicy)[keyof typeof SessionHistoryPolicy];
-
 const MAX_PROMPT_LENGTH = 100_000;
 export const MAX_PROMPT_ATTACHMENT_BYTES = 32 * 1024 * 1024;
 
@@ -56,7 +48,6 @@ export type SessionPromptCommand = {
     readonly commandId: string;
     readonly directoryId: string;
     readonly attachments: readonly PromptAttachment[];
-    readonly historyPolicy: SessionHistoryPolicy;
     readonly kind: typeof SESSION_PROMPT_KIND;
     readonly prompt: string;
     readonly sessionConfigurations?: readonly SessionConfigurationSelection[];
@@ -177,21 +168,12 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
         commandId: readIdentifier(value, "commandId"),
         directoryId: readDirectoryIdentifier(value, "directoryId"),
         attachments,
-        historyPolicy: readHistoryPolicy(value),
         kind: SESSION_PROMPT_KIND,
         prompt,
         ...(hasSessionConfigurations ? { sessionConfigurations } : {}),
         sessionId: readIdentifier(value, "sessionId"),
         ...placement,
     };
-}
-
-function readHistoryPolicy(value: Readonly<Record<string, unknown>>): SessionHistoryPolicy {
-    const field = value["historyPolicy"];
-    if (field === SessionHistoryPolicy.Eager || field === SessionHistoryPolicy.ExecutionOnly) {
-        return field;
-    }
-    throw new ProtocolMessageError("Invalid value field: historyPolicy");
 }
 
 export function decodeSessionCancelCommand(encoded: string): SessionCancelCommand {

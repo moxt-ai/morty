@@ -85,7 +85,6 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                 const commandId = randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         kind: "session.prompt",
                         sessionId,
                         commandId,

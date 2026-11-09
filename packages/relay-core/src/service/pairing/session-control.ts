@@ -58,7 +58,6 @@ export interface TurnSubmission extends SessionBindingRequest {
     readonly disposition: string;
     readonly targetCommandId?: string | undefined;
     readonly sessionConfigurations: readonly unknown[];
-    readonly historyPolicy?: "eager" | "execution-only" | undefined;
 }
 
 /**
@@ -112,7 +111,6 @@ export class SessionControl {
                     commandId: turn.commandId,
                     directoryId: binding.directoryId,
                     disposition: turn.disposition,
-                    historyPolicy: turn.historyPolicy ?? "eager",
                     kind: "session.prompt",
                     prompt: turn.content,
                     sessionConfigurations: turn.sessionConfigurations,

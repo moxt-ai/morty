@@ -33,7 +33,6 @@ test("Given an existing real Codex conversation, When the process exits or its t
                     const commandId = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            historyPolicy: "eager",
                             kind: "session.prompt",
                             commandId,
                             sessionId: peer.sessionId,
@@ -115,7 +114,6 @@ test("Given a real Codex conversation in Plan mode, When its process recovers be
                     const commandId = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            historyPolicy: "eager",
                             kind: "session.prompt",
                             commandId,
                             sessionId: peer.sessionId,

@@ -25,7 +25,6 @@ test("Given Codex auto-compacts a conversation, When the daemon relays the turns
         ]) {
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: peer.bindingId,

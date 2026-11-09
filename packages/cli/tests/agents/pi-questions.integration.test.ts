@@ -64,7 +64,6 @@ test.each(["new", "imported"] as const)(
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "pi",
                     bindingId: peer.bindingId,
@@ -229,7 +228,6 @@ function sendQuestionPrompt(peer: RealDaemonPeer, sessionId: string, prompt: str
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            historyPolicy: "eager",
             additionalDirectoryIds: [],
             agentId: "pi",
             bindingId: peer.bindingId,

@@ -78,7 +78,6 @@ const browserCredentialSchema = v.strictObject({
 // images and resources separately.
 const runtimeTurnEntries = {
     ...turnSubmissionEntries,
-    historyPolicy: v.optional(v.picklist(["eager", "execution-only"])),
 };
 const runtimeTurnRequest = v.union([
     v.strictObject({ ...runtimeTurnEntries, attachments: turnAttachmentsSchema }),

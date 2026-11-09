@@ -32,7 +32,6 @@ export interface AgentSessionRestore {
     setNativeHistoryOwnership(
         ownership: { kind: "unbound" } | { kind: "fresh-session" } | { kind: "agent-owned" },
     ): void;
-    startExecutionOnlyCapture(): void;
     setPrompted(prompted: boolean): void;
     setRestored(restored: boolean): void;
     setSessionTitle(title: string): void;

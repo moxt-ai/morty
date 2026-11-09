@@ -131,7 +131,6 @@ async function prompt(peer: RealDaemonPeer, agentId: string, sessionId: string, 
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            historyPolicy: "eager",
             kind: "session.prompt",
             commandId,
             sessionId,

@@ -66,7 +66,6 @@ test("Given Claude awaits a background subagent, When the user steers and the su
             const sendPrompt = (commandId: string, prompt: string, steering = false) =>
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         kind: "session.prompt",
                         commandId,
                         sessionId: peer.sessionId,

@@ -804,7 +804,6 @@ describe.sequential("Platform Session-only boundary", () => {
             });
             host.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: "workspace",
@@ -2603,7 +2602,6 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionPromptCommand(
                     decodeSessionPromptCommand(
                         JSON.stringify({
-                            historyPolicy: "eager",
                             additionalDirectoryIds: [],
                             agentId: "codex",
                             attachments: [],

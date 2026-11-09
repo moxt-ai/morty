@@ -22,7 +22,6 @@ const submit = (peer: RealDaemonPeer, prompt: string) => {
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            historyPolicy: "eager",
             additionalDirectoryIds: [],
             agentId: "controlled-acp",
             attachments: [],

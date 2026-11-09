@@ -37,10 +37,7 @@ export interface SessionPrepareOptions {
     readonly externalizeSessionUpdate?: AcpContentExternalizer["update"];
 }
 
-export type SessionRecovery =
-    | { readonly kind: "history-required" }
-    | { readonly kind: "interactive-only" }
-    | { readonly kind: "execution-only" };
+export type SessionRecovery = { readonly kind: "history-required" } | { readonly kind: "interactive-only" };
 
 export interface AgentSettingsInspectionOptions {
     readonly adapter: Adapter;

@@ -120,7 +120,6 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
             let rejectedSteering = false;
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     ...base,
                     kind: "session.prompt",
                     commandId,
@@ -140,7 +139,6 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                 ) {
                     peer.send(
                         encodeSessionPromptCommand({
-                            historyPolicy: "eager",
                             ...base,
                             kind: "session.prompt",
                             commandId: steeringCommandId,

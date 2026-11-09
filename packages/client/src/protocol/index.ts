@@ -476,7 +476,6 @@ export {
     SESSION_PROMPT_STEERED_KIND,
     SESSION_TURN_STOPPED_KIND,
     SESSION_TURN_WITHDRAWN_KIND,
-    SessionHistoryPolicy,
     SessionPromptDisposition,
 } from "./session/prompt/commands.ts";
 
