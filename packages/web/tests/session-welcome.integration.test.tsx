@@ -6,7 +6,7 @@ import { createTestApp } from "./infra/test-app.tsx";
 async function openFirstSession() {
     const sessionId = "first-session-guidance";
     const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
+        agent: { harness: "pi", label: "Pi" },
         connectAgent: true,
         sessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },

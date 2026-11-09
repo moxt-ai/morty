@@ -59,7 +59,7 @@ test("Given a response waiting for permission, When I change mode, effort, speed
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "configuration-test", label: "Settings Agent" },
+        agent: { harness: "configuration-test", label: "Settings Agent" },
     });
     await sendPrompt(
         app,

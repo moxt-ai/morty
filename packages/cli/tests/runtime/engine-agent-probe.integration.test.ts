@@ -280,7 +280,7 @@ test("Given three Runtime connections discovered delayed version output, When th
         for (const result of results) {
             expect(result).toMatchObject({
                 kind: "agent.catalog.discovered",
-                agents: [expect.objectContaining({ id: "codex", agentVersion: "codex-cli 0.154.0" })],
+                agents: [expect.objectContaining({ harness: "codex", agentVersion: "codex-cli 0.154.0" })],
             });
         }
     } finally {
@@ -302,7 +302,7 @@ test.for([
             expect(peer.catalogs).toContainEqual(
                 expect.objectContaining({
                     agents: expect.arrayContaining([
-                        expect.objectContaining({ id: "codex", agentVersion: "codex-cli 0.154.0" }),
+                        expect.objectContaining({ harness: "codex", agentVersion: "codex-cli 0.154.0" }),
                     ]),
                 }),
             );
@@ -457,7 +457,9 @@ test("Given a version pipe times out once, When the retry drains normally, Then 
         peer.allowVersions();
         const socket = await peer.online();
         expect(peer.catalogs).toContainEqual(
-            expect.objectContaining({ agents: expect.arrayContaining([expect.objectContaining({ id: "codex" })]) }),
+            expect.objectContaining({
+                agents: expect.arrayContaining([expect.objectContaining({ harness: "codex" })]),
+            }),
         );
         const report = await diagnostics(socket, peer.signal);
         expect(report.entries.filter((entry) => entry["event"] === "agent_probe_failed")).toEqual([

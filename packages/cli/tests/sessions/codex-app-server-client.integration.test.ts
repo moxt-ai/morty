@@ -147,7 +147,7 @@ it("Given a non-Codex agent, When its history is requested through the Codex ada
         command,
         (options) =>
             new ControlledAcpConnection(
-                { id: "claude", adapterPath: command, arguments: [], environment: options.environment },
+                { harness: "claude", adapterPath: command, arguments: [], environment: options.environment },
                 options,
             ),
     );
@@ -164,7 +164,7 @@ it("Given paginated Codex history exceeds 32 MiB across consumed responses, When
         command,
         (options) =>
             new ControlledAcpConnection(
-                { id: "codex", adapterPath: command, arguments: [], environment: options.environment },
+                { harness: "codex", adapterPath: command, arguments: [], environment: options.environment },
                 options,
             ),
     );

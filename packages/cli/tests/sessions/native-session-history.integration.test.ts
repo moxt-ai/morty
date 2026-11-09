@@ -34,7 +34,7 @@ const cannedHistoryAdapter: AdapterResolver = (agent, dependencies) => {
             events.close();
         },
         readSessionHistory: async ({ request }) => {
-            const target = { harness: agent.id, sessionId: request.sessionId };
+            const target = { harness: agent.harness, sessionId: request.sessionId };
             events.materialize(target, request.sessionId, [
                 {
                     type: "acp",

@@ -84,7 +84,7 @@ export async function codexFixture(
         }),
     );
     const identity = {
-        harness: agent.id,
+        harness: agent.harness,
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",

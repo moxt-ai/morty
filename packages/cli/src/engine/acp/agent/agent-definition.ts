@@ -16,13 +16,13 @@ export class AcpAgentDefinition {
     readonly capabilities: SessionCapabilities;
     readonly command: string;
     readonly environment: Readonly<Record<string, string>>;
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     readonly runtimeExecutables: readonly ExecutableIdentity[];
     readonly #connectionFactory: AgentConnectionFactory;
 
     constructor(
-        id: string,
+        harness: string,
         label: string,
         command: string,
         createConnection: AgentConnectionFactory,
@@ -39,7 +39,7 @@ export class AcpAgentDefinition {
         this.capabilities = Object.freeze({ ...capabilities });
         this.command = agentIdentity.realPath;
         this.environment = Object.freeze({ ...environment });
-        this.id = id;
+        this.harness = harness;
         this.label = label;
         this.runtimeExecutables = Object.freeze([...new Set([agentIdentity, ...runtimeExecutables])]);
         this.#connectionFactory = createConnection;
@@ -50,7 +50,7 @@ export class AcpAgentDefinition {
 
     readonly withEnvironment = (environment: Readonly<Record<string, string>>): AcpAgentDefinition =>
         new AcpAgentDefinition(
-            this.id,
+            this.harness,
             this.label,
             this.command,
             this.#connectionFactory,

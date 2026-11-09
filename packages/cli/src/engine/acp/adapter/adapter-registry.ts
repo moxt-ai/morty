@@ -13,13 +13,13 @@ export class AdapterRegistry {
     }
 
     readonly resolve = (agent: AcpAgentDefinition): Adapter => {
-        const existing = this.#adapters.get(agent.id);
+        const existing = this.#adapters.get(agent.harness);
         if (existing !== undefined) {
             existing.refreshAgent(agent);
             return existing;
         }
         const adapter = this.#resolve(agent, this.#dependencies);
-        this.#adapters.set(agent.id, adapter);
+        this.#adapters.set(agent.harness, adapter);
         return adapter;
     };
 

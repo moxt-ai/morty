@@ -12,7 +12,7 @@ test("Given the Agent asks me a question while it keeps working, When I pick a s
     const app = await createTestApp({
         connectAgent: true,
         agent: {
-            id: "codex-asks",
+            harness: "codex-asks",
             label: "Codex",
             reply: (prompt, turnNumber, mode) =>
                 prompt === PROMPT

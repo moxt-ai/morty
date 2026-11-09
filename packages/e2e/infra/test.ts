@@ -8,10 +8,10 @@ function runtimeTest() {
     return base.extend<{
         readonly runtime: Awaited<ReturnType<typeof createTestRuntime>>;
         readonly runtimeMachineName: string;
-        readonly runtimeAgent: { readonly id: string; readonly name: string };
+        readonly runtimeAgent: { readonly harness: string; readonly name: string };
     }>({
         runtimeMachineName: ["Browser test Runtime", { option: true }],
-        runtimeAgent: [{ id: "claude", name: "Claude Code" }, { option: true }],
+        runtimeAgent: [{ harness: "claude", name: "Claude Code" }, { option: true }],
         runtime: async ({ browserName, contextOptions, runtimeMachineName, runtimeAgent }, use, testInfo) => {
             const harness = await E2EHarness.create("chat-e2e");
             let failure: unknown;

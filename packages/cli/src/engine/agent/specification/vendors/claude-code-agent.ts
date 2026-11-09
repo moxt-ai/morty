@@ -8,7 +8,7 @@ import { InProcessAcpAgentSpecification } from "../agent-specification.ts";
 export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "claude";
     readonly createConnection: AgentConnectionFactory = (options) => new ClaudeAgentConnection(options);
-    readonly id = "claude";
+    readonly harness = "claude";
     readonly label = "Claude Code";
     override readonly minimumSupportedAgentVersion = "2.1.273";
     override readonly maximumTestedAgentVersion = "2.1.273";

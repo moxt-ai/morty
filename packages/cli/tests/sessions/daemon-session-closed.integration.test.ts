@@ -38,7 +38,7 @@ const NATIVE_HARNESS = "claude";
 /** Each discovery or execution process receives the next endpoint index. */
 class ClosableAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
-    readonly id = NATIVE_HARNESS;
+    readonly harness = NATIVE_HARNESS;
     readonly label = "Controlled Claude";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;

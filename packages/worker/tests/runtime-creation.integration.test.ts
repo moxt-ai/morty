@@ -11,7 +11,7 @@ test("Given a creation operation still applying initial settings, When another c
         const identity = await cloud.createAnonymousUser();
         await using runtime = await cloud.connectAgent(identity.computerId, [
             {
-                id: "configuration-test",
+                harness: "configuration-test",
                 label: "Settings Agent",
                 beforeConfigurationApplied: async (configId, value) => {
                     if (configId === "model" && value === "test-large") {

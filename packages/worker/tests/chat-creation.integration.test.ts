@@ -39,7 +39,7 @@ test.beforeAll(async ({ cloud }) => {
 
 async function createChatFixture(
     cloud: Awaited<ReturnType<typeof createIdentityFixture>>,
-    agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],
+    agents: readonly ControlledAgent[] = [{ harness: "codex", label: "Codex" }],
     sessionIds: ReadonlySet<string> = new Set(),
 ) {
     const identity = await cloud.createAnonymousUser();
@@ -268,7 +268,9 @@ for (const { reason, ...configuration } of [
     test(`Given a ${reason} Agent setting, When Chat creates a conversation, Then it reports a conflict and a corrected retry opens one fully configured session`, async ({
         cloud,
     }) => {
-        await using fixture = await createChatFixture(cloud, [{ id: "configuration-test", label: "Settings Agent" }]);
+        await using fixture = await createChatFixture(cloud, [
+            { harness: "configuration-test", label: "Settings Agent" },
+        ]);
         const computerId = fixture.runtime.computerId;
         expect((await fixture.request(`chat/setup`, { computerId, harness: "configuration-test" })).status).toBe(202);
         const input = {
@@ -423,7 +425,9 @@ test("Given a new conversation whose Session creation never reached the Runtime,
 test("Given an Agent whose model decides its effort levels, When Chat starts a conversation that lists the effort before the model, Then the new Session holds both selections", async ({
     cloud,
 }) => {
-    await using fixture = await createChatFixture(cloud, [{ id: "dependent-settings-test", label: "Settings Agent" }]);
+    await using fixture = await createChatFixture(cloud, [
+        { harness: "dependent-settings-test", label: "Settings Agent" },
+    ]);
     expect(
         (
             await fixture.request(`chat/setup`, {
@@ -455,7 +459,9 @@ test("Given an Agent whose model decides its effort levels, When Chat starts a c
 test("Given dependent Agent settings, When applying a later selection changes an earlier one, Then Chat rejects creation instead of returning partially configured access", async ({
     cloud,
 }) => {
-    await using fixture = await createChatFixture(cloud, [{ id: "dependent-settings-test", label: "Settings Agent" }]);
+    await using fixture = await createChatFixture(cloud, [
+        { harness: "dependent-settings-test", label: "Settings Agent" },
+    ]);
     expect(
         (
             await fixture.request(`chat/setup`, {
@@ -545,8 +551,8 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud, [
-        { id: "codex", label: "Codex" },
-        { id: "pi", label: "Pi" },
+        { harness: "codex", label: "Codex" },
+        { harness: "pi", label: "Pi" },
     ]);
     const setup = { computerId: fixture.runtime.computerId, harness: "codex" };
     expect((await fixture.request(`chat/setup`, setup)).status).toBe(202);
@@ -982,7 +988,7 @@ test("Given a browser connecting from a city, When it opens a link, Then the dev
 test("Given an existing owned conversation, When a repeated start is refused, Then ownership remains", async ({
     cloud,
 }) => {
-    await using fixture = await createChatFixture(cloud, [{ id: "configuration-test", label: "Settings Agent" }]);
+    await using fixture = await createChatFixture(cloud, [{ harness: "configuration-test", label: "Settings Agent" }]);
     expect(
         (
             await fixture.request(`chat/setup`, {

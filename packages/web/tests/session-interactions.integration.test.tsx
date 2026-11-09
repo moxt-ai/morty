@@ -8,7 +8,7 @@ import { TestClock } from "./infra/test-clock.ts";
 async function requestInput(prompt = "request user input") {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "interaction-test", label: "Interaction Agent" },
+        agent: { harness: "interaction-test", label: "Interaction Agent" },
     });
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -25,7 +25,7 @@ for (const empty of [false, true]) {
     }, async () => {
         const app = await createTestApp({
             connectAgent: true,
-            agent: { id: "interaction-test", label: "Interaction Agent" },
+            agent: { harness: "interaction-test", label: "Interaction Agent" },
         });
         const composer = await app.queryElementByTestId(dataTestId.messageComposer);
         if (!(composer instanceof HTMLTextAreaElement)) {
@@ -69,7 +69,7 @@ test("Given a half-typed answer to the agent's question, When the user switches 
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "interaction-test", label: "Interaction Agent" },
+        agent: { harness: "interaction-test", label: "Interaction Agent" },
     });
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -226,7 +226,7 @@ test("Given a pending permission card, When the Runtime drops and the retry noti
     const clock = new TestClock("2026-10-30T08:00:00Z");
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "interaction-test", label: "Interaction Agent" },
+        agent: { harness: "interaction-test", label: "Interaction Agent" },
         clock,
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "request user input");
@@ -255,7 +255,7 @@ test("Given a background permission after the foreground turn ends, When the use
     const ready = Promise.withResolvers<() => Promise<void>>();
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "interaction-test", label: "Interaction Agent", onBackgroundPermissionReady: ready.resolve },
+        agent: { harness: "interaction-test", label: "Interaction Agent", onBackgroundPermissionReady: ready.resolve },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "request background permission");
     await app.waitForView(() => expect(document.body.textContent).toContain("Foreground work completed"));

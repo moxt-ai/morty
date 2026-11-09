@@ -18,9 +18,9 @@ it("Given two harnesses create the same native ID, When I create and restore eac
         );
         const runtime = await platform.connectAgent(
             project.computerId,
-            ["claude", "codex"].map((id) => ({
-                id,
-                label: id,
+            ["claude", "codex"].map((harness) => ({
+                harness,
+                label: harness,
                 isolatedNativeStorage: true,
                 arguments: ["--persist-empty-sessions"],
             })),
@@ -69,7 +69,7 @@ it("Given a harness announces its title during creation, When the caller creates
         );
         const runtime = await platform.connectAgent(project.computerId, [
             {
-                id: "claude",
+                harness: "claude",
                 label: "Controlled ACP",
                 arguments: ["--announce-title-while-creating"],
             },
@@ -117,8 +117,8 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         const runtime = await platform.connectAgent(
             project.computerId,
             [
-                { id: "claude", label: "Claude Code" },
-                { id: "codex", label: "Codex" },
+                { harness: "claude", label: "Claude Code" },
+                { harness: "codex", label: "Codex" },
             ],
             new Set([sessionId]),
         );

@@ -16,7 +16,7 @@ test("Given an open conversation, When its Agent is renamed on the computer, The
     timeout: 60_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true, clock });
+    const app = await createTestApp({ agents: [{ harness: "codex", label: "Codex" }], connectAgent: true, clock });
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -37,7 +37,7 @@ test("Given an open conversation, When its Agent is renamed on the computer, The
     await app.waitForView(() => expect(getByRole(before, "heading", { name: "Codex" })).toBeDefined());
     await app.user.keyboard("{Escape}");
 
-    await daemon.replaceAgents([{ id: "codex", label: "Codex Pro" }]);
+    await daemon.replaceAgents([{ harness: "codex", label: "Codex Pro" }]);
 
     // The conversation's own menu names the harness the way the computer now does.
     const after = await openAgentConfiguration(app);
@@ -48,7 +48,7 @@ test("Given a new conversation draft, When its Agent is renamed on the computer,
     timeout: 60_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true, clock });
+    const app = await createTestApp({ agents: [{ harness: "codex", label: "Codex" }], connectAgent: true, clock });
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -62,7 +62,7 @@ test("Given a new conversation draft, When its Agent is renamed on the computer,
     await app.waitForView(() => expect(details.textContent).toContain("Codex"));
     expect(details.textContent).not.toContain("Codex Pro");
 
-    await daemon.replaceAgents([{ id: "codex", label: "Codex Pro" }]);
+    await daemon.replaceAgents([{ harness: "codex", label: "Codex Pro" }]);
 
     // The open details follow the Runtime configuration the page follows.
     await app.waitForView(() => expect(details.textContent).toContain("Codex Pro"));

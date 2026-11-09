@@ -24,7 +24,7 @@ const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.met
 class PromptMediaAgent extends ControlledAcpSpecification {
     readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled prompt media";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;

@@ -127,7 +127,7 @@ test("Given a first message whose Session is still being created, When I open an
     const app = await createTestApp({
         connectAgent: true,
         agent: {
-            id: "settings-test",
+            harness: "settings-test",
             label: "Settings Agent",
             beforeSessionCreated: async () => {
                 if (holding) {

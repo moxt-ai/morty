@@ -43,7 +43,7 @@ describe("acp commands environment", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,

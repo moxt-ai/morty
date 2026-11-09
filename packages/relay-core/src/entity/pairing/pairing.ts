@@ -19,7 +19,7 @@ export interface AgentDescriptor {
     readonly agentPath: string;
     readonly agentVersion: string;
     readonly capabilities: SessionCapabilities;
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
 }
 
@@ -329,13 +329,13 @@ export function validateAgents(value: unknown): readonly AgentDescriptor[] {
             !Object.hasOwn(candidate, "agentPath") ||
             !Object.hasOwn(candidate, "agentVersion") ||
             !Object.hasOwn(candidate, "capabilities") ||
-            !Object.hasOwn(candidate, "id") ||
+            !Object.hasOwn(candidate, "harness") ||
             !Object.hasOwn(candidate, "label")
         ) {
             throw new PairingDirectoryError("invalid_agents", "The local agent directory is invalid");
         }
         const capabilities = validateAgentCapabilities(candidate["capabilities"]);
-        const id = candidate["id"];
+        const harness = candidate["harness"];
         const label = candidate["label"];
         const agentPath = candidate["agentPath"];
         const agentVersion = candidate["agentVersion"];
@@ -346,21 +346,21 @@ export function validateAgents(value: unknown): readonly AgentDescriptor[] {
             typeof agentVersion !== "string" ||
             agentVersion.trim().length === 0 ||
             agentVersion.length > 128 ||
-            typeof id !== "string" ||
-            !isIdentifier(id) ||
+            typeof harness !== "string" ||
+            !isIdentifier(harness) ||
             typeof label !== "string" ||
             label.trim().length === 0 ||
             label.length > 80 ||
-            identifiers.has(id)
+            identifiers.has(harness)
         ) {
             throw new PairingDirectoryError("invalid_agents", "The local agent directory is invalid");
         }
-        identifiers.add(id);
+        identifiers.add(harness);
         agents.push({
             agentPath,
             agentVersion: agentVersion.trim(),
             capabilities,
-            id,
+            harness,
             label: label.trim(),
         });
     }

@@ -68,7 +68,7 @@ test("Given a new conversation, When I send its first prompt, Then its preview a
 test("Given a loaded session whose initial user chunk is delayed, When its first ACP event arrives and I steer, Then the submitted message stays visible until native chunks replace it without duplicates", async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
         page: { kind: "bootstrap", identity: true },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold delayed initial message");
@@ -102,7 +102,7 @@ test("Given a loaded session whose initial user chunk is delayed, When its first
 test("Given lifecycle events arrive before ACP output, When I queue a follow-up, Then the optimistic prompt remains until the first ACP event", async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
         page: { kind: "bootstrap", identity: true },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold before first acp");
@@ -704,7 +704,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     const prompt = "Show this prompt without an Agent echo";
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "claude-code", label: "Claude Code" },
+        agent: { harness: "claude-code", label: "Claude Code" },
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,

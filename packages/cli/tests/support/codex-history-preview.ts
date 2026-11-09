@@ -48,7 +48,7 @@ export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string
 export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, sessionId: string) {
     const { adapter, processes } = historyAdapter(agent);
     const events = new MemorySessionEventStore();
-    const sessionTarget = { harness: agent.id, sessionId };
+    const sessionTarget = { harness: agent.harness, sessionId };
     try {
         const signal = AbortSignal.timeout(30_000);
         await validateAgentRuntime(agent, signal);

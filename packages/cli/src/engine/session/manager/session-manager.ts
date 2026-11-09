@@ -363,7 +363,7 @@ export class SessionManager {
         closed: ClosedSessionHandling,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
     ): Promise<PreparedSession> {
-        if (options.target.harness !== options.agent.id) {
+        if (options.target.harness !== options.agent.harness) {
             throw new AcpExecutionError(
                 "The native Session belongs to a different harness",
                 {},
@@ -395,7 +395,7 @@ export class SessionManager {
                         "session-preparation-wait",
                         async () => await waitForSharedOperation(pending, options.signal),
                     );
-                    if (runtime.belongsTo(options.agent.id, options.cwd)) {
+                    if (runtime.belongsTo(options.agent.harness, options.cwd)) {
                         this.#executionProcesses.touch(options.target, runtime);
                         if (recovery.kind === "history-required") {
                             await metrics.measure(
@@ -409,7 +409,7 @@ export class SessionManager {
                 }
                 const existing = this.#executionProcesses.get(options.target);
                 if (existing !== undefined) {
-                    if (existing.belongsTo(options.agent.id, options.cwd)) {
+                    if (existing.belongsTo(options.agent.harness, options.cwd)) {
                         const runtime = await this.#currentSessionProcess(existing, options, recovery);
                         this.#executionProcesses.touch(options.target, runtime);
                         if (recovery.kind === "history-required") {
@@ -592,7 +592,7 @@ export class SessionManager {
             if (existing === undefined) {
                 return (await this.#startPreparation(options, recovery)).prepared();
             }
-            if (!existing.belongsTo(options.agent.id, options.cwd)) {
+            if (!existing.belongsTo(options.agent.harness, options.cwd)) {
                 throw new AcpExecutionError(
                     "The agent or workspace cannot change after a conversation has started",
                     {},
@@ -703,7 +703,7 @@ export class SessionManager {
                 throw new AcpExecutionError("The target turn is no longer active", {}, "steering_target_unavailable");
             }
             const runtime = this.#executionProcesses.get(options.target);
-            if (runtime === undefined || !runtime.belongsTo(options.agent.id, options.cwd)) {
+            if (runtime === undefined || !runtime.belongsTo(options.agent.harness, options.cwd)) {
                 throw new AcpExecutionError(
                     "The target turn execution context is unavailable",
                     {},
@@ -736,7 +736,7 @@ export class SessionManager {
 
     readonly runPrompt = async (options: SessionTurnOptions): Promise<PromptResult> =>
         this.#operations.run(options, async (options) => {
-            if (options.target.harness !== options.agent.id) {
+            if (options.target.harness !== options.agent.harness) {
                 throw new AcpExecutionError(
                     "The native Session belongs to a different harness",
                     {},
@@ -758,7 +758,7 @@ export class SessionManager {
                     return { stopReason: "cancelled" };
                 }
                 const runtime = await this.ensureSession(options);
-                if (this.#nativeOperations.has(nativeOperationKey(options.agent.id, runtime.sessionId()))) {
+                if (this.#nativeOperations.has(nativeOperationKey(options.agent.harness, runtime.sessionId()))) {
                     throw new AcpExecutionError("The native session is being managed", {}, "session_busy");
                 }
                 if (cancelled()) {
@@ -934,12 +934,12 @@ export class SessionManager {
         options.signal.throwIfAborted();
         const runtime = this.#executionProcesses.get(options.target);
         if (runtime !== undefined) {
-            return runtime.belongsTo(options.agent.id, options.cwd) ? runtime.interactionSnapshot() : undefined;
+            return runtime.belongsTo(options.agent.harness, options.cwd) ? runtime.interactionSnapshot() : undefined;
         }
         const stored = this.#store.read(options.target);
         if (
             !(stored instanceof FoundStoredSession) ||
-            stored.session.harness !== options.agent.id ||
+            stored.session.harness !== options.agent.harness ||
             stored.session.cwd !== options.cwd
         ) {
             return undefined;
@@ -991,7 +991,7 @@ export class SessionManager {
             this.#assertOpen(options.target);
             const existing = this.#executionProcesses.get(options.target);
             if (existing !== undefined) {
-                if (!existing.belongsTo(options.agent.id, options.cwd)) {
+                if (!existing.belongsTo(options.agent.harness, options.cwd)) {
                     throw new AcpExecutionError(
                         "The agent or workspace cannot change after a conversation has started",
                         {},
@@ -1021,7 +1021,7 @@ export class SessionManager {
         operation: (options: SessionCreationOptions) => Promise<Result>,
     ): Promise<Result> =>
         this.#operations.run(options, async (options) => {
-            const key = nativeOperationKey(options.agent.id, sessionId);
+            const key = nativeOperationKey(options.agent.harness, sessionId);
             if (this.#nativeOperations.has(key)) {
                 throw new AcpExecutionError(
                     "Wait for the native session's running operation to finish",
@@ -1056,7 +1056,7 @@ export class SessionManager {
         target: NativeSessionTarget,
         resolveAgent: ResolveAgent,
     ): Promise<SessionPrepareOptions> {
-        const resolved = await resolveAgent(options.agent.id, options.signal, target);
+        const resolved = await resolveAgent(options.agent.harness, options.signal, target);
         options.signal.throwIfAborted();
         return { ...options, ...resolved, target };
     }
@@ -1070,11 +1070,11 @@ export class SessionManager {
         readonly prepared: PreparedSession;
     }> =>
         this.#operations.run(options, async (options) => {
-            const key = nativeOperationKey(options.agent.id, origin.sessionId);
+            const key = nativeOperationKey(options.agent.harness, origin.sessionId);
             if (this.#nativeOperations.has(key)) {
                 throw new AcpExecutionError("The native session is being managed", {}, "session_busy");
             }
-            const stored = this.#store.read({ harness: options.agent.id, sessionId: origin.sessionId });
+            const stored = this.#store.read({ harness: options.agent.harness, sessionId: origin.sessionId });
             const existing = stored instanceof FoundStoredSession ? stored.session : undefined;
             if (origin.kind === "import" && existing !== undefined) {
                 return await this.#executionProcesses.use(existing.target, async () => {
@@ -1117,7 +1117,7 @@ export class SessionManager {
             this.#nativeOperations.add(key);
             try {
                 if (origin.kind === "import") {
-                    const target = { harness: options.agent.id, sessionId: origin.sessionId };
+                    const target = { harness: options.agent.harness, sessionId: origin.sessionId };
                     const preparation = await this.#nativeTargetOptions(options, target, resolveAgent);
                     const runtime = await this.#startPreparation(
                         { ...preparation, origin },

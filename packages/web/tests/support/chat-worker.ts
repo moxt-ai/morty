@@ -65,7 +65,7 @@ export async function createChatWorkerEnvironment(
             const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/setup`, {
                 computerId: runtime.computerId,
-                harness: agents[0]?.id ?? "codex",
+                harness: agents[0]?.harness ?? "codex",
             });
             if (setup.status !== 202) {
                 throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
@@ -76,7 +76,7 @@ export async function createChatWorkerEnvironment(
                 /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     await runtime.client.sessions.close(
-                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         new AbortController().signal,
                     );
                 },
@@ -85,14 +85,14 @@ export async function createChatWorkerEnvironment(
                     const signal = AbortSignal.timeout(30_000);
                     const snapshot = await runtime.client.sessions.readConfiguration(
                         runtime.computerId,
-                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         signal,
                     );
                     await runtime.client.sessions.updateConfiguration(
                         runtime.computerId,
-                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         {
-                            harness: agents[0]?.id ?? "codex",
+                            harness: agents[0]?.harness ?? "codex",
                             booleanValue: false,
                             configId: "model",
                             directory: ".",
@@ -106,9 +106,9 @@ export async function createChatWorkerEnvironment(
                 /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
-                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         {
-                            harness: agents[0]?.id ?? "codex",
+                            harness: agents[0]?.harness ?? "codex",
                             attachments: [],
                             content,
                             directory: ".",
@@ -124,8 +124,8 @@ export async function createChatWorkerEnvironment(
                         throw new Error("A controlled Runtime needs at least one Agent");
                     }
                     await runtime.restartWithAgents({
-                        additionalAgents: others.map((agent) => ({ id: agent.id, name: agent.label })),
-                        harness: first.id,
+                        additionalAgents: others.map((agent) => ({ harness: agent.harness, name: agent.label })),
+                        harness: first.harness,
                         agentName: first.label,
                     });
                 },
@@ -133,7 +133,7 @@ export async function createChatWorkerEnvironment(
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
                         runtime.computerId,
-                        { harness: agents[0]?.id ?? "codex", sessionId: sessionId },
+                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         title,
                         new AbortController().signal,
                     );
@@ -161,7 +161,7 @@ export async function createChatWorkerEnvironment(
             sharingNetwork,
             executionNetwork: cloud.executionNetwork,
             connectAgent: async (
-                agent: ControlledAgent = { id: "claude", label: "Codex" },
+                agent: ControlledAgent = { harness: "claude", label: "Codex" },
                 sessionIds?: ReadonlySet<string>,
             ) => await connect([agent], sessionIds),
             connectAgents: async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) =>

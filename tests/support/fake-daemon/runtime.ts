@@ -40,7 +40,7 @@ export interface ControlledRuntimeConnection {
 
 /** An Agent the controlled Runtime exposes. */
 export interface ControlledAgent {
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     /** Controls replies through the real daemon's Agent dependency. */
     readonly reply?: FakeAgentHarnessOptions["reply"];

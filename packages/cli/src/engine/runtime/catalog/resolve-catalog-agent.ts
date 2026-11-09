@@ -33,16 +33,16 @@ export function createCatalogAgentResolver(
     const swaps = new Map<string, Promise<void>>();
     return async (agent, signal) => {
         const config = readConfig();
-        const pending = swaps.get(agent.id);
+        const pending = swaps.get(agent.harness);
         if (pending !== undefined) {
             await pending;
-            return config.catalog.find(agent.id);
+            return config.catalog.find(agent.harness);
         }
         let release = (): void => undefined;
         const gate = new Promise<void>((resolveGate) => {
             release = resolveGate;
         });
-        swaps.set(agent.id, gate);
+        swaps.set(agent.harness, gate);
         try {
             if (await unchangedIdentity(agent, signal)) {
                 return agent;
@@ -52,21 +52,23 @@ export function createCatalogAgentResolver(
             signal.throwIfAborted();
             const rediscovered = inventory
                 .readyAgents()
-                .filter((ready) => ready.id === agent.id)
+                .filter((ready) => ready.harness === agent.harness)
                 .map((ready) => withRuntimeEnvironment(ready, config.localContext.agentLaunchEnvironment));
             await config.catalog.replaceAndPublish(
                 (current) => {
-                    if (!current.some((entry) => entry.id === agent.id)) {
-                        throw new Error(`The local Agent ${agent.id} left the catalog before its refresh completed`);
+                    if (!current.some((entry) => entry.harness === agent.harness)) {
+                        throw new Error(
+                            `The local Agent ${agent.harness} left the catalog before its refresh completed`,
+                        );
                     }
-                    return [...current.filter((entry) => entry.id !== agent.id), ...rediscovered];
+                    return [...current.filter((entry) => entry.harness !== agent.harness), ...rediscovered];
                 },
                 (publishSignal) => publish(config, publishSignal),
                 signal,
             );
-            return config.catalog.find(agent.id);
+            return config.catalog.find(agent.harness);
         } finally {
-            swaps.delete(agent.id);
+            swaps.delete(agent.harness);
             release();
         }
     };

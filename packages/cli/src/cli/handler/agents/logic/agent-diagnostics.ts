@@ -10,21 +10,21 @@ import { writeExistingFile } from "../../../../storage/files/output-file.ts";
 class AvailableAgentDiagnostic {
     readonly adapterVersion: string;
     readonly agentVersion: string;
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     readonly status = "ready";
 
     constructor(discovery: AvailableAgent) {
         this.adapterVersion = discovery.agent.adapterVersion;
         this.agentVersion = discovery.agent.agentVersion;
-        this.id = discovery.specification.id;
+        this.harness = discovery.specification.harness;
         this.label = discovery.specification.label;
     }
 }
 
 class UnavailableAgentDiagnostic {
     readonly code: string;
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     readonly message: string;
     readonly recoveryCommand: string;
@@ -32,7 +32,7 @@ class UnavailableAgentDiagnostic {
 
     constructor(discovery: UnavailableAgent) {
         this.code = discovery.code;
-        this.id = discovery.specification.id;
+        this.harness = discovery.specification.harness;
         this.label = discovery.specification.label;
         this.message = discovery.message;
         this.recoveryCommand =

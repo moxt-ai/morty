@@ -34,7 +34,7 @@ import { IdleTimeoutTimer } from "../support/idle-timeout-timer.ts";
 class IdleAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
-    readonly id = "claude";
+    readonly harness = "claude";
     readonly label = "Controlled ACP";
     override readonly minimumSupportedAgentVersion = "1.0.0";
     override readonly maximumTestedAgentVersion = "1.0.0";
@@ -487,7 +487,7 @@ test("Given a canonical native Session is idle, When its process is reclaimed, T
 
 class RetiringIdleAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
-    readonly id = "claude";
+    readonly harness = "claude";
     readonly label = "Controlled retiring Agent";
     override readonly minimumSupportedAgentVersion = process.versions.node;
     override readonly maximumTestedAgentVersion = process.versions.node;

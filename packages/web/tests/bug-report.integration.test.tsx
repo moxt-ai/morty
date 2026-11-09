@@ -33,7 +33,7 @@ test("Given an Agent with a known CLI version and private model metadata, When r
     try {
         let app = await createTestApp({
             connectAgent: true,
-            agent: { id: "diagnostics-test", label: "Settings Agent" },
+            agent: { harness: "diagnostics-test", label: "Settings Agent" },
         });
         await app.queryElementByTestId(
             dataTestId.agentConfiguration,

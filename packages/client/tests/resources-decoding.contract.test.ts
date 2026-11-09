@@ -25,7 +25,7 @@ const runtime = {
                 steering: false,
                 unstableForkSession: false,
             },
-            id: "codex",
+            harness: "codex",
             label: "Codex",
         },
     ],
@@ -44,9 +44,10 @@ const pairedStatus = {
 };
 
 describe("Runtime descriptor decoding contracts", () => {
-    it("Given a Runtime list, When it is decoded, Then its Agents are available", () => {
+    it("Given a Runtime catalog naming harnesses, When it is decoded, Then each Agent exposes its harness rather than id", () => {
         const decoded = decodeMortyRuntimeList({ runtimes: [runtime] });
-        expect(decoded[0]?.agents[0]?.id).toBe("codex");
+        expect(decoded[0]?.agents[0]?.harness).toBe("codex");
+        expect(decoded[0]?.agents[0]).not.toHaveProperty("id");
     });
 
     it.each([{}, null, { steering: "yes" }])(

@@ -272,14 +272,20 @@ export class MortyAgentDescriptor {
     readonly agentPath: string;
     readonly agentVersion: string;
     readonly capabilities: SessionCapabilities;
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
 
-    constructor(agentPath: string, agentVersion: string, capabilities: SessionCapabilities, id: string, label: string) {
+    constructor(
+        agentPath: string,
+        agentVersion: string,
+        capabilities: SessionCapabilities,
+        harness: string,
+        label: string,
+    ) {
         this.agentPath = agentPath;
         this.agentVersion = agentVersion;
         this.capabilities = Object.freeze({ ...capabilities });
-        this.id = id;
+        this.harness = harness;
         this.label = label;
     }
 }
@@ -298,7 +304,7 @@ function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
         !Object.hasOwn(agent, "agentPath") ||
         !Object.hasOwn(agent, "agentVersion") ||
         !Object.hasOwn(agent, "capabilities") ||
-        !Object.hasOwn(agent, "id") ||
+        !Object.hasOwn(agent, "harness") ||
         !Object.hasOwn(agent, "label")
     ) {
         throw invalidResponse("The service returned an invalid Agent descriptor");
@@ -313,7 +319,7 @@ function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
         agentPath,
         agentVersion,
         decodeMortyAgentCapabilities(agent["capabilities"]),
-        identifierField(agent, "id"),
+        identifierField(agent, "harness"),
         label.trim(),
     );
 }

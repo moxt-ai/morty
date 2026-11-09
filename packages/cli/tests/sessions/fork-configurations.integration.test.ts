@@ -20,7 +20,7 @@ import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/rea
 class ForkSettingsAgent extends ControlledAcpSpecification {
     readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled Fork settings";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;

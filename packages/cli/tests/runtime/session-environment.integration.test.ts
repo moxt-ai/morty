@@ -377,15 +377,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 await import(${JSON.stringify(agentPeer)});
 `,
     );
-    const external = fakeAgentHarness({ id: "codex", label: "Controlled ACP" }, harnessState);
-    const createAgent = (id: string) =>
+    const external = fakeAgentHarness({ harness: "codex", label: "Controlled ACP" }, harnessState);
+    const createAgent = (harness: string) =>
         new AcpAgentDefinition(
-            id,
+            harness,
             external.label,
             process.execPath,
             (options) =>
                 new ControlledAcpConnection(
-                    { id, adapterPath: process.execPath, arguments: [launcher], environment: options.environment },
+                    { harness, adapterPath: process.execPath, arguments: [launcher], environment: options.environment },
                     options,
                 ),
             external.environment,

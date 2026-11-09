@@ -88,7 +88,7 @@ export async function fixture(
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: harness,
+                    harness: harness,
                     adapterPath: executable,
                     arguments: [
                         "--agent-name",
@@ -155,7 +155,7 @@ export async function fixture(
         }),
     );
     const identity = {
-        harness: agent.id,
+        harness: agent.harness,
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",

@@ -6,9 +6,9 @@ import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
 for (const agent of [
-    { id: "claude", label: "Claude Code", title: "Claude Code needs sign-in", command: "claude" },
-    { id: "codex", label: "Codex", title: "Codex needs authentication", command: "codex" },
-    { id: "pi", label: "Pi", title: "Pi's model provider needs authentication", command: "pi" },
+    { harness: "claude", label: "Claude Code", title: "Claude Code needs sign-in", command: "claude" },
+    { harness: "codex", label: "Codex", title: "Codex needs authentication", command: "codex" },
+    { harness: "pi", label: "Pi", title: "Pi's model provider needs authentication", command: "pi" },
 ]) {
     test(`Given ${agent.label} requires authentication, When I send a message and retry after reloading, Then one notice offers recovery steps and preserves my draft`, {
         timeout: 30_000,
@@ -40,7 +40,7 @@ for (const agent of [
         expect(steps).toHaveProperty("open", true);
         expect(steps?.textContent).toContain(`Run ${agent.command}`);
         expect(steps?.textContent).toContain("send your message again");
-        if (agent.id === "pi") {
+        if (agent.harness === "pi") {
             expect(steps?.textContent).toContain("/login");
             expect(steps?.textContent).toContain("API key");
         }
@@ -49,7 +49,7 @@ for (const agent of [
         expect(details?.textContent).toContain("authentication_required");
         expect(composer).toHaveProperty("value", "Keep my next message");
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Keep my next message");
-        if (agent.id === "claude") {
+        if (agent.harness === "claude") {
             if (app.daemon === null) {
                 throw new Error("Expected the connected Runtime");
             }

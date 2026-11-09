@@ -71,7 +71,7 @@ if (process.argv.includes("--version")) {
                 unavailable: [
                     {
                         code: "authentication_required",
-                        id: "pi",
+                        harness: "pi",
                         label: "Pi",
                         message: "Agent authentication is required",
                         recoveryCommand: "pi",

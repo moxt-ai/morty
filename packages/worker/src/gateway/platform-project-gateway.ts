@@ -71,7 +71,7 @@ export type ExistingChatSessionInput = ChatSessionTarget;
 const discoveredRuntimeSchema = v.object({
     agents: v.array(
         v.object({
-            id: platformIdentifier,
+            harness: platformIdentifier,
             label: v.string(),
         }),
     ),
@@ -134,7 +134,7 @@ export class PlatformProjectGateway {
                 computerId: runtime.computerId,
                 machineName: runtime.machineName,
                 online: runtime.online,
-                agents: runtime.agents.map((agent) => ({ harness: agent.id, label: agent.label })),
+                agents: runtime.agents.map((agent) => ({ harness: agent.harness, label: agent.label })),
             }));
         });
 
@@ -178,7 +178,7 @@ export class PlatformProjectGateway {
                 computerId: runtime.computerId,
                 machineName: runtime.machineName,
                 online: runtime.online,
-                agents: runtime.agents.map((agent) => ({ harness: agent.id, label: agent.label })),
+                agents: runtime.agents.map((agent) => ({ harness: agent.harness, label: agent.label })),
             };
         } catch (cause) {
             parent.throwIfAborted();

@@ -49,7 +49,7 @@ export async function discoverRuntimeAgentInventory(options: DiscoverLocalAgentI
     for (const { discovery, detectionMilliseconds } of inventory.results) {
         record({
             event: "agent_discovery_result",
-            harness: discovery.specification.id,
+            harness: discovery.specification.harness,
             code: discovery instanceof UnavailableAgent ? discovery.code : "ready",
             source: discovery.status,
             elapsedMilliseconds: detectionMilliseconds,

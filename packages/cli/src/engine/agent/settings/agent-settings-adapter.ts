@@ -22,7 +22,7 @@ export function applyAgentLaunchSettings(
     agent: AcpAgentDefinition,
     selections: readonly SessionConfigurationSelection[],
 ): AppliedAgentLaunchSettings {
-    const adapter = agentSettingsAdapterForAgent(agent.id);
+    const adapter = agentSettingsAdapterForAgent(agent.harness);
     let selectedAgent = agent;
     const sessionConfigurations: SessionConfigurationSelection[] = [];
     for (const selection of selections) {

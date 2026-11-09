@@ -35,7 +35,7 @@ export class PiAgentSpecification extends InProcessAcpAgentSpecification {
             MORTY_PI_SESSION_DIR: sessionDirectory,
         });
     };
-    readonly id = "pi";
+    readonly harness = "pi";
     readonly label = "Pi";
     override readonly minimumSupportedAgentVersion = "0.85.0";
     override readonly maximumTestedAgentVersion = "1.1.0";

@@ -151,7 +151,7 @@ describe("daemon narration delivery", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -182,7 +182,7 @@ describe("daemon narration delivery", () => {
                     kind: "session.create",
                     requestId: crypto.randomUUID(),
                     operationId: crypto.randomUUID(),
-                    harness: agent.id,
+                    harness: agent.harness,
                     directory: ".",
                     configurations: [],
                 }),
@@ -195,7 +195,7 @@ describe("daemon narration delivery", () => {
                 created = await frames.next();
             }
             const prompt: SessionPromptCommand = {
-                harness: agent.id,
+                harness: agent.harness,
                 commandId: "narration_turn",
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,

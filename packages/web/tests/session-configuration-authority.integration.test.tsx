@@ -11,7 +11,7 @@ test("Given two clients of the current Runtime, When one changes the model and t
 }, async () => {
     const first = await createTestApp({
         connectAgent: true,
-        agent: { id: "settings-test", label: "Settings Agent" },
+        agent: { harness: "settings-test", label: "Settings Agent" },
     });
     await sendPrompt(first, await first.queryElementByTestId(dataTestId.messageComposer), "Start shared session");
     await first.waitForView(() => {
@@ -54,7 +54,7 @@ for (const delivery of ["before-acceptance", "after-acceptance"] as const) {
             clock,
             environment,
             connectAgent: true,
-            agent: { id: "settings-test", label: "Settings Agent" },
+            agent: { harness: "settings-test", label: "Settings Agent" },
         });
         const network = first.network;
         if (network === null) {

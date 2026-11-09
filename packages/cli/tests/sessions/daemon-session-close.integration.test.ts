@@ -80,7 +80,7 @@ class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
             options.client,
         );
     readonly agentExecutable = "node";
-    readonly id = "controlled-close";
+    readonly harness = "controlled-close";
     readonly label = "Controlled Close";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;

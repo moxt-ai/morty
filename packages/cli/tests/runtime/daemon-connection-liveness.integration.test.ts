@@ -981,7 +981,7 @@ describe("daemon relay connection liveness", () => {
                     (options) =>
                         new ControlledAcpConnection(
                             {
-                                id: "codex",
+                                harness: "codex",
                                 adapterPath: process.execPath,
                                 arguments: [fakeAgentPath],
                                 environment: options.environment,

@@ -46,7 +46,7 @@ child.once("exit", code => process.exit(code ?? 1));
         expect(inventory.available).toEqual([]);
         expect(inventory.unavailable).toEqual([
             expect.objectContaining({
-                specification: expect.objectContaining({ id: "codex" }),
+                specification: expect.objectContaining({ harness: "codex" }),
                 status: "incompatible_adapter",
             }),
         ]);

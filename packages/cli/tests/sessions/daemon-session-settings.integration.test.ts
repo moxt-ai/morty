@@ -282,7 +282,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--change-model-catalog-after-first-process"],
                         environment: options.environment,
@@ -310,7 +310,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    harness: agent.id,
+                    harness: agent.harness,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId,
                 }),
@@ -384,7 +384,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP", "--without-reasoning-effort"],
                         environment: options.environment,
@@ -414,7 +414,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    harness: agent.id,
+                    harness: agent.harness,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: noEffortRequestId,
                 }),
@@ -495,7 +495,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -525,7 +525,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 socket,
                 encodeAgentSettingsDiscoverCommand({
-                    harness: agent.id,
+                    harness: agent.harness,
                     directory: projectDirectory,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: "controlled-settings-in-project",
@@ -540,7 +540,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 socket,
                 encodeAgentSettingsDiscoverCommand({
-                    harness: agent.id,
+                    harness: agent.harness,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: "controlled-settings-in-default",
                 }),
@@ -610,7 +610,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [
                             fakeAgentPath,
@@ -646,7 +646,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    harness: agent.id,
+                    harness: agent.harness,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: noEffortRequestId,
                 }),
@@ -720,7 +720,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -750,7 +750,7 @@ describe("daemon session configuration boundary", () => {
             sendText(
                 await socketReady.promise,
                 encodeAgentSettingsDiscoverCommand({
-                    harness: agent.id,
+                    harness: agent.harness,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId,
                 }),
@@ -829,7 +829,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [
                             fakeAgentPath,
@@ -859,10 +859,10 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionTarget = await createSession(socket, frames, agent.id);
+            const sessionTarget = await createSession(socket, frames, agent.harness);
             const runningCommandId = "running_configured_turn";
             const runningPrompt: SessionPromptCommand = {
-                harness: agent.id,
+                harness: agent.harness,
                 commandId: runningCommandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,
@@ -959,7 +959,7 @@ describe("daemon session configuration boundary", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -984,10 +984,10 @@ describe("daemon session configuration boundary", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
-            const sessionTarget = await createSession(socket, frames, agent.id);
+            const sessionTarget = await createSession(socket, frames, agent.harness);
             const runningCommandId = "running_drifted_settings_turn";
             const runningPrompt: SessionPromptCommand = {
-                harness: agent.id,
+                harness: agent.harness,
                 commandId: runningCommandId,
                 directory: ".",
                 disposition: SessionPromptDisposition.Append,

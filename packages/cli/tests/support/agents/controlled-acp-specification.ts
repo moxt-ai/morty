@@ -10,7 +10,7 @@ export abstract class ControlledAcpSpecification extends LocalAgentSpecification
     readonly createConnection: AgentConnectionFactory = (options) =>
         new ControlledAcpConnection(
             {
-                id: this.id,
+                harness: this.harness,
                 adapterPath: options.command,
                 arguments: this.launchArguments,
                 environment: options.environment,

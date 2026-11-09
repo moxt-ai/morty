@@ -95,7 +95,7 @@ const readyAgents = [
             steering: false,
             unstableForkSession: false,
         },
-        id: "codex",
+        harness: "codex",
         label: "Codex",
     },
 ];
@@ -405,7 +405,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], computerId });
+        ).toMatchObject({ agents: [{ harness: "codex", label: "Codex" }], computerId });
         const sessionId = "local-codex-session";
         const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
@@ -3079,7 +3079,7 @@ describe.sequential("Platform Turn submission", () => {
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], computerId });
+        ).toMatchObject({ agents: [{ harness: "codex", label: "Codex" }], computerId });
 
         // The Relay no longer decides from the catalog. It forwards the steer
         // to the Runtime, whose own rejection answers with the same

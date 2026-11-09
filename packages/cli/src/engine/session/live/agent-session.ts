@@ -185,7 +185,7 @@ export class AgentSession implements AgentSessionRestore {
         this.#agentCommand = () => execution.agentCommand(this.target);
         this.#settledTurns = () => execution.settledTurns(this.target);
         this.#adapter = adapter;
-        this.#harness = agent.id;
+        this.#harness = agent.harness;
         this.#commands = [];
         this.#cwd = cwd;
         this.#environment = agent.environment;
@@ -264,7 +264,7 @@ export class AgentSession implements AgentSessionRestore {
         metrics: OperationMetrics,
         adapter: Adapter,
     ): Promise<AgentSession> {
-        if (address.kind === "established" && address.target.harness !== options.agent.id) {
+        if (address.kind === "established" && address.target.harness !== options.agent.harness) {
             throw new AcpExecutionError(
                 "The native Session belongs to a different harness",
                 {},
@@ -304,7 +304,7 @@ export class AgentSession implements AgentSessionRestore {
                 }
                 options.signal.throwIfAborted();
                 if (error instanceof RetryableAcpInitializationError && attempt === 1) {
-                    console.warn(`[${options.agent.id}-acp] ACP agent initialization failed; retrying once`);
+                    console.warn(`[${options.agent.harness}-acp] ACP agent initialization failed; retrying once`);
                     continue;
                 }
                 if (error instanceof AcpExecutionError) {
@@ -386,7 +386,7 @@ export class AgentSession implements AgentSessionRestore {
             store,
             async (runtime) => {
                 runtime.#capabilities = capabilities;
-                const source = store.read({ harness: options.agent.id, sessionId: origin.sessionId });
+                const source = store.read({ harness: options.agent.harness, sessionId: origin.sessionId });
                 const opened = await runtime.#writeNativeHistory(
                     async () => await runtime.forkSession(origin.sessionId, options.signal),
                 );

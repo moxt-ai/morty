@@ -115,7 +115,7 @@ export async function discoverAgentSettings(
             }
         }
     }
-    const adapter = agentSettingsAdapterForAgent(agent.id);
+    const adapter = agentSettingsAdapterForAgent(agent.harness);
     const modelEffort = await discoverModelEffort(
         command,
         agent,
@@ -173,7 +173,7 @@ function settingsFromSnapshot(
     configOptions: readonly SessionConfigOption[],
 ): readonly AgentSetting[] {
     const settings = [
-        ...agentSettingsAdapterForAgent(agent.id).settings(agent).map(settingFromOption),
+        ...agentSettingsAdapterForAgent(agent.harness).settings(agent).map(settingFromOption),
         ...configOptions.map(settingFromOption),
     ];
     const identifiers = new Set<string>();
@@ -374,7 +374,7 @@ function settingsRevision(
         .update(
             JSON.stringify({
                 adapterVersion: agent.adapterVersion,
-                harness: agent.id,
+                harness: agent.harness,
                 agentVersion: agent.agentVersion,
                 modelEffort: revisionModelEffort,
                 reportedAgentVersion,

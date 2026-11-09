@@ -159,7 +159,7 @@ async function applySessionConfigurationSelection(
             "session_configuration_setting_ignored",
             commandId,
             sessionTarget,
-            agent.id,
+            agent.harness,
             selection,
             option?.category ?? unavailableSessionConfigurationCategory(selection),
             reason,

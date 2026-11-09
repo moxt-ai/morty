@@ -42,7 +42,7 @@ describe("Agent setting capabilities", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--effort-provider-default"],
                         environment: options.environment,
@@ -119,7 +119,7 @@ describe("Agent setting capabilities", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--without-reasoning-effort"],
                         environment: options.environment,
@@ -179,7 +179,7 @@ describe("Agent setting capabilities", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "pi",
+                        harness: "pi",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--without-model", "--without-reasoning-effort"],
                         environment: options.environment,
@@ -237,7 +237,7 @@ describe("Agent setting capabilities", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "fake",
+                        harness: "fake",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--ignore-config-update"],
                         environment: options.environment,

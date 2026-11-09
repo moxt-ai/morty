@@ -41,14 +41,14 @@ const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.met
 class RefreshableAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
-    readonly id: string;
+    readonly harness: string;
     readonly label = "Controlled ACP";
     override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
 
     constructor(id: string) {
         super("MORTY_TEST_REFRESHABLE_AGENT_PATH", []);
-        this.id = id;
+        this.harness = id;
     }
 }
 
@@ -57,7 +57,7 @@ class RefreshableAgentSpecification extends ControlledAcpSpecification {
 class UnchangedPeerAgentSpecification extends ControlledAcpSpecification {
     readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp-peer";
-    readonly id = "controlled-acp-peer";
+    readonly harness = "controlled-acp-peer";
     readonly label = "Controlled ACP Peer";
 
     constructor() {
@@ -310,7 +310,7 @@ test.for([
             signal: AbortSignal.timeout(60_000),
             specifications: specifications(harness),
         });
-        const agent = inventory.readyAgents().find((entry) => entry.id === harness);
+        const agent = inventory.readyAgents().find((entry) => entry.harness === harness);
         if (agent === undefined || inventory.readyAgents().length !== 2) {
             await rm(stateDirectory, { force: true, recursive: true });
             throw new Error(`Controlled agent was not discovered: ${JSON.stringify(inventory.unavailable)}`);
@@ -463,10 +463,10 @@ test.for([
             }
 
             const republished = catalogBodies
-                .map((body) => JSON.parse(body) as { agents: { agentVersion: string; id: string }[] })
+                .map((body) => JSON.parse(body) as { agents: { agentVersion: string; harness: string }[] })
                 .filter((catalog) => catalog.agents.some((entry) => entry.agentVersion === "1.1.0"));
             expect(republished).toHaveLength(1);
-            expect(republished[0]?.agents.map((entry) => entry.id).sort()).toEqual(
+            expect(republished[0]?.agents.map((entry) => entry.harness).sort()).toEqual(
                 [harness, "controlled-acp-peer"].sort(),
             );
         } finally {

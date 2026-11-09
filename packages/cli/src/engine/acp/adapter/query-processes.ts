@@ -133,7 +133,7 @@ export class AgentQueryProcesses {
             if (preview === undefined || preview.sessionId !== sessionId) {
                 throw new Error("The native event cursor is invalid");
             }
-            return preview.store.page({ harness: scoped.agent.id, sessionId }, eventLimit, cursor);
+            return preview.store.page({ harness: scoped.agent.harness, sessionId }, eventLimit, cursor);
         }
         const store = new MemorySessionEventStore();
         this.#eventPreviewsBySession.get(key)?.store.close();

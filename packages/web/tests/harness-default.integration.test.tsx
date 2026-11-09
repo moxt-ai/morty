@@ -95,8 +95,8 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
 }, async () => {
     const app = await createTestApp({
         agents: [
-            { id: "codex", label: "Codex" },
-            { id: "pi", label: "Pi" },
+            { harness: "codex", label: "Codex" },
+            { harness: "pi", label: "Pi" },
         ],
         connectAgent: true,
     });
@@ -166,8 +166,8 @@ test("Given a Pi draft, When a Codex switch cannot finish because the Runtime go
 }, async () => {
     const app = await createTestApp({
         agents: [
-            { id: "codex", label: "Codex" },
-            { id: "pi", label: "Pi" },
+            { harness: "codex", label: "Codex" },
+            { harness: "pi", label: "Pi" },
         ],
         connectAgent: true,
     });

@@ -97,7 +97,7 @@ export class ChatApi {
         if (
             paired["status"] !== "paired" ||
             !Array.isArray(paired["agents"]) ||
-            !paired["agents"].some((agent) => object(agent, "agent")["id"] === harness)
+            !paired["agents"].some((agent) => object(agent, "agent")["harness"] === harness)
         ) {
             throw new Error(`The paired Runtime does not expose ${harness}`);
         }

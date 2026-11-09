@@ -12,7 +12,7 @@ export type NativeSessionPreviewKey = BrandedType<string, "NativeSessionPreviewK
 export function nativeSessionQueryKey(query: NativeSessionQuery): NativeSessionQueryKey {
     return queryKeySchema.parse(
         JSON.stringify([
-            query.agent.id,
+            query.agent.harness,
             query.cwd,
             Object.entries(query.agent.environment).sort(([left], [right]) => left.localeCompare(right)),
         ]),

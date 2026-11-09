@@ -27,7 +27,7 @@ async function controlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: harness,
+                    harness: harness,
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, ...additionalArguments],
                     environment: options.environment,

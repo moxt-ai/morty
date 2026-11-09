@@ -262,7 +262,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "controlled-acp",
+                    harness: "controlled-acp",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                     environment: options.environment,
@@ -292,7 +292,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
             kind: "session.create",
             requestId: "fixture-create",
             operationId: "fixture-creation",
-            harness: agent.id,
+            harness: agent.harness,
             directory: ".",
             configurations: [],
         }),
@@ -377,7 +377,7 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
 
 function prompt(fixture: Fixture, text: string): SessionPromptCommand {
     return {
-        harness: fixture.agent.id,
+        harness: fixture.agent.harness,
         commandId: "test-turn",
         directory: ".",
         disposition: SessionPromptDisposition.Append,
@@ -494,7 +494,7 @@ async function activeTurn(fixture: Fixture, command: SessionPromptCommand) {
         fixture.socket,
         encodeNativeSessionRequest({
             action: "active-turn",
-            harness: fixture.agent.id,
+            harness: fixture.agent.harness,
             directory: ".",
             kind: "native.session.request",
             requestId: "active",
@@ -1020,7 +1020,7 @@ describe("daemon V2 live delivery", () => {
                     kind: "session.create",
                     requestId: "other-create",
                     operationId: "other-creation",
-                    harness: restarted.agent.id,
+                    harness: restarted.agent.harness,
                     directory: ".",
                     configurations: [],
                 }),

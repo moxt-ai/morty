@@ -156,7 +156,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         executable,
         (options) =>
             new ControlledAcpConnection(
-                { id: "codex", adapterPath: executable, arguments: [], environment: options.environment },
+                { harness: "codex", adapterPath: executable, arguments: [], environment: options.environment },
                 options,
             ),
     );

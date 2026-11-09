@@ -1576,7 +1576,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             const entry = [inventory["unavailable"], inventory["available"]]
                 .flatMap((agents) => (Array.isArray(agents) ? agents : []))
                 .map(object)
-                .find((agent) => agent["id"] === harness);
+                .find((agent) => agent["harness"] === harness);
             if (entry === undefined) {
                 return null;
             }
@@ -1619,14 +1619,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     if (status["computerId"] !== computerId || !Array.isArray(status["agents"])) {
                         fail("INVALID_RESPONSE");
                     }
-                    if (status["agents"].some((agent) => object(agent)["id"] === harness)) {
+                    if (status["agents"].some((agent) => object(agent)["harness"] === harness)) {
                         emit({ status: "runtime_paired", computerId, harness });
                         break;
                     }
                     await harnessUnavailable(
                         context,
                         harness,
-                        status["agents"].map((agent) => identifier(object(agent)["id"])),
+                        status["agents"].map((agent) => identifier(object(agent)["harness"])),
                         cwd,
                     );
                 }

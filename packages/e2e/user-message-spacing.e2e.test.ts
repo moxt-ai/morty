@@ -1,6 +1,6 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { id: "settings-test", name: "Settings Agent" } });
+test.use({ runtimeAgent: { harness: "settings-test", name: "Settings Agent" } });
 
 test("Given consecutive user messages, When I hover the earlier message, Then its copy button does not overlap the next message", async ({
     runtime,

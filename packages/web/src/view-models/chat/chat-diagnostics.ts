@@ -24,7 +24,7 @@ export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
             view: "draft",
             computerId: runtime?.computerId ?? null,
             runtimeOnline: runtime?.online ?? false,
-            agent: { id: diagnosticAgent(catalog.harness), version: diagnosticVersion(catalog.agentVersion) },
+            agent: { harness: diagnosticAgent(catalog.harness), version: diagnosticVersion(catalog.agentVersion) },
             catalog: {
                 source: "agent-settings",
                 observedAt: catalog.observedAt,
@@ -52,7 +52,7 @@ export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
         view: "session",
         computerId: runtime?.computerId ?? null,
         runtimeOnline: runtime?.online ?? false,
-        agent: { id: diagnosticAgent(ready.harness), version: diagnosticVersion(ready.agentVersion) },
+        agent: { harness: diagnosticAgent(ready.harness), version: diagnosticVersion(ready.agentVersion) },
         catalog: {
             source: "session-ready",
             observedAt: settings.openedAt,

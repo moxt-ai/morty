@@ -24,10 +24,10 @@ const runtimePairingSchema = v.object({
 
 function fakeAgentHarnessCatalog(definitions: readonly FakeAgentHarnessDefinition[]) {
     return definitions.map((agent) => ({
-        agentPath: `/controlled-harness/${agent.id}`,
+        agentPath: `/controlled-harness/${agent.harness}`,
         agentVersion: "controlled-harness",
         capabilities: fakeAgentHarnessCapabilities(agent),
-        id: agent.id,
+        harness: agent.harness,
         label: agent.label,
     }));
 }

@@ -18,7 +18,7 @@ const NATIVE_HARNESS = "claude";
 
 class ControlledAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
-    readonly id = NATIVE_HARNESS;
+    readonly harness = NATIVE_HARNESS;
     readonly label = "Controlled Claude";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;

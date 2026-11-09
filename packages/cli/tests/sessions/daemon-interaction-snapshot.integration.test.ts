@@ -110,7 +110,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "claude",
+                    harness: "claude",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                     environment: options.environment,
@@ -289,7 +289,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "claude",
+                    harness: "claude",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                     environment: options.environment,
@@ -397,7 +397,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "claude",
+                    harness: "claude",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                     environment: options.environment,
@@ -505,7 +505,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "claude",
+                    harness: "claude",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                     environment: options.environment,
@@ -613,7 +613,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "codex",
+                    harness: "codex",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Codex"],
                     environment: options.environment,
@@ -699,7 +699,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "codex",
+                    harness: "codex",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Codex", "--replay-history-once"],
                     environment: options.environment,
@@ -852,7 +852,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "claude",
+                    harness: "claude",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                     environment: options.environment,
@@ -871,7 +871,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "codex",
+                    harness: "codex",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath, "--agent-name", "Codex"],
                     environment: options.environment,
