@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, request } from "node:http";
 import type { Duplex } from "node:stream";
+import { decodeNativeSessionResult } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 
 /** Forwards real traffic unchanged, with controllable ordering at the Platform transport boundary. */
@@ -9,6 +10,14 @@ export async function createSessionExecutionProxy(upstream: string) {
     const heldReplies = new Map<string, (release: () => Promise<unknown>) => void>();
     let holdSubmission: ((release: () => void) => void) | null = null;
     let heldEvents: (() => void)[] | null = null;
+    let heldTerminalEvents: Map<WebSocket, (() => void)[]> | null = null;
+    let terminalObserved: (() => void) | null = null;
+    const executionReads: {
+        readonly turn: string | null;
+        readonly lastTurn: string | null;
+        readonly lastTurnState: string | null;
+        readonly interactionPosition: string | null;
+    }[] = [];
     let heldRuntimeHosts: (() => void)[] | null = null;
     let openRuntimeHosts = 0;
     const runtimeHostWaiters: (() => void)[] = [];
@@ -75,6 +84,7 @@ export async function createSessionExecutionProxy(upstream: string) {
         }
         const pending: (() => void)[] = [];
         const responses = new Map<string, (frame: unknown) => void>();
+        const executionRequests = new Set<string>();
         client.on("message", (data, binary) => {
             const send = () => {
                 if (remote.readyState === WebSocket.OPEN) {
@@ -95,6 +105,9 @@ export async function createSessionExecutionProxy(upstream: string) {
                 typeof frame.requestId === "string"
                     ? { path: new URL(frame.path, upstream).pathname, requestId: frame.requestId }
                     : null;
+            if (heldReply?.path.endsWith("/active-turn")) {
+                executionRequests.add(heldReply.requestId);
+            }
             const heldSuffix =
                 heldReply === null ? undefined : [...heldReplies.keys()].find((end) => heldReply.path.endsWith(end));
             const held = heldSuffix === undefined ? undefined : heldReplies.get(heldSuffix);
@@ -149,11 +162,69 @@ export async function createSessionExecutionProxy(upstream: string) {
         });
         remote.on("message", (data, binary) => {
             const frame: unknown = binary ? null : JSON.parse(data.toString());
+            if (
+                typeof frame === "object" &&
+                frame !== null &&
+                "kind" in frame &&
+                frame.kind === "http.response" &&
+                "requestId" in frame &&
+                typeof frame.requestId === "string" &&
+                executionRequests.delete(frame.requestId) &&
+                "status" in frame &&
+                frame.status === 200 &&
+                "body" in frame &&
+                typeof frame.body === "string"
+            ) {
+                const snapshot = decodeNativeSessionResult(frame.body);
+                if (snapshot.action === "active-turn") {
+                    executionReads.push({
+                        turn: snapshot.turn?.commandId ?? null,
+                        lastTurn: snapshot.lastTurn?.commandId ?? null,
+                        lastTurnState: snapshot.lastTurn?.state ?? null,
+                        interactionPosition: snapshot.interactionState?.throughPosition ?? null,
+                    });
+                }
+            }
             const send = () => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(data, { binary });
                 }
             };
+            if (
+                heldTerminalEvents !== null &&
+                typeof frame === "object" &&
+                frame !== null &&
+                "kind" in frame &&
+                frame.kind === "session.events.event" &&
+                "data" in frame &&
+                typeof frame.data === "string"
+            ) {
+                const batch: unknown = JSON.parse(frame.data);
+                const terminal =
+                    Array.isArray(batch) &&
+                    batch.some(
+                        (event: unknown) =>
+                            typeof event === "object" &&
+                            event !== null &&
+                            "type" in event &&
+                            event.type === "lifecycle-metadata" &&
+                            "payload" in event &&
+                            typeof event.payload === "object" &&
+                            event.payload !== null &&
+                            "kind" in event.payload &&
+                            (event.payload.kind === "prompt.completed" || event.payload.kind === "prompt.failed"),
+                    );
+                const pending = heldTerminalEvents.get(client);
+                if (pending !== undefined || terminal) {
+                    const queue = pending ?? [];
+                    queue.push(send);
+                    heldTerminalEvents.set(client, queue);
+                    if (terminal) {
+                        terminalObserved?.();
+                    }
+                    return;
+                }
+            }
             if (
                 heldEvents !== null &&
                 typeof frame === "object" &&
@@ -193,6 +264,27 @@ export async function createSessionExecutionProxy(upstream: string) {
     }
     return {
         origin: `http://127.0.0.1:${address.port}`,
+        observedExecutionReads: () => [...executionReads],
+        /** Delays real terminal events and every later event on the same connection without reordering them. */
+        holdTerminalSessionEvents: () => {
+            const pending = new Map<WebSocket, (() => void)[]>();
+            const observed = Promise.withResolvers<void>();
+            heldTerminalEvents = pending;
+            terminalObserved = observed.resolve;
+            return {
+                observed: observed.promise,
+                release: () => {
+                    heldTerminalEvents = null;
+                    terminalObserved = null;
+                    for (const queue of pending.values()) {
+                        for (const send of queue) {
+                            send();
+                        }
+                    }
+                    pending.clear();
+                },
+            };
+        },
         holdNextExecution: () =>
             new Promise<() => void>((resolve) => {
                 hold = resolve;

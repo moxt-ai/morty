@@ -131,38 +131,48 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         directories,
         manager,
         async (request, requestOptions) => {
-            const snapshot = await activeSessions.executionSnapshot(async (command) => {
-                if (command.sessionId !== request.targetSessionId || command.agentId !== request.agentId) {
-                    return false;
-                }
-                const cwd = await directories.resolve(command.bindingId, command.directoryId, requestOptions.signal);
-                const additionalDirectories = await directories.resolveMany(
-                    command.bindingId,
-                    command.additionalDirectoryIds,
-                    requestOptions.signal,
-                );
-                return (
-                    cwd === requestOptions.cwd &&
-                    additionalDirectories.length === requestOptions.additionalDirectories.length &&
-                    additionalDirectories.every(
-                        (directory, index) => directory === requestOptions.additionalDirectories[index],
-                    )
-                );
-            });
-            // Read after the snapshot, so neither is older than the execution beside it.
-            const lastTurn = snapshot.turn === null ? operations.lastTurn(request.targetSessionId) : undefined;
-            const interactionState = manager.interactionSnapshot({
-                ...requestOptions,
-                sessionId: request.targetSessionId,
-            });
-            return {
-                ...snapshot,
-                interactionState: interactionState ?? null,
-                ...(request.deliveryCommandId === undefined
-                    ? {}
-                    : { command: operations.delivery(request.deliveryCommandId, request.targetSessionId) }),
-                ...(lastTurn === undefined ? {} : { lastTurn }),
-            };
+            return await activeSessions.executionSnapshot(
+                request.targetSessionId,
+                async (command) => {
+                    if (command.sessionId !== request.targetSessionId || command.agentId !== request.agentId) {
+                        return false;
+                    }
+                    const cwd = await directories.resolve(
+                        command.bindingId,
+                        command.directoryId,
+                        requestOptions.signal,
+                    );
+                    const additionalDirectories = await directories.resolveMany(
+                        command.bindingId,
+                        command.additionalDirectoryIds,
+                        requestOptions.signal,
+                    );
+                    return (
+                        cwd === requestOptions.cwd &&
+                        additionalDirectories.length === requestOptions.additionalDirectories.length &&
+                        additionalDirectories.every(
+                            (directory, index) => directory === requestOptions.additionalDirectories[index],
+                        )
+                    );
+                },
+                (snapshot) => {
+                    const lastTurn = snapshot.turn === null ? operations.lastTurn(request.targetSessionId) : undefined;
+                    const interactionState = manager.interactionSnapshot({
+                        ...requestOptions,
+                        sessionId: request.targetSessionId,
+                    });
+                    return {
+                        ...snapshot,
+                        executionPosition: events.livePosition(request.targetSessionId),
+                        interactionState: interactionState ?? null,
+                        ...(request.deliveryCommandId === undefined
+                            ? {}
+                            : { command: operations.delivery(request.deliveryCommandId, request.targetSessionId) }),
+                        ...(lastTurn === undefined ? {} : { lastTurn }),
+                    };
+                },
+                requestOptions.signal,
+            );
         },
     );
     // Outcomes retained across a restart are published once. The sink keeps them until the Relay connects,

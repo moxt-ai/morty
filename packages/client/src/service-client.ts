@@ -1417,7 +1417,7 @@ export class MortySessionResources {
     ): Promise<
         Pick<
             Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-            "turn" | "queued" | "command" | "lastTurn" | "queuedCancellation" | "interactionState"
+            "turn" | "queued" | "command" | "lastTurn" | "queuedCancellation" | "interactionState" | "executionPosition"
         >
     > => {
         const path = requestUrl(
@@ -1441,6 +1441,7 @@ export class MortySessionResources {
             ...(result.lastTurn === undefined ? {} : { lastTurn: result.lastTurn }),
             queuedCancellation: result.queuedCancellation,
             interactionState: result.interactionState,
+            ...(result.executionPosition === undefined ? {} : { executionPosition: result.executionPosition }),
         };
     };
 

@@ -78,7 +78,7 @@ export class NativeSessionService {
     ) => Promise<
         Pick<
             Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-            "turn" | "queued" | "command" | "lastTurn" | "interactionState"
+            "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
         >
     >;
 
@@ -93,7 +93,7 @@ export class NativeSessionService {
         ) => Promise<
             Pick<
                 Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-                "turn" | "queued" | "command" | "lastTurn" | "interactionState"
+                "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
             >
         >,
     ) {
