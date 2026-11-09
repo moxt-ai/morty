@@ -1,11 +1,14 @@
 """Exercise production Session issuance and Runtime authorization without executing a local operation."""
+import argparse
 import base64
 import hashlib
 import hmac
 import json
 import os
+from pathlib import Path
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from deploy import ROOT, read
@@ -85,12 +88,22 @@ def verify(origin, app_credential, root_key, revision):
 
 
 def main():
-    target = read(ROOT / 'deployment/targets.json')['environments']['production']
+    # Releases verify production; the merge queue runs the same check against the release's local platform.
+    production = read(ROOT / 'deployment/targets.json')['environments']['production']['platform_origin']
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--platform-origin', default=production)
+    parser.add_argument('--evidence', type=Path, default=ROOT / 'session-access-evidence.json')
+    args = parser.parse_args()
+    # The credentials may only reach the pinned production platform or a local one.
+    origin = urllib.parse.urlsplit(args.platform_origin)
+    local = origin.scheme == 'http' and origin.hostname in {'127.0.0.1', 'localhost', '::1'}
+    if args.platform_origin != production and not (local and origin.path == '' and not origin.query and not origin.fragment and origin.username is None):
+        raise ValueError('Session access is verified only on the production platform or a local one')
     evidence = verify(
-        target['platform_origin'] + '/morty/api', os.environ['MORTY_SERVICE_SECRET'],
+        args.platform_origin + '/morty/api', os.environ['MORTY_SERVICE_SECRET'],
         os.environ['MORTY_SESSION_SIGNING_SECRET'].encode(), os.environ['EXPECTED_REVISION'],
     )
-    (ROOT / 'session-access-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    args.evidence.write_text(json.dumps(evidence, indent=2) + '\n')
     print(json.dumps(evidence))
 
 
