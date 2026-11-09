@@ -1,1 +1,0 @@
-ALTER TABLE `acp_session` RENAME COLUMN "native_session_id" TO "session_id";
