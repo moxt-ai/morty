@@ -8,6 +8,7 @@ export async function createSessionExecutionProxy(upstream: string) {
     let hold: ((release: () => void) => void) | null = null;
     // Requests held by the end of their path until released, each release returning the Runtime's response.
     const heldReplies = new Map<string, (release: () => Promise<unknown>) => void>();
+    let holdCloseNotice: ((release: () => void) => void) | null = null;
     let holdSubmission: ((release: () => void) => void) | null = null;
     let heldEvents: (() => void)[] | null = null;
     let heldTerminalEvents: Map<WebSocket, (() => void)[]> | null = null;
@@ -83,6 +84,7 @@ export async function createSessionExecutionProxy(upstream: string) {
             });
         }
         const pending: (() => void)[] = [];
+        let delayedCloseTraffic: (() => void)[] | null = null;
         const responses = new Map<string, (frame: unknown) => void>();
         const executionRequests = new Set<string>();
         client.on("message", (data, binary) => {
@@ -190,6 +192,29 @@ export async function createSessionExecutionProxy(upstream: string) {
                     client.send(data, { binary });
                 }
             };
+            if (delayedCloseTraffic !== null) {
+                delayedCloseTraffic.push(send);
+                return;
+            }
+            if (
+                holdCloseNotice !== null &&
+                typeof frame === "object" &&
+                frame !== null &&
+                "kind" in frame &&
+                frame.kind === "session.close.notice"
+            ) {
+                const held = holdCloseNotice;
+                holdCloseNotice = null;
+                const pending = [send];
+                delayedCloseTraffic = pending;
+                held(() => {
+                    delayedCloseTraffic = null;
+                    for (const forward of pending.splice(0)) {
+                        forward();
+                    }
+                });
+                return;
+            }
             if (
                 heldTerminalEvents !== null &&
                 typeof frame === "object" &&
@@ -285,6 +310,11 @@ export async function createSessionExecutionProxy(upstream: string) {
                 },
             };
         },
+        /** Delays the close notice and later traffic on its connection, leaving the Session event stream independent. */
+        holdNextCloseNotice: () =>
+            new Promise<() => void>((resolve) => {
+                holdCloseNotice = resolve;
+            }),
         holdNextExecution: () =>
             new Promise<() => void>((resolve) => {
                 hold = resolve;

@@ -871,14 +871,25 @@ export class SessionManager {
             // Announce first: clients must learn of the closing while its process is still going down.
             this.#announceClosed(options.sessionId, "This Session was closed on request.");
             const release = (async (): Promise<void> => {
-                const retiring = this.#sessionRetirements.get(options.sessionId);
-                if (retiring !== undefined) {
-                    await retiring;
-                }
-                const pending = this.#executionProcesses.pending(options.sessionId);
-                const runtime = pending === undefined ? this.#executionProcesses.get(options.sessionId) : await pending;
-                if (runtime !== undefined) {
-                    await this.#stopSessionProcess(options.sessionId, runtime);
+                try {
+                    const execution = this.#executions.status(options.sessionId);
+                    if (execution.kind === "working") {
+                        // Closing deliberately stops this turn. Record that intent through the cancellation owner
+                        // before releasing the Agent, so its teardown cannot become a retained turn failure.
+                        await this.cancelPrompt(options.sessionId, execution.commandId);
+                    }
+                } finally {
+                    // A failed Agent cancellation must still release the closed Session's resources.
+                    const retiring = this.#sessionRetirements.get(options.sessionId);
+                    if (retiring !== undefined) {
+                        await retiring;
+                    }
+                    const pending = this.#executionProcesses.pending(options.sessionId);
+                    const runtime =
+                        pending === undefined ? this.#executionProcesses.get(options.sessionId) : await pending;
+                    if (runtime !== undefined) {
+                        await this.#stopSessionProcess(options.sessionId, runtime);
+                    }
                 }
             })();
             const deadline = Promise.withResolvers<void>();
