@@ -12,6 +12,8 @@ Morty owns its browser application, local Runtime and internal cloud services.
 This glossary describes their authorization and ownership boundaries. For
 user-facing behavior, start with the [usage guide](GUIDE.md).
 
+A computer in the switcher is a machine account this browser remembers. Switching follows that account’s URL and loads its own credentials and conversation. The Relay and Web protocols call its routing and authorization scope a Project. The database stores the machine account and its grants directly.
+
 ## How the main concepts relate
 
 ```text

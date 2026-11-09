@@ -67,7 +67,7 @@ You may install missing prerequisites and pair this machine.
 Moxt/Mobius 服务。Agent 自己的会话历史仍保留在机器上。重新运行上面的安装提示，
 并使用新生成的浏览器链接。
 
-`npx --yes @morty-build/cli uninstall` 停止 Morty 并移除托管的可执行文件，
+`npx --yes @morty-build/cli@latest stop` 停止 Morty，
 保留本地身份、配对、工作区和 Agent 历史。
 
 ## 已知限制
@@ -99,10 +99,7 @@ Moxt/Mobius 服务。Agent 自己的会话历史仍保留在机器上。重新�
   关闭；如果暂时无法联系 relay，最迟在 15 分钟内关闭。
 - **Morty 记录设备加入时的大致位置，不记录 IP 地址。** 浏览器打开分享链接时，Morty
   保存 Cloudflare 提供的城市和国家，帮助你辨认自己的设备。
-- **Morty 独立管理安装和更新。** 安装程序将确定版本的 `@morty-build/cli`
-  安装到持久的用户目录。运行 `npx --yes @morty-build/cli update` 安装并启用新版，
-  运行 `npx --yes @morty-build/cli status` 比较已安装与正在运行的版本。
-  更新保留配对和 Agent 历史，不操作 Moxt 的服务。
+- **重启更新。** `npx --yes @morty-build/cli@latest restart` 启动最新版。
 - **网站会统计页面访问和 setup 步骤，并上报错误。** morty.build 把页面访问发送给 Google
   Analytics，把错误发送给 Sentry。两者收到的页面路径都不带查询参数，因此不包含会话 ID；
   Sentry 事件还会去掉用户、cookie、请求头和请求体数据。Google Analytics 还会收到两种不带

@@ -31,16 +31,14 @@ state and browser links are unsupported. Agent-owned history is preserved.
 ## Manage your installation
 
 ```sh
-npx --yes @morty-build/cli status
-npx --yes @morty-build/cli doctor
-npx --yes @morty-build/cli stop
-npx --yes @morty-build/cli start
-npx --yes @morty-build/cli update
-npx --yes @morty-build/cli uninstall
+npx --yes @morty-build/cli@latest status
+npx --yes @morty-build/cli@latest start
+npx --yes @morty-build/cli@latest restart
+npx --yes @morty-build/cli@latest stop
 ```
 
-Uninstall stops Morty and removes managed executables while retaining local
-identity, pairings, workspaces and Agent history. `release` hands idle Agent
+Start ensures the daemon is running. Restart launches the version selected by npx.
+Stopping retains your pairing, workspace and Agent history. `release` hands idle Agent
 sessions back to the terminal without disconnecting Morty. Exit an active terminal
 conversation before continuing it in Morty to avoid competing writers.
 
