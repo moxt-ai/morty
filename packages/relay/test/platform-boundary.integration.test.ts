@@ -66,7 +66,11 @@ function liveEvent(sessionTarget: NativeSessionTarget, text: string): string {
                 sessionGenerationId: "session-generation-1",
                 target: sessionTarget,
                 type: "acp",
-                payload: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+                payload: {
+                    messageId: "message-1",
+                    sessionUpdate: "agent_message_chunk",
+                    content: { type: "text", text },
+                },
             },
         ],
     });

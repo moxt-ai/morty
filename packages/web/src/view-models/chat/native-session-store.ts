@@ -118,7 +118,6 @@ function listingFor(agent: NativeSessionAgent | undefined): string {
 }
 
 export const createNativeSessionStore = (
-    botId: string,
     requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">,
     /** The Runtime the page follows, the one owner of which agents it offers. */
     runtime: () => ChatRuntime | null,
@@ -182,7 +181,6 @@ export const createNativeSessionStore = (
                 }
                 set({ selected });
                 const result = await requests.nativeSessions(
-                    botId,
                     agent.computerId,
                     {
                         action: "list",
@@ -272,7 +270,6 @@ export const createNativeSessionStore = (
             set({ preview: { kind: "loading", entry }, error: "" });
             try {
                 const content = await requests.nativeSession(
-                    botId,
                     directory.computerId,
                     {
                         agentId: directory.agentRef,
@@ -328,15 +325,8 @@ export const createNativeSessionStore = (
                 }
                 const result =
                     action === "fork"
-                        ? await requests.forkNativeSession(
-                              botId,
-                              directory.computerId,
-                              forkIntent.operationId,
-                              input,
-                              signal,
-                          )
+                        ? await requests.forkNativeSession(directory.computerId, forkIntent.operationId, input, signal)
                         : await requests.nativeSessions(
-                              botId,
                               directory.computerId,
                               {
                                   action,
@@ -377,7 +367,6 @@ export const createNativeSessionStore = (
             set({ operation: "more", error: "" });
             try {
                 const result = await requests.nativeSessions(
-                    botId,
                     directory.computerId,
                     {
                         action: "list",

@@ -42,6 +42,9 @@ async function migrate(
     );
 }
 
+// The local platform's Session signing secret; production supplies its own as a deployment secret.
+const sessionSigningSecret = "local-development-only-session-signing-secret";
+
 export class LocalStack {
     readonly harness: E2EHarness;
     readonly directories: Readonly<Record<"platform" | "chat" | "workspace", string>>;
@@ -105,6 +108,8 @@ export class LocalStack {
                     `MORTY_RELAY_URL:${this.platformOrigin}`,
                     "--var",
                     `MORTY_SERVICE_SECRET:${application.appSecret}`,
+                    "--var",
+                    `MORTY_SESSION_SIGNING_SECRET:${sessionSigningSecret}`,
                     "--ip",
                     "127.0.0.1",
                     "--port",
@@ -118,7 +123,7 @@ export class LocalStack {
             );
             await this.harness.checkHttp(`${this.platformOrigin}/morty/api/dashboard/health`, "morty-platform health");
         });
-        return application;
+        return { ...application, sessionSigningSecret };
     }
 
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {

@@ -235,7 +235,7 @@ const sessionConfigOptionSchema = z.discriminatedUnion("type", [
 ]);
 const contentChunkFields = {
     content: contentBlockSchema,
-    messageId: shortString.nullable().optional(),
+    messageId: shortString.min(1),
 };
 /**
  * A question an Agent message asks while the Agent keeps working, with the answers it suggests (none for a free-text

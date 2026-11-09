@@ -5,7 +5,7 @@ import type { ChatDiagnostics } from "./model-catalog.ts";
 import type { NetworkDiagnostics } from "./network-diagnostics.ts";
 
 export interface BugReport {
-    readonly schemaVersion: 2;
+    readonly schemaVersion: 3;
     readonly chat: ChatDiagnostics;
     readonly id: string;
     readonly createdAt: string;
@@ -14,7 +14,7 @@ export interface BugReport {
     readonly release: string;
     readonly browser: string;
     readonly relatedEventId: string | null;
-    readonly botId: string | null;
+    readonly computerId: string | null;
     readonly harness: string | null;
     readonly sessionId: string | null;
     readonly web: ReturnType<typeof browserDiagnosticsSnapshot>;

@@ -135,7 +135,7 @@ for (const viewport of [
         );
         // The sharing code can expire independently of the access it issued.
         const scope = new URL(secondAddress).searchParams.get("identity");
-        const computerId = scope?.split("~")[1];
+        const computerId = scope?.split("~")[0];
         if (computerId === undefined) {
             throw new Error("Expected the computer's project in its address");
         }

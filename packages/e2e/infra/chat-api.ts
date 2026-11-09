@@ -7,7 +7,6 @@ interface RequestOptions {
 }
 
 interface BrowserIdentity {
-    readonly botId: string;
     readonly computerId: string;
     readonly token: string;
 }
@@ -80,13 +79,7 @@ export class ChatApi {
         const identity = object(value, "anonymous identity");
         const computerId = text(identity["computerId"], "computerId");
         const token = text(identity["token"], "anonymous token");
-        const bot = await jsonRequest(this.origin, "/morty/api/management/bot", {
-            project: computerId,
-            token,
-            signal: this.signal,
-        });
         this.identity = {
-            botId: text(bot["botId"], "botId"),
             computerId,
             token,
         };
@@ -113,18 +106,15 @@ export class ChatApi {
 
     async bindAgent(computerId: string, agentId: string) {
         const identity = this.#requireIdentity();
-        await this.#request(
-            `/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
-            {
-                body: { computerId, agentRef: agentId },
-            },
-        );
+        await this.#request(`/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/setup`, {
+            body: { computerId, agentRef: agentId },
+        });
     }
 
     async readBinding(agentId: string) {
         const identity = this.#requireIdentity();
         const configuration = await this.#request(
-            `/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
+            `/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/workspace`,
             { body: {} },
         );
         const runtime = object(configuration["runtime"], "runtime");

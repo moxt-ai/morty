@@ -35,7 +35,7 @@ const identitySchema = v.object({
     token: v.string(),
     userId: v.string(),
     computerId: v.string(),
-    bot: v.object({ botId: v.string() }),
+    bot: v.object({ displayName: v.string() }),
 });
 
 // Stateful external admission port, explicitly replenished by the scenario; no real-time quota window.
@@ -182,7 +182,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
         const completed = await run();
         expect(completed.code, JSON.stringify(completed.events)).toBe(0);
         const identity = v.parse(identitySchema, original);
-        expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace, botId: identity.bot.botId });
+        expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace, computerId: identity.computerId });
         expect(await configuration()).toMatchObject({
             kind: "ready",
             user_token: identity.token,

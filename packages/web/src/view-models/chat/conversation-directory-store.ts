@@ -58,7 +58,6 @@ export function conversationDirectorySessions(
 }
 
 export const createConversationDirectoryStore = (
-    botId: string,
     requests: Pick<BotChatApi, "archiveManagedSession" | "managedSessions">,
     /** Announced when a load publishes a ready directory, so the owner re-scopes status watching without subscribing. */
     onLoaded: (sessions: readonly ManagedChatSession[]) => void,
@@ -111,7 +110,7 @@ export const createConversationDirectoryStore = (
                     if (session === undefined) {
                         throw new CloudApiError("NOT_FOUND", "The Session was not found.");
                     }
-                    const result = await requests.archiveManagedSession(botId, session.target, signal);
+                    const result = await requests.archiveManagedSession(session.target, signal);
                     signal.throwIfAborted();
                     const archive: ArchiveOperation =
                         result.close === "confirmed" ? { kind: "idle" } : { kind: "unconfirmed" };
@@ -178,7 +177,7 @@ export const createConversationDirectoryStore = (
                 set({ state: cached === null ? { kind: "loading" } : { kind: "refreshing", sessions: cached } });
                 const startedWith = titles.getState().titles;
                 try {
-                    const reported = await requests.managedSessions(botId, signal);
+                    const reported = await requests.managedSessions(signal);
                     signal.throwIfAborted();
                     titles.getState().directoryLoaded(reported, startedWith);
                     const sessions = reported.map(({ title: _title, ...session }) => session);

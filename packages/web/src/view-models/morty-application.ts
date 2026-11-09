@@ -22,7 +22,6 @@ import { type SetupHandoffModel, setupHandoffModel } from "./send-link-store.ts"
  * instance.
  */
 interface ChatIdentity {
-    readonly botId: string;
     readonly computerId: string;
     readonly getToken: (signal: AbortSignal) => Promise<string>;
 }
@@ -124,7 +123,6 @@ export function createMortyApplication(options: {
     const activateWorkspace = (session: ActiveAnonymousSession): void => {
         const identity = session.identity;
         const scope: ChatIdentity = {
-            botId: identity.botId,
             computerId: identity.computerId,
             getToken: async (signal) => {
                 signal.throwIfAborted();
@@ -171,7 +169,6 @@ export function createMortyApplication(options: {
                     }),
             }),
             entry: session.entry,
-            botId: identity.botId,
             bugReportDialog,
             computerId: identity.computerId,
             requests,

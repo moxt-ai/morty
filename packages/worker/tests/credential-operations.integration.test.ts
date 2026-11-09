@@ -102,10 +102,6 @@ test("Given a browser that joined through a link, When it asks for recovery acce
             fixture.environment(),
         );
     const project = `/computers/${owner.computerId}`;
-    const botId = v.parse(
-        v.object({ botId: v.string() }),
-        await (await request(`${project}/management/bot`, owner.token)).json(),
-    ).botId;
     const transfer = await request(`${project}/identity/transfers`, owner.token, "POST", {
         operationId: crypto.randomUUID(),
     });
@@ -129,7 +125,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
             await request(`${project}/management/pairing`, token, "POST", {
                 idempotencyKey: "shared-pairing",
             }),
-            await request(`/chat/computers/${owner.computerId}/bots/${botId}/setup`, token, "POST", {
+            await request(`/chat/computers/${owner.computerId}/setup`, token, "POST", {
                 computerId: "shared-runtime",
                 agentRef: "codex",
             }),

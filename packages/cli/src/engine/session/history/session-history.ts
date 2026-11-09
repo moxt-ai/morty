@@ -50,7 +50,7 @@ class ReplayedTurns {
     readonly #byMessage: ReadonlyMap<string, SettledTurn>;
     #open: SettledTurn | null = null;
     /** The user message the latest replayed event belongs to; undefined after any other event. */
-    #userMessage: { readonly messageId: string | null } | undefined;
+    #userMessage: { readonly messageId: string } | undefined;
 
     constructor(turns: readonly SettledTurn[]) {
         this.#byMessage = new Map(turns.map((turn) => [turn.outcome.messageId, turn]));
@@ -62,12 +62,12 @@ class ReplayedTurns {
             this.#userMessage = undefined;
             return [];
         }
-        const messageId = update.messageId ?? null;
+        const messageId = update.messageId;
         if (this.#userMessage?.messageId === messageId) {
             return [];
         }
         this.#userMessage = { messageId };
-        const turn = messageId === null ? undefined : this.#byMessage.get(messageId);
+        const turn = this.#byMessage.get(messageId);
         const steered = turn?.outcome.kind === "prompt.completed" && promptCompletion(turn.outcome).kind === "steered";
         const open = this.#open;
         if (turn !== undefined && steered && open !== null) {

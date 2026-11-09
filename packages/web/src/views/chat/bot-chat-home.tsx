@@ -214,12 +214,12 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const showNewSessionTitle = model.selection.kind === "draft";
     const activeConversationTarget = selectedConversationTarget(model.selection);
     const sessionDiagnostics: DaemonDiagnosticsSource = {
-        botId: workspace.botId,
+        computerId: workspace.computerId,
         harness: activeConversationTarget?.harness ?? null,
         sessionId: activeConversationTarget?.sessionId ?? null,
         context: () => chatDiagnostics(workspace),
-        read: (signal) => requests.daemonDiagnostics(workspace.botId, signal),
-        readNetwork: (signal) => requests.networkDiagnostic(workspace.botId, signal),
+        read: (signal) => requests.daemonDiagnostics(signal),
+        readNetwork: (signal) => requests.networkDiagnostic(signal),
     };
     const reportButton = (
         <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} dialog={workspace.bugReportDialog} />
@@ -256,7 +256,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             onInputCapture={workspace.recordUserActivity}
         >
             <ConversationSidebar
-                botId={workspace.botId}
+                computerId={workspace.computerId}
                 workspace={workspace}
                 activeTarget={activeConversationTarget}
                 connectionStatus={connectionStatus}

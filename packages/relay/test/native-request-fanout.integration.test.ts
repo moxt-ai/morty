@@ -86,6 +86,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
                             target: { harness: "claude", sessionId: `session-${index}` },
                             type: "acp",
                             payload: {
+                                messageId: `message-${index}`,
                                 sessionUpdate: "agent_message_chunk",
                                 content: { type: "text", text: "x".repeat(64_000) },
                             },
@@ -131,6 +132,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
                     sessionGenerationId: `generation-${sessionId}`,
                     type: "acp" as const,
                     payload: {
+                        messageId: `after-hibernation-${sessionId}`,
                         sessionUpdate: "agent_message_chunk" as const,
                         content: { type: "text" as const, text: "After hibernation" },
                     },

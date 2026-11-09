@@ -463,7 +463,6 @@ function SessionRenderItemContent({
             active={active}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
             failureAgentRef={pane.agentRef}
-            failureApproval={{ botId: pane.botId, kind: "bot-approval" }}
             failureMachineName={machineName}
             message={item.message}
             onRemoveUnknownDelivery={onRemoveUnknownDelivery}

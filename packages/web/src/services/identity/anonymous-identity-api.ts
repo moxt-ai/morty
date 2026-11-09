@@ -1,4 +1,3 @@
-import { type Identifier, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ApiTransport } from "../api/api-transport.ts";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
@@ -32,9 +31,8 @@ const recoveryTokenSchema = v.pipe(
     v.regex(/^morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
 );
 const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
-const botIdSchema = v.custom<Identifier>(isIdentifier);
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
-const identityFields = { token: tokenSchema, botId: botIdSchema, userId: userIdSchema, computerId: computerIdSchema };
+const identityFields = { token: tokenSchema, userId: userIdSchema, computerId: computerIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
 /**
  * The Project a well-formed transfer code names, or null when the code cannot
@@ -233,7 +231,7 @@ export class AnonymousIdentityApi {
             },
         });
         try {
-            await management.readBot(identity.botId, signal);
+            await management.readBot(signal);
             signal.throwIfAborted();
         } catch (cause) {
             signal.throwIfAborted();
@@ -410,7 +408,7 @@ export class AnonymousIdentityApi {
         this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
-        const scope = { botId: identity.botId, computerId: identity.computerId, userId: identity.userId };
+        const scope = { computerId: identity.computerId, userId: identity.userId };
         saveAccess(scope, identity.token);
         writeIdentityScope(scope);
     };

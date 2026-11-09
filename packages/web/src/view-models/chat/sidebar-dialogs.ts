@@ -53,7 +53,6 @@ const MOBILE_SHEET_DISMISS_LOCK_MILLISECONDS = 450;
 export function createSidebarDialogs(options: {
     readonly clock: Clock;
     readonly signal: () => AbortSignal;
-    readonly botId: string;
     readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">;
     /** The Runtime the page follows. */
     readonly runtime: () => ChatRuntime | null;
@@ -61,7 +60,7 @@ export function createSidebarDialogs(options: {
     readonly onOpenSession: (session: OpenMortySession) => void;
     readonly onOpenedSession: () => void;
 }): SidebarDialogs {
-    const { botId, clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;
+    const { clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;
     return createStore<SidebarDialogsState>()((set, get) => ({
         mobileNavOpen: false,
         mobileSessionsOpen: false,
@@ -97,7 +96,7 @@ export function createSidebarDialogs(options: {
                 retained.getState().start();
                 return;
             }
-            const store = createNativeSessionStore(botId, requests, runtime, (session) => {
+            const store = createNativeSessionStore(requests, runtime, (session) => {
                 onOpenSession(session);
                 get().discardNativeDialog();
                 onOpenedSession();

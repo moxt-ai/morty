@@ -1,7 +1,7 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "d2d20420-1c92-4375-b96d-d2dcc6af27ff",
+    "id": "3c0b92d8-cb74-4c96-b7a2-3cd2ce04d03a",
     "prevId": "5f1fd81c-3371-49ad-b896-d255fe58745a",
     "tables": {
         "anonymous_credential": {
@@ -194,8 +194,8 @@
         "chat_managed_session": {
             "name": "chat_managed_session",
             "columns": {
-                "computer_id": {
-                    "name": "computer_id",
+                "project_id": {
+                    "name": "project_id",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": true,
@@ -203,13 +203,6 @@
                 },
                 "user_id": {
                     "name": "user_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "bot_id": {
-                    "name": "bot_id",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": true,
@@ -247,20 +240,20 @@
             "indexes": {
                 "chat_managed_session_native_target": {
                     "name": "chat_managed_session_native_target",
-                    "columns": ["computer_id", "user_id", "bot_id", "harness", "session_id"],
+                    "columns": ["project_id", "user_id", "harness", "session_id"],
                     "isUnique": true
                 },
                 "chat_managed_session_directory": {
                     "name": "chat_managed_session_directory",
-                    "columns": ["computer_id", "user_id", "bot_id", "created_at", "resource_id"],
+                    "columns": ["project_id", "user_id", "created_at", "resource_id"],
                     "isUnique": false
                 }
             },
             "foreignKeys": {},
             "compositePrimaryKeys": {
-                "chat_managed_session_computer_id_user_id_bot_id_resource_id_pk": {
-                    "columns": ["computer_id", "user_id", "bot_id", "resource_id"],
-                    "name": "chat_managed_session_computer_id_user_id_bot_id_resource_id_pk"
+                "chat_managed_session_project_id_user_id_resource_id_pk": {
+                    "columns": ["project_id", "user_id", "resource_id"],
+                    "name": "chat_managed_session_project_id_user_id_resource_id_pk"
                 }
             },
             "uniqueConstraints": {},
@@ -360,13 +353,6 @@
                     "notNull": true,
                     "autoincrement": false
                 },
-                "bot_id": {
-                    "name": "bot_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
                 "display_name": {
                     "name": "display_name",
                     "type": "text",
@@ -396,13 +382,7 @@
                     "autoincrement": false
                 }
             },
-            "indexes": {
-                "managed_bot_bot_id_unique": {
-                    "name": "managed_bot_bot_id_unique",
-                    "columns": ["bot_id"],
-                    "isUnique": true
-                }
-            },
+            "indexes": {},
             "foreignKeys": {},
             "compositePrimaryKeys": {},
             "uniqueConstraints": {},

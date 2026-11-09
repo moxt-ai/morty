@@ -73,7 +73,6 @@ export async function followSetupInstructions(options: {
         events,
         ready,
         identity: {
-            botId: text(ready["botId"], "ready Bot"),
             computerId: text(configuration["project_id"], "saved project"),
             userId: text(configuration["user_id"], "saved user"),
         },

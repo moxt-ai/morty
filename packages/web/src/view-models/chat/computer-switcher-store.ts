@@ -99,12 +99,12 @@ export function createComputerSwitcher(options: {
                             }
                             const requests = options.requests(identity);
                             try {
-                                const bot = await requests.readBot(identity.botId, signal);
+                                const bot = await requests.readBot(signal);
                                 signal.throwIfAborted();
                                 if (!bot.configured) {
                                     return choice;
                                 }
-                                const configuration = await requests.runtimeConfiguration(identity.botId, signal);
+                                const configuration = await requests.runtimeConfiguration(signal);
                                 signal.throwIfAborted();
                                 rememberComputerName(identity, configuration.runtime.machineName);
                                 return {

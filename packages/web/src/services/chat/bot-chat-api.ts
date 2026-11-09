@@ -291,16 +291,13 @@ export class BotChatApi {
     readonly close = (): void => {
         this.#sessionTransport.close();
     };
-    readonly access = async (botId: string, parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
-        v.parse(accessSchema, await this.#request(botId, "access", v.parse(nativeSessionTargetSchema, target), parent));
-    readonly daemonDiagnostics = async (botId: string, signal: AbortSignal) =>
-        decodeRuntimeDiagnosticsResult(
-            JSON.stringify(await this.#request(botId, "daemon-diagnostics", undefined, signal)),
-        );
-    readonly networkDiagnostic = async (botId: string, signal: AbortSignal) =>
-        v.parse(networkDiagnosticSchema, await this.#request(botId, "network-diagnostic", undefined, signal));
+    readonly access = async (parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
+        v.parse(accessSchema, await this.#request("access", v.parse(nativeSessionTargetSchema, target), parent));
+    readonly daemonDiagnostics = async (signal: AbortSignal) =>
+        decodeRuntimeDiagnosticsResult(JSON.stringify(await this.#request("daemon-diagnostics", undefined, signal)));
+    readonly networkDiagnostic = async (signal: AbortSignal) =>
+        v.parse(networkDiagnosticSchema, await this.#request("network-diagnostic", undefined, signal));
     readonly createConversation = async (
-        botId: string,
         conversationKey: string,
         settings: ChatDraftConfiguration,
         signal: AbortSignal,
@@ -308,7 +305,6 @@ export class BotChatApi {
         v.parse(
             accessSchema,
             await this.#request(
-                botId,
                 "access",
                 {
                     agentRef: settings.agentRef,
@@ -341,20 +337,20 @@ export class BotChatApi {
             updatedAt: null,
         },
     });
-    readonly managedSessions = async (botId: string, signal: AbortSignal) =>
+    readonly managedSessions = async (signal: AbortSignal) =>
         v.parse(
             v.object({ sessions: v.array(managedSessionSchema) }),
-            await this.#request(botId, "managed-sessions", {}, signal),
+            await this.#request("managed-sessions", {}, signal),
         ).sessions;
-    readonly archiveManagedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) =>
+    readonly archiveManagedSession = async (target: NativeSessionTarget, signal: AbortSignal) =>
         v.parse(
             v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),
-            await this.#request(botId, "managed-session/archive", v.parse(nativeSessionTargetSchema, target), signal),
+            await this.#request("managed-session/archive", v.parse(nativeSessionTargetSchema, target), signal),
         );
-    readonly managedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) => {
+    readonly managedSession = async (target: NativeSessionTarget, signal: AbortSignal) => {
         const stored = v.parse(
             managedSdkSessionSchema,
-            await this.#request(botId, "managed-session", v.parse(nativeSessionTargetSchema, target), signal),
+            await this.#request("managed-session", v.parse(nativeSessionTargetSchema, target), signal),
         );
         const ready = decodeSessionReadyEvent(JSON.stringify(stored.ready));
         if (ready.agentId !== target.harness || stored.entry.sessionId !== target.sessionId) {
@@ -371,26 +367,19 @@ export class BotChatApi {
         };
     };
     /** Imports the native session a setup handoff names into the caller's Machine. */
-    readonly continueNativeSession = async (botId: string, harness: string, sessionId: string, signal: AbortSignal) =>
-        continuedSession(await this.#request(botId, "continue-native-session", { harness, sessionId }, signal));
+    readonly continueNativeSession = async (harness: string, sessionId: string, signal: AbortSignal) =>
+        continuedSession(await this.#request("continue-native-session", { harness, sessionId }, signal));
     /** The settings a new Session of the Agent starts with in the directory. */
     readonly agentSettings = async (
-        botId: string,
         agentRef: string,
         workspaceRef: string,
         signal: AbortSignal,
     ): Promise<AgentSettingsResult> => {
         signal.throwIfAborted();
-        const requestedBotId = v.parse(identifier, botId);
         const requestedAgentRef = v.parse(identifier, agentRef);
         const result = v.parse(
             v.object({ settings: v.unknown() }),
-            await this.#request(
-                requestedBotId,
-                "agent-settings",
-                { agentRef: requestedAgentRef, workspaceRef },
-                signal,
-            ),
+            await this.#request("agent-settings", { agentRef: requestedAgentRef, workspaceRef }, signal),
         );
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         const settings = {
@@ -414,12 +403,10 @@ export class BotChatApi {
         };
         return settings;
     };
-    readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
-        v.parse(runtimeConfigurationSchema, await this.#request(botId, "workspace", undefined, parent));
-    readonly directory = async (botId: string, directory: string, signal: AbortSignal) =>
-        decodeWorkspaceEntriesEvent(
-            JSON.stringify(await this.#request(botId, "workspace/directory", { directory }, signal)),
-        );
+    readonly runtimeConfiguration = async (parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
+        v.parse(runtimeConfigurationSchema, await this.#request("workspace", undefined, parent));
+    readonly directory = async (directory: string, signal: AbortSignal) =>
+        decodeWorkspaceEntriesEvent(JSON.stringify(await this.#request("workspace/directory", { directory }, signal)));
     /** Resolves once the watched resource differs from the snapshot this client last read, or from its first sample. */
     readonly #waitForResourceChange = async (
         url: URL,
@@ -438,18 +425,14 @@ export class BotChatApi {
         );
     };
     /** Resolves once the Machine's Runtime binding differs from the binding this client last read. */
-    readonly waitForRuntimeBindingChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#computerId, botId), "GET", parent);
+    readonly waitForRuntimeBindingChange = async (parent: AbortSignal): Promise<void> =>
+        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#computerId), "GET", parent);
     readonly waitForRuntimeConfigurationChange = async (
-        botId: string,
         parent: AbortSignal,
         onReady?: (configuration: BotRuntimeConfiguration) => void,
     ): Promise<void> =>
         await this.#waitForResourceChange(
-            new URL(
-                `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
-                this.#origin,
-            ),
+            new URL(`/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/workspace`, this.#origin),
             "POST",
             parent,
             onReady === undefined
@@ -460,7 +443,6 @@ export class BotChatApi {
                   },
         );
     readonly forkNativeSession = async (
-        botId: string,
         computerId: string,
         operationId: string,
         input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[1],
@@ -469,7 +451,6 @@ export class BotChatApi {
         decodeNativeSessionResult(
             JSON.stringify(
                 await this.#request(
-                    botId,
                     `native-session-forks/${encodeURIComponent(operationId)}`,
                     { ...input, computerId },
                     signal,
@@ -478,14 +459,13 @@ export class BotChatApi {
         );
 
     readonly nativeSessions = async (
-        botId: string,
         computerId: string,
         input: Parameters<MortyClient["runtimes"]["nativeSessions"]>[0],
         signal: AbortSignal,
     ) => {
         if (input.action === "list") {
             return decodeNativeSessionResult(
-                JSON.stringify(await this.#request(botId, "native-sessions", { ...input, computerId }, signal)),
+                JSON.stringify(await this.#request("native-sessions", { ...input, computerId }, signal)),
             );
         }
         if (input.action !== "import") {
@@ -498,7 +478,6 @@ export class BotChatApi {
         return decodeNativeSessionResult(
             JSON.stringify(
                 await this.#request(
-                    botId,
                     `native-session/${encodeURIComponent(v.parse(identifier, sessionId))}/${action}`,
                     { ...identity, computerId },
                     signal,
@@ -507,7 +486,6 @@ export class BotChatApi {
         );
     };
     readonly nativeSession = async (
-        botId: string,
         computerId: string,
         input: {
             readonly agentId: string;
@@ -519,7 +497,6 @@ export class BotChatApi {
         const { sessionId, ...identity } = input;
         return decodeNativeSessionEvents(
             await this.#request(
-                botId,
                 `native-session/${encodeURIComponent(v.parse(identifier, sessionId))}`,
                 { ...identity, computerId },
                 signal,
@@ -528,7 +505,6 @@ export class BotChatApi {
     };
 
     readonly connectSession = async (
-        botId: string,
         target: NativeSessionTarget,
         signal: AbortSignal,
         initialAccess?: ChatAccess,
@@ -538,12 +514,7 @@ export class BotChatApi {
                 try {
                     return v.parse(
                         sessionAccessSchema,
-                        await this.#request(
-                            botId,
-                            "session-access",
-                            v.parse(nativeSessionTargetSchema, target),
-                            parent,
-                        ),
+                        await this.#request("session-access", v.parse(nativeSessionTargetSchema, target), parent),
                     );
                 } catch (cause) {
                     parent.throwIfAborted();
@@ -583,12 +554,7 @@ export class BotChatApi {
             },
         });
     };
-    readonly #request = async (
-        botId: string | null,
-        operation: string,
-        body: unknown,
-        parent: AbortSignal,
-    ): Promise<unknown> => {
+    readonly #request = async (operation: string, body: unknown, parent: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([
             parent,
             AbortSignal.timeout(
@@ -601,7 +567,6 @@ export class BotChatApi {
                     : 45000,
             ),
         ]);
-        const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
@@ -610,7 +575,7 @@ export class BotChatApi {
             this.#fetchRequest(
                 new Request(
                     new URL(
-                        `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/${operation}`,
                         this.#origin,
                     ),
                     {
