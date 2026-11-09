@@ -19,12 +19,11 @@
     "assets": {
         "binding": "ASSETS",
         "not_found_handling": "none",
-        "run_worker_first": ["/morty/api/*", "/morty/ws", "/setup.md", "/setup.mjs"]
+        "run_worker_first": ["/morty/api/*", "/setup.md", "/setup.mjs"]
     },
     "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-apac-attachments" }],
     "durable_objects": {
         "bindings": [
-            { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
             {
                 "name": "COMPUTER_RELAY",
                 "class_name": "ComputerRelay",
@@ -36,7 +35,8 @@
         { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
         { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] },
         { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] },
-        { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] }
+        { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] },
+        { "tag": "v5", "deleted_classes": ["ChatWebSocketDurableObject"] }
     ],
     "env": {
         "production": {
@@ -59,7 +59,6 @@
             "workers_dev": false,
             "durable_objects": {
                 "bindings": [
-                    { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
                     {
                         "name": "COMPUTER_RELAY",
                         "class_name": "ComputerRelay",

@@ -3,7 +3,7 @@ import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
 import { CloudApiError, isRuntimeConnectionFailure } from "@/services/management/management-api";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
+import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { localCalendarDay } from "./conversation-groups.ts";
@@ -192,11 +192,11 @@ export const createConversationDirectoryStore = (
                         }
                         const message = isRuntimeConnectionFailure(cause)
                             ? "Computer is offline. Sessions will appear when it reconnects."
-                            : isChatBridgeError(cause)
+                            : isApiConnectionError(cause)
                               ? "Connection interrupted. Your sessions will appear when the connection returns."
                               : formatError(cause, "Sessions are unavailable.");
                         const failure =
-                            isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
+                            isRuntimeConnectionFailure(cause) || isApiConnectionError(cause)
                                 ? ("connection" as const)
                                 : ("unavailable" as const);
                         set((current) => {

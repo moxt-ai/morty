@@ -1,7 +1,7 @@
 import "./monitoring.ts";
 import { installMortyDebugBridge } from "./debug-bridge.ts";
 import { createConfiguredGoogleAnalytics } from "./services/analytics/google-analytics.ts";
-import { WebSocketApiTransport } from "./services/api/websocket-api-transport.ts";
+import { HttpApiTransport } from "./services/api/http-api-transport.ts";
 import { mountMorty } from "./views/bootstrap.tsx";
 import "./styles.css";
 
@@ -18,7 +18,7 @@ const morty = mountMorty({
     analytics,
     element: rootElement,
     origin: window.location.origin,
-    transport: new WebSocketApiTransport(window.location.origin),
+    transport: new HttpApiTransport(window.location.origin),
 });
 
 // The browser may hide the page into the back/forward cache instead of

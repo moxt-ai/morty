@@ -1,5 +1,4 @@
 import { getByRole } from "@testing-library/dom";
-import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { openExecutionDetails, sendPrompt } from "./infra/application-scenario.ts";
@@ -39,12 +38,6 @@ test("Given an open conversation, When its Agent is renamed on the computer, The
     await app.user.keyboard("{Escape}");
 
     await daemon.replaceAgents([{ id: "codex", label: "Codex Pro" }]);
-    // The page hears the Runtime's current configuration when its Chat connection returns, without waiting for the
-    // Worker's periodic check: the recovered watch starts from that configuration.
-    app.transport.disconnect();
-    await act(async () => {
-        clock.advanceBy(1_000);
-    });
 
     // The conversation's own menu names the harness the way the computer now does.
     const after = await openAgentConfiguration(app);
@@ -70,10 +63,6 @@ test("Given a new conversation draft, When its Agent is renamed on the computer,
     expect(details.textContent).not.toContain("Codex Pro");
 
     await daemon.replaceAgents([{ id: "codex", label: "Codex Pro" }]);
-    app.transport.disconnect();
-    await act(async () => {
-        clock.advanceBy(1_000);
-    });
 
     // The open details follow the Runtime configuration the page follows.
     await app.waitForView(() => expect(details.textContent).toContain("Codex Pro"));

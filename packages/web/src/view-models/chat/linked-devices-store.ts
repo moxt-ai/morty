@@ -1,5 +1,4 @@
 import { createStore } from "zustand/vanilla";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { LinkedDevice } from "../../services/identity/anonymous-identity-api.ts";
 import { centralLocalStorage, linkedDevicesSeenEntry } from "../../services/local-storage/central-local-storage.ts";
 
@@ -51,7 +50,6 @@ export function createLinkedDevicesStore(options: {
     readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
     /** Resolves once the device list differs from the one last read. */
     readonly waitForChange: (signal: AbortSignal) => Promise<void>;
-    readonly waitForBridge: (signal: AbortSignal) => Promise<void>;
 }) {
     const seen = linkedDevicesSeenEntry(options.computerId);
     return createStore<LinkedDevicesStore>()((set, get) => {
@@ -84,15 +82,8 @@ export function createLinkedDevicesStore(options: {
             while (await read(signal)) {
                 try {
                     await options.waitForChange(signal);
-                } catch (cause) {
-                    if (signal.aborted || !isChatBridgeError(cause)) {
-                        return;
-                    }
-                    try {
-                        await options.waitForBridge(signal);
-                    } catch {
-                        return;
-                    }
+                } catch {
+                    return;
                 }
             }
         };

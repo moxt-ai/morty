@@ -4,7 +4,7 @@ import type { CloudBindings } from "../infra/cloud-bindings.ts";
 type WorkerFetch = (request: Request, bindings: CloudBindings, context?: ExecutionContext) => Promise<Response>;
 
 /** Who made a setup request: a person's browser, or the agent and the setup script it runs. */
-export type SetupClient = "browser" | "agent";
+type SetupClient = "browser" | "agent";
 
 /** The setup steps a new user passes, from fetching the instructions to opening Morty through the returned link. */
 const funnelSteps = [
@@ -27,7 +27,7 @@ const funnelSteps = [
  * Records a successful setup step as one structured log line, so launch traffic can be counted step by step in
  * Workers Logs. Events carry no user, project, or network identifiers: only the step and who made the request.
  */
-export function recordSetupFunnelStep(logger: Logger, request: Request, response: Response, client: SetupClient) {
+function recordSetupFunnelStep(logger: Logger, request: Request, response: Response, client: SetupClient) {
     if (!response.ok) {
         return;
     }

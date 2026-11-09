@@ -233,7 +233,7 @@ export function createChatWorkspace(options: {
         botId,
         requests,
         (sessions) => {
-            statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
+            statuses.getState().directoryLoaded(sessions);
         },
         options.clock,
         titles,
@@ -248,21 +248,7 @@ export function createChatWorkspace(options: {
             home.getState().newConversation();
         },
     );
-    const statuses = createConversationStatusStore(
-        requests,
-        () => {
-            const selected = selectedConversationTarget(home.getState().selection);
-            return selected;
-        },
-        (sessionTarget, reason) => {
-            // Only the open pane has something to tell its user; the other Sessions reopen when selected.
-            if (paneEntry !== null && sameNativeSession(paneEntry.session.result.ready.target, sessionTarget)) {
-                paneEntry.model.store.getState().sessionClosed(reason);
-            }
-        },
-        () => runtimeRecovery.failed(),
-        () => runtimeRecovery.working(),
-    );
+    const statuses = createConversationStatusStore(() => selectedConversationTarget(home.getState().selection));
     const draftControls = createDraftControlsStore(
         botId,
         requests,
@@ -328,7 +314,6 @@ export function createChatWorkspace(options: {
     let directoryLifetime = new AbortController();
     directoryLifetime.abort(new Error("The chat workspace has not loaded yet."));
     const operationsLifetime = new AbortController();
-    const statusLifetime = new AbortController();
 
     const startHomeLoad = (): void => {
         chatLifetime.abort(new Error("Chat loading restarted."));
@@ -382,19 +367,13 @@ export function createChatWorkspace(options: {
     /** The live pane, when its connection used up its automatic retries and waits for the Runtime. */
     const paneWaitingForRuntime = (): ChatWorkspacePaneEntry | null =>
         paneEntry !== null && connectionWaitsForRuntime(paneEntry.model.store.getState().connection) ? paneEntry : null;
-    /**
-     * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
-     * the home view, the session list, the stream that follows their statuses, and the open Session's connection.
-     * Each retries only what it lost. Restarting the home view reloads the list with it, and a list load follows the
-     * statuses again.
-     */
+    /** Retry pending reads once the computer is reachable again. */
     const runtimeRecovery = createRuntimeRecovery({
         clock: options.clock,
         lifetime: operationsLifetime.signal,
         waiting: () =>
             homeWaitsForRuntime(home.getState()) ||
             listWaitsForRuntime() ||
-            statuses.getState().unfollowed() ||
             draftWaitsForRuntime() ||
             paneWaitingForRuntime() !== null,
         retry: () => {
@@ -402,8 +381,6 @@ export function createChatWorkspace(options: {
                 home.getState().retry();
             } else if (listWaitsForRuntime()) {
                 startDirectoryLoad();
-            } else if (statuses.getState().unfollowed()) {
-                statuses.getState().follow(statusLifetime.signal);
             }
             // A late offline response can arrive after the online watch snapshot.
             // Draft settings need the same bounded recovery as the list and statuses.
@@ -495,7 +472,6 @@ export function createChatWorkspace(options: {
                   computerId: options.computerId,
                   linkedDevices: options.linkedDevices,
                   waitForChange: options.waitForLinkedDevicesChange,
-                  waitForBridge: requests.waitForBridge,
               });
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
     const endDeviceAccess = options.endDeviceAccess;
@@ -585,10 +561,8 @@ export function createChatWorkspace(options: {
             paneEntry?.model.stop();
             chatLifetime.abort(new Error("The chat workspace was disposed."));
             directoryLifetime.abort(new Error("The chat workspace was disposed."));
-            statusLifetime.abort(new Error("Conversation status lifetime ended."));
             operationsLifetime.abort(new Error("The chat workspace was disposed."));
             sessionStates.clear();
-            statuses.getState().close();
         },
     };
 }

@@ -21,7 +21,7 @@ const runtimeBindingSchema = v.object({ botId: identifier, computerId: v.nullabl
 /** Whether the Worker binds the Machine to a Runtime. The Worker's record is the only source of this fact. */
 export type RuntimeBinding = { readonly kind: "unbound" } | { readonly kind: "bound"; readonly computerId: Identifier };
 
-/** The Machine's Runtime binding resource, read by setup and the page and watched through the Chat bridge. */
+/** The Machine's Runtime binding resource, read by setup and the page and polled by the browser. */
 export function runtimeBindingUrl(origin: string, computerId: string, botId: string): URL {
     return managementUrl(
         origin,

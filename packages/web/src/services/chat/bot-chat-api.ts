@@ -9,23 +9,17 @@ import {
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeAgentSettingsDiscoveredEvent,
-    decodeMessageKind,
     decodeNativeSessionEvents,
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
-    decodeSessionCloseNoticeEvent,
     decodeSessionReadyEvent,
-    decodeSessionStatusChangedEvent,
     decodeWorkspaceEntriesEvent,
     type Identifier,
     isDirectoryPath,
     isIdentifier,
     type NativeSessionTarget,
-    SESSION_CLOSE_NOTICE_KIND,
-    type SessionCloseNoticeEvent,
     type SessionConfigOption,
     type SessionConfigurationSelection,
-    type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
@@ -79,26 +73,6 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
-/** The Chat Worker sends this once the status stream reaches the Runtime and follows the Sessions. */
-const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
-const managedSessionStatusesFollowingSchema = v.object({
-    sessions: v.literal("owned"),
-    statuses: v.array(
-        v.pipe(v.object({ target: nativeSessionTargetSchema, status: managedSessionStatusSchema }), v.readonly()),
-    ),
-});
-/** Current statuses precede changes for every owned Session, including Sessions created after subscription. */
-export type ManagedSessionEvent =
-    | {
-          readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
-          readonly sessions: "owned";
-          readonly statuses: readonly {
-              readonly target: NativeSessionTarget;
-              readonly status: ManagedChatSession["status"];
-          }[];
-      }
-    | SessionStatusChangedEvent
-    | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
     computerId: identifier,
     machineName: v.string(),
@@ -283,10 +257,7 @@ export class BotChatApi {
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #credentialRejected: (() => void) | undefined;
     readonly #sessionTransport = new BrowserSessionTransport();
-    readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: ApiTransport["waitForChange"];
-    readonly recoverBridge: ApiTransport["recover"];
-    readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
     readonly readRuntimeBinding: ManagementApi["readRuntimeBinding"];
     constructor(options: {
@@ -301,10 +272,7 @@ export class BotChatApi {
         readonly replacedToken?: (rejected: string, signal: AbortSignal) => Promise<string | null>;
         /** Told when the Worker refuses the access as unauthenticated; whoever owns that access decides what it means. */
         readonly credentialRejected?: () => void;
-        readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: ApiTransport["waitForChange"];
-        readonly recoverBridge: ApiTransport["recover"];
-        readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#computerId = v.parse(identifier, options.computerId);
@@ -312,15 +280,11 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.#replacedToken = options.replacedToken;
         this.#credentialRejected = options.credentialRejected;
-        this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
-        this.#waitForBridge = options.waitForBridge;
-        this.recoverBridge = options.recoverBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
         this.readRuntimeBinding = management.readRuntimeBinding;
     }
-    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
     readonly resetSessionConnections = (): void => {
         this.#sessionTransport.reset();
     };
@@ -382,41 +346,6 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request(botId, "managed-sessions", {}, signal),
         ).sessions;
-    readonly subscribeManagedSessionStatuses = async (
-        botId: string,
-        receive: (event: ManagedSessionEvent) => void,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        const token = await this.#getToken(signal);
-        if (token === null) {
-            throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
-        }
-        await this.#subscribe(
-            new Request(
-                new URL(
-                    `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
-                    this.#origin,
-                ),
-                { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
-            ),
-            (data) => {
-                switch (decodeMessageKind(data)) {
-                    case MANAGED_SESSION_STATUSES_FOLLOWING_KIND: {
-                        const message: unknown = JSON.parse(data);
-                        const { sessions, statuses } = v.parse(managedSessionStatusesFollowingSchema, message);
-                        receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND, sessions, statuses });
-                        return;
-                    }
-                    case SESSION_CLOSE_NOTICE_KIND:
-                        receive(decodeSessionCloseNoticeEvent(data));
-                        return;
-                    case "session.status.changed":
-                        receive(decodeSessionStatusChangedEvent(data));
-                        return;
-                }
-            },
-        );
-    };
     readonly archiveManagedSession = async (botId: string, target: NativeSessionTarget, signal: AbortSignal) =>
         v.parse(
             v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),

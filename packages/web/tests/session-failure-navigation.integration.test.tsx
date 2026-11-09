@@ -38,7 +38,7 @@ test("Given a saved-session link, When the bridge drops during entry initializat
 
         await act(async () => {
             clock.advanceBy(1_000);
-            await app.transport.waitForBridge(new AbortController().signal);
+            app.transport.open();
         });
         await app.user.click(getByRole(document.body, "button", { name: "Reconnect" }));
         const failure = await app.queryElementByTestId(dataTestId.sessionLoadFailure);

@@ -146,13 +146,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 // The access this browser holds: another tab may have replaced the one this link issued.
                 getToken: async () => storedToken(identity.userId) ?? identity.token,
                 replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
-                subscribe: async () => {
-                    throw new Error("Session status updates are unavailable while continuing this session.");
-                },
-                recoverBridge: async (signal) => signal.throwIfAborted(),
-                waitForBridge: async () => {
-                    throw new Error("Bridge updates are unavailable while continuing this session.");
-                },
                 waitForChange: async () => {
                     throw new Error("Runtime updates are unavailable while continuing this session.");
                 },

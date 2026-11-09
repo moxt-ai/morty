@@ -1,4 +1,9 @@
-import { decodeContentChunkFrame, MORTY_API_PREFIX } from "@morty-build/client/protocol";
+import {
+    decodeContentChunkFrame,
+    decodeSessionCloseNoticeEvent,
+    MORTY_API_PREFIX,
+    SESSION_CLOSED_ERROR_CODE,
+} from "@morty-build/client/protocol";
 import { type HttpError, toHttpError } from "../../entity/http-error.ts";
 import { diagnosticText, serializeDiagnosticError } from "../../infra/log-diagnostics.ts";
 import { logger } from "../../infra/logger.ts";
@@ -543,6 +548,22 @@ export function acceptWebSocketHttpTransport(
                             server.readyState === WebSocket.OPEN &&
                             subscriptions.get(subscriptionId)?.kind === "open"
                         ) {
+                            // Live event batches are arrays. A close notice ends only this subscription.
+                            if (subscriptionEvent.data.startsWith("{")) {
+                                const notice = decodeSessionCloseNoticeEvent(subscriptionEvent.data);
+                                subscriptions.delete(subscriptionId);
+                                server.send(
+                                    JSON.stringify({
+                                        kind: "session.events.error",
+                                        code: SESSION_CLOSED_ERROR_CODE,
+                                        status: 409,
+                                        message: notice.reason,
+                                        subscriptionId,
+                                    }),
+                                );
+                                subscription.close(1000, "Session closed");
+                                return;
+                            }
                             lastMessageAt = Date.now();
                             server.send(
                                 JSON.stringify({

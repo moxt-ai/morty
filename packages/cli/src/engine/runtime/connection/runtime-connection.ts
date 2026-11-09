@@ -16,14 +16,12 @@ export class VerifiedRuntimeConnection {
     readonly computerId: string;
     readonly connectionId: string;
     readonly defaultWorkspace: string;
-    readonly installationId: string;
     readonly relayOrigin: URL;
     /** The credential state saved with this pairing; live users read it through the installation store. */
     readonly credentials: HeldRuntimeCredentials;
 
     constructor(
         activation: RuntimeConnectionActivation,
-        installationId: string,
         connectionId: string,
         computerId: string,
         defaultWorkspace: string,
@@ -34,7 +32,6 @@ export class VerifiedRuntimeConnection {
         this.computerId = computerId;
         this.connectionId = connectionId;
         this.defaultWorkspace = defaultWorkspace;
-        this.installationId = installationId;
         this.relayOrigin = relayOrigin;
         this.credentials = credentials;
     }

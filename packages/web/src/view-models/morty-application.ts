@@ -85,7 +85,6 @@ export function createMortyApplication(options: {
 }): MortyApplication {
     const lifetime = new AbortController();
     const transport = options.transport;
-    transport.open();
     const anonymousSession = createAnonymousSessionStore(
         transport.fetch,
         options.origin,
@@ -148,9 +147,6 @@ export function createMortyApplication(options: {
             credentialRejected: () => void credentialRejected(),
             origin: options.origin,
             computerId: identity.computerId,
-            subscribe: transport.subscribe,
-            recoverBridge: transport.recover,
-            waitForBridge: transport.waitForBridge,
             waitForChange: transport.waitForChange,
         });
         workspace = createChatWorkspace({
@@ -165,15 +161,12 @@ export function createMortyApplication(options: {
                 requests: (saved) =>
                     new BotChatApi({
                         fetchRequest: transport.fetch,
-                        recoverBridge: transport.recover,
-                        waitForBridge: transport.waitForBridge,
                         getToken: async (signal) => {
                             signal.throwIfAborted();
                             return storedToken(saved.userId) ?? saved.token;
                         },
                         origin: options.origin,
                         computerId: saved.computerId,
-                        subscribe: transport.subscribe,
                         waitForChange: transport.waitForChange,
                     }),
             }),
@@ -230,11 +223,7 @@ export function createMortyApplication(options: {
         if (document.visibilityState === "hidden" || recovery !== null) {
             return;
         }
-        recovery = Promise.allSettled([
-            transport.recover(lifetime.signal),
-            workspace?.sessionPane()?.store.getState().recover(lifetime.signal),
-        ])
-            // Both connection owners retain their retry and manual recovery paths.
+        recovery = Promise.allSettled([workspace?.sessionPane()?.store.getState().recover(lifetime.signal)])
             .then(() => undefined)
             .finally(() => {
                 recovery = null;

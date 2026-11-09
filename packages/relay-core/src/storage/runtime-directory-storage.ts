@@ -13,9 +13,9 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     channelAccessGrant,
     channelHostCredential,
+    daemonCredential,
     pairedDaemon,
-    runtimeDaemonCredential,
-    runtimeDaemonRetiredCredential,
+    retiredDaemonCredential,
     runtimePairingAuditEvent,
     runtimePairingRequest,
     runtimeRegistration,
@@ -195,7 +195,7 @@ export class RuntimeDirectoryStorage {
                 .from(runtimePairingAuditEvent)
                 .where(eq(runtimePairingAuditEvent.auditId, value.auditId)),
         );
-        const cleanup = [runtimeRegistration, runtimeDaemonCredential, runtimeDaemonRetiredCredential].map((table) =>
+        const cleanup = [runtimeRegistration, daemonCredential, retiredDaemonCredential].map((table) =>
             this.statement(db.delete(table).where(and(eq(table.computerId, computerId), accepted))),
         );
         const revokeHosts = db
@@ -243,7 +243,7 @@ export class RuntimeDirectoryStorage {
         signal: AbortSignal,
     ): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
-        const credential = database.insert(runtimeDaemonCredential).select(
+        const credential = database.insert(daemonCredential).select(
             database
                 .select({
                     computerId: pairedDaemon.computerId,
@@ -274,21 +274,21 @@ export class RuntimeDirectoryStorage {
         const registration = database.insert(runtimeRegistration).select(
             database
                 .select({
-                    computerId: runtimeDaemonCredential.computerId,
+                    computerId: daemonCredential.computerId,
                     claimedAt: sql<number>`${value.now}`.as("claimed_at"),
                     machineName: sql<string>`${value.machineName}`.as("machine_name"),
                     workspaceName: sql<string>`${value.workspaceName}`.as("workspace_name"),
                     agentsJson: sql<string>`${value.agents}`.as("agents_json"),
                 })
-                .from(runtimeDaemonCredential)
+                .from(daemonCredential)
                 .where(
                     and(
-                        eq(runtimeDaemonCredential.tokenHash, value.daemonHash),
+                        eq(daemonCredential.tokenHash, value.daemonHash),
                         notExists(
                             database
                                 .select({ computerId: runtimeRegistration.computerId })
                                 .from(runtimeRegistration)
-                                .where(eq(runtimeRegistration.computerId, runtimeDaemonCredential.computerId)),
+                                .where(eq(runtimeRegistration.computerId, daemonCredential.computerId)),
                         ),
                     ),
                 ),
@@ -304,13 +304,13 @@ export class RuntimeDirectoryStorage {
                     detailsJson: sql<string>`'{}'`.as("details_json"),
                     recordedAt: runtimeRegistration.claimedAt,
                 })
-                .from(runtimeDaemonCredential)
-                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimeDaemonCredential.computerId))
+                .from(daemonCredential)
+                .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, daemonCredential.computerId))
                 .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
                 .innerJoin(runtimePairingRequest, eq(runtimePairingRequest.computerId, pairedDaemon.computerId))
                 .where(
                     and(
-                        eq(runtimeDaemonCredential.tokenHash, value.daemonHash),
+                        eq(daemonCredential.tokenHash, value.daemonHash),
                         notExists(
                             database
                                 .select({ auditId: runtimePairingAuditEvent.auditId })
@@ -362,13 +362,13 @@ export class RuntimeDirectoryStorage {
             .select(identityFields)
             .from(pairedDaemon)
             .innerJoin(runtimeRegistration, eq(runtimeRegistration.computerId, pairedDaemon.computerId))
-            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
+            .innerJoin(daemonCredential, eq(daemonCredential.computerId, pairedDaemon.computerId))
             .where(
                 and(
                     eq(pairedDaemon.computerId, this.#computerId),
                     eq(pairedDaemon.computerId, computerId),
                     isNull(pairedDaemon.revokedAt),
-                    eq(runtimeDaemonCredential.tokenHash, tokenHash),
+                    eq(daemonCredential.tokenHash, tokenHash),
                 ),
             )
             .limit(1);
@@ -399,39 +399,39 @@ export class RuntimeDirectoryStorage {
                     ),
                 );
         const current = and(
-            eq(runtimeDaemonCredential.tokenHash, presentedHash),
-            inArray(runtimeDaemonCredential.computerId, runtimeOf(false)),
+            eq(daemonCredential.tokenHash, presentedHash),
+            inArray(daemonCredential.computerId, runtimeOf(false)),
         );
         // One batch: the presented credential is retired with its successor exactly when the successor replaces it.
         await this.#database.batch(
             [
-                database.insert(runtimeDaemonRetiredCredential).select(
+                database.insert(retiredDaemonCredential).select(
                     database
                         .select({
-                            tokenHash: runtimeDaemonCredential.tokenHash,
-                            computerId: runtimeDaemonCredential.computerId,
+                            tokenHash: daemonCredential.tokenHash,
+                            computerId: daemonCredential.computerId,
                             successorHash: sql<string>`${successorHash}`.as("successor_hash"),
                         })
-                        .from(runtimeDaemonCredential)
+                        .from(daemonCredential)
                         .where(current),
                 ),
-                database.update(runtimeDaemonCredential).set({ tokenHash: successorHash }).where(current),
+                database.update(daemonCredential).set({ tokenHash: successorHash }).where(current),
             ].map(this.statement),
             signal,
         );
         const rows = await database
             .select({
                 ...identityFields,
-                successor_hash: runtimeDaemonRetiredCredential.successorHash,
-                current_hash: runtimeDaemonCredential.tokenHash,
+                successor_hash: retiredDaemonCredential.successorHash,
+                current_hash: daemonCredential.tokenHash,
             })
-            .from(runtimeDaemonRetiredCredential)
-            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, runtimeDaemonRetiredCredential.computerId))
-            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
+            .from(retiredDaemonCredential)
+            .innerJoin(pairedDaemon, eq(pairedDaemon.computerId, retiredDaemonCredential.computerId))
+            .innerJoin(daemonCredential, eq(daemonCredential.computerId, pairedDaemon.computerId))
             .where(
                 and(
-                    eq(runtimeDaemonRetiredCredential.tokenHash, presentedHash),
-                    inArray(runtimeDaemonRetiredCredential.computerId, runtimeOf(false)),
+                    eq(retiredDaemonCredential.tokenHash, presentedHash),
+                    inArray(retiredDaemonCredential.computerId, runtimeOf(false)),
                 ),
             )
             .limit(1);
@@ -444,22 +444,22 @@ export class RuntimeDirectoryStorage {
         }
         // A revoked Runtime keeps its credential hashes, so its daemon learns that its access ended for good.
         const revoked = await database
-            .select({ computerId: runtimeDaemonCredential.computerId })
-            .from(runtimeDaemonCredential)
+            .select({ computerId: daemonCredential.computerId })
+            .from(daemonCredential)
             .where(
                 and(
-                    eq(runtimeDaemonCredential.tokenHash, presentedHash),
-                    inArray(runtimeDaemonCredential.computerId, runtimeOf(true)),
+                    eq(daemonCredential.tokenHash, presentedHash),
+                    inArray(daemonCredential.computerId, runtimeOf(true)),
                 ),
             )
             .union(
                 database
-                    .select({ computerId: runtimeDaemonRetiredCredential.computerId })
-                    .from(runtimeDaemonRetiredCredential)
+                    .select({ computerId: retiredDaemonCredential.computerId })
+                    .from(retiredDaemonCredential)
                     .where(
                         and(
-                            eq(runtimeDaemonRetiredCredential.tokenHash, presentedHash),
-                            inArray(runtimeDaemonRetiredCredential.computerId, runtimeOf(true)),
+                            eq(retiredDaemonCredential.tokenHash, presentedHash),
+                            inArray(retiredDaemonCredential.computerId, runtimeOf(true)),
                         ),
                     ),
             )
@@ -545,13 +545,13 @@ export class RuntimeDirectoryStorage {
         const identity = database
             .select({ computerId: pairedDaemon.computerId })
             .from(pairedDaemon)
-            .innerJoin(runtimeDaemonCredential, eq(runtimeDaemonCredential.computerId, pairedDaemon.computerId))
+            .innerJoin(daemonCredential, eq(daemonCredential.computerId, pairedDaemon.computerId))
             .where(
                 and(
                     eq(pairedDaemon.computerId, this.#computerId),
                     eq(pairedDaemon.computerId, computerId),
                     isNull(pairedDaemon.revokedAt),
-                    eq(runtimeDaemonCredential.tokenHash, tokenHash),
+                    eq(daemonCredential.tokenHash, tokenHash),
                 ),
             );
         return this.statement(

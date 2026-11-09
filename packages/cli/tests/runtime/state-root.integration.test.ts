@@ -51,13 +51,7 @@ async function openedStateRoot(): Promise<{
     const listed = await runCli(["pair", "list"], environment(home, root));
     expect(listed.code, listed.stderr).toBe(0);
     const application = join(root, "machine");
-    const pointer: unknown = JSON.parse(await readFile(join(application, "current.json"), "utf8"));
-    const installationId =
-        typeof pointer === "object" && pointer !== null && "installationId" in pointer ? pointer.installationId : null;
-    if (typeof installationId !== "string") {
-        throw new Error("The opened state root has no current installation");
-    }
-    return { root, installation: join(application, installationId), home };
+    return { root, installation: application, home };
 }
 
 function environment(home: string, stateDirectory: string): NodeJS.ProcessEnv {

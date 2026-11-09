@@ -240,25 +240,14 @@ test("Given Open Session was opened while the Runtime was offline, When the Runt
     const connection = (): string | null =>
         app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status");
     await app.waitForView(() => expect(connection()).toBe("connected"));
-    // The page hears the Runtime's current configuration when its Chat connection returns, without waiting for
-    // the Worker's periodic check.
-    const followRuntime = async (): Promise<void> => {
-        app.transport.disconnect();
-        // Past the bridge's longest reconnect delay, so the watch is armed again whichever attempt this is.
-        await act(async () => {
-            clock.advanceBy(15_000);
-        });
-    };
 
     await daemon.disconnect();
-    await followRuntime();
     await app.waitForView(() => expect(connection()).toBe("disconnected"));
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
     await app.waitForView(() => expect(dialog.textContent).toContain("No local agent"));
 
     await daemon.reconnect();
-    await followRuntime();
     await app.waitForView(() => expect(connection()).toBe("connected"));
     await app.waitForView(() => getByRole(dialog, "button", { name: "Native session-after-reconnect" }));
     await app.waitForView(() => getByRole(dialog, "button", { name: "Native session-after-reconnect /" }));

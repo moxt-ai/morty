@@ -42,12 +42,14 @@ test("Given a reply finished in another session on a phone, When the user looks 
         expect(app.optionalElementByTestId(dataTestId.mobileRecentSessionsUnread)).toBeNull();
 
         await daemon.continueReply(HELD_PROMPT, { outcome: "complete", output: [] });
-        const dot = await app.queryElementByTestId(dataTestId.mobileRecentSessionsUnread);
-        expect(recentSessions().contains(dot)).toBe(true);
-        expect(recentSessions().getAttribute("aria-label")).toBe("Recent sessions, unread replies");
-
-        await app.user.click(recentSessions());
+        const trigger = recentSessions();
+        await app.user.click(trigger);
         const sheet = await app.queryElementByTestId(dataTestId.mobileRecentSessionsSheet);
+        await app.user.click(getByRole(sheet, "button", { name: "Refresh sessions" }));
+        const dot = await app.queryElementByTestId(dataTestId.mobileRecentSessionsUnread);
+        expect(trigger.contains(dot)).toBe(true);
+        expect(trigger.getAttribute("aria-label")).toBe("Recent sessions, unread replies");
+
         const unreadConversation = app
             .elementsByTestId(dataTestId.managedConversation)
             .find((element) => sheet.contains(element) && element.textContent?.includes(HELD_PROMPT) === true);

@@ -8,7 +8,7 @@ export default defineConfig({
         alias: [{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) }],
     },
     test: {
-        environment: "happy-dom",
+        environment: "./tests/infra/http-environment.ts",
         // Retain diagnostics for failures without streaming every real-service event to CI.
         silent: "passed-only",
         environmentOptions: {

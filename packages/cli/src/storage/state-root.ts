@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
-import { installationPointerPath } from "../engine/storage/installation/installation-files.ts";
+import { access } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+import { isNodeError } from "../engine/util/node-error.ts";
 import { readStateDirectory } from "./state-directory.ts";
 
 /** The configured state directory holds another root's installation data, so Morty must not create a root there. */
@@ -19,25 +19,17 @@ export class StateRootError extends Error {
 }
 
 async function owningRoot(directory: string): Promise<string | null> {
-    const application = dirname(directory);
-    if (basename(application) !== "machine") {
-        return null;
+    if (basename(directory) === "machine") {
+        try {
+            await access(join(dirname(directory), "morty-installation.json"));
+            return dirname(directory);
+        } catch (error) {
+            if (!isNodeError(error, "ENOENT")) {
+                throw error;
+            }
+        }
     }
-    let pointer: unknown;
-    try {
-        pointer = JSON.parse(await readFile(installationPointerPath(application), "utf8"));
-    } catch {
-        return null;
-    }
-    if (
-        typeof pointer !== "object" ||
-        pointer === null ||
-        !("installationId" in pointer) ||
-        pointer.installationId !== basename(directory)
-    ) {
-        return null;
-    }
-    return dirname(application);
+    return null;
 }
 
 /** Refuse to create a nested root inside an existing machine installation. */

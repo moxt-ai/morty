@@ -489,6 +489,7 @@ for (const linkKind of ["handoff", "sharing"] as const) {
         const code = (application: TestApp["identity"]) =>
             `morty_transfer_v1.${application.computerId}.${"a".repeat(43)}`;
         const app = await createTestApp({
+            prepare: ({ transport }) => transport.disconnect(),
             page:
                 linkKind === "handoff"
                     ? {
@@ -499,7 +500,6 @@ for (const linkKind of ["handoff", "sharing"] as const) {
                       }
                     : { kind: "share", code: (application) => code(application.identity) },
         });
-        app.transport.disconnect();
         const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Try again" }));
         expect(document.body.textContent).not.toContain("Ask for a new link.");
         expect(document.body.textContent).not.toContain("Run setup again");

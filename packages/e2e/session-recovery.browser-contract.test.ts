@@ -7,7 +7,7 @@ import { test as base, expect } from "./infra/test.ts";
 
 type Network = {
     readonly url: string;
-    readonly blackhole: (route: "all" | "session" | "bridge") => void;
+    readonly blackhole: () => void;
     readonly disconnect: () => void;
     readonly interruptSession: () => void;
     readonly stallSessionRequests: () => void;
@@ -26,7 +26,6 @@ const test = base.extend<{ readonly network: Network }>({
         const tunnels = new Set<{
             readonly client: Duplex;
             readonly upstream: Socket;
-            readonly route: "session" | "bridge";
         }>();
         const sockets = new Set<Socket>();
         const server = createServer((incoming, outgoing) => {
@@ -65,7 +64,6 @@ const test = base.extend<{ readonly network: Network }>({
             const tunnel = {
                 client,
                 upstream,
-                route: endpoint.pathname === "/morty/ws" ? ("bridge" as const) : ("session" as const),
             };
             tunnels.add(tunnel);
             sockets.add(upstream);
@@ -85,12 +83,10 @@ const test = base.extend<{ readonly network: Network }>({
         try {
             await use({
                 url: `http://127.0.0.1:${address.port}`,
-                blackhole: (route) => {
+                blackhole: () => {
                     for (const tunnel of tunnels) {
-                        if (route === "all" || tunnel.route === route) {
-                            tunnel.client.pause();
-                            tunnel.upstream.pause();
-                        }
+                        tunnel.client.pause();
+                        tunnel.upstream.pause();
                     }
                 },
                 disconnect: () => {
@@ -101,25 +97,19 @@ const test = base.extend<{ readonly network: Network }>({
                 },
                 interruptSession: () => {
                     for (const tunnel of tunnels) {
-                        if (tunnel.route === "session") {
-                            tunnel.client.destroy();
-                        }
+                        tunnel.client.destroy();
                     }
                 },
                 stallSessionRequests: () => {
                     for (const tunnel of tunnels) {
-                        if (tunnel.route === "session") {
-                            // Stall the browser's requests, its heartbeat pings included, while server-to-browser
-                            // events keep flowing.
-                            tunnel.client.pause();
-                        }
+                        // Stall the browser's requests, its heartbeat pings included, while server-to-browser
+                        // events keep flowing.
+                        tunnel.client.pause();
                     }
                 },
                 resumeSessionRequests: () => {
                     for (const tunnel of tunnels) {
-                        if (tunnel.route === "session") {
-                            tunnel.client.resume();
-                        }
+                        tunnel.client.resume();
                     }
                 },
                 restore: () => {
@@ -280,7 +270,7 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
         await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
         await page.clock.runFor(12000);
         if (recovery !== "automatic") {
-            // Spend the bounded bridge retry budget before an explicit wakeup.
+            // Spend the bounded reconnect retry budget before an explicit wakeup.
             await page.clock.runFor(300000);
         }
         network.restore();
@@ -301,7 +291,7 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
     });
 }
 
-for (const route of ["all", "session", "bridge", "suspended"] as const) {
+for (const route of ["session", "suspended"] as const) {
     const condition = route === "suspended" ? "a suspended browser" : `a silently stalled ${route} connection`;
     test(`Given ${condition}, when the browser resumes, then the conversation recovers with its draft and history`, async ({
         runtime,
@@ -320,7 +310,7 @@ for (const route of ["all", "session", "bridge", "suspended"] as const) {
             "Remember the first response.",
         );
         await composer.fill("Continue after resuming.");
-        network.blackhole(route === "suspended" ? "all" : route);
+        network.blackhole();
         if (route === "suspended") {
             // Resume overdue timers once, as after a long browser suspension.
             await page.clock.fastForward(120000);
@@ -337,15 +327,10 @@ for (const route of ["all", "session", "bridge", "suspended"] as const) {
             await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
             await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
         }
-        if (route === "session" || route === "all") {
+        if (route === "session") {
             // The SDK pings every 20 seconds and drops a tunnel that leaves a ping unanswered for 10.
             await page.clock.runFor(30000);
-        } else if (route !== "suspended") {
-            // Bridge liveness is independent of Session execution-state polling.
-            await page.clock.runFor(5000);
         }
-        // Reconnecting asks the Chat bridge for Session access again, which can first wait out its 10-second health
-        // check when the bridge's own tunnel went silent too.
         await page.clock.runFor(15000);
         await expect(composer).toBeEnabled();
         await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
@@ -375,7 +360,7 @@ test("Given a silently stalled session without a lifecycle event, when its liven
         "Establish the conversation before the network stalls.",
     );
     await composer.fill("Preserve this draft until transport recovery.");
-    network.blackhole("session");
+    network.blackhole();
     // The SDK pings every 20 seconds and drops a tunnel that leaves a ping unanswered for 10; the Session then
     // reconnects on a new tunnel.
     await page.clock.runFor(30000);

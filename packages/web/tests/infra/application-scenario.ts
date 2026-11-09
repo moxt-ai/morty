@@ -85,9 +85,8 @@ export async function openExecutionDetails(app: TestApp): Promise<HTMLElement> {
 /** Advances the clock past the bridge retry delay and waits for Chat's bridge to reconnect. */
 export async function recoverChat(app: TestApp, clock: TestClock, delayMs = 1_000): Promise<void> {
     await act(async () => {
-        const connected = app.transport.waitForBridge(AbortSignal.timeout(10_000));
-        clock.advanceBy(delayMs);
-        await connected;
+        app.transport.open();
+        clock.advanceBy(Math.max(5000, delayMs));
     });
 }
 
@@ -98,4 +97,14 @@ export async function showReconnectNotice(app: TestApp, clock: TestClock): Promi
     );
     await act(async () => clock.advanceBy(30_000));
     await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
+}
+
+/** Refresh the list in this particular viewer. */
+export async function refreshSessions(app: TestApp): Promise<void> {
+    const root = app.elementByTestId(dataTestId.messageComposer).closest<HTMLElement>("[data-test-app-root]");
+    if (!root) {
+        throw new Error("Missing chat page");
+    }
+    const button = await app.waitForView(() => getByRole(root, "button", { name: "Refresh sessions" }));
+    await app.user.click(button);
 }

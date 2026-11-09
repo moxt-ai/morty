@@ -3,17 +3,14 @@ import { join, resolve } from "node:path";
 import { isIdentifier, runtimeCredentialSuccessor } from "@morty-build/client/protocol";
 import { ensurePrivateDirectory } from "../../storage/files/local-files.ts";
 import {
-    createInstallationFile,
     type InstallationDirectory,
     installationDirectory,
-    installationPointerPath,
     readInstallationFile,
     removeInstallationFile,
     writeInstallationFile,
 } from "../../storage/installation/installation-files.ts";
 import { tryLock } from "../../storage/installation/local-lock.ts";
 import { validateLocalPath } from "../../util/filesystem/private-path.ts";
-import { isNodeError } from "../../util/node-error.ts";
 import {
     type RuntimeConnectionActivation,
     type RuntimeConnectionInput,
@@ -21,16 +18,14 @@ import {
 } from "./runtime-connection.ts";
 import type { HeldRuntimeCredentials, RuntimeCredentials } from "./runtime-credentials.ts";
 
+const PAIRING_RECORD_VERSION = 8;
 const CONNECTION_ID_PATTERN = /^mcn_[a-f0-9]{32}$/;
-const INSTALLATION_ID_PATTERN = /^min_[a-f0-9]{32}$/;
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-const INSTALLATION_POINTER_KEYS: readonly string[] = ["installationId", "version"];
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
     "computerId",
     "connectionId",
     "defaultWorkspace",
-    "installationId",
     "kind",
     "relayOrigin",
     "credentials",
@@ -47,10 +42,6 @@ export class RuntimeInstallationStoreError extends Error {
     }
 }
 
-interface InstallationPointer {
-    readonly installationId: string;
-}
-
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -63,13 +54,6 @@ function hasExactKeys(value: Readonly<Record<string, unknown>>, expectedKeys: re
 function validateConnectionId(value: string): string {
     if (!CONNECTION_ID_PATTERN.test(value)) {
         throw new RuntimeInstallationStoreError("invalid_connection_id", "The local connection ID is invalid");
-    }
-    return value;
-}
-
-function validateInstallationId(value: string): string {
-    if (!INSTALLATION_ID_PATTERN.test(value)) {
-        throw new RuntimeInstallationStoreError("invalid_installation_id", "The installation ID is invalid");
     }
     return value;
 }
@@ -115,29 +99,17 @@ function connectionId(): string {
     return `mcn_${randomUUID().replaceAll("-", "")}`;
 }
 
-function installationId(): string {
-    return `min_${randomUUID().replaceAll("-", "")}`;
-}
-
-function decodeInstallationPointer(value: unknown): InstallationPointer {
-    if (!isRecord(value) || !hasExactKeys(value, INSTALLATION_POINTER_KEYS) || value["version"] !== 1) {
-        throw new RuntimeInstallationStoreError("invalid_installation", "The local installation record is invalid");
-    }
-    const storedInstallationId = value["installationId"];
-    if (typeof storedInstallationId !== "string") {
-        throw new RuntimeInstallationStoreError("invalid_installation", "The local installation record is invalid");
-    }
-    return { installationId: validateInstallationId(storedInstallationId) };
-}
-
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedRuntimeConnection {
-    if (!hasExactKeys(value, VERIFIED_CONNECTION_KEYS) || value["version"] !== 7 || value["kind"] !== "verified") {
+    if (
+        !hasExactKeys(value, VERIFIED_CONNECTION_KEYS) ||
+        value["version"] !== PAIRING_RECORD_VERSION ||
+        value["kind"] !== "verified"
+    ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
     const connectionId = value["connectionId"];
     const defaultWorkspace = value["defaultWorkspace"];
-    const storedInstallationId = value["installationId"];
     const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];
     const credentials = value["credentials"];
@@ -146,7 +118,6 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         typeof computerId !== "string" ||
         typeof connectionId !== "string" ||
         typeof defaultWorkspace !== "string" ||
-        typeof storedInstallationId !== "string" ||
         typeof relayOrigin !== "string" ||
         !isRecord(credentials) ||
         !hasExactKeys(credentials, ["current", "successor"]) ||
@@ -157,7 +128,6 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
     }
     return new VerifiedRuntimeConnection(
         activation,
-        validateInstallationId(storedInstallationId),
         validateConnectionId(connectionId),
         validateIdentifier(computerId, "invalid_connection"),
         defaultWorkspace,
@@ -223,12 +193,10 @@ async function writeJsonAtomically(
 }
 
 export class RuntimeInstallationStore {
-    readonly installationId: string;
     readonly stateDirectory: InstallationDirectory;
     readonly pairingPath: string;
 
-    private constructor(installationId: string, stateDirectory: InstallationDirectory) {
-        this.installationId = installationId;
+    private constructor(stateDirectory: InstallationDirectory) {
         this.stateDirectory = stateDirectory;
         this.pairingPath = join(stateDirectory, "pairing.json");
     }
@@ -248,22 +216,8 @@ export class RuntimeInstallationStore {
                 },
             );
         }
-        const storedInstallationId = await readOrCreateInstallationId(dataDirectory, signal);
-        const stateDirectory = installationDirectory(dataDirectory, storedInstallationId);
-        try {
-            await ensurePrivateDirectory(stateDirectory);
-            await validateLocalPath(stateDirectory, true, true, signal);
-        } catch (cause) {
-            throw new RuntimeInstallationStoreError(
-                "installation_unavailable",
-                "The local installation cannot be initialized",
-                {
-                    cause,
-                },
-            );
-        }
         signal.throwIfAborted();
-        return new RuntimeInstallationStore(storedInstallationId, stateDirectory);
+        return new RuntimeInstallationStore(installationDirectory(dataDirectory));
     };
 
     private readonly changePairing = async <T>(operation: () => Promise<T>): Promise<T> => {
@@ -280,9 +234,7 @@ export class RuntimeInstallationStore {
 
     readonly readConnection = async (connectionId: string, signal: AbortSignal): Promise<VerifiedRuntimeConnection> => {
         validateConnectionId(connectionId);
-        const connection = this.decodeOwnedConnection(
-            await readJsonFile(this.pairingPath, signal, "connection_not_found"),
-        );
+        const connection = decodeConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
         if (connection.connectionId !== connectionId) {
             throw new RuntimeInstallationStoreError(
                 "connection_not_found",
@@ -292,24 +244,12 @@ export class RuntimeInstallationStore {
         return connection;
     };
 
-    private readonly decodeOwnedConnection = (record: unknown): VerifiedRuntimeConnection => {
-        const stored = decodeConnection(record);
-        if (stored.installationId !== this.installationId) {
-            throw new RuntimeInstallationStoreError(
-                "connection_owner_mismatch",
-                "The saved Runtime connection belongs to another installation",
-            );
-        }
-        return stored;
-    };
-
     readonly saveConnection = async (
         input: RuntimeConnectionInput,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection> => {
         const stored = new VerifiedRuntimeConnection(
             "active",
-            this.installationId,
             connectionId(),
             validateIdentifier(input.computerId, "invalid_connection"),
             input.defaultWorkspace,
@@ -324,7 +264,7 @@ export class RuntimeInstallationStore {
 
     readonly currentConnection = async (signal: AbortSignal): Promise<VerifiedRuntimeConnection | null> => {
         try {
-            return this.decodeOwnedConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
+            return decodeConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
         } catch (cause) {
             if (cause instanceof RuntimeInstallationStoreError && cause.code === "connection_not_found") {
                 return null;
@@ -347,7 +287,6 @@ export class RuntimeInstallationStore {
             const connection = await this.readConnection(connectionId, signal);
             const updated = new VerifiedRuntimeConnection(
                 activation,
-                connection.installationId,
                 connection.connectionId,
                 connection.computerId,
                 connection.defaultWorkspace,
@@ -404,7 +343,6 @@ export class RuntimeInstallationStore {
         await this.overwriteConnection(
             new VerifiedRuntimeConnection(
                 connection.activation,
-                connection.installationId,
                 connection.connectionId,
                 connection.computerId,
                 connection.defaultWorkspace,
@@ -434,43 +372,12 @@ export class RuntimeInstallationStore {
                 computerId: connection.computerId,
                 connectionId: connection.connectionId,
                 defaultWorkspace: connection.defaultWorkspace,
-                installationId: connection.installationId,
                 kind: connection.kind,
                 relayOrigin: connection.relayOrigin.toString(),
                 credentials: connection.credentials,
-                version: 7,
+                version: PAIRING_RECORD_VERSION,
             },
             signal,
         );
     };
-}
-
-async function readOrCreateInstallationId(engineDataDir: string, signal: AbortSignal): Promise<string> {
-    const pointerPath = installationPointerPath(engineDataDir);
-    try {
-        return decodeInstallationPointer(await readJsonFile(pointerPath, signal, "installation_not_found"))
-            .installationId;
-    } catch (cause) {
-        if (!(cause instanceof RuntimeInstallationStoreError) || cause.code !== "installation_not_found") {
-            throw cause;
-        }
-    }
-
-    const candidate = installationId();
-    try {
-        await createInstallationFile(pointerPath, `${JSON.stringify({ installationId: candidate, version: 1 })}\n`);
-        return candidate;
-    } catch (cause) {
-        if (!isNodeError(cause, "EEXIST")) {
-            throw new RuntimeInstallationStoreError(
-                "installation_unavailable",
-                "The local installation cannot be initialized",
-                {
-                    cause,
-                },
-            );
-        }
-        return decodeInstallationPointer(await readJsonFile(pointerPath, signal, "installation_not_found"))
-            .installationId;
-    }
 }

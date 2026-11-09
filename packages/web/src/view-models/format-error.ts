@@ -1,5 +1,5 @@
 import { MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
-import { isChatBridgeError } from "../services/api/websocket-api-transport.ts";
+import { isApiConnectionError } from "../services/api/http-api-transport.ts";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
 const runtimeDisconnectedFailure = {
@@ -51,7 +51,12 @@ export function describePageFailure(
 
 // A revoked Session credential is replaced on the next attempt, which asks Chat again and so learns whether the
 // access behind it ended.
-const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable", "credential_revoked"]);
+const retryableRuntimeFailureCodes = new Set([
+    "runtime_offline",
+    "service_unavailable",
+    "credential_revoked",
+    "operation_timeout",
+]);
 
 /**
  * Map a caught error to the single user-facing message for it. Known error
@@ -70,7 +75,7 @@ export function formatError(cause: unknown, fallback: string): string {
  * Whether an operation failed because the Runtime closed the Session and nobody reopened it. The Session is not
  * broken: reopening it makes its operations work again.
  */
-export function isSessionClosedFailure(cause: unknown): boolean {
+export function isSessionClosedFailure(cause: unknown): cause is MortyError {
     return cause instanceof MortyError && cause.code === SESSION_CLOSED_ERROR_CODE;
 }
 
@@ -80,7 +85,11 @@ export function isSessionClosedFailure(cause: unknown): boolean {
  * upgrade), so the Session keeps retrying them instead of settling as failed.
  */
 export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
-    if (isChatBridgeError(cause) || isRuntimeConnectionFailure(cause)) {
+    if (
+        isApiConnectionError(cause) ||
+        isRuntimeConnectionFailure(cause) ||
+        (cause instanceof DOMException && cause.name === "TimeoutError")
+    ) {
         return true;
     }
     return cause instanceof MortyError && retryableRuntimeFailureCodes.has(cause.code);
