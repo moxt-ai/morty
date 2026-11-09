@@ -47,8 +47,7 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("host"),
         credentialId: v.string(),
-        // Attachments written before credential kinds name only stored Channel host credentials.
-        credentialKind: v.optional(v.picklist(["channel", "project"]), "channel"),
+        credentialKind: v.literal("project"),
         nativeRequestId: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
         sessionFilter: v.optional(targetSchema),
 
@@ -199,7 +198,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
     readonly permitsSessionHistory = (): boolean => {
         const identity = this.identity();
         // Control hosts read Session history: the Relay's own connection and a project credential's connection.
-        return identity.role === "relay" || (identity.role === "host" && identity.credential.kind === "project");
+        return identity.role === "relay" || identity.role === "host";
     };
     readonly send = (message: string | ArrayBuffer): void => this.#socket.send(message);
     readonly trackAgentSettingsDiscovery = (requestId: string, harness: string): "tracked" | "duplicate" | "busy" => {

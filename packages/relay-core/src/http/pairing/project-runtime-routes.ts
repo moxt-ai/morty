@@ -16,12 +16,7 @@ import {
 } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import * as v from "valibot";
-import {
-    MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    PairingDirectoryError,
-    validateIdentifier,
-} from "../../entity/pairing/pairing.ts";
+import { PairingDirectoryError, validateIdentifier } from "../../entity/pairing/pairing.ts";
 import { assertRequiredKeys, bearerToken, readString } from "../../infra/relay-http.ts";
 import { bodyParser } from "../middleware/body-parser.ts";
 import { errorMiddleware, rethrowHonoError } from "../middleware/error-middleware.ts";
@@ -73,14 +68,6 @@ const sessionRestoreSchema = v.strictObject({});
 const sessionListQuerySchema = v.strictObject({
     limit: v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,2}$/), v.transform(Number), v.safeInteger(), v.maxValue(500)),
 });
-const browserCredentialSchema = v.strictObject({
-    expiresInSeconds: v.pipe(
-        v.number(),
-        v.safeInteger(),
-        v.minValue(MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS / 1_000),
-        v.maxValue(MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS / 1_000),
-    ),
-});
 // The Runtime API also lets a caller choose the Turn's history policy, and accepts the earlier envelope that named
 // images and resources separately.
 const runtimeTurnEntries = {
@@ -107,27 +94,6 @@ export function createProjectRuntimeRoutes() {
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .route("/", createProjectRuntimeSessionControlRoutes())
-        .post("/computers/:computerId/browser-credentials", bodyParser<RelayHttpEnvironment>(), async (context) => {
-            const body = validated(browserCredentialSchema, context.req.valid("json"));
-            return context.json(
-                await context.env.services.runtimePairings.createBrowserCredential(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
-                    bearerToken(context.req.raw),
-                    body.expiresInSeconds * 1_000,
-                    context.req.raw.signal,
-                ),
-                201,
-            );
-        })
-        .delete("/computers/:computerId/browser-credentials/:credentialId", async (context) => {
-            await context.env.services.runtimePairings.revokeBrowserCredential(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
-                validateIdentifier(context.req.param("credentialId"), "credential_id"),
-                bearerToken(context.req.raw),
-                context.req.raw.signal,
-            );
-            return new Response(null, { status: 204 });
-        })
         .get("/computers/:computerId/latency", async (context) => {
             await context.env.services.runtimePairings.probeProject(
                 validateIdentifier(context.req.param("computerId"), "project_id"),

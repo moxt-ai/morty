@@ -148,17 +148,6 @@ export interface MortyTurnCancellation {
     readonly stopReason: string;
 }
 
-export class MortyBrowserCredentialRequest {
-    readonly expiresInSeconds: number;
-
-    constructor(expiresInSeconds: number) {
-        if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 3_600) {
-            throw new MortyValidationError("The browser credential lifetime is invalid");
-        }
-        this.expiresInSeconds = expiresInSeconds;
-    }
-}
-
 export class MortyRuntimePairingRequest {
     readonly idempotencyKey: string;
 
@@ -168,104 +157,6 @@ export class MortyRuntimePairingRequest {
         }
         this.idempotencyKey = idempotencyKey;
     }
-}
-
-export class MortyBrowserCredential {
-    readonly credentialId: string;
-    readonly expiresAt: string;
-    readonly computerId: string;
-    readonly token: string;
-
-    constructor(credentialId: string, expiresAt: string, computerId: string, token: string) {
-        this.credentialId = credentialId;
-        this.expiresAt = expiresAt;
-        this.computerId = computerId;
-        this.token = token;
-    }
-}
-
-export function decodeMortyBrowserCredential(value: unknown): MortyBrowserCredential {
-    const credential = record(value, "browser credential");
-    return new MortyBrowserCredential(
-        identifierField(credential, "credentialId"),
-        validateTimestamp(stringField(credential, "expiresAt", 128), "expiresAt"),
-        identifierField(credential, "computerId"),
-        stringField(credential, "token", 256),
-    );
-}
-
-export class MortyChannelAccessGrant {
-    readonly expiresAt: string;
-    readonly grantId: string;
-    readonly grantSecret: string;
-
-    constructor(grantId: string, grantSecret: string, expiresAt: string) {
-        this.expiresAt = expiresAt;
-        this.grantId = grantId;
-        this.grantSecret = grantSecret;
-    }
-}
-
-export function decodeMortyChannelAccessGrant(value: unknown): MortyChannelAccessGrant {
-    const grant = record(value, "channel access grant");
-    const grantSecret = stringField(grant, "grantSecret", 256);
-    if (!/^[a-zA-Z0-9_-]{32,256}$/.test(grantSecret)) {
-        throw invalidResponse("The service returned an invalid channel access grant");
-    }
-    return new MortyChannelAccessGrant(
-        identifierField(grant, "grantId"),
-        grantSecret,
-        validateTimestamp(stringField(grant, "expiresAt", 128), "expiresAt"),
-    );
-}
-
-export class MortyLinkedChannelDevice {
-    readonly createdAt: string;
-    readonly credentialId: string;
-    readonly lastUsedAt: string;
-
-    constructor(credentialId: string, createdAt: string, lastUsedAt: string) {
-        this.createdAt = createdAt;
-        this.credentialId = credentialId;
-        this.lastUsedAt = lastUsedAt;
-    }
-}
-
-function decodeMortyLinkedChannelDevice(value: unknown): MortyLinkedChannelDevice {
-    const device = record(value, "linked channel device");
-    return new MortyLinkedChannelDevice(
-        identifierField(device, "credentialId"),
-        validateTimestamp(stringField(device, "createdAt", 128), "createdAt"),
-        validateTimestamp(stringField(device, "lastUsedAt", 128), "lastUsedAt"),
-    );
-}
-
-export function decodeMortyLinkedChannelDeviceList(value: unknown): readonly MortyLinkedChannelDevice[] {
-    const response = record(value, "linked channel device list");
-    const devices = arrayField(response, "devices", 1_000).map(decodeMortyLinkedChannelDevice);
-    if (new Set(devices.map((device) => device.credentialId)).size !== devices.length) {
-        throw invalidResponse("The service returned duplicate linked channel devices");
-    }
-    return devices;
-}
-
-export class MortyRedeemedChannelCredential {
-    readonly hostToken: string;
-    readonly computerId: string;
-
-    constructor(hostToken: string, computerId: string) {
-        this.computerId = computerId;
-        this.hostToken = hostToken;
-    }
-}
-
-export function decodeMortyRedeemedChannelCredential(value: unknown): MortyRedeemedChannelCredential {
-    const credential = record(value, "redeemed channel credential");
-    const hostToken = stringField(credential, "hostToken", 256);
-    if (!/^[a-zA-Z0-9_-]{32,256}$/.test(hostToken)) {
-        throw invalidResponse("The service returned an invalid channel credential");
-    }
-    return new MortyRedeemedChannelCredential(hostToken, identifierField(credential, "computerId"));
 }
 
 export class MortyAgentDescriptor {
@@ -344,35 +235,6 @@ export class MortyRuntimeDescriptor {
         this.online = online;
         this.workspaceName = workspaceName;
     }
-}
-
-export class MortyChannelDescriptor {
-    readonly agents: readonly MortyAgentDescriptor[];
-    readonly machineName: string;
-    readonly computerId: string;
-    readonly workspaceName: string;
-
-    constructor(
-        agents: readonly MortyAgentDescriptor[],
-        machineName: string,
-        computerId: string,
-        workspaceName: string,
-    ) {
-        this.agents = agents;
-        this.computerId = computerId;
-        this.machineName = machineName;
-        this.workspaceName = workspaceName;
-    }
-}
-
-export function decodeMortyChannelDescriptor(value: unknown): MortyChannelDescriptor {
-    const channel = record(value, "channel descriptor");
-    return new MortyChannelDescriptor(
-        arrayField(channel, "agents", 100).map(decodeAgentDescriptor),
-        stringField(channel, "machineName", 255),
-        identifierField(channel, "computerId"),
-        stringField(channel, "workspaceName", 255),
-    );
 }
 
 export function decodeRuntimeDescriptor(value: unknown): MortyRuntimeDescriptor {

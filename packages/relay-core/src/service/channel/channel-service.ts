@@ -24,31 +24,6 @@ export class ChannelService {
         signal: AbortSignal,
     ) => this.#pairings.updateAgentCatalog(computerId, token, successor, agents, signal);
 
-    readonly createAccessGrant = (computerId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.createChannelAccessGrant(computerId, token, signal);
-
-    readonly redeemAccessGrant = (computerId: string, grantId: string, grantSecret: string, signal: AbortSignal) =>
-        this.#pairings.redeemChannelAccessGrant(computerId, grantId, grantSecret, signal);
-
-    readonly listLinkedDevices = (computerId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.listLinkedChannelDevices(computerId, token, signal);
-
-    readonly revokeLinkedDevice = async (
-        computerId: string,
-        credentialId: string,
-        token: string,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        const credential = await this.#pairings.revokeLinkedChannelDevice(computerId, credentialId, token, signal);
-        await this.#channelGateway.disconnectHost(credential, signal);
-    };
-
-    readonly readChannel = (computerId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.readChannel(computerId, token, signal);
-
-    readonly authorizeHost = (computerId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.authorizeHost(computerId, token, signal);
-
     /**
      * Authorizes a daemon connection, rotating its credential. A reused credential ends the Runtime's access first; a
      * daemon of a Runtime whose access ended is told so, so it stops instead of retrying.

@@ -12,14 +12,7 @@ function hostCredential(credentialId: string | null, kind: string | null): HostC
     if (credentialId === null) {
         return null;
     }
-    switch (kind) {
-        case "channel":
-            return { kind: "channel", credentialId };
-        case "project":
-            return { kind: "project", credentialId };
-        default:
-            return null;
-    }
+    return kind === "project" ? { kind, credentialId } : null;
 }
 
 export function createRuntimeRoutes(runtime: RuntimeService) {
@@ -42,13 +35,6 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
         const credentialId = request.headers.get("x-morty-host-credential-id");
         if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
             await runtime.revokeRuntime(scope, request.signal);
-            return new Response(null, { status: 204 });
-        }
-        if (request.method === "DELETE" && url.pathname.endsWith("/host-credentials/revoke")) {
-            if (credentialId === null) {
-                return unauthorized("Verified host credential access is required");
-            }
-            runtime.revokeHost(credentialId, scope);
             return new Response(null, { status: 204 });
         }
         if (request.method === "GET" && url.pathname.endsWith("/runtime-status")) {

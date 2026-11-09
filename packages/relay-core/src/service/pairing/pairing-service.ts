@@ -42,16 +42,6 @@ export class PairingService {
         signal: AbortSignal,
     ) => this.#pairings.createProjectRuntimePairing(computerId, token, idempotencyKey, signal);
 
-    readonly createBrowserCredential = (
-        computerId: string,
-        token: string,
-        lifetimeMilliseconds: number,
-        signal: AbortSignal,
-    ) => this.#pairings.createBrowserCredential(computerId, token, lifetimeMilliseconds, signal);
-
-    readonly revokeBrowserCredential = (computerId: string, credentialId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.revokeBrowserCredential(computerId, credentialId, token, signal);
-
     readonly probeProject = async (computerId: string, token: string, signal: AbortSignal): Promise<void> => {
         await this.#pairings.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
     };

@@ -12,30 +12,6 @@ export type RuntimeCredentialRotation =
     | { readonly kind: "revoked" }
     | { readonly kind: "unknown" };
 
-/** A host credential that authenticated, with the Runtime it reaches. */
-export interface AuthorizedChannelRow extends PairingScopeRow {
-    readonly credential_id: string;
-    readonly authority: "owner" | "linked";
-}
-
-export interface ChannelCredentialIdentity {
-    readonly credentialId: string;
-    readonly computerId: string;
-}
-
-/** A stored credential matching an identity lookup; only browser credentials carry their own lifetime. */
-export interface CredentialMatch {
-    readonly computer_id: string;
-    readonly expires_at: number | null;
-    readonly revoked_at: number | null;
-}
-
-export interface LinkedDeviceRow {
-    readonly credential_id: string;
-    readonly created_at: number;
-    readonly last_used_at: number;
-}
-
 interface RuntimeRegistrationRow {
     readonly claimed_at: number;
     readonly agents_json: string;

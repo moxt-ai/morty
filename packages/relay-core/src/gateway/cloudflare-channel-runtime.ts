@@ -1,9 +1,5 @@
 import type { RuntimeAccessContext } from "../entity/authentication/project-authentication.ts";
-import {
-    type ChannelHostCredential,
-    ProjectCredentialHostAccess,
-    type VerifiedChannelAccess,
-} from "../entity/pairing/pairing.ts";
+import type { ProjectCredentialHostAccess, VerifiedChannelAccess } from "../entity/pairing/pairing.ts";
 import { requestLogContext } from "../infra/log-diagnostics.ts";
 import { logger } from "../infra/logger.ts";
 import { RuntimeStatus } from "../service/channel/channel.ts";
@@ -48,7 +44,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     readonly acceptHost = async (
-        access: ChannelHostCredential | ProjectCredentialHostAccess,
+        access: ProjectCredentialHostAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -58,30 +54,6 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         // Public viewers cannot opt into the private request-reply routing mode.
         endpoint.searchParams.delete("nativeRequestId");
         return await this.forward(access, new Request(endpoint, { headers, method: request.method, signal }), signal);
-    };
-
-    readonly disconnectHost = async (access: ChannelHostCredential, signal: AbortSignal): Promise<void> => {
-        signal.throwIfAborted();
-        const headers = new Headers();
-
-        headers.set(INTERNAL_HOST_CREDENTIAL_ID_HEADER, access.credentialId);
-
-        const response = await this.fetchRuntime(
-            access,
-            new Request(
-                `https://runtime.internal/computers/${encodeURIComponent(access.computerId)}/host-credentials/revoke`,
-                {
-                    headers,
-                    method: "DELETE",
-                    signal,
-                },
-            ),
-            signal,
-        );
-        signal.throwIfAborted();
-        if (response.status !== 204) {
-            throw new Error("The linked host connection could not be revoked");
-        }
     };
 
     readonly disconnectRuntime = async (access: VerifiedChannelAccess, signal: AbortSignal): Promise<void> => {
@@ -194,10 +166,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
 }
 
 /** Replaces whatever a caller sent: only this Worker states which credential authorizes a host connection. */
-function setHostCredential(headers: Headers, access: ChannelHostCredential | ProjectCredentialHostAccess): void {
+function setHostCredential(headers: Headers, access: ProjectCredentialHostAccess): void {
     headers.set(INTERNAL_HOST_CREDENTIAL_ID_HEADER, access.credentialId);
-    headers.set(
-        INTERNAL_HOST_CREDENTIAL_KIND_HEADER,
-        access instanceof ProjectCredentialHostAccess ? "project" : "channel",
-    );
+    headers.set(INTERNAL_HOST_CREDENTIAL_KIND_HEADER, "project");
 }

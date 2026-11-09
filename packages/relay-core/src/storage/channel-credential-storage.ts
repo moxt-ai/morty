@@ -1,11 +1,9 @@
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
-import type { ChannelCredentialIdentity } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { channelHostCredential, computer } from "../schema/project-do/index.ts";
-import { hostCredentialValid } from "./host-credential-validity.ts";
+import { computer } from "../schema/project-do/index.ts";
 
-/** Whether a Runtime, or a host credential reaching it, is still active in the Project's own storage. */
+/** Whether a Runtime is still active in the Project's own storage. */
 export class ChannelCredentialStorage {
     readonly #database: SqlDatabase;
 
@@ -30,23 +28,5 @@ export class ChannelCredentialStorage {
             )
             .limit(1);
         return runtimes.length === 1;
-    };
-
-    readonly readActive = async (identity: ChannelCredentialIdentity, signal: AbortSignal): Promise<boolean> => {
-        const database = relayDrizzle(this.#database, signal);
-        const credentials = await database
-            .select({ credentialId: channelHostCredential.credentialId })
-            .from(channelHostCredential)
-            .innerJoin(computer, eq(computer.computerId, channelHostCredential.computerId))
-            .where(
-                and(
-                    eq(channelHostCredential.credentialId, identity.credentialId),
-                    eq(channelHostCredential.computerId, identity.computerId),
-                    eq(computer.computerId, identity.computerId),
-                    hostCredentialValid(database),
-                ),
-            )
-            .limit(1);
-        return credentials.length === 1;
     };
 }
