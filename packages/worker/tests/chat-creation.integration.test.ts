@@ -68,7 +68,7 @@ async function createChatFixture(
     };
 }
 
-test("Given an archived conversation, When the original creation request is retried, Then it stays closed", async ({
+test("Given an archived conversation, When the original creation request is retried, Then its receipt cannot restore the archived Session", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -93,8 +93,8 @@ test("Given an archived conversation, When the original creation request is retr
     expect(refusedBeforeReplay.status).toBe(404);
     expect(await refusedBeforeReplay.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     const retried = await fixture.request("chat/access", input);
-    expect(retried.status).toBe(404);
-    expect(await retried.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    expect(retried.status).toBe(200);
+    expect(v.parse(v.object({ target: targetSchema }), await retried.json()).target).toEqual(target);
     expect(await (await fixture.request("chat/managed-sessions", {})).json()).toEqual({ sessions: [] });
     expect((await fixture.request("chat/access", target)).status).toBe(404);
 });

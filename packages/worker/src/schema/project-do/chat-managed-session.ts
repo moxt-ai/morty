@@ -9,9 +9,6 @@ export const chatManagedSession = sqliteTable(
         harness: text("harness"),
         sessionId: text("session_id"),
         createdAt: integer("created_at").notNull(),
-        state: text("state", { enum: ["active", "archived"] })
-            .notNull()
-            .default("active"),
     },
     (table) => [
         primaryKey({ columns: [table.computerId, table.userId, table.resourceId] }),

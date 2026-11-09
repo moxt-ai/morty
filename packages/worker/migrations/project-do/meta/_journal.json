@@ -344,13 +344,6 @@
             "when": 1794223385438,
             "tag": "0060_computer_storage",
             "breakpoints": true
-        },
-        {
-            "idx": 61,
-            "version": "6",
-            "when": 1794238477116,
-            "tag": "0061_red_agent_zero",
-            "breakpoints": true
         }
     ]
 }
