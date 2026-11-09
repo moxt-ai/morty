@@ -77,7 +77,6 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
             const sendPrompt = (commandId: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         kind: "session.prompt",
                         commandId,
                         sessionId: nativeId,

@@ -112,7 +112,6 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         const commandId = randomUUID();
         socket.send(
             encodeSessionPromptCommand({
-                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,

@@ -15,7 +15,6 @@ import { writeControlledAcpExecutable } from "../support/controlled-acp-executab
 
 const prompt = (peer: RealDaemonPeer, commandId: string, text: string) =>
     encodeSessionPromptCommand({
-        historyPolicy: "eager",
         additionalDirectoryIds: [],
         agentId: "controlled-acp",
         attachments: [],
@@ -99,7 +98,6 @@ test("Given a running prompt, When clients append messages and steer a turn that
                 const steer = randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         attachments: [],

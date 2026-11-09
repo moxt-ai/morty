@@ -73,7 +73,6 @@ test.each(["codex", "claude"] as const)(
                 const prompt = (sessionId: string, text: string, selectMode = false): void =>
                     peer.send(
                         encodeSessionPromptCommand({
-                            historyPolicy: "eager",
                             ...identity,
                             kind: "session.prompt",
                             sessionId,

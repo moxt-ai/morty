@@ -568,7 +568,6 @@ await import(${JSON.stringify(agentPeer)});
         prompt: async (sessionId: string, commandId: string, agentId = "codex") => {
             send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     ...base(sessionId, agentId),
                     kind: "session.prompt",
                     commandId,

@@ -18,7 +18,6 @@ test("Given a real Codex conversation, When the user sends slash-prefixed text o
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     kind: "session.prompt",
                     commandId,
                     sessionId: peer.sessionId,
@@ -68,7 +67,6 @@ test("Given a real Codex conversation with content, When the user sends /compact
         const sendPrompt = (prompt: string): void => {
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     kind: "session.prompt",
                     commandId: randomUUID(),
                     sessionId: peer.sessionId,
@@ -135,7 +133,6 @@ test("Given a real Codex conversation with content, When the manual /compact's s
         const sendPrompt = (prompt: string): void => {
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     kind: "session.prompt",
                     commandId: randomUUID(),
                     sessionId: peer.sessionId,

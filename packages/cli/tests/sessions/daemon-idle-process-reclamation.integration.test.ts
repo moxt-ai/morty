@@ -121,7 +121,6 @@ async function expire(native: string, pid: string, timer: IdleTimeoutTimer): Pro
 function sendPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): void {
     peer.send(
         encodeSessionPromptCommand({
-            historyPolicy: "eager",
             additionalDirectoryIds: [],
             agentId: "claude",
             bindingId: peer.bindingId,

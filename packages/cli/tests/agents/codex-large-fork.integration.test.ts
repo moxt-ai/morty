@@ -26,7 +26,6 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     kind: "session.prompt",
                     commandId,
                     sessionId: sourceSessionId,
@@ -147,7 +146,6 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
         const continuedId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                historyPolicy: "eager",
                 ...identity,
                 kind: "session.prompt",
                 sessionId: targetSessionId,

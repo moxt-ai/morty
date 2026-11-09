@@ -281,7 +281,6 @@ const pendingRequestEntries = {
     // Preserve the attempted request exactly; the receiving API owns prompt-size rejection.
     content: v.string(),
     attachments: v.pipe(v.array(uploadedAttachmentSchema), v.maxLength(16), v.readonly()),
-    historyPolicy: v.exactOptional(v.picklist(["eager", "execution-only"])),
     sessionConfigurations: v.exactOptional(
         v.pipe(
             v.array(

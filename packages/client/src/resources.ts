@@ -7,7 +7,6 @@ import {
     type PromptAttachment,
     type SessionCapabilities,
     type SessionConfigurationSelection,
-    type SessionHistoryPolicy,
     type SessionPromptDisposition,
     type TurnRequest,
 } from "@morty-build/client/protocol";
@@ -129,7 +128,6 @@ interface SubmitMortyTurnContent extends MortySessionBinding {
     readonly attachments: readonly PromptAttachment[];
     readonly content: string;
     readonly idempotencyKey: string;
-    readonly historyPolicy?: SessionHistoryPolicy;
     readonly sessionConfigurations?: readonly SessionConfigurationSelection[];
 }
 

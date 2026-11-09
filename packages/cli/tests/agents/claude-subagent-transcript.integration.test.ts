@@ -35,7 +35,6 @@ test("Given Claude Code dispatches a subagent that runs tools, When the turn str
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: peer.bindingId,

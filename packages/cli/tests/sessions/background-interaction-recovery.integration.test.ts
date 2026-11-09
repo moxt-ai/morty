@@ -146,7 +146,6 @@ test("Given a completed foreground turn, When its Agent requests background perm
         }
         socket.send(
             encodeSessionPromptCommand({
-                historyPolicy: "eager",
                 ...identity,
                 commandId: "foreground",
                 disposition: "append",

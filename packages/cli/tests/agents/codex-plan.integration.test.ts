@@ -126,7 +126,6 @@ test.each(["owned", "borrowed"])(
                 const commandId = randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         kind: "session.prompt",
                         commandId,
                         sessionId: peer.sessionId,

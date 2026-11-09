@@ -15,7 +15,6 @@ async function promptFromMorty(peer: RealDaemonPeer, sessionId: string, prompt: 
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            historyPolicy: "eager",
             kind: "session.prompt",
             commandId,
             sessionId,

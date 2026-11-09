@@ -194,7 +194,6 @@ test("Given Claude is answering a background notification, When it absorbs a new
             const send = (commandId: string, prompt: string) =>
                 peer.send(
                     encodeSessionPromptCommand({
-                        historyPolicy: "eager",
                         kind: "session.prompt",
                         commandId,
                         prompt,

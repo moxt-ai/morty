@@ -619,9 +619,6 @@ export class SessionManager {
             }
             if (existing.usesEnvironment(options.agent.environment)) {
                 const runtime = await this.#currentSessionProcess(existing, options, recovery);
-                if (recovery.kind === "execution-only") {
-                    runtime.startExecutionOnlyCapture();
-                }
                 this.#executionProcesses.touch(options.sessionId, runtime);
                 return runtime.prepared();
             }
@@ -1030,9 +1027,6 @@ export class SessionManager {
                     options,
                     options.recovery ?? { kind: "interactive-only" },
                 );
-                if (options.recovery?.kind === "execution-only") {
-                    runtime.startExecutionOnlyCapture();
-                }
                 this.#executionProcesses.touch(options.sessionId, runtime);
                 return runtime;
             }

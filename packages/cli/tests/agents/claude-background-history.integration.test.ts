@@ -215,7 +215,6 @@ test("Given Claude is running a background command, When two idle hours pass and
                     const commandId = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            historyPolicy: "eager",
                             kind: "session.prompt",
                             commandId,
                             sessionId,

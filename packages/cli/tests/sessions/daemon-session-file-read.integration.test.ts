@@ -49,7 +49,6 @@ test("Given a persisted conversation with different product and native IDs, When
                     const commandId = crypto.randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            historyPolicy: "eager",
                             kind: "session.prompt",
                             additionalDirectoryIds: [],
                             agentId: "controlled-acp",

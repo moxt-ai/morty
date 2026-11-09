@@ -30,7 +30,6 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                historyPolicy: "eager",
                 ...identity,
                 kind: "session.prompt",
                 commandId,
@@ -176,7 +175,6 @@ async function interruptedJourney(
         const sendPrompt = (id: string, prompt: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    historyPolicy: "eager",
                     ...identity,
                     kind: "session.prompt",
                     commandId: id,
