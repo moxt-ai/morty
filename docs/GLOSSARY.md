@@ -145,11 +145,12 @@ versus a **Native Session** owned by the Agent.
 
 ### Native Session entry
 
-A discovery result representing one Agent-owned conversation in a particular
-workspace. Its entry ID is an opaque handle for the current discovery operation;
-it is not necessarily the Native Session ID or a Morty Session ID. Refreshing the
-directory can produce a new discovery context, so stale entries must not authorize
-later operations.
+A discovery result describing one Agent-owned conversation in a particular
+workspace, identified by its harness and harness-owned Session ID. Discovery is
+not an authorization grant: opening or forking a conversation resolves its current
+metadata and authorizes its directories locally, without requiring an earlier
+listing or a process-local discovery handle. Pairing authorizes the Computer;
+requests do not carry an additional workspace binding identity.
 
 ### Open / import
 
@@ -173,12 +174,11 @@ must not be assumed to update the source Native Session.
 Fork is a capability, not a fallback implementation for import. If the Agent cannot
 fork reliably, Morty must report that limitation rather than simulate success.
 
-### Session entry ID, Morty Session ID, and Native Session ID
+### Session identity
 
-- A **Session entry ID** selects an item returned by native-session discovery.
-- A **Morty Session ID** addresses live and managed Session operations through the
-  Runtime and Relay.
-- A **Native Session ID** identifies the Agent-owned conversation.
+The harness-owned **Session ID**, together with the harness on the selected
+Computer, identifies the conversation for discovery and subsequent operations.
+Morty does not assign an additional Session entry identity or conversation ID.
 
 Some creation paths deliberately reuse a value across layers. That is an
 implementation choice, not permission to collapse the concepts or skip validation
