@@ -1187,29 +1187,18 @@ export function createSessionPaneModel(options: {
                             }
                         },
                         receive: async (events) => {
-                            const historyLoads: Promise<void>[] = [];
                             for (const event of events) {
-                                const effects = commitProjection({ event, kind: "live-event" });
-                                for (const effect of effects) {
-                                    if (effect.kind === "load-history") {
-                                        historyLoads.push(loadProjectionHistory(effect, connected, signal));
-                                    } else if (effect.kind === "read-settings") {
-                                        settings
-                                            .getState()
-                                            .readInBackground(
-                                                (readSignal) =>
-                                                    connected.sessions.readConfiguration(sessionId, readSignal),
-                                                signal,
-                                            );
-                                    }
-                                }
-                                if (event.type !== "acp") {
-                                    await receiveLifecycle(sessionLifecycleFact(event.payload), event);
-                                }
+                                // History and lifecycle processing belong to this event. Observe both immediately,
+                                // so cancellation or failure in either cannot leave the other's rejection unhandled.
+                                await Promise.all([
+                                    dispatchProjection({ event, kind: "live-event" }, connected, signal),
+                                    event.type === "acp"
+                                        ? Promise.resolve()
+                                        : receiveLifecycle(sessionLifecycleFact(event.payload), event),
+                                ]);
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();
                             }
-                            await Promise.all(historyLoads);
                             return true;
                         },
                     };
