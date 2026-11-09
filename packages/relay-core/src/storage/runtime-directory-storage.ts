@@ -11,8 +11,6 @@ import { type RelayDrizzleDatabase, relayDrizzle } from "../infra/drizzle-databa
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import {
     auditEvent,
-    channelAccessGrant,
-    channelHostCredential,
     computer,
     daemonCredential,
     retiredDaemonCredential,
@@ -186,30 +184,7 @@ export class RuntimeDirectoryStorage {
         const cleanup = [daemonCredential, retiredDaemonCredential].map((table) =>
             this.statement(db.delete(table).where(and(eq(table.computerId, computerId), accepted))),
         );
-        const revokeHosts = db
-            .update(channelHostCredential)
-            .set({ revokedAt: value.now })
-            .where(
-                and(
-                    eq(channelHostCredential.computerId, computerId),
-                    isNull(channelHostCredential.revokedAt),
-                    accepted,
-                ),
-            );
-        const expireGrants = db
-            .update(channelAccessGrant)
-            .set({ expiresAt: value.now })
-            .where(
-                and(
-                    eq(channelAccessGrant.computerId, computerId),
-                    gt(channelAccessGrant.expiresAt, value.now),
-                    accepted,
-                ),
-            );
-        const results = await sql.batch(
-            [reservation, request, audit, ...cleanup, this.statement(revokeHosts), this.statement(expireGrants)],
-            signal,
-        );
+        const results = await sql.batch([reservation, request, audit, ...cleanup], signal);
         return results[0]?.meta.changes === 1;
     };
 

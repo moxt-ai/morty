@@ -47,8 +47,6 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("host"),
         credentialId: v.string(),
-        // Attachments written before credential kinds name only stored Channel host credentials.
-        credentialKind: v.optional(v.picklist(["channel", "project"]), "channel"),
         nativeRequestId: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
         sessionFilter: v.optional(targetSchema),
 
@@ -85,7 +83,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         if (attachment.role === "host") {
             return {
-                credential: { kind: attachment.credentialKind, credentialId: attachment.credentialId },
+                credential: { credentialId: attachment.credentialId },
                 ...(attachment.nativeRequestId === undefined ? {} : { nativeRequestId: attachment.nativeRequestId }),
                 ...(attachment.sessionFilter === undefined ? {} : { sessionFilter: attachment.sessionFilter }),
                 computerId: attachment.computerId,
@@ -199,7 +197,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
     readonly permitsSessionHistory = (): boolean => {
         const identity = this.identity();
         // Control hosts read Session history: the Relay's own connection and a project credential's connection.
-        return identity.role === "relay" || (identity.role === "host" && identity.credential.kind === "project");
+        return identity.role === "relay" || identity.role === "host";
     };
     readonly send = (message: string | ArrayBuffer): void => this.#socket.send(message);
     readonly trackAgentSettingsDiscovery = (requestId: string, harness: string): "tracked" | "duplicate" | "busy" => {
@@ -325,5 +323,5 @@ function attachment(identity: RuntimeSocketIdentity): v.InferInput<typeof attach
         return identity;
     }
     const { credential, ...connection } = identity;
-    return { ...connection, credentialId: credential.credentialId, credentialKind: credential.kind };
+    return { ...connection, credentialId: credential.credentialId };
 }

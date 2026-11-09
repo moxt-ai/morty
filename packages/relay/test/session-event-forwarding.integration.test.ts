@@ -66,7 +66,6 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
                 Upgrade: "websocket",
 
                 "x-morty-host-credential-id": hostCredentialId,
-                "x-morty-host-credential-kind": "project",
             },
         });
         expect(response.status).toBe(101);

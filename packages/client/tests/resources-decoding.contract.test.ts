@@ -1,5 +1,4 @@
 import {
-    decodeMortyChannelDescriptor,
     decodeMortyRuntimeList,
     decodeMortyRuntimePairingStatus,
     MortyRuntimePairingLifecycle,
@@ -69,9 +68,5 @@ describe("Runtime descriptor decoding contracts", () => {
     it("Given a paired status, When it is decoded, Then it is accepted", () => {
         const decoded = decodeMortyRuntimePairingStatus(pairedStatus);
         expect(decoded.status).toBe(MortyRuntimePairingLifecycle.Paired);
-    });
-
-    it("Given a channel descriptor, When it is decoded, Then it is accepted", () => {
-        expect(() => decodeMortyChannelDescriptor(runtime)).not.toThrow();
     });
 });

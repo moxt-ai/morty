@@ -7,9 +7,6 @@ import {
 import type { HttpError } from "../http-error.ts";
 
 export const PAIRING_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
-export const ACCESS_GRANT_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
-export const MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS = 60 * 1_000;
-export const MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS = 60 * 60 * 1_000;
 
 const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
@@ -41,29 +38,6 @@ export interface ClaimedPairing {
     readonly daemonToken: string;
 }
 
-export interface CreatedChannelAccessGrant {
-    readonly expiresAt: string;
-    readonly grantId: string;
-    readonly grantSecret: string;
-}
-
-export interface RedeemedChannelAccessGrant {
-    readonly hostToken: string;
-    readonly computerId: string;
-}
-
-export class LinkedChannelDevice {
-    readonly createdAt: string;
-    readonly credentialId: string;
-    readonly lastUsedAt: string;
-
-    constructor(credentialId: string, createdAt: string, lastUsedAt: string) {
-        this.createdAt = createdAt;
-        this.credentialId = credentialId;
-        this.lastUsedAt = lastUsedAt;
-    }
-}
-
 export class VerifiedChannelAccess {
     readonly agents: readonly AgentDescriptor[];
     readonly computerId: string;
@@ -71,15 +45,6 @@ export class VerifiedChannelAccess {
     constructor(computerId: string, agents: readonly AgentDescriptor[]) {
         this.agents = agents;
         this.computerId = computerId;
-    }
-}
-
-export class ChannelHostCredential extends VerifiedChannelAccess {
-    readonly credentialId: string;
-
-    constructor(computerId: string, credentialId: string) {
-        super(computerId, []);
-        this.credentialId = credentialId;
     }
 }
 
@@ -97,12 +62,10 @@ export class ProjectCredentialHostAccess extends VerifiedChannelAccess {
     }
 }
 
-/** The credential whose authority keeps a host connection open. */
-export type HostCredential =
-    /** A Channel host credential stored in the Project: a linked device or a Relay-internal control host. */
-    | { readonly kind: "channel"; readonly credentialId: string }
-    /** The project credential that opened the connection. */
-    | { readonly kind: "project"; readonly credentialId: string };
+/** The credential whose authority keeps a host connection open: the project credential that opened it. */
+export interface HostCredential {
+    readonly credentialId: string;
+}
 
 export class ChannelDescriptor {
     readonly agents: readonly AgentDescriptor[];
@@ -119,20 +82,6 @@ export class ChannelDescriptor {
         this.computerId = computerId;
         this.machineName = machineName;
         this.workspaceName = workspaceName;
-    }
-}
-
-export class CreatedBrowserCredential {
-    readonly credentialId: string;
-    readonly expiresAt: string;
-    readonly computerId: string;
-    readonly token: string;
-
-    constructor(credentialId: string, expiresAt: string, computerId: string, token: string) {
-        this.credentialId = credentialId;
-        this.expiresAt = expiresAt;
-        this.computerId = computerId;
-        this.token = token;
     }
 }
 
@@ -207,22 +156,13 @@ function pairingDirectoryErrorStatus(code: string): number {
         case "pairing_not_found":
         case "runtime_not_found":
         case "channel_not_found":
-        case "access_grant_invalid":
-        case "linked_device_not_found":
-        case "browser_credential_not_found":
             return 404;
         case "unauthorized":
-        case "credential_expired":
-        case "credential_revoked":
         case "runtime_revoked":
             return 401;
-        case "owner_access_required":
         case "runtime_access_denied":
         case "workspace_required":
             return 403;
-        case "access_grant_expired":
-            return 410;
-        case "access_grant_redeemed":
         case "runtime_unavailable":
         case "idempotency_conflict":
         case "session_configuration_conflict":

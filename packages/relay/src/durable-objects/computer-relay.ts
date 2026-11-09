@@ -1,15 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { RUNTIME_HEARTBEAT_ACK_MESSAGE, RUNTIME_HEARTBEAT_MESSAGE } from "@morty-build/client/protocol";
 import {
-    type AccessGrantRedemption,
     acceptWebSocketHttpTransport,
     type ClaimPairing,
-    type CreateAccessGrant,
-    type CreateBrowserCredential,
     createLocalSessionOperations,
     DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
-    type RedeemAccessGrant,
     RelaySockets,
     type RequestRuntimePairing,
     type RevokeRuntime,
@@ -171,41 +167,6 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         }
     }
 
-    async authenticateHost(computerId: string, tokenHash: string, now: number): Promise<Result<"authenticateHost">> {
-        return await this.#operate(computerId).authenticateHost(computerId, tokenHash, now, uncancelled);
-    }
-
-    async isHostCredentialActive(
-        computerId: string,
-        identity: Parameters<Store["isHostCredentialActive"]>[0],
-    ): Promise<boolean> {
-        return await this.#operate(computerId).isHostCredentialActive(identity, uncancelled);
-    }
-
-    async listLinkedDevices(computerId: string): Promise<Result<"listLinkedDevices">> {
-        return await this.#operate(computerId).listLinkedDevices(computerId, uncancelled);
-    }
-
-    async revokeLinkedDevice(computerId: string, credentialId: string, now: number): Promise<boolean> {
-        return await this.#operate(computerId).revokeLinkedDevice(computerId, credentialId, now, uncancelled);
-    }
-
-    async createAccessGrant(computerId: string, value: CreateAccessGrant): Promise<boolean> {
-        return await this.#operate(computerId).createAccessGrant(value, uncancelled);
-    }
-
-    async redeemAccessGrant(computerId: string, value: RedeemAccessGrant): Promise<AccessGrantRedemption> {
-        return await this.#operate(computerId).redeemAccessGrant(value, uncancelled);
-    }
-
-    async createBrowserCredential(computerId: string, value: CreateBrowserCredential): Promise<boolean> {
-        return await this.#operate(computerId).createBrowserCredential(value, uncancelled);
-    }
-
-    async revokeBrowserCredential(computerId: string, credentialId: string, now: number): Promise<boolean> {
-        return await this.#operate(computerId).revokeBrowserCredential(credentialId, now, uncancelled);
-    }
-
     async updateAgentCatalog(computerId: string, tokenHash: string, agents: string): Promise<boolean> {
         return await this.#operate(computerId).updateAgentCatalog(computerId, tokenHash, agents, uncancelled);
     }
@@ -220,10 +181,6 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
 
     async listRuntimes(computerId: string): Promise<Result<"listRuntimes">> {
         return await this.#operate(computerId).listRuntimes(uncancelled);
-    }
-
-    async readChannel(computerId: string): Promise<Result<"readChannel">> {
-        return await this.#operate(computerId).readChannel(computerId, uncancelled);
     }
 
     async requestRuntimePairing(computerId: string, value: RequestRuntimePairing): Promise<RuntimePairingRequest> {

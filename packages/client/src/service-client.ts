@@ -46,28 +46,16 @@ import {
 } from "./errors.ts";
 import { sameNativeSession } from "./native-session.ts";
 import { nativeSessionTargetSchema } from "./protocol/session/shared/native-session-target.ts";
-import { MortyPublicRequestExecutor } from "./public-request.ts";
 import {
     type CreateMortySessionRequest,
-    decodeMortyBrowserCredential,
-    decodeMortyChannelAccessGrant,
-    decodeMortyChannelDescriptor,
-    decodeMortyLinkedChannelDeviceList,
-    decodeMortyRedeemedChannelCredential,
     decodeMortyRuntimeList,
     decodeMortyRuntimePairing,
     decodeMortyRuntimePairingStatus,
     decodeMortyTurn,
     decodeRuntimeDescriptor,
-    type MortyBrowserCredential,
-    type MortyBrowserCredentialRequest,
-    type MortyChannelAccessGrant,
-    type MortyChannelDescriptor,
     type MortyInteractionResponseRequest,
-    type MortyLinkedChannelDevice,
     type MortyPageRequest,
     MortyPairedRuntimePairingStatus,
-    type MortyRedeemedChannelCredential,
     type MortyRuntimeDescriptor,
     type MortyRuntimePairing,
     MortyRuntimePairingLifecycle,
@@ -739,123 +727,6 @@ export async function readExactResponseBytes(
         }
     }
     return bytes;
-}
-
-export class MortyCredentialResources {
-    readonly #executor: MortyRequestExecutor;
-    readonly #computerId: string;
-
-    constructor(executor: MortyRequestExecutor, computerId: string) {
-        this.#executor = executor;
-        this.#computerId = computerId;
-    }
-
-    readonly issue = async (
-        request: MortyBrowserCredentialRequest,
-        signal: AbortSignal,
-    ): Promise<MortyBrowserCredential> =>
-        decodeMortyBrowserCredential(
-            await this.#executor.post(projectPath(this.#computerId, "browser-credentials"), request, signal),
-        );
-
-    readonly revoke = async (credentialId: string, signal: AbortSignal): Promise<void> => {
-        if (!isIdentifier(credentialId)) {
-            throw new MortyValidationError("The browser credential identifier is invalid");
-        }
-        await this.#executor.deleteEmpty(
-            projectPath(this.#computerId, `browser-credentials/${encodeURIComponent(credentialId)}`),
-            signal,
-        );
-    };
-}
-
-export class MortyChannelResources {
-    readonly #executor: MortyRequestExecutor;
-
-    constructor(executor: MortyRequestExecutor) {
-        this.#executor = executor;
-    }
-
-    readonly createAccessGrant = async (computerId: string, signal: AbortSignal): Promise<MortyChannelAccessGrant> => {
-        if (!isIdentifier(computerId)) {
-            throw new MortyValidationError("The channel identifier is invalid");
-        }
-        return decodeMortyChannelAccessGrant(
-            await this.#executor.post(`channels/${encodeURIComponent(computerId)}/access-grants`, {}, signal),
-        );
-    };
-
-    readonly listLinkedDevices = async (
-        computerId: string,
-        signal: AbortSignal,
-    ): Promise<readonly MortyLinkedChannelDevice[]> => {
-        if (!isIdentifier(computerId)) {
-            throw new MortyValidationError("The channel identifier is invalid");
-        }
-        return decodeMortyLinkedChannelDeviceList(
-            await this.#executor.get(`channels/${encodeURIComponent(computerId)}/linked-devices`, signal),
-        );
-    };
-
-    readonly read = async (computerId: string, signal: AbortSignal): Promise<MortyChannelDescriptor> => {
-        if (!isIdentifier(computerId)) {
-            throw new MortyValidationError("The channel identifier is invalid");
-        }
-        return decodeMortyChannelDescriptor(
-            await this.#executor.get(`channels/${encodeURIComponent(computerId)}`, signal),
-        );
-    };
-
-    readonly revokeLinkedDevice = async (
-        computerId: string,
-        credentialId: string,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        if (!isIdentifier(computerId) || !isIdentifier(credentialId)) {
-            throw new MortyValidationError("The linked channel device identifier is invalid");
-        }
-        await this.#executor.deleteEmpty(
-            `channels/${encodeURIComponent(computerId)}/linked-devices/${encodeURIComponent(credentialId)}`,
-            signal,
-        );
-    };
-}
-
-export interface MortyChannelAccessClientOptions {
-    readonly endpoint: string;
-    readonly observeResponse?: (metadata: MortyResponseMetadata) => void;
-    readonly operationTimeoutMilliseconds?: number;
-    readonly transport?: MortyHttpTransport;
-}
-
-export class MortyChannelAccessClient {
-    readonly #requests: MortyPublicRequestExecutor;
-
-    constructor(options: MortyChannelAccessClientOptions) {
-        this.#requests = new MortyPublicRequestExecutor(options);
-    }
-
-    readonly redeem = async (
-        computerId: string,
-        grantId: string,
-        grantSecret: string,
-        signal: AbortSignal,
-    ): Promise<MortyRedeemedChannelCredential> => {
-        if (!isIdentifier(computerId) || !isIdentifier(grantId) || !/^[a-zA-Z0-9_-]{32,256}$/.test(grantSecret)) {
-            throw new MortyValidationError("The channel access grant is invalid");
-        }
-        const credential = decodeMortyRedeemedChannelCredential(
-            await this.#requests.post(
-                `channels/${encodeURIComponent(computerId)}/access-grants/${encodeURIComponent(grantId)}/redeem`,
-                { grantSecret },
-                signal,
-            ),
-        );
-        if (credential.computerId !== computerId) {
-            throw new MortyProtocolError("The service returned a credential for another channel");
-        }
-        return credential;
-    };
 }
 
 export class MortyRuntimeResources {
@@ -1742,8 +1613,6 @@ export class MortyEventResources {
 }
 
 export class MortyClient {
-    readonly channels: MortyChannelResources;
-    readonly credentials: MortyCredentialResources;
     readonly events: MortyEventResources;
     readonly interactions: MortyInteractionResources;
     readonly runtimePairings: MortyRuntimePairingResources;
@@ -1757,8 +1626,6 @@ export class MortyClient {
         if (!Number.isSafeInteger(reconnectAttempts) || reconnectAttempts < 0) {
             throw new MortyValidationError("The stream reconnect attempt limit is invalid");
         }
-        this.channels = new MortyChannelResources(executor);
-        this.credentials = new MortyCredentialResources(executor, options.computerId);
         this.events = new MortyEventResources(executor, options.computerId, reconnectAttempts);
         this.interactions = new MortyInteractionResources(executor, options.computerId);
         this.runtimePairings = new MortyRuntimePairingResources(executor, options.computerId);

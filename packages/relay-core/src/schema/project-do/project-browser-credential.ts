@@ -1,5 +1,6 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+/** Retained records of the retired link-sharing model; Morty no longer reads or writes this table. */
 export const projectBrowserCredential = sqliteTable(
     "machine_browser_credentials",
     {
