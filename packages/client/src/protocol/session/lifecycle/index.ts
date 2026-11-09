@@ -8,7 +8,6 @@ import {
     DIRECTORY_PATH,
     sessionCapabilitiesSchema,
     sessionCommandSchema,
-    sessionIdentityFields,
     sessionStatusSchema,
 } from "../shared/index.ts";
 import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
@@ -123,9 +122,9 @@ const sessionCloseCommandSchema = z
 
 export type SessionCloseCommand = z.infer<typeof sessionCloseCommandSchema>;
 
+/** Opens an existing Session with the Agent and directory the Runtime holds it with. */
 const sessionPrepareCommandSchema = z
     .object({
-        ...sessionIdentityFields,
         /**
          * The complete settings a new Session starts with. The Runtime applies them in dependency order as part of
          * creating the Session: it answers only once every selection holds, and otherwise creates nothing.
@@ -134,6 +133,7 @@ const sessionPrepareCommandSchema = z
         kind: z.literal(SESSION_PREPARE_KIND),
         requestId: IDENTIFIER,
         sessionState: z.literal("provisioned").optional(),
+        target: nativeSessionTargetSchema,
         /** Marks an inspection-only Session preparation. */
         transient: z.boolean().optional(),
     })

@@ -47,7 +47,7 @@ test.each(["codex", "claude"] as const)(
                 { ...agent.environment, [harness === "codex" ? "MORTY_CODEX_PATH" : "MORTY_CLAUDE_PATH"]: launcher },
                 async (peer) => {
                     const sessionTarget = peer.target;
-                    await prompt(peer, harness, sessionTarget, "Remember ORIGINAL_BEFORE_IDLE and reply without tools");
+                    await prompt(peer, sessionTarget, "Remember ORIGINAL_BEFORE_IDLE and reply without tools");
                     const retained = (await readdir(processes)).filter((name) => name.endsWith(".process"));
                     expect(retained).toHaveLength(1);
                     const original = retained[0];
@@ -82,7 +82,7 @@ test.each(["codex", "claude"] as const)(
                         }
                     }
                     const readers = (await readdir(processes)).filter((name) => name.endsWith(".process"));
-                    await prompt(peer, harness, sessionTarget, "Continue AFTER_IDLE_RECOVERY without tools");
+                    await prompt(peer, sessionTarget, "Continue AFTER_IDLE_RECOVERY without tools");
                     const resumed = (await readdir(processes)).filter((name) => name.endsWith(".process"));
                     expect(resumed).toHaveLength(readers.length + 1);
                     expect(resumed).toEqual(expect.arrayContaining(readers));
@@ -124,20 +124,13 @@ test.each(["codex", "claude"] as const)(
     },
 );
 
-async function prompt(
-    peer: RealDaemonPeer,
-    harness: string,
-    sessionTarget: RealDaemonPeer["target"],
-    text: string,
-): Promise<void> {
+async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], text: string): Promise<void> {
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            harness,
-            directory: ".",
             attachments: [],
             prompt: text,
             disposition: SessionPromptDisposition.Append,

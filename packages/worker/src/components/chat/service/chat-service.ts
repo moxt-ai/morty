@@ -688,10 +688,7 @@ export class ChatService {
         const events = await this.#platform.previewRuntimeNativeEvents(
             scope.computerId,
             { harness: input.harness, sessionId: input.sessionId },
-            {
-                harness: input.harness,
-                directory: input.directory,
-            },
+            input.directory,
             { cursor: null, eventLimit: 200 },
             scope.signal,
         );

@@ -64,45 +64,24 @@ export class SessionTurns {
         }
     };
 
-    /** Resolve identities first, then read every execution projection in one synchronous step. */
-    readonly executionSnapshot = async <T>(
+    /** The Session's running turn and the commands waiting behind it, as one synchronous read. */
+    readonly executionSnapshot = (
         sessionTarget: NativeSessionTarget,
-        matches: (command: SessionPromptCommand) => Promise<boolean>,
-        read: (snapshot: {
-            readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>;
-            readonly queued: QueuedTurnSnapshot;
-        }) => T,
-        signal: AbortSignal,
-    ): Promise<T> => {
-        const matched = new Map<ActiveRuntimeTurn, boolean>();
-        for (;;) {
-            signal.throwIfAborted();
-            const current = this.#bySessionTarget.get(sessionTarget)?.turns() ?? [];
-            const unresolved = current.filter((turn) => !matched.has(turn));
-            if (unresolved.length > 0) {
-                for (const turn of unresolved) {
-                    matched.set(turn, await matches(turn.command));
-                }
-                // A command may arrive or settle during directory resolution. Re-read the live index.
-                continue;
-            }
-            const matching = current.filter((turn) => matched.get(turn) === true);
-            const turn =
-                matching.map((candidate) => candidate.snapshot()).find((snapshot) => snapshot !== null) ?? null;
-            const queued = matching
-                .filter(
-                    (candidate) =>
-                        candidate.isQueued() &&
-                        !this.#operations.isTerminalExecution(candidate.command.commandId, sessionTarget),
-                )
-                .map((candidate) => ({
-                    commandId: candidate.command.commandId,
-                    prompt: candidate.command.prompt,
-                    attachments: candidate.command.attachments,
-                }));
-            // No await between reading the turns and the caller's receipts, interactions and event position.
-            return read({ turn, queued });
-        }
+    ): { readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>; readonly queued: QueuedTurnSnapshot } => {
+        const current = this.#bySessionTarget.get(sessionTarget)?.turns() ?? [];
+        const turn = current.map((candidate) => candidate.snapshot()).find((snapshot) => snapshot !== null) ?? null;
+        const queued = current
+            .filter(
+                (candidate) =>
+                    candidate.isQueued() &&
+                    !this.#operations.isTerminalExecution(candidate.command.commandId, sessionTarget),
+            )
+            .map((candidate) => ({
+                commandId: candidate.command.commandId,
+                prompt: candidate.command.prompt,
+                attachments: candidate.command.attachments,
+            }));
+        return { turn, queued };
     };
 
     readonly admitAndWait = async (

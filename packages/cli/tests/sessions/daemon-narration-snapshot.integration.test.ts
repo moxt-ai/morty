@@ -195,9 +195,7 @@ describe("daemon narration delivery", () => {
                 created = await frames.next();
             }
             const prompt: SessionPromptCommand = {
-                harness: agent.harness,
                 commandId: "narration_turn",
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

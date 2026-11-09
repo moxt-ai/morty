@@ -28,9 +28,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         await runtime.client.turns.submitToRuntime(
             sessionTarget,
             {
-                harness: "claude",
                 content: "Remember this conversation",
-                directory: ".",
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
                 attachments: [],
             },

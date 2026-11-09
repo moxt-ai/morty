@@ -81,7 +81,6 @@ if (process.argv.includes("--version")) {
                 async (peer) => {
                     peer.send(
                         encodeSessionPreviewHistoryPageLoad({
-                            harness: "claude",
                             cursor: null,
                             directory: ".",
                             eventLimit: 10000,

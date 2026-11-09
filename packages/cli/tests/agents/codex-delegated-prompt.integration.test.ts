@@ -135,10 +135,8 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            harness: "codex",
             attachments: [],
             commandId,
-            directory: ".",
             disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt,

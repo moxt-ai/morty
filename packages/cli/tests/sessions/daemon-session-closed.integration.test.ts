@@ -109,8 +109,6 @@ async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["targ
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionPrepareCommand({
-            harness: NATIVE_HARNESS,
-            directory: ".",
             kind: "session.prepare",
             requestId,
             target: sessionTarget,
@@ -123,9 +121,7 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     const commandId = crypto.randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            harness: NATIVE_HARNESS,
             commandId,
-            directory: ".",
             disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",

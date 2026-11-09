@@ -23,7 +23,6 @@ import {
     type RelayContext,
     RequestAccessMetrics,
     requestTimeoutMiddleware,
-    type SessionBindingRequest,
     SessionControl,
     sessionConfigurationRequest,
     sessionRenameRequest,
@@ -152,15 +151,6 @@ const scopedProjectApplication = createProjectApplication();
 const controlApplication = createPlatformControlApplication();
 const PLATFORM_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 const sessionIdentifier = v.custom<Identifier>(isIdentifier);
-/** A Session binding stated in a query string. Each omitted field is the Session's own. */
-function sessionBindingQuery(request: { readonly query: (name: string) => string | undefined }): SessionBindingRequest {
-    const harness = request.query("harness");
-    const directory = request.query("directory");
-    return {
-        harness: harness === undefined ? undefined : v.parse(sessionIdentifier, harness),
-        directory: directory === undefined ? undefined : v.parse(v.custom<string>(isDirectoryPath), directory),
-    };
-}
 
 type DispatchEnvironment = {
     readonly Bindings: PlatformApplicationBindings;
@@ -332,7 +322,8 @@ export function createPlatformApplication(
                 Number(context.req.query("eventLimit") ?? "50"),
             );
             const control = authorizedSessionControl(context, access, sessionTarget);
-            const events = await control.previewEvents(sessionBindingQuery(context.req), {
+            const directory = v.parse(v.custom<string>(isDirectoryPath), context.req.query("directory"));
+            const events = await control.previewEvents(directory, {
                 cursor: context.req.query("cursor") ?? null,
                 eventLimit,
             });
@@ -372,11 +363,9 @@ export function createPlatformApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const binding = sessionBindingQuery(context.req);
             const commandId = context.req.query("commandId");
             const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.activeTurn(
-                binding,
                 commandId === undefined ? undefined : v.parse(sessionIdentifier, commandId),
             );
             context.header("Cache-Control", "no-store");

@@ -27,8 +27,6 @@ async function promptFromMorty(
             kind: "session.prompt",
             commandId,
             target: sessionTarget,
-            harness: "codex",
-            directory: ".",
             attachments: [],
             prompt,
             disposition: SessionPromptDisposition.Append,

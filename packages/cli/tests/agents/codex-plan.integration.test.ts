@@ -130,8 +130,6 @@ test.each(["owned", "borrowed"])(
                         kind: "session.prompt",
                         commandId,
                         target: sessionTarget,
-                        harness: "codex",
-                        directory: ".",
                         attachments: [],
                         prompt: "Stream a concise proposed plan",
                         disposition: SessionPromptDisposition.Append,

@@ -640,9 +640,7 @@ test("Given a managed Chat session is still running, When its owner archives it,
     await fixture.runtime.client.turns.submitToRuntime(
         { harness: "codex", sessionId: sessionId },
         {
-            harness: "codex",
             content: "wait for steering",
-            directory: ".",
             idempotencyKey: crypto.randomUUID(),
             attachments: [],
         },
@@ -879,9 +877,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     await fixture.runtime.client.turns.submitToRuntime(
         target,
         {
-            harness: "codex",
             content: "Reply after revoke",
-            directory: ".",
             idempotencyKey: crypto.randomUUID(),
             attachments: [],
         },

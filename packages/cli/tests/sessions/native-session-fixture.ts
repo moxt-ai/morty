@@ -148,7 +148,7 @@ export async function fixture(
         directories,
         sessions.sessions,
         creations,
-        async () => ({
+        () => ({
             turn: null,
             queued: [],
             executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },
@@ -160,7 +160,7 @@ export async function fixture(
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",
-    } satisfies Omit<NativeSessionCommand, "action">;
+    } satisfies Omit<Extract<NativeSessionCommand, { readonly action: "find" }>, "action" | "sessionId">;
     const seed = async (title: string, cwd = workspace): Promise<string> => {
         const external = new SessionManager({
             observer: new NullSessionObserver(),
@@ -261,7 +261,7 @@ export async function fixture(
                 directories,
                 sessions.sessions,
                 creations,
-                async () => ({
+                () => ({
                     turn: null,
                     queued: [],
                     executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },

@@ -264,13 +264,6 @@ export class AgentSession implements AgentSessionRestore {
         metrics: OperationMetrics,
         adapter: Adapter,
     ): Promise<AgentSession> {
-        if (address.kind === "established" && address.target.harness !== options.agent.harness) {
-            throw new AcpExecutionError(
-                "The native Session belongs to a different harness",
-                {},
-                "session_identity_mismatch",
-            );
-        }
         for (let attempt = 1; attempt <= 2; attempt += 1) {
             await metrics.measure(
                 "executable-validation",
@@ -412,7 +405,8 @@ export class AgentSession implements AgentSessionRestore {
             options.adapter,
         );
 
-    readonly belongsTo = (harness: string, cwd: string): boolean => this.#harness === harness && this.#cwd === cwd;
+    /** A live process keeps the directory it started in; its Agent is the one its target names. */
+    readonly runsIn = (cwd: string): boolean => this.#cwd === cwd;
 
     readonly usesEnvironment = (environment: Readonly<Record<string, string>>): boolean =>
         recordsEqual(this.#environment, environment);

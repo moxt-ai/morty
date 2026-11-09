@@ -117,9 +117,7 @@ async function expire(native: string, pid: string, timer: IdleTimeoutTimer): Pro
 function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): void {
     peer.send(
         encodeSessionPromptCommand({
-            harness: "claude",
             commandId: crypto.randomUUID(),
-            directory: ".",
             disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",
@@ -278,10 +276,8 @@ test("Given a client read a conversation's settings before its idle process exit
         const configureId = crypto.randomUUID();
         peer.send(
             encodeSessionConfigureCommand({
-                harness: "claude",
                 booleanValue: false,
                 configId: "model",
-                directory: ".",
                 expectedConfigurationRevision: read.configurationRevision,
                 kind: "session.configure",
                 requestId: configureId,
@@ -382,8 +378,6 @@ test("Given an old retained process was closed and the daemon restarted, When it
                 kind: "session.prepare",
                 requestId: crypto.randomUUID(),
                 target: sessionTarget,
-                harness: "claude",
-                directory: ".",
             }),
         );
         expect(decodeSessionReadyEvent(await nextResponse(peer, "session.ready")).target).toEqual(sessionTarget);
@@ -411,8 +405,6 @@ test("Given native history is loading in a retained process, When three hours pa
                 kind: "session.prepare",
                 requestId: crypto.randomUUID(),
                 target: sessionTarget,
-                harness: "claude",
-                directory: ".",
             }),
         );
         await nextResponse(peer, "session.ready");

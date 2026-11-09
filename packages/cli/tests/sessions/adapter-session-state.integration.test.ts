@@ -34,11 +34,6 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                 MORTY_FAKE_ACP_STATE_DIRECTORY: directory,
             },
             async (peer) => {
-                const identity = {
-                    harness: "controlled-acp",
-                    directory: ".",
-                    target: peer.target,
-                };
                 const next = async (kind: string): Promise<string> => {
                     for (;;) {
                         const message = await peer.nextMessage();
@@ -54,9 +49,9 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                 const prepare = async () => {
                     peer.send(
                         encodeSessionPrepareCommand({
-                            ...identity,
                             kind: "session.prepare",
                             requestId: crypto.randomUUID(),
+                            target: peer.target,
                         }),
                     );
                     return decodeSessionReadyEvent(await next("session.ready"));
@@ -65,12 +60,12 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                 const commandId = crypto.randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
-                        ...identity,
                         kind: "session.prompt",
                         commandId,
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         prompt: "Persist this conversation",
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -93,7 +88,6 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                 const configureId = crypto.randomUUID();
                 peer.send(
                     encodeSessionConfigureCommand({
-                        ...identity,
                         kind: "session.configure",
                         requestId: configureId,
                         configId: "model",
@@ -101,6 +95,7 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                         value: "test-large",
                         booleanValue: false,
                         expectedConfigurationRevision: ready.configurationRevision,
+                        target: peer.target,
                     }),
                 );
                 await paused;
@@ -176,8 +171,6 @@ test.each(["opening", "configuration"] as const)(
                 peer.send(
                     encodeSessionPrepareCommand({
                         kind: "session.prepare",
-                        harness: "controlled-acp",
-                        directory: ".",
                         target: peer.target,
                         requestId,
                     }),
@@ -199,8 +192,6 @@ test.each(["opening", "configuration"] as const)(
                         peer.send(
                             encodeSessionConfigureCommand({
                                 kind: "session.configure",
-                                harness: "controlled-acp",
-                                directory: ".",
                                 target: peer.target,
                                 requestId: configureId,
                                 configId: "model",

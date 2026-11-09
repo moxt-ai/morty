@@ -426,17 +426,7 @@ export class PlatformProjectGateway {
             computerId,
             signal,
             async (client) => {
-                const ready = this.#expectSession(
-                    await client.sessions.load(
-                        input.target,
-                        {
-                            harness: input.harness,
-                            directory: input.workspaceRef,
-                        },
-                        signal,
-                    ),
-                    input.target,
-                );
+                const ready = this.#expectSession(await client.sessions.load(input.target, signal), input.target);
                 return await this.#sessionAccess(client, computerId, input, ready, credentialLifetimeSeconds, signal);
             },
             120000,
@@ -568,14 +558,14 @@ export class PlatformProjectGateway {
     readonly previewRuntimeNativeEvents = async (
         computerId: string,
         target: NativeSessionTarget,
-        identity: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[1],
+        directory: string,
         page: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[2],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
             computerId,
             signal,
-            async (client) => await client.sessions.previewRuntimeNativeEvents(target, identity, page, signal),
+            async (client) => await client.sessions.previewRuntimeNativeEvents(target, directory, page, signal),
             120000,
         );
 

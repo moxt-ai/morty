@@ -548,7 +548,6 @@ await import(${JSON.stringify(agentPeer)});
         prompt: async (target: NativeSessionTarget, commandId: string) => {
             send(
                 encodeSessionPromptCommand({
-                    ...binding(target.harness),
                     target,
                     kind: "session.prompt",
                     commandId,

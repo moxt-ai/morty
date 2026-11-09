@@ -90,15 +90,9 @@ test("Given a setting was chosen before the first prompt, When the daemon restar
     }
 });
 
-const identity = (_peer: RealDaemonPeer) => ({
-    harness: "controlled-acp",
-    directory: ".",
-});
-
 async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {
     peer.send(
         encodeSessionPromptCommand({
-            ...identity(peer),
             attachments: [],
             commandId: crypto.randomUUID(),
             disposition: SessionPromptDisposition.Append,
@@ -120,9 +114,7 @@ async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["targe
 
 async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]) {
     const requestId = crypto.randomUUID();
-    peer.send(
-        encodeSessionPrepareCommand({ ...identity(peer), kind: "session.prepare", requestId, target: sessionTarget }),
-    );
+    peer.send(encodeSessionPrepareCommand({ kind: "session.prepare", requestId, target: sessionTarget }));
     for (;;) {
         const message = await nextMessage(peer, "session.ready");
         const ready = decodeSessionReadyEvent(message);
@@ -144,7 +136,6 @@ async function configure(
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionConfigureCommand({
-            ...identity(peer),
             booleanValue: false,
             configId,
             expectedConfigurationRevision: revision,
@@ -165,9 +156,7 @@ async function configure(
 
 async function currentRevision(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<string> {
     const requestId = crypto.randomUUID();
-    peer.send(
-        encodeSessionPrepareCommand({ ...identity(peer), kind: "session.prepare", requestId, target: sessionTarget }),
-    );
+    peer.send(encodeSessionPrepareCommand({ kind: "session.prepare", requestId, target: sessionTarget }));
     for (;;) {
         const ready = decodeSessionReadyEvent(await nextMessage(peer, "session.ready"));
         if (ready.requestId === requestId) {

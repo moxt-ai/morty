@@ -57,7 +57,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                     ): Promise<void> => {
                         peer.send(
                             encodeSessionPromptCommand({
-                                ...identity,
                                 kind: "session.prompt",
                                 target: peer.target,
                                 commandId: crypto.randomUUID(),
@@ -143,7 +142,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                     }
                     peer.send(
                         encodeSessionPrepareCommand({
-                            ...identity,
                             kind: "session.prepare",
                             requestId: crypto.randomUUID(),
                             target: peer.target,

@@ -22,7 +22,12 @@ import { replaySessionConfigurations, storedSessionConfiguration } from "../live
 import { nativeSessionQuery } from "../native/native-query.ts";
 import type { AgentProcessPool, AgentProcessRetention } from "../process/agent-process-pool.ts";
 import { RetainedAgentProcesses } from "../process/retained-agent-processes.ts";
-import { FoundStoredSession, MemorySessionStore, type SessionStore } from "../record/session-store.ts";
+import {
+    FoundStoredSession,
+    MemorySessionStore,
+    type SessionStore,
+    type StoredSession,
+} from "../record/session-store.ts";
 import { isModelOption } from "../settings/configuration-dependencies.ts";
 import { ActiveExecutions } from "../turn/active-executions.ts";
 import type { SettledTurn } from "../turn/execution-receipts.ts";
@@ -363,13 +368,6 @@ export class SessionManager {
         closed: ClosedSessionHandling,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
     ): Promise<PreparedSession> {
-        if (options.target.harness !== options.agent.harness) {
-            throw new AcpExecutionError(
-                "The native Session belongs to a different harness",
-                {},
-                "session_identity_mismatch",
-            );
-        }
         return await this.#executionProcesses.use(options.target, async () =>
             this.#operations.run(options, async (options) => {
                 const closing = this.#sessionClosures.get(options.target);
@@ -395,7 +393,7 @@ export class SessionManager {
                         "session-preparation-wait",
                         async () => await waitForSharedOperation(pending, options.signal),
                     );
-                    if (runtime.belongsTo(options.agent.harness, options.cwd)) {
+                    if (runtime.runsIn(options.cwd)) {
                         this.#executionProcesses.touch(options.target, runtime);
                         if (recovery.kind === "history-required") {
                             await metrics.measure(
@@ -409,7 +407,7 @@ export class SessionManager {
                 }
                 const existing = this.#executionProcesses.get(options.target);
                 if (existing !== undefined) {
-                    if (existing.belongsTo(options.agent.harness, options.cwd)) {
+                    if (existing.runsIn(options.cwd)) {
                         const runtime = await this.#currentSessionProcess(existing, options, recovery);
                         this.#executionProcesses.touch(options.target, runtime);
                         if (recovery.kind === "history-required") {
@@ -421,7 +419,7 @@ export class SessionManager {
                         return runtime.prepared();
                     }
                     throw new AcpExecutionError(
-                        "The native Session's harness and workspace cannot change",
+                        "The native Session's workspace cannot change",
                         {},
                         "session_identity_mismatch",
                     );
@@ -592,9 +590,9 @@ export class SessionManager {
             if (existing === undefined) {
                 return (await this.#startPreparation(options, recovery)).prepared();
             }
-            if (!existing.belongsTo(options.agent.harness, options.cwd)) {
+            if (!existing.runsIn(options.cwd)) {
                 throw new AcpExecutionError(
-                    "The agent or workspace cannot change after a conversation has started",
+                    "The workspace cannot change after a conversation has started",
                     {},
                     "session_identity_mismatch",
                 );
@@ -703,7 +701,7 @@ export class SessionManager {
                 throw new AcpExecutionError("The target turn is no longer active", {}, "steering_target_unavailable");
             }
             const runtime = this.#executionProcesses.get(options.target);
-            if (runtime === undefined || !runtime.belongsTo(options.agent.harness, options.cwd)) {
+            if (runtime === undefined || !runtime.runsIn(options.cwd)) {
                 throw new AcpExecutionError(
                     "The target turn execution context is unavailable",
                     {},
@@ -736,13 +734,6 @@ export class SessionManager {
 
     readonly runPrompt = async (options: SessionTurnOptions): Promise<PromptResult> =>
         this.#operations.run(options, async (options) => {
-            if (options.target.harness !== options.agent.harness) {
-                throw new AcpExecutionError(
-                    "The native Session belongs to a different harness",
-                    {},
-                    "session_identity_mismatch",
-                );
-            }
             // A close can land after the prompt was prepared; fail before the Session is reported working.
             this.#assertOpen(options.target);
             if (this.#isNativeSessionOperationActive(options.target)) {
@@ -907,6 +898,15 @@ export class SessionManager {
             return stored instanceof FoundStoredSession ? [stored.session] : [];
         });
 
+    /** The Session this Runtime holds for `target`, which a command naming only the target uses; none is refused. */
+    readonly heldSession = (target: NativeSessionTarget): StoredSession => {
+        const stored = this.#store.read(target);
+        if (!(stored instanceof FoundStoredSession)) {
+            throw new AcpExecutionError("The Session was not found", {}, "session_not_found");
+        }
+        return stored.session;
+    };
+
     readonly sessionStatus = (target: NativeSessionTarget): SessionStatus =>
         this.#reported(target, this.#executions.status(target));
 
@@ -930,27 +930,20 @@ export class SessionManager {
             .filter((session) => session.prompted)
             .slice(0, limit);
 
-    readonly interactionSnapshot = (options: SessionPrepareOptions): SessionInteractionSnapshot | undefined => {
-        options.signal.throwIfAborted();
-        const runtime = this.#executionProcesses.get(options.target);
+    /** The actionable requests of the Session this Runtime holds for `target`; a target it does not hold is refused. */
+    readonly interactionSnapshot = (target: NativeSessionTarget): SessionInteractionSnapshot => {
+        const session = this.heldSession(target);
+        const runtime = this.#executionProcesses.get(session.target);
         if (runtime !== undefined) {
-            return runtime.belongsTo(options.agent.harness, options.cwd) ? runtime.interactionSnapshot() : undefined;
-        }
-        const stored = this.#store.read(options.target);
-        if (
-            !(stored instanceof FoundStoredSession) ||
-            stored.session.harness !== options.agent.harness ||
-            stored.session.cwd !== options.cwd
-        ) {
-            return undefined;
+            return runtime.interactionSnapshot();
         }
         // No live Agent owns an actionable request after its session process has gone away.
-        const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(options.target);
+        const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(session.target);
         return { sessionGenerationId, throughPosition, interactions: [] };
     };
 
-    readonly hasPreparedSession = (target: NativeSessionTarget, harness: string, cwd: string): boolean =>
-        this.#executionProcesses.get(target)?.belongsTo(harness, cwd) === true;
+    readonly hasPreparedSession = (target: NativeSessionTarget, cwd: string): boolean =>
+        this.#executionProcesses.get(target)?.runsIn(cwd) === true;
 
     readonly createNativeSession = async (options: SessionCreationOptions): Promise<NativeSessionTarget> =>
         this.#operations.run(options, async (options) => {
@@ -991,9 +984,9 @@ export class SessionManager {
             this.#assertOpen(options.target);
             const existing = this.#executionProcesses.get(options.target);
             if (existing !== undefined) {
-                if (!existing.belongsTo(options.agent.harness, options.cwd)) {
+                if (!existing.runsIn(options.cwd)) {
                     throw new AcpExecutionError(
-                        "The agent or workspace cannot change after a conversation has started",
+                        "The workspace cannot change after a conversation has started",
                         {},
                         "session_identity_mismatch",
                     );

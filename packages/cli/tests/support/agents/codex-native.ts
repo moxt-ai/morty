@@ -77,7 +77,7 @@ export async function codexFixture(
         directories,
         sessions.sessions,
         creations,
-        async () => ({
+        () => ({
             turn: null,
             queued: [],
             executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },
@@ -89,7 +89,7 @@ export async function codexFixture(
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",
-    } satisfies Omit<NativeSessionCommand, "action">;
+    } satisfies Omit<Extract<NativeSessionCommand, { readonly action: "find" }>, "action" | "sessionId">;
     const prompt = async (target: NativeSessionTarget, text: string): Promise<void> => {
         await sessions.runPrompt({
             agent,

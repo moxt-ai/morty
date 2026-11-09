@@ -36,8 +36,6 @@ test("Given an existing real Codex conversation, When the process exits or its t
                             kind: "session.prompt",
                             commandId,
                             target: peer.target,
-                            harness: "codex",
-                            directory: ".",
                             attachments: [],
                             prompt: "Continue the conversation",
                             disposition: SessionPromptDisposition.Append,
@@ -115,8 +113,6 @@ test("Given a real Codex conversation in Plan mode, When its process recovers be
                             kind: "session.prompt",
                             commandId,
                             target: peer.target,
-                            harness: "codex",
-                            directory: ".",
                             attachments: [],
                             prompt: plan ? "Give me a plan" : "Go.",
                             disposition: SessionPromptDisposition.Append,
@@ -163,8 +159,6 @@ test("Given a real Codex conversation in Plan mode, When its process recovers be
                         kind: "session.prepare",
                         requestId,
                         target: peer.target,
-                        harness: "codex",
-                        directory: ".",
                     }),
                 );
                 for (;;) {

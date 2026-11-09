@@ -3,6 +3,7 @@ import { AcpExecutionError } from "../../acp/acp-error.ts";
 import { operationErrorCode, operationErrorMessage } from "../../infra/operation-error.ts";
 import type { ReportFailure, ResolveAgent } from "../api/session-api.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
+import type { StoredSession } from "../record/session-store.ts";
 import type { PromptDispatch } from "../turn/active-turn.ts";
 import { resolveSessionDirectory } from "../workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
@@ -13,6 +14,8 @@ import type { PromptLifecycle } from "./prompt-lifecycle.ts";
 export interface ExecutePromptOptions {
     readonly eventProjection: PromptLifecycle;
     readonly command: SessionPromptCommand;
+    /** The Session the prompt names, as this Runtime holds it. */
+    readonly session: StoredSession;
     readonly resolveAgent: ResolveAgent;
     readonly readArtifact: ReadPromptArtifact;
     readonly reportFailure: ReportFailure;
@@ -34,6 +37,7 @@ export interface ExecutePromptOptions {
 export async function executePrompt({
     eventProjection,
     command,
+    session,
     resolveAgent,
     readArtifact,
     reportFailure,
@@ -46,11 +50,12 @@ export async function executePrompt({
     cancellationRequested,
 }: ExecutePromptOptions): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectory(directories, command.directory, signal);
+        // The directory the Session records is authorized again before the Agent uses it.
+        const resolved = await resolveSessionDirectory(directories, session.cwd, signal);
         const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(
-            command.harness,
+            session.harness,
             signal,
-            command.target,
+            session.target,
         );
         const dispatch = await waitForSessionAdmission(signal);
         // A steering prompt joins an execution the Agent already holds. Check before preparing, so a steer can never
@@ -167,7 +172,7 @@ export async function executePrompt({
         // chain deliberately stay out of the log. The message still reaches the
         // user through the failure event above.
         reportFailure("session_prompt_failed", command.commandId, {
-            harness: command.harness,
+            harness: command.target.harness,
             code: failureCode,
             commandId: command.commandId,
             sessionId: command.target.sessionId,
