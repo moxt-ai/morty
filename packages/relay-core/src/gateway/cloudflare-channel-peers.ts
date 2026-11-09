@@ -47,7 +47,6 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("host"),
         credentialId: v.string(),
-        credentialKind: v.literal("project"),
         nativeRequestId: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
         sessionFilter: v.optional(targetSchema),
 
@@ -84,7 +83,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         if (attachment.role === "host") {
             return {
-                credential: { kind: attachment.credentialKind, credentialId: attachment.credentialId },
+                credential: { credentialId: attachment.credentialId },
                 ...(attachment.nativeRequestId === undefined ? {} : { nativeRequestId: attachment.nativeRequestId }),
                 ...(attachment.sessionFilter === undefined ? {} : { sessionFilter: attachment.sessionFilter }),
                 computerId: attachment.computerId,
@@ -324,5 +323,5 @@ function attachment(identity: RuntimeSocketIdentity): v.InferInput<typeof attach
         return identity;
     }
     const { credential, ...connection } = identity;
-    return { ...connection, credentialId: credential.credentialId, credentialKind: credential.kind };
+    return { ...connection, credentialId: credential.credentialId };
 }

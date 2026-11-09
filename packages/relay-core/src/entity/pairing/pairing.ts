@@ -64,7 +64,6 @@ export class ProjectCredentialHostAccess extends VerifiedChannelAccess {
 
 /** The credential whose authority keeps a host connection open: the project credential that opened it. */
 export interface HostCredential {
-    readonly kind: "project";
     readonly credentialId: string;
 }
 

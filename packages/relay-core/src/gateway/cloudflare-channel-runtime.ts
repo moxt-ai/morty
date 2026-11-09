@@ -6,7 +6,6 @@ import { RuntimeStatus } from "../service/channel/channel.ts";
 import type { ChannelGateway } from "./channel-gateway.ts";
 
 const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-morty-host-credential-id";
-const INTERNAL_HOST_CREDENTIAL_KIND_HEADER = "x-morty-host-credential-kind";
 const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-morty-session-access-revoked-through";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
@@ -168,5 +167,4 @@ export class CloudflareChannelRuntime implements ChannelGateway {
 /** Replaces whatever a caller sent: only this Worker states which credential authorizes a host connection. */
 function setHostCredential(headers: Headers, access: ProjectCredentialHostAccess): void {
     headers.set(INTERNAL_HOST_CREDENTIAL_ID_HEADER, access.credentialId);
-    headers.set(INTERNAL_HOST_CREDENTIAL_KIND_HEADER, "project");
 }

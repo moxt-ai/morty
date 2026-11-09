@@ -326,7 +326,6 @@ it("keeps ordinary Host closes quiet after the real platform close callback comp
             Upgrade: "websocket",
             "x-morty-computer-id": computerId,
             "x-morty-host-credential-id": "ctl_HOST_CREDENTIAL_CANARY",
-            "x-morty-host-credential-kind": "project",
         },
     });
     expect(response.status).toBe(101);

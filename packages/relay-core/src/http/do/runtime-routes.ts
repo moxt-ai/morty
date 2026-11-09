@@ -1,18 +1,10 @@
 import { isIdentifier } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import { ComputerScope } from "../../entity/do/session.ts";
-import type { HostCredential } from "../../entity/pairing/pairing.ts";
 import type { RuntimeAdmission, RuntimeService } from "../../service/channel/runtime-service.ts";
 
 function unauthorized(message: string): Response {
     return Response.json({ error: { code: "unauthorized", message } }, { status: 401 });
-}
-
-function hostCredential(credentialId: string | null, kind: string | null): HostCredential | null {
-    if (credentialId === null) {
-        return null;
-    }
-    return kind === "project" ? { kind, credentialId } : null;
 }
 
 export function createRuntimeRoutes(runtime: RuntimeService) {
@@ -72,8 +64,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return unreachable;
         }
         if (url.pathname.endsWith("/host")) {
-            const credential = hostCredential(credentialId, request.headers.get("x-morty-host-credential-kind"));
-            if (credential === null) {
+            if (credentialId === null) {
                 return unauthorized("Verified host credential access is required");
             }
             const nativeRequestId = url.searchParams.get("nativeRequestId");
@@ -90,7 +81,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                 await runtime.acceptHost(
                     {
                         role: "host",
-                        credential,
+                        credential: { credentialId },
                         computerId,
                         ...(nativeRequestId === null ? {} : { nativeRequestId }),
                         ...(sessionFilter === undefined ? {} : { sessionFilter }),
