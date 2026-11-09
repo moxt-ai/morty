@@ -12,6 +12,7 @@ coverage/
 .dev.vars.*
 worker-configuration.d.ts
 test-results/
+e2e-diagnostics/
 playwright-report/
 !/.dev.vars.example
 
