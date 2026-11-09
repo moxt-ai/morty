@@ -15,18 +15,18 @@
         "./service-fixture": "./src/service-fixture.ts"
     },
     "dependencies": {
-        "@cloudflare/vitest-plugin": "^1.4.9",
-        "@cloudflare/workers-types": "^5.20261028.1",
+        "@cloudflare/vitest-plugin": "^1.6.0",
+        "@cloudflare/workers-types": "^5.20261106.1",
         "@morty-build/relay": "workspace:*",
         "@morty-build/relay-core": "workspace:*",
         "@morty-build/client": "workspace:*",
-        "@types/ws": "^8.18.1",
+        "@types/ws": "^8.18.2",
         "drizzle-orm": "^0.45.2",
         "esbuild": "0.28.2",
-        "hono": "^4.13.14",
+        "hono": "^4.13.16",
         "miniflare": "5.20261023.1-beta",
         "valibot": "1.5.0",
-        "wrangler": "^4.154.0",
-        "ws": "^8.21.3"
+        "wrangler": "^4.158.0",
+        "ws": "^8.22.1"
     }
 }

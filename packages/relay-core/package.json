@@ -21,13 +21,13 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "devDependencies": {
-        "@cloudflare/workers-types": "^5.20261028.1"
+        "@cloudflare/workers-types": "^5.20261106.1"
     },
     "dependencies": {
         "@morty-build/client": "workspace:*",
         "drizzle-orm": "^0.45.2",
-        "hono": "^4.13.14",
-        "pino": "^10.3.1",
+        "hono": "^4.13.16",
+        "pino": "^10.4.0",
         "valibot": "1.5.0"
     }
 }
