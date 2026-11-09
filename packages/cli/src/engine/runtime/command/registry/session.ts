@@ -76,7 +76,7 @@ async function prepareSession(
             // A Session being created starts with exactly the settings it states, by the rule a Turn's settings use.
             return await sessions.createSession(
                 preparation,
-                async (created) =>
+                async (created, creationSignal) =>
                     await metrics.measure(
                         "configuration",
                         async () =>
@@ -91,7 +91,7 @@ async function prepareSession(
                                 resolved.additionalDirectories,
                                 command.requestId,
                                 command.sessionId,
-                                signal,
+                                creationSignal,
                             ),
                     ),
                 metrics,

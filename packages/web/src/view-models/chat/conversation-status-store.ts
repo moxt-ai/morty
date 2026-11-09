@@ -20,8 +20,7 @@ type IdleStatus = {
 
 /**
  * What a Session shows once the Runtime reports it idle. A reply that finished while another Session was selected is
- * unread. A failed turn stays marked until the next turn starts: the Runtime reports it, so every page shows it, and a
- * Runtime that does not report it leaves the failure the open pane saw.
+ * unread. The Runtime owns the last turn outcome, including the absence of failure after a later successful turn.
  */
 function settleIdle(
     current: ConversationListStatus | undefined,
@@ -33,9 +32,6 @@ function settleIdle(
     }
     if (status.failedTurn !== undefined) {
         return { kind: "failed", commandId: status.failedTurn.commandId, message: status.failedTurn.message };
-    }
-    if (current?.kind === "failed") {
-        return current;
     }
     return { kind: "idle" };
 }
@@ -76,8 +72,7 @@ interface ConversationStatusState {
     /** The user opened this Session, so nothing it finished is unread. */
     readonly opened: (sessionId: string) => void;
     /**
-     * The open pane of this Session stopped with `activity` as its last account. A failed turn, which only the pane
-     * knows, stays marked until the next turn starts; whether the Session works is the Runtime's to report.
+     * The open pane stopped with `activity` as its last account. Retain it until the Runtime reports current status.
      */
     readonly paneReleased: (sessionId: string, activity: SessionActivityState) => void;
     /**
@@ -145,17 +140,14 @@ export function createConversationStatusStore(
         };
 
         /**
-         * Applies the current statuses a stream reported once it followed, as a directory snapshot would be applied.
-         * They count as changes, so a directory snapshot that started earlier does not replace them.
+         * Each following snapshot is authoritative in this stream's order, including after transport reconnection.
+         * The stream sends it before subsequent changes. Only independent directory reads need the change counter:
+         * capturing a counter when this long-lived subscription starts would reject future reconnect snapshots.
          */
         const applyCurrentStatuses = (
             statuses: readonly { readonly sessionId: string; readonly status: ManagedChatSession["status"] }[],
-            snapshotStartedAt: number,
         ): void => {
             for (const { sessionId, status } of statuses) {
-                if ((changedAt.get(sessionId) ?? 0) > snapshotStartedAt) {
-                    continue;
-                }
                 if (status.kind === "idle") {
                     markCompleted(sessionId, status);
                 } else {
@@ -186,14 +178,13 @@ export function createConversationStatusStore(
                 try {
                     while (!signal.aborted) {
                         try {
-                            const streamStartedAt = changes;
                             await requests.subscribeManagedSessionStatuses(
                                 botId,
                                 (event) => {
                                     // Opening the stream shows it works, but only a later Session event shows it keeps
                                     // working, so only that restores the stream's own retries.
                                     if (event.kind === "managed-session.statuses.following") {
-                                        applyCurrentStatuses(event.statuses, streamStartedAt);
+                                        applyCurrentStatuses(event.statuses);
                                         onFollowing();
                                         return;
                                     }

@@ -70,6 +70,17 @@ export function createSessionSettingsStore(options: {
     return createStore<SessionSettingsStore>()((set, get) => {
         let pendingRead: AbortController | null = null;
         const openedAt = new Date().toISOString();
+        // A mutation response acknowledges the edit; it may already be older than another client's edit.
+        // All refreshes use the same read lifetime so newer observations invalidate older reads.
+        const refresh = (signal: AbortSignal): void =>
+            get().readInBackground(
+                (readSignal) =>
+                    options.connection.send(
+                        (client, requestSignal) => client.sessions.readConfiguration(options.sessionId, requestSignal),
+                        readSignal,
+                    ),
+                signal,
+            );
         return {
             openedAt,
             observedAt: openedAt,
@@ -126,7 +137,7 @@ export function createSessionSettingsStore(options: {
             configure: async (binding, option, value, booleanValue, signal) => {
                 set({ change: { configId: option.id, kind: "configuring" } });
                 try {
-                    const result = await options.connection.send(
+                    await options.connection.send(
                         async (client, requestSignal) => {
                             return await client.sessions.updateConfiguration(
                                 options.sessionId,
@@ -151,7 +162,7 @@ export function createSessionSettingsStore(options: {
                             ? { configId: option.id, kind: "boolean", value: booleanValue }
                             : { configId: option.id, kind: "select", value },
                     );
-                    get().adopt(result);
+                    refresh(signal);
                     set({ change: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -161,15 +172,7 @@ export function createSessionSettingsStore(options: {
                         return;
                     }
                     if (cause instanceof MortyApiError && cause.code === "session_configuration_conflict") {
-                        get().readInBackground(
-                            (readSignal) =>
-                                options.connection.send(
-                                    (client, requestSignal) =>
-                                        client.sessions.readConfiguration(options.sessionId, requestSignal),
-                                    readSignal,
-                                ),
-                            signal,
-                        );
+                        refresh(signal);
                     }
                     set({
                         change: { kind: "failed", message: formatError(cause, "The selection could not be applied.") },

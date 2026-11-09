@@ -71,6 +71,9 @@ export async function createResponseLossProxy(upstream: string) {
         incoming.on("aborted", () => forwarded.destroy());
         incoming.pipe(forwarded);
     });
+    let heldConfiguration: { readonly client: WebSocket; readonly data: Buffer; readonly binary: boolean } | null =
+        null;
+    let holdConfiguration: { readonly resolve: () => void } | null = null;
     const sockets = new Set<WebSocket>();
     const webSockets = new WebSocketServer({ server });
     let armed: "before-acceptance" | "after-acceptance" | "held" | null = null;
@@ -93,6 +96,7 @@ export async function createResponseLossProxy(upstream: string) {
                 : { headers: { authorization: incoming.headers.authorization } }),
         });
         sockets.add(remote);
+        let configurationResponse: { readonly requestId: string; readonly ready: () => void } | null = null;
         let lostRequestId: string | null = null;
         const pending: { readonly data: Buffer; readonly binary: boolean }[] = [];
         client.on("message", (data, binary) => {
@@ -103,6 +107,24 @@ export async function createResponseLossProxy(upstream: string) {
                   : Buffer.from(new Uint8Array(data));
             if (!binary) {
                 const frame: unknown = JSON.parse(bytes.toString());
+                if (
+                    holdConfiguration !== null &&
+                    typeof frame === "object" &&
+                    frame !== null &&
+                    "kind" in frame &&
+                    frame.kind === "http.request" &&
+                    "method" in frame &&
+                    frame.method === "POST" &&
+                    "path" in frame &&
+                    typeof frame.path === "string" &&
+                    frame.path.endsWith("/configuration") &&
+                    "requestId" in frame &&
+                    typeof frame.requestId === "string"
+                ) {
+                    configurationResponse = { requestId: frame.requestId, ready: holdConfiguration.resolve };
+                    holdConfiguration = null;
+                }
+
                 if (
                     typeof frame === "object" &&
                     frame !== null &&
@@ -149,6 +171,23 @@ export async function createResponseLossProxy(upstream: string) {
             }
         });
         remote.on("message", (data, binary) => {
+            if (configurationResponse !== null && !binary) {
+                const frame: unknown = JSON.parse(data.toString());
+                if (
+                    typeof frame === "object" &&
+                    frame !== null &&
+                    "kind" in frame &&
+                    frame.kind === "http.response" &&
+                    "requestId" in frame &&
+                    frame.requestId === configurationResponse.requestId
+                ) {
+                    heldConfiguration = { client, data: Buffer.from(data.toString()), binary };
+                    configurationResponse.ready();
+                    configurationResponse = null;
+                    return;
+                }
+            }
+
             if (lostRequestId !== null) {
                 const frame: unknown = binary ? null : JSON.parse(data.toString());
                 if (
@@ -185,6 +224,17 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
+        /** Holds one real settings edit response, letting later notifications and reads pass unchanged. */
+        holdNextConfigurationResponse: () =>
+            new Promise<void>((resolve) => {
+                holdConfiguration = { resolve };
+            }),
+        releaseConfigurationResponse: () => {
+            if (heldConfiguration !== null) {
+                heldConfiguration.client.send(heldConfiguration.data, { binary: heldConfiguration.binary });
+                heldConfiguration = null;
+            }
+        },
         /** Loses a pairing response after the real service commits it. */
         interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/runtime-pairings(?:\?|$)/u),
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
