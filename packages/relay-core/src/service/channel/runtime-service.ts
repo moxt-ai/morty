@@ -104,7 +104,7 @@ interface RuntimeContext {
                 signal: AbortSignal,
             ) => Promise<"granted" | "revoked">;
         };
-        readonly channel: ( scope: ComputerScope) => ChannelActor;
+        readonly channel: (scope: ComputerScope) => ChannelActor;
     };
     readonly gateways: {
         readonly peers: RuntimePeers;
@@ -145,9 +145,9 @@ export class RuntimeService {
         this.#cx = cx;
     }
 
-    readonly acceptDaemon = ( scope: ComputerScope, signal: AbortSignal) =>
-        this.admit( scope, signal, (admission) => {
-            const operation = this.#acceptTail.then(() => this.acceptDaemonSocket( scope, admission));
+    readonly acceptDaemon = (scope: ComputerScope, signal: AbortSignal) =>
+        this.admit(scope, signal, (admission) => {
+            const operation = this.#acceptTail.then(() => this.acceptDaemonSocket(scope, admission));
             this.#acceptTail = operation.then(
                 () => undefined,
                 () => undefined,
@@ -186,10 +186,7 @@ export class RuntimeService {
         }
     };
 
-    private readonly acceptDaemonSocket = (
-        scope: ComputerScope,
-        signal: AbortSignal,
-    ): RuntimeAcceptance => {
+    private readonly acceptDaemonSocket = (scope: ComputerScope, signal: AbortSignal): RuntimeAcceptance => {
         // Nothing below awaits, so this admission check and accept + connect are one step.
         signal.throwIfAborted();
         const prepared = this.#cx.services.connections.prepare(scope.computerId);
@@ -246,7 +243,7 @@ export class RuntimeService {
         const signal = AbortSignal.any([attachment.controller.signal, timeout.signal]);
         const operation = (async () => {
             try {
-                await this.attachDaemon( scope, replaced, signal);
+                await this.attachDaemon(scope, replaced, signal);
                 signal.throwIfAborted();
                 if (!this.#cx.services.connections.isCurrent(identity)) {
                     return;
@@ -276,10 +273,10 @@ export class RuntimeService {
         signal: AbortSignal,
     ): Promise<RuntimeAdmission> => {
         const scope = new ComputerScope(identity.computerId);
-        return this.admit( scope, signal, async (admission): Promise<RuntimeAdmission> => {
+        return this.admit(scope, signal, async (admission): Promise<RuntimeAdmission> => {
             admission.throwIfAborted();
             const accepted = this.#cx.gateways.peers.accept(identity);
-            await this.attachHost( scope, accepted.socket, signal);
+            await this.attachHost(scope, accepted.socket, signal);
             return { kind: "accepted", response: accepted.response };
         });
     };
@@ -301,17 +298,20 @@ export class RuntimeService {
         }
     };
 
-    readonly revokeHost = ( credentialId: string, scope: ComputerScope): void => {
+    readonly revokeHost = (credentialId: string, scope: ComputerScope): void => {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
             if (
-                identity.role === "host" && identity.computerId === scope.computerId && identity.credential.kind === "channel" && identity.credential.credentialId === credentialId
+                identity.role === "host" &&
+                identity.computerId === scope.computerId &&
+                identity.credential.kind === "channel" &&
+                identity.credential.credentialId === credentialId
             ) {
                 socket.close(1008, "Channel access revoked");
             }
         }
     };
 
-    readonly revokeRuntime = async ( scope: ComputerScope, signal: AbortSignal): Promise<void> => {
+    readonly revokeRuntime = async (scope: ComputerScope, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         // The Project's Runtime authority committed the revocation before notifying; acceptance and every
         // daemon message read that authority, so this notification only cleans up promptly. Its one fallible
@@ -341,7 +341,10 @@ export class RuntimeService {
             }
             if (identity.role === "daemon") {
                 socket.close(1008, "Runtime revoked");
-            } else if (identity.role === "viewer" || (identity.role === "host" && identity.computerId === scope.computerId)) {
+            } else if (
+                identity.role === "viewer" ||
+                (identity.role === "host" && identity.computerId === scope.computerId)
+            ) {
                 socket.close(1008, "Runtime revoked");
             }
         }
@@ -386,17 +389,13 @@ export class RuntimeService {
         );
     };
 
-    readonly attachDaemon = async (
-        scope: ComputerScope,
-        replaced: boolean,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        const channel = this.channel( scope);
+    readonly attachDaemon = async (scope: ComputerScope, replaced: boolean, signal: AbortSignal): Promise<void> => {
+        const channel = this.channel(scope);
         await channel.attachDaemon(replaced, signal);
     };
 
-    readonly attachHost = ( scope: ComputerScope, socket: ChannelSocket, signal: AbortSignal) =>
-        this.channel( scope).attachHost(socket, signal);
+    readonly attachHost = (scope: ComputerScope, socket: ChannelSocket, signal: AbortSignal) =>
+        this.channel(scope).attachHost(socket, signal);
 
     /** The public HTTP handler already authorized this operation; no host credential is involved. */
     readonly receiveOperation = async (
@@ -416,13 +415,10 @@ export class RuntimeService {
                         peer.isOpen() &&
                         this.#cx.services.connections.isCurrent(identity),
                 );
-            if (
-                daemon !== undefined &&
-                (daemon.identity.computerId !== scope.computerId)
-            ) {
+            if (daemon !== undefined && daemon.identity.computerId !== scope.computerId) {
                 throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
             }
-            const channel = this.channel( scope);
+            const channel = this.channel(scope);
             if (typeof message === "string") {
                 await channel.receiveHostMessage(socket, message, signal);
             } else {
@@ -447,7 +443,7 @@ export class RuntimeService {
             const silentDaemons = this.closeSilentDaemons();
             try {
                 if (identity.role === "relay") {
-                    const channel = this.channel( scope);
+                    const channel = this.channel(scope);
                     if (typeof message !== "string") {
                         channel.receiveHostChunk(socket, message);
                         return;
@@ -478,7 +474,7 @@ export class RuntimeService {
                     case "granted":
                         break;
                 }
-                const channel = this.channel( scope);
+                const channel = this.channel(scope);
                 if (typeof message !== "string") {
                     channel.receiveHostChunk(socket, message);
                     return;
@@ -496,7 +492,7 @@ export class RuntimeService {
                     if (!(await this.authorizeDaemonMessage(identity, socket, signal))) {
                         return;
                     }
-                    this.channel( scope).receiveDaemonChunk(socket, message);
+                    this.channel(scope).receiveDaemonChunk(socket, message);
                 });
             } catch (error) {
                 signal.throwIfAborted();
@@ -516,7 +512,7 @@ export class RuntimeService {
             daemonMessage = decodeDaemonToRelayMessage(message);
         } catch {
             // Reject this frame without disconnecting unrelated Sessions.
-            this.channel( scope).recordSkipped("invalid_daemon_message");
+            this.channel(scope).recordSkipped("invalid_daemon_message");
             return;
         }
         const lanes = daemonMessage === null ? ["runtime"] : this.daemonMessageLanes(daemonMessage);
@@ -526,7 +522,7 @@ export class RuntimeService {
                 if (!(await this.authorizeDaemonMessage(identity, socket, signal))) {
                     return;
                 }
-                const channel = this.channel( scope);
+                const channel = this.channel(scope);
                 await channel.receiveDaemonMessage(socket, daemonMessage, signal, message);
             });
         } catch (error) {
@@ -591,7 +587,7 @@ export class RuntimeService {
         return ["runtime"];
     };
 
-    private readonly channel = ( scope: ComputerScope): ChannelActor => {
+    private readonly channel = (scope: ComputerScope): ChannelActor => {
         const key = JSON.stringify({
             computerId: scope.computerId,
         });
@@ -599,7 +595,7 @@ export class RuntimeService {
         if (existing !== undefined) {
             return existing;
         }
-        const channel = this.#cx.services.channel( scope);
+        const channel = this.#cx.services.channel(scope);
         this.#channels.set(key, channel);
         return channel;
     };
@@ -625,7 +621,7 @@ export class RuntimeService {
             return;
         }
         this.#cx.services.connections.disconnected(identity, Date.now());
-        await this.channel( new ComputerScope(identity.computerId)).detachDaemon(socket, signal);
+        await this.channel(new ComputerScope(identity.computerId)).detachDaemon(socket, signal);
     };
 
     private readonly closeSilentDaemons = (): readonly RuntimePeer[] => {

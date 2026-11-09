@@ -111,11 +111,7 @@ function authorizedSessionControl(
     const scope = new ComputerScope(access.computerId);
     return new SessionControl(async (command, permission) => {
         await access.authorize(permission, context.req.raw.signal);
-        return await sessionOperations(context).requestComputerScopeControl(
-            scope,
-            command,
-            context.req.raw.signal,
-        );
+        return await sessionOperations(context).requestComputerScopeControl(scope, command, context.req.raw.signal);
     }, sessionId);
 }
 

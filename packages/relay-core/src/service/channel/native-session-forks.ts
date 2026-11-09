@@ -252,9 +252,7 @@ export class NativeSessionForks {
                     }),
                 );
                 try {
-                    const result = forkResult(
-                        JSON.stringify(await request(scope, command, controller.signal)),
-                    );
+                    const result = forkResult(JSON.stringify(await request(scope, command, controller.signal)));
                     if (result.targetSessionId !== command.targetSessionId || result.ready.agentId !== input.agentId) {
                         throw new PairingDirectoryError(
                             "invalid_native_session_response",
@@ -269,12 +267,7 @@ export class NativeSessionForks {
                     // after committing one. A rejected Fork created no Session, so forget it and let it run again.
                     if (
                         cause instanceof RuntimeOperationFailedError &&
-                        (await this.#targetAbsent(
-                            scope,
-                            command.targetSessionId,
-                            request,
-                            controller.signal,
-                        ))
+                        (await this.#targetAbsent(scope, command.targetSessionId, request, controller.signal))
                     ) {
                         this.#storage.abandon(scope.computerId, operationId);
                         throw cause;

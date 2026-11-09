@@ -67,12 +67,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         await cx.services.runtime.expireSilentDaemons();
         return cx.gateways.requests.open(requestId, sessionId, async (socket, message) => {
             if (!signal.aborted) {
-                await cx.services.runtime.receiveOperation(
-                    new ComputerScope(computerId),
-                    socket,
-                    message,
-                    signal,
-                );
+                await cx.services.runtime.receiveOperation(new ComputerScope(computerId), socket, message, signal);
                 return;
             }
             // The caller has left, but native query cancellation must still reach the daemon.
@@ -113,13 +108,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
     return {
         forkNativeSession: async (scope, operationId, input, signal) => {
             checkTarget(scope.computerId);
-            return await cx.services.nativeForks.fork(
-                scope,
-                operationId,
-                input,
-                requestComputerScopeControl,
-                signal,
-            );
+            return await cx.services.nativeForks.fork(scope, operationId, input, requestComputerScopeControl, signal);
         },
         requestWorkspace: async (scope, command, signal) => {
             checkTarget(scope.computerId);
