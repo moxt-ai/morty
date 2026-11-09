@@ -26,8 +26,9 @@
         "bindings": [
             { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
             {
-                "name": "CHAT_COMPUTERS",
-                "class_name": "ComputerDurableObject"
+                "name": "COMPUTER_RELAY",
+                "class_name": "ComputerRelay",
+                "script_name": "morty-relay-local"
             }
         ]
     },
@@ -64,8 +65,9 @@
                 "bindings": [
                     { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
                     {
-                        "name": "CHAT_COMPUTERS",
-                        "class_name": "ComputerDurableObject"
+                        "name": "COMPUTER_RELAY",
+                        "class_name": "ComputerRelay",
+                        "script_name": "morty-platform-production"
                     }
                 ]
             },

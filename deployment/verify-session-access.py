@@ -66,7 +66,7 @@ def verify(origin, app_credential, root_key, revision):
     encoded_signature = base64.urlsafe_b64encode(hmac.digest(key, signed, 'sha256')).rstrip(b'=').decode()
     if not hmac.compare_digest(signature, encoded_signature):
         raise ValueError('Production Session signature does not match the configured signing secret')
-    # The Session credential selects RuntimeRelay; the Runtime verifies it before answering this public route.
+    # The Session credential selects ComputerRelay; the Runtime verifies it before answering this public route.
     verify_url = origin + '/v1/computers/' + computer_id + '/sessions/' + session_id + '/live-event-subscription-target'
     status, selected = request(verify_url, credential)
     if status != 200 or selected.get('computerId') != computer_id or selected.get('runtimeId') != runtime_id:

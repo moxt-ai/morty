@@ -7,12 +7,8 @@
     "durable_objects": {
         "bindings": [
             {
-                "name": "RUNTIME_RELAY",
-                "class_name": "RuntimeRelay"
-            },
-            {
                 "name": "COMPUTER_RELAY",
-                "class_name": "ComputerDO"
+                "class_name": "ComputerRelay"
             }
         ]
     },
@@ -62,7 +58,8 @@
             "tag": "platform-runtime-browser-transport",
             "deleted_classes": ["WebSocketTransport"]
         },
-        { "tag": "rename-computer-object", "renamed_classes": [{ "from": "ProjectDO", "to": "ComputerDO" }] }
+        { "tag": "rename-computer-object", "renamed_classes": [{ "from": "ProjectDO", "to": "ComputerDO" }] },
+        { "tag": "unify-computer-relay", "renamed_classes": [{ "from": "ComputerDO", "to": "ComputerRelay" }] }
     ],
     "d1_databases": [
         {

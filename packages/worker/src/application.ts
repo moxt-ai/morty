@@ -7,9 +7,9 @@ import {
     clientLocationOf,
     encodeClientLocation,
 } from "./components/management/entity/client-location.ts";
-import { computerBootstrap } from "./components/management/entity/computer-bootstrap.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
-import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
+import { publicCloudRoutes } from "./composition/cloud-http.ts";
+import { computerApplication } from "./computer-application.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
 import { notFoundPage, webPages } from "./gateway/web-pages.ts";
 import { type CloudBindings, webSocketNamespaceBindingSchema } from "./infra/cloud-bindings.ts";
@@ -21,34 +21,6 @@ const MAXIMUM_REQUEST_BODY_BYTES = 3 * 1_024 * 1_024;
 const notFound = (): never => {
     throw new RequestError("NOT_FOUND", "Not found.", 404);
 };
-
-async function bootstrapProject(request: Request, bindings: CloudBindings): Promise<Response> {
-    const computerId = bindings.CHAT_COMPUTER_ID;
-    if (computerId === undefined) {
-        return notFound();
-    }
-    const input: unknown = await request.json();
-    const parsed = v.parse(computerBootstrap, input);
-    if (parsed.computer.computerId !== computerId) {
-        throw new RequestError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
-    }
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
-    const dependencies = createApplicationDependencies(bindings);
-    return new Response(
-        JSON.stringify(
-            await dependencies.services.management.initializeAnonymousUser(
-                parsed.userId,
-                parsed.computer,
-                signal,
-                parsed.origin,
-            ),
-        ),
-        {
-            headers: { "Cache-Control": "no-store", "content-type": "application/json" },
-            status: 201,
-        },
-    );
-}
 
 const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ readonly Bindings: CloudBindings }>()
     .onError(
@@ -72,8 +44,7 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
         }
         return namespace.get(namespace.newUniqueId()).fetch(new Request(context.req.raw, { headers }));
     })
-    .post("/__computer/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
-    .route("/morty/api", cloudRoutes)
+    .route("/", computerApplication)
     .notFound(notFound);
 
 const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()

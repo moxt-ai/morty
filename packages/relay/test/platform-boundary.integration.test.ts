@@ -34,7 +34,7 @@ import {
     runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import { DurableObjectSqlDatabase, RuntimeRelay } from "@morty-build/relay-core";
+import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase, RelaySockets } from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import {
@@ -43,8 +43,9 @@ import {
     seedMortyService,
 } from "../../platform-test-support/src/service-fixture.ts";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
+import { ComputerRelay as PlatformRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
 import { createPlatformDurableObjectContext } from "../src/durable-objects/platform-durable-object-context.ts";
-import { RuntimeRelay as PlatformRuntimeRelay } from "../src/durable-objects/runtime-relay.ts";
+import { SqlitePlatformProjectStore } from "../src/storage/sqlite-platform-project-store.ts";
 import {
     createPlatformGateways,
     PlatformAuthenticationConfiguration,
@@ -125,7 +126,6 @@ function bindings(): PlatformRelayBindings {
         COMPUTER_RELAY: env.COMPUTER_RELAY,
         R2_BUCKET_APAC: env.R2_BUCKET_APAC,
         R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
-        RUNTIME_RELAY: env.RUNTIME_RELAY,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
 }
@@ -623,7 +623,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 requestId: "settings-duplicate-barrier",
             });
             expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("runtime.ping");
-            await evictDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), { webSockets: "hibernate" });
+            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             for (const action of ["import", "fork"] as const) {
                 const requestId = `native-${action}-request`;
                 const directoryId = action === "fork" ? `root-${"d".repeat(2000)}` : "root";
@@ -911,7 +911,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 version: 2,
             });
             // Direct Runtime HTTP owns the response until it completes; hibernate between requests.
-            await evictDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), { webSockets: "hibernate" });
+            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             // A delayed result after the caller has finished must not disconnect the Runtime.
             daemon.send(historyPage);
             const previewHistoryResponse = worker.fetch(
@@ -956,7 +956,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 },
                 queuedPromptRequests: [],
             });
-            await evictDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), { webSockets: "hibernate" });
+            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             // A delayed result after the caller has finished must not disconnect the Runtime.
             daemon.send(previewHistoryPage);
             const failedPreviewHistoryResponse = worker.fetch(
@@ -1121,7 +1121,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 kind: "agent.settings.discover",
                 requestId: "settings-before-disconnect",
             });
-            await evictDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), { webSockets: "hibernate" });
+            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             daemon.close(1000, "Reconnect Runtime");
             expect(JSON.parse(await hostMessages.next())).toMatchObject({
                 kind: "agent.settings.discovery.failed",
@@ -1150,7 +1150,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 kind: "agent.settings.discover",
                 requestId: "settings-before-replacement",
             });
-            await evictDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), { webSockets: "hibernate" });
+            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             const replacementResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
             expect(replacementResponse.status).toBe(101);
             if (replacementResponse.webSocket === null) {
@@ -1173,7 +1173,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 replacement.close(1000, "Test complete");
             }
             expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: false });
-            await runInDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), async (_instance, state) => {
+            await runInDurableObject(environment.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
                 const sessionTables = [
                     ...state.storage.sql.exec<{ name: string }>(
                         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('sessions', 'session_bindings', 'session_configuration_snapshots', 'turns', 'attempts', 'interactions', 'pending_work', 'command_receipts', 'session_event_receipts', 'reliable_event_receipts', 'runtime_active_sessions', 'runtime_disconnect')",
@@ -1386,7 +1386,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     const heartbeat = async (): Promise<number> => {
         daemon.send(RUNTIME_HEARTBEAT_MESSAGE);
         expect(await daemonMessages.next()).toBe(RUNTIME_HEARTBEAT_ACK_MESSAGE);
-        return await runInDurableObject(environment.RUNTIME_RELAY.getByName(runtimeId), (_instance, state) => {
+        return await runInDurableObject(environment.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
             const socket = state.getWebSockets("daemon")[0];
             const answeredAt = socket === undefined ? null : state.getWebSocketAutoResponseTimestamp(socket);
             if (answeredAt === null) {
@@ -1651,9 +1651,9 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             idempotencyKey: string,
             credentialTransform: (credential: string) => string = (credential) => credential,
             requestedSessionId: string = sessionId,
-            destinationRuntimeId: string = runtimeId,
+            destinationComputerId: string = computerId,
         ) =>
-            env.RUNTIME_RELAY.getByName(destinationRuntimeId).fetch(
+            env.COMPUTER_RELAY.getByName(destinationComputerId).fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${requestedSessionId}/turns`,
                     {
@@ -1671,7 +1671,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 ),
             ),
         readSessionExecution: (commandId?: string) =>
-            env.RUNTIME_RELAY.getByName(runtimeId).fetch(
+            env.COMPUTER_RELAY.getByName(computerId).fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/sessions/${sessionId}/active-turn?${new URLSearchParams(
                         {
@@ -1722,11 +1722,15 @@ it.each(["text", "binary"])(
         });
         viewer.accept();
         const deliver = (message: string | Uint8Array) =>
-            runInDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), async (_instance, state) => {
+            runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectSqlDatabase(state.storage);
-                const context = createPlatformDurableObjectContext(state, bindings(), { database });
-                const relay = new RuntimeRelay(
+                const context = createPlatformDurableObjectContext(state, bindings(), {
+                    database,
+                    storeFor: (computerId) =>
+                        new SqlitePlatformProjectStore(computerId, new DurableObjectDatabaseAdapter(state.storage)),
+                });
+                const relay = new RelaySockets(
                     createDurableObjectDependencies({
                         doDatabase: database,
                         storages: context.storages,
@@ -1751,7 +1755,7 @@ it.each(["text", "binary"])(
         try {
             await deliver(liveEvent(runtime.sessionId, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
-            await runInDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), (_instance, state) => {
+            await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
                 state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE ON runtime_connection_state
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
@@ -1760,7 +1764,7 @@ it.each(["text", "binary"])(
                     error: { code: "runtime_disconnect_failed" },
                 });
             } finally {
-                await runInDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), (_instance, state) => {
+                await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
                     state.storage.sql.exec("DROP TRIGGER reject_runtime_disconnect");
                 });
             }
@@ -2597,7 +2601,7 @@ describe.sequential("Platform Turn submission", () => {
             const credential = await other.issueRuntimeCredential(owner.runtimeId);
             expect(
                 await responseJson(
-                    await other.submitRuntimeTurn("foreign-project", () => credential, undefined, owner.runtimeId),
+                    await other.submitRuntimeTurn("foreign-project", () => credential, undefined, owner.computerId),
                     403,
                 ),
             ).toMatchObject({ error: { code: "runtime_access_denied" } });
@@ -2678,7 +2682,7 @@ describe.sequential("Platform Turn submission", () => {
                 async (publicCredentialId) => await relaySigningKey(publicCredentialId, signingSecret),
             );
             const statuses = await runInDurableObject(
-                env.RUNTIME_RELAY.getByName(runtime.runtimeId),
+                env.COMPUTER_RELAY.getByName(runtime.computerId),
                 async (_instance, state) => {
                     // Reconstruct the production object with the same persisted sockets and a newly deployed binding.
                     const rotated = new PlatformRuntimeRelay(state, {
@@ -3433,7 +3437,7 @@ it.each(["completed", "interrupted"] as const)(
             if (outcome === "interrupted") {
                 expect(original).toMatchObject({ error: { code: "native_fork_outcome_unknown" } });
             }
-            await evictDurableObject(env.RUNTIME_RELAY.getByName(runtime.runtimeId), { webSockets: "hibernate" });
+            await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
             expect(await responseJson(await runtime.forkNative(operationId, input), expectedStatus)).toEqual(original);
         } finally {
             runtime.daemon.close(1000, "Fork recovery scenario completed");
@@ -3662,7 +3666,7 @@ describe("Runtime prompt acknowledgements", () => {
         try {
             const credential = await runtime.issueRuntimeCredential(runtime.runtimeId);
             const queue = (idempotencyKey: string) =>
-                env.RUNTIME_RELAY.getByName(runtime.runtimeId).fetch(
+                env.COMPUTER_RELAY.getByName(runtime.computerId).fetch(
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/sessions/${runtime.sessionId}/turns`,
                         {

@@ -13,11 +13,7 @@ import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
-import {
-    hashPairingCredential,
-    hashSecret,
-    MAX_RUNTIMES_PER_PROJECT,
-} from "../../relay-core/src/entity/pairing/pairing.ts";
+import { hashPairingCredential, hashSecret } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
 import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { SqlitePlatformProjectStore } from "../src/storage/sqlite-platform-project-store.ts";
@@ -153,13 +149,7 @@ it("Given a current pairing reservation, When an obsolete claim endpoint is call
 
 it("Given pending reservations at capacity, When their deadline passes without expiry maintenance, Then status reads and new reservations succeed", async () => {
     const app = await project();
-    const pairings = await Promise.all(
-        Array.from({ length: MAX_RUNTIMES_PER_PROJECT }, (_, index) => app.pair(`reservation-${index}`)),
-    );
-    const first = pairings[0];
-    if (first === undefined) {
-        throw new Error("Expected a pending pairing");
-    }
+    const first = await app.pair("reservation-0");
     expect(await responseJson(await app.create("over-capacity"), 429)).toMatchObject({
         error: { code: "runtime_quota_exceeded" },
     });
@@ -175,13 +165,10 @@ it("Given pending reservations at capacity, When their deadline passes without e
     expect(await app.pair("reservation-0")).toEqual(first);
 });
 
-it("Given simultaneous retries of one creation, When they commit, Then they share one reservation and leave the remaining capacity available", async () => {
+it("Given simultaneous retries of one creation, When they commit, Then they share one reservation and occupy the single daemon slot", async () => {
     const app = await project();
     const [left, right] = await Promise.all([app.pair("same-request"), app.pair("same-request")]);
     expect(left).toEqual(right);
-    await Promise.all(
-        Array.from({ length: MAX_RUNTIMES_PER_PROJECT - 1 }, (_, index) => app.pair(`remaining-${index}`)),
-    );
     expect((await app.create("no-place")).status).toBe(429);
 });
 
@@ -191,7 +178,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     const claimTime = Date.now();
     const codeHash = await hashPairingCredential(pairing.pairingCode);
     vi.setSystemTime(new Date(pairing.expiresAt));
-    await Promise.all(Array.from({ length: MAX_RUNTIMES_PER_PROJECT }, (_, index) => app.pair(`replacement-${index}`)));
+    await app.pair("replacement");
     // Execute the original command against the real Project database after
     // newer transactions, as can happen when a database request is delayed.
     const claimed = await app.storage(async (storage) =>
@@ -398,9 +385,6 @@ it("Given expired links and stored links shortened by an older revoker, When the
 
 it("Given one available Runtime place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
     const app = await project();
-    await Promise.all(
-        Array.from({ length: MAX_RUNTIMES_PER_PROJECT - 1 }, (_, index) => app.pair(`existing-${index}`)),
-    );
     const responses = await Promise.all([app.create("competitor-a"), app.create("competitor-b")]);
     expect(responses.map((response) => response.status).sort()).toEqual([201, 429]);
     const winnerIndex = responses.findIndex((response) => response.status === 201);
@@ -509,6 +493,7 @@ it.each(["", "morty-pairing-v1\0"])(
         });
         expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);
         expect(await responseJson(await app.status(oldPairing), 200)).toMatchObject({ status: "paired" });
+        expect((await app.revoke(oldPairing)).status).toBe(204);
         const replacement = await app.pair("morty-generation-two");
         const current = v.parse(
             v.object({ runtimeCredential: v.string() }),

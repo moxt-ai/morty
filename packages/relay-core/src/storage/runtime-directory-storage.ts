@@ -1,5 +1,5 @@
 import { and, count, eq, exists, gt, inArray, isNotNull, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
-import { MAX_RUNTIMES_PER_PROJECT } from "../entity/pairing/pairing.ts";
+import { MAX_DAEMONS_PER_COMPUTER } from "../entity/pairing/pairing.ts";
 import type {
     PairingChannelRow,
     PairingClaimRow,
@@ -170,7 +170,7 @@ export class RuntimeDirectoryStorage {
                     revokedByOwnerCredentialId: sql<null>`null`.as("revoked_by_owner_credential_id"),
                 })
                 .from(sql`(select 1)`)
-                .where(lt(occupiedRuntimeCount(database, this.#computerId, value.now), MAX_RUNTIMES_PER_PROJECT)),
+                .where(lt(occupiedRuntimeCount(database, this.#computerId, value.now), MAX_DAEMONS_PER_COMPUTER)),
         );
         const request = database.insert(runtimePairingRequest).select(
             database
@@ -244,7 +244,7 @@ export class RuntimeDirectoryStorage {
                         // A delayed command can arrive after a newer creation
                         // has reclaimed its expired reservation. Recheck the
                         // same capacity rule inside the claim transaction.
-                        lte(occupiedRuntimeCount(database, this.#computerId, value.now), MAX_RUNTIMES_PER_PROJECT),
+                        lte(occupiedRuntimeCount(database, this.#computerId, value.now), MAX_DAEMONS_PER_COMPUTER),
                         notExists(
                             database
                                 .select({ runtimeId: runtimeRegistration.runtimeId })

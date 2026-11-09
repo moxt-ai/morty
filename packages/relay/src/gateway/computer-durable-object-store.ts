@@ -6,25 +6,29 @@ import {
 } from "@morty-build/relay-core/contracts";
 import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
-import type { ComputerDO } from "../durable-objects/computer-do.ts";
+import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformProjectStore, PlatformProjectStores } from "../infra/platform-project-store.ts";
 
 const OPERATION_TIMEOUT_MILLISECONDS = 15_000;
 
-type ProjectStub = DurableObjectStub<ComputerDO>;
+type ProjectStub = DurableObjectStub<ComputerRelay>;
 
 /**
  * A Project's store reached through its Account Durable Object. Every operation executes there as one unit;
  * cancelling or timing out here stops waiting for the result but cannot undo an operation already delivered.
  */
 class ComputerDurableObjectStore implements PlatformProjectStore {
-    readonly #namespace: DurableObjectNamespace<ComputerDO>;
+    readonly #namespace: DurableObjectNamespace<ComputerRelay>;
     readonly #computerId: string;
     readonly #locationHint: ProjectLocationHint;
     #stub: ProjectStub | null = null;
 
-    constructor(namespace: DurableObjectNamespace<ComputerDO>, computerId: string, locationHint: ProjectLocationHint) {
+    constructor(
+        namespace: DurableObjectNamespace<ComputerRelay>,
+        computerId: string,
+        locationHint: ProjectLocationHint,
+    ) {
         this.#namespace = namespace;
         this.#computerId = computerId;
         this.#locationHint = locationHint;
@@ -61,7 +65,7 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             logger.error(
                 {
                     event: "project_database_request_failed",
-                    durableObjectClass: "ComputerDO",
+                    durableObjectClass: "ComputerRelay",
                     durableObjectId: this.#namespace.idFromName(this.#computerId).toString(),
                     computerId: this.#computerId,
                     operation,
@@ -193,12 +197,12 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
  * Project resolves to its own Durable Object.
  */
 export class ComputerDurableObjectStores implements PlatformProjectStores {
-    readonly #namespace: DurableObjectNamespace<ComputerDO>;
+    readonly #namespace: DurableObjectNamespace<ComputerRelay>;
     readonly #local: { readonly computerId: string; readonly store: PlatformProjectStore } | null;
     readonly #remote = new Map<string, PlatformProjectStore>();
 
     constructor(
-        namespace: DurableObjectNamespace<ComputerDO>,
+        namespace: DurableObjectNamespace<ComputerRelay>,
         local: { readonly computerId: string; readonly store: PlatformProjectStore } | null = null,
     ) {
         this.#namespace = namespace;

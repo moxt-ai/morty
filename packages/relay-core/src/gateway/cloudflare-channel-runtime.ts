@@ -18,8 +18,14 @@ const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-morty-session-access-r
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
 
-    constructor(cx: { readonly gateways: { readonly runtimeRelay: DurableObjectNamespace } }) {
-        this.#namespace = cx.gateways.runtimeRelay;
+    readonly #local: ((computerId: string, request: Request) => Promise<Response>) | undefined;
+
+    constructor(
+        namespace: DurableObjectNamespace,
+        local?: (computerId: string, request: Request) => Promise<Response>,
+    ) {
+        this.#local = local;
+        this.#namespace = namespace;
     }
 
     readonly acceptDaemon = async (
@@ -168,9 +174,11 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
-        const objectId = this.#namespace.idFromName(access.runtimeId);
+        const objectId = this.#namespace.idFromName(access.computerId);
         try {
-            const response = await this.#namespace.get(objectId).fetch(request.url, request);
+            const response = await (this.#local === undefined
+                ? this.#namespace.get(objectId).fetch(request.url, request)
+                : this.#local(access.computerId, request));
             signal.throwIfAborted();
             return response;
         } catch (error) {
@@ -178,7 +186,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
                 {
                     ...requestLogContext(request),
                     event: "runtime_relay_request_failed",
-                    durableObjectClass: "RuntimeRelay",
+                    durableObjectClass: "ComputerRelay",
                     durableObjectId: objectId.toString(),
                     computerId: access.computerId,
                     channelId: access.channelId,

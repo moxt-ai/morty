@@ -185,8 +185,7 @@ async function exercise(count) {
                     script: await bundle("packages/platform-test-support/src/platform-worker-entry.ts"),
                     compatibilityDate: "2026-09-03",
                     durableObjects: {
-                        RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                        COMPUTER_RELAY: { className: "ComputerDO", useSQLite: true },
+                        COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                     },
                     d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
                     r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],

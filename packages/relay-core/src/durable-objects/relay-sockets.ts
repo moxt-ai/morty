@@ -23,7 +23,7 @@ function socketLogContext(webSocket: WebSocket) {
     }
 }
 
-export class RuntimeRelay {
+export class RelaySockets {
     readonly #dependencies: DurableObjectContext;
     readonly #logger: typeof logger;
 

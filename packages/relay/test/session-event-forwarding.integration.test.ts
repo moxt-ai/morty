@@ -58,7 +58,7 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
     const runtimeId = `wire-events-${crypto.randomUUID()}`;
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
     const { hostCredentialId } = await registerRuntimeFixture(computerId, runtimeId);
-    const relay = env.RUNTIME_RELAY.getByName(runtimeId);
+    const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
     const connect = async (path: string): Promise<RuntimeConnection> => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.

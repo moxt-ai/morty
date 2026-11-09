@@ -14,7 +14,7 @@ export class RuntimeConnectionService {
         runtimeId: string,
     ): { readonly kind: "conflict" } | { readonly kind: "ready"; readonly identity: RuntimeConnectionIdentity } => {
         const previous = this.#storage.read();
-        if (previous !== null && previous.runtimeId !== runtimeId) {
+        if (previous?.state === "online" && previous.runtimeId !== runtimeId) {
             return { kind: "conflict" };
         }
         return {

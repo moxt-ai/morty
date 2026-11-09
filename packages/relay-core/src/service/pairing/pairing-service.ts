@@ -13,7 +13,7 @@ import type { RuntimeControlCommand } from "./runtime-control-request.ts";
 export class PairingService {
     readonly #channels: ChannelGateway;
     readonly #pairings: PairingOperations;
-    // Runtime operations execute only in the RuntimeRelay that owns the Runtime; every Runtime route reaches it there.
+    // Runtime operations execute only in the ComputerRelay that holds the daemon connection; every Runtime route reaches it there.
     readonly #runtimeOperations: LocalSessionOperations | undefined;
 
     constructor(cx: {
@@ -30,7 +30,7 @@ export class PairingService {
 
     readonly #operations = (): LocalSessionOperations => {
         if (this.#runtimeOperations === undefined) {
-            throw new Error("Runtime operations run only in the Runtime's RuntimeRelay");
+            throw new Error("Runtime operations run only in the ComputerRelay");
         }
         return this.#runtimeOperations;
     };

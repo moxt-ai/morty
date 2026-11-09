@@ -1,10 +1,12 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { PLATFORM_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { eq } from "drizzle-orm";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
 import { runtimeIdentity, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
+import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 
@@ -32,6 +34,7 @@ export async function registerRuntimeFixture(
             .onConflictDoNothing(),
     ]);
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
+        applyDurableObjectMigrations(state.storage, computerDurableObjectMigrations);
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         await database.batch([
             database

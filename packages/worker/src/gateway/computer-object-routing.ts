@@ -3,47 +3,6 @@ import { PlatformProjectError } from "../components/management/entity/platform-p
 import { projectRegion } from "../components/management/entity/project-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
-interface ComputerObjectNamespace {
-    readonly get: (
-        id: unknown,
-        options?: { readonly locationHint?: "apac" | "apac-ne" | "apac-se" | "wnam" },
-    ) => { readonly fetch: (request: Request) => Promise<Response> };
-    readonly idFromName: (name: string) => unknown;
-}
-
-function computerObjects(value: unknown): ComputerObjectNamespace {
-    const parsed = v.safeParse(durableObjectNamespaceBindingSchema(), value);
-    if (!parsed.success) {
-        throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
-    }
-    const namespace = parsed.output;
-    const get = namespace.get;
-    const idFromName = namespace.idFromName;
-    return {
-        idFromName: (name) => Reflect.apply(idFromName, namespace, [name]),
-        get: (id, options) => {
-            const stub: unknown = Reflect.apply(get, namespace, [id, options]);
-            if (typeof stub !== "object" || stub === null || !("fetch" in stub) || typeof stub.fetch !== "function") {
-                throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
-            }
-            const fetchObject = stub.fetch;
-            return {
-                fetch: async (request) => {
-                    const response: unknown = await Reflect.apply(fetchObject, stub, [request]);
-                    if (!(response instanceof Response)) {
-                        throw new PlatformProjectError(
-                            "PROJECT_OBJECT_UNAVAILABLE",
-                            "Morty storage is unavailable.",
-                            503,
-                        );
-                    }
-                    return response;
-                },
-            };
-        },
-    };
-}
-
 export async function routeComputerObject(
     request: Request,
     bindings: CloudBindings,
@@ -88,6 +47,10 @@ export async function routeComputerObject(
 }
 
 export function computerObject(bindings: CloudBindings, computerId: string) {
-    const namespace = computerObjects(bindings.CHAT_COMPUTERS);
+    const parsed = v.safeParse(durableObjectNamespaceBindingSchema(), bindings.COMPUTER_RELAY);
+    if (!parsed.success) {
+        throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
+    }
+    const namespace = parsed.output;
     return namespace.get(namespace.idFromName(computerId), { locationHint: projectRegion(computerId) });
 }

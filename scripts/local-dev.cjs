@@ -475,6 +475,14 @@ async function prepare(options) {
             PLATFORM_CONFIG,
         ]);
 
+        log("provisioning local Morty service");
+        const { provisionLocalService } = await import("./provision-local-service.ts");
+        const { appId, appSecret } = await provisionLocalService(
+            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
+            platformPersist,
+            AbortSignal.timeout(60_000),
+        );
+
         log("starting Platform fixture");
         const platformPid = await startProcess(
             "platform",
@@ -482,6 +490,12 @@ async function prepare(options) {
                 "dev",
                 "--config",
                 PLATFORM_CONFIG,
+                "--var",
+                `APP_ORIGIN:${chatOrigin}`,
+                "--var",
+                `MORTY_RELAY_URL:${platformOrigin}`,
+                "--var",
+                `MORTY_SERVICE_SECRET:${appSecret}`,
                 "--ip",
                 "127.0.0.1",
                 "--port",
@@ -501,14 +515,6 @@ async function prepare(options) {
             90_000,
             "Platform health",
             { pid: platformPid, logPath: platformLog },
-        );
-
-        log("provisioning local Morty service");
-        const { provisionLocalService } = await import("./provision-local-service.ts");
-        const { appId, appSecret } = await provisionLocalService(
-            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
-            platformPersist,
-            AbortSignal.timeout(60_000),
         );
 
         if (options.build !== false) {

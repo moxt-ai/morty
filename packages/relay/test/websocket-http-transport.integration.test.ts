@@ -37,7 +37,7 @@ function nextMessage(socket: WebSocket): Promise<string> {
 
 it("Given a browser connection, When it heartbeats through the public Platform transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/computers/project/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/runtime/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -58,7 +58,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
                 kind: "http.request",
                 requestId: "after-heartbeat",
                 method: "GET",
-                path: "/morty/api/v1/computers/project/runtimes/runtime/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/runtime/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -75,7 +75,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
 
 it("Given a Runtime-bound browser, When it addresses another Runtime, Then the request is rejected without closing the browser connection", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/computers/project/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/runtime/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -93,7 +93,7 @@ it("Given a Runtime-bound browser, When it addresses another Runtime, Then the r
                 kind: "http.request",
                 requestId: "request-identity",
                 method: "GET",
-                path: "/morty/api/v1/computers/project/runtimes/another-runtime/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/runtimes/another-runtime/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -174,7 +174,7 @@ it.each([
     { name: "missing", authorization: null, code: "session_access_required" },
     { name: "malformed", authorization: "Bearer invalid-session-credential", code: "project_credential_invalid" },
 ])(
-    "Given a $name Session credential, When the public event-stream upgrade crosses ComputerDO, Then it returns the authentication error without another public handoff",
+    "Given a $name Session credential, When the public event-stream upgrade crosses ComputerRelay, Then it returns the authentication error without another public handoff",
     { timeout: 5_000 },
     async ({ authorization, code }) => {
         const headers = new Headers({ Upgrade: "websocket" });

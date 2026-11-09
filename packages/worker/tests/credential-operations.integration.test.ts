@@ -48,7 +48,7 @@ test("Given local, browser and recovery credentials, When their operations end a
         { token: owner.token, path: "/identity/v1/local-credential" },
         { token: browser, path: "/identity/v1/browser-access" },
     ];
-    const namespace = fixture.environment().CHAT_COMPUTERS;
+    const namespace = fixture.environment().COMPUTER_RELAY;
     const storage = namespace.get(namespace.idFromName(owner.computerId));
     const kinds = async () =>
         await (await storage.fetch(new Request("https://computer.internal/credential-kinds"))).json();
@@ -159,7 +159,7 @@ test("Given browser access granted through a link, When the access term its link
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     expect((await session(browser)).status).toBe(200);
 
-    const namespace = fixture.environment().CHAT_COMPUTERS;
+    const namespace = fixture.environment().COMPUTER_RELAY;
     const storage = namespace.get(namespace.idFromName(owner.computerId));
     const aged = await storage.fetch(new Request("https://computer.internal/aged-links", { method: "POST" }));
     expect(aged.status).toBe(204);
@@ -212,7 +212,7 @@ test("Given a well-formed Project identifier that was never created, When an una
     );
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: { code: "PROJECT_NOT_FOUND" } });
-    const namespace = fixture.environment().CHAT_COMPUTERS;
+    const namespace = fixture.environment().COMPUTER_RELAY;
     const stored = await namespace
         .get(namespace.idFromName(computerId))
         .fetch(new Request("https://computer.internal/stored-state"));

@@ -43,7 +43,7 @@ export const platformCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_
 
 export interface CloudBindings {
     readonly CHAT_WEBSOCKETS?: unknown;
-    readonly CHAT_COMPUTERS?: unknown;
+    readonly COMPUTER_RELAY?: unknown;
     readonly CHAT_ATTACHMENTS_APAC?: unknown;
     readonly ANONYMOUS_CREATION_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;

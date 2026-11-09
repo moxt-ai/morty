@@ -2,7 +2,7 @@ export { createMortyApplication, notFoundResponse } from "./app.ts";
 export { createDurableObjectContext } from "./di/create-durable-object-context.ts";
 export type { RelayContext } from "./di/create-relay-dependencies.ts";
 export { createWorkerContext, type WorkerRuntimeGateways } from "./di/create-worker-context.ts";
-export { RuntimeRelay } from "./durable-objects/runtime-relay.ts";
+export { RelaySockets } from "./durable-objects/relay-sockets.ts";
 export * from "./entity/authentication/project-authentication.ts";
 export { ComputerScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { type HttpError, type HttpErrorJson, isHttpError, toHttpError } from "./entity/http-error.ts";
@@ -21,7 +21,7 @@ export {
     hashSecret,
     LinkedChannelDevice,
     MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    MAX_RUNTIMES_PER_PROJECT,
+    MAX_DAEMONS_PER_COMPUTER,
     MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
     normalizePairingCode,
     PAIRING_LIFETIME_MILLISECONDS,

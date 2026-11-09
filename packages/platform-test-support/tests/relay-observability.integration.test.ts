@@ -43,8 +43,7 @@ beforeAll(async () => {
             script: output.text,
             compatibilityDate: "2026-09-03",
             durableObjects: {
-                RUNTIME_RELAY: { className: "RuntimeRelay", useSQLite: true },
-                COMPUTER_RELAY: { className: "ComputerDO", useSQLite: true },
+                COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                 UNAVAILABLE_PROJECT: { className: "UnavailableProject", useSQLite: true },
             },
             d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
@@ -281,7 +280,7 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
     expect(logs.slice(start)).toContainEqual(
         expect.objectContaining({
             event: "project_relay_request_failed",
-            durableObjectClass: "ComputerDO",
+            durableObjectClass: "ComputerRelay",
             durableObjectId: expect.any(String),
             computerId,
             cfRay: "project-failure-ray",
@@ -316,7 +315,7 @@ it("identifies a Project database overload through the public project creation A
     const log = logs.slice(start).find((log) => log["event"] === "project_database_request_failed");
     expect(log).toMatchObject({
         event: "project_database_request_failed",
-        durableObjectClass: "ComputerDO",
+        durableObjectClass: "ComputerRelay",
         durableObjectId: expect.any(String),
         computerId: expect.any(String),
         operation: expect.any(String),
@@ -447,14 +446,16 @@ it("records overload close details and connection epochs without logging healthy
 
 // @no-uc: Technical regression; platform-supplied errors must survive the exported hibernatable WebSocket callback.
 it("retains a platform WebSocket error and connection identity before closing the socket", async () => {
-    const { runtimeId } = await registeredLoggingRuntime();
+    const { computerId, runtimeId } = await registeredLoggingRuntime();
     const socket = await daemon();
     try {
         const closed = new Promise<number>((resolve) =>
             socket.addEventListener("close", (event) => resolve(event.code), { once: true }),
         );
         const start = logs.length;
-        const responsePending = runtime.dispatchFetch("https://relay.test/inject-websocket-error");
+        const responsePending = runtime.dispatchFetch(
+            `https://relay.test/computers/${computerId}/inject-websocket-error`,
+        );
         await expect
             .poll(() => logs.slice(start).find((log) => log["event"] === "runtime_websocket_error"))
             .toBeDefined();

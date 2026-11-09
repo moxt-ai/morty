@@ -38,7 +38,6 @@ import {
     type PlatformAuthenticationEnvironment,
     platformAuthenticationFromEnvironment,
 } from "./composition/platform-authentication-environment.ts";
-import { RuntimeRelay } from "./durable-objects/runtime-relay.ts";
 import type { PlatformAuthenticationConfiguration } from "./entity/platform-control-plane.ts";
 import { SessionAccessSigner } from "./entity/session-access-credential.ts";
 import {
@@ -70,7 +69,6 @@ import { type PlatformStorageBindings, PlatformStorageRegistry } from "./storage
 export interface PlatformRelayBindings extends PlatformStorageBindings, ComputerWorkerRoutingBindings {
     readonly PLATFORM_DIRECTORY_DATABASE: D1Database;
     readonly R2_BUCKET_APAC: R2Bucket;
-    readonly RUNTIME_RELAY: DurableObjectNamespace<RuntimeRelay>;
     /** Worker secret from which the Relay derives the keys that sign Session credentials. */
     readonly MORTY_SESSION_SIGNING_SECRET: string;
 }
@@ -86,12 +84,16 @@ export interface RuntimeExecutionBindings extends PlatformRelayBindings {
 }
 type PlatformApplicationBindings = PlatformRelayBindings | ComputerPlatformRelayBindings | RuntimeExecutionBindings;
 
-export interface ConfiguredPlatformRelayBindings extends PlatformRelayBindings, PlatformAuthenticationEnvironment {}
+export interface ConfiguredPlatformRelayBindings extends PlatformRelayBindings, PlatformAuthenticationEnvironment {
+    readonly APP_ORIGIN?: string;
+    readonly MORTY_RELAY_URL?: string;
+    readonly MORTY_SERVICE_SECRET?: string;
+}
 
-// A request a Session credential authorizes is routed to its Runtime's RuntimeRelay before any Session route runs.
+// A request a Session credential authorizes is routed to its ComputerRelay before any Session route runs.
 function sessionOperations(context: { readonly env: PlatformApplicationBindings }) {
     if (!("MORTY_RUNTIME_EXECUTION" in context.env)) {
-        throw new Error("Session operations run only in the Runtime's RuntimeRelay");
+        throw new Error("Session operations run only in the ComputerRelay");
     }
     return context.env.MORTY_RUNTIME_EXECUTION.operations;
 }
@@ -685,7 +687,7 @@ export function createPlatformApplication(
         }
         v.parse(v.strictObject({}), await context.req.json());
         if (!("MORTY_COMPUTER_STORE" in context.env)) {
-            throw new Error("Session access is revoked only in the Project's ComputerDO");
+            throw new Error("Session access is revoked only in the Project's ComputerRelay");
         }
         const computerId = validateIdentifier(context.req.param("computerId") ?? "", "project_id");
         const store = context.env.MORTY_COMPUTER_STORE;
@@ -797,7 +799,10 @@ function instrumentPlatformDatabases(
 
 export function createPlatformGateways(environment: PlatformApplicationBindings): WorkerRuntimeGateways {
     return {
-        channel: new CloudflareChannelRuntime({ gateways: { runtimeRelay: environment.RUNTIME_RELAY } }),
+        channel: new CloudflareChannelRuntime(
+            environment.COMPUTER_RELAY,
+            "MORTY_COMPUTER_STORE" in environment ? environment.MORTY_LOCAL_CHANNEL : undefined,
+        ),
         ...("MORTY_RUNTIME_EXECUTION" in environment
             ? { runtimeOperations: environment.MORTY_RUNTIME_EXECUTION.operations }
             : {}),
@@ -831,5 +836,4 @@ const worker = createPlatformWorker();
 
 export { platformAuthenticationFromEnvironment } from "./composition/platform-authentication-environment.ts";
 export { PlatformAuthenticationConfiguration } from "./entity/platform-control-plane.ts";
-export { RuntimeRelay };
 export default worker;

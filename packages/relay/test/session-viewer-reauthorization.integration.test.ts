@@ -77,7 +77,7 @@ async function openSessionView(slug: string) {
     const runtimeId = `viewer-check-runtime-${slug}`;
     const sessionId = "viewer-check-session";
     await registerRuntimeFixture(computerId, runtimeId);
-    const daemonResponse = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
+    const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
         `https://runtime.internal/computers/${computerId}/daemon`,
         { headers: { Upgrade: "websocket", "x-morty-channel-id": runtimeId, "x-morty-runtime-id": runtimeId } },
     );
@@ -129,19 +129,19 @@ const liveEvent = (sessionId: string, eventId: string) => ({
 });
 
 it("Given a live Session view, When the AppCredential that issued its Session credential is revoked, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, defaultCredential, runtimeId, sessionId, viewInbox } = await openSessionView("app");
+    const { daemon, defaultCredential, computerId, sessionId, viewInbox } = await openSessionView("app");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
     await revokeMortyCredential(env.PLATFORM_DIRECTORY_DATABASE, defaultCredential.credentialId);
-    expect(await runDurableObjectAlarm(env.RUNTIME_RELAY.getByName(runtimeId))).toBe(true);
+    expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });
     daemon.close(1000, "done");
 });
 
 it("Given a live Session view the revocation push missed, When the Project's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, computerId, runtimeId, sessionId, viewInbox } = await openSessionView("missed");
+    const { daemon, computerId, sessionId, viewInbox } = await openSessionView("missed");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
@@ -151,7 +151,7 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
     )
         .bind(computerId, Date.now())
         .run();
-    expect(await runDurableObjectAlarm(env.RUNTIME_RELAY.getByName(runtimeId))).toBe(true);
+    expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });
     daemon.close(1000, "done");

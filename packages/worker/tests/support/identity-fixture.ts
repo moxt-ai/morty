@@ -75,7 +75,9 @@ export async function createIdentityFixture(options: IdentityFixtureOptions = {}
 /** Call in beforeAll so each suite run rebuilds its inputs, including watch reruns. */
 export async function prepareIdentityFixture(options: IdentityFixtureOptions = {}) {
     const bundle = await build({
-        entryPoints: [options.workerEntryPoint ?? fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
+        entryPoints: [
+            options.workerEntryPoint ?? fileURLToPath(new URL("./credential-storage-worker.ts", import.meta.url)),
+        ],
         bundle: true,
         external: ["cloudflare:*", "node:*"],
         format: "esm",
@@ -123,9 +125,12 @@ async function startIdentityFixture(
                     bindings: baseConfiguration,
                     compatibilityDate: "2026-09-07",
                     compatibilityFlags: ["nodejs_compat"],
-                    durableObjects: miniflareDurableObjects(
-                        options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
-                    ),
+                    durableObjects: {
+                        ...miniflareDurableObjects(
+                            options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
+                        ),
+                        COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
+                    },
                     modules: true,
                     r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
                     // Suites create many independent visitors through one local test process.
@@ -156,7 +161,7 @@ async function startIdentityFixture(
         const { baseConfiguration, cloudflare, ready, runtimeOptions } = await startChatWorker();
         try {
             let cloudBindings = await cloudflare.getBindings();
-            let computerObjects = await cloudflare.getDurableObjectNamespace("CHAT_COMPUTERS");
+            let computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
             const chatProjects = {
                 idFromName: (name: string) => computerObjects.idFromName(name),
                 get: (
@@ -187,7 +192,7 @@ async function startIdentityFixture(
                 ...baseConfiguration,
                 APP_ORIGIN: appOrigin,
                 ASSETS: { fetch: () => Promise.resolve(new Response()) },
-                CHAT_COMPUTERS: chatProjects,
+                COMPUTER_RELAY: chatProjects,
             });
             /** Restarts the Worker with the changed deployment settings, keeping its storage. */
             const reconfigure = async () => {
@@ -195,7 +200,7 @@ async function startIdentityFixture(
                     convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
                 );
                 cloudBindings = await cloudflare.getBindings();
-                computerObjects = await cloudflare.getDurableObjectNamespace("CHAT_COMPUTERS");
+                computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
             };
             const createAnonymousUser = async () => {
                 const response = await worker.fetch(

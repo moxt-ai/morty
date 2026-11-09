@@ -58,7 +58,7 @@ export class DurableObjectDatabase {
 
     constructor(storage: DurableObjectStorage) {
         this.#storage = storage;
-        applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations, "chat/");
     }
 
     readonly prepare = (query: string) => new DurableObjectStatement(this.#storage.sql, query);

@@ -17,7 +17,6 @@ import {
     hashPairingCredential,
     LinkedChannelDevice,
     MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    MAX_RUNTIMES_PER_PROJECT,
     MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
     normalizePairingCode,
     PAIRING_LIFETIME_MILLISECONDS,
@@ -296,7 +295,7 @@ export class PairingDirectoryService implements PairingOperations {
             case "quota_exceeded":
                 throw new PairingDirectoryError(
                     "runtime_quota_exceeded",
-                    `A Project can have at most ${MAX_RUNTIMES_PER_PROJECT.toString()} active Runtimes`,
+                    "This computer already has a daemon or pending pairing",
                 );
             case "created":
                 return new CreatedRuntimePairing(

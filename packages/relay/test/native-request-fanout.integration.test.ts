@@ -37,7 +37,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
     const runtimeId = `fanout-${crypto.randomUUID()}`;
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
     await registerRuntimeFixture(computerId, runtimeId);
-    const relay = env.RUNTIME_RELAY.getByName(runtimeId);
+    const relay = env.COMPUTER_RELAY.getByName(computerId);
     const clients: WebSocket[] = [];
     const connect = async (path: string) => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
@@ -195,7 +195,7 @@ it("Given a host connection without credential kind, When it reaches the service
     const runtimeId = `kind-${crypto.randomUUID()}`;
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
     await registerRuntimeFixture(computerId, runtimeId);
-    const response = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
+    const response = await env.COMPUTER_RELAY.getByName(computerId).fetch(
         `https://runtime.internal/computers/${computerId}/host`,
         {
             headers: {

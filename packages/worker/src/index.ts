@@ -5,10 +5,12 @@ import { withInstructionDocumentCache } from "./gateway/instruction-document-cac
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 
 export { ChatWebSocketDurableObject } from "./components/chat/chat-websocket-durable-object.ts";
-export { ComputerDurableObject } from "./components/project/computer-durable-object.ts";
 
 const fetch = withSetupFunnelEvents(withInstructionDocumentCache(fetchPublicApplication), logger);
 
 export default {
     fetch,
 } satisfies ExportedHandler<CloudBindings, unknown>;
+
+// Preserve the retired namespace and its records without binding it to incoming requests.
+export { DurableObject as ComputerDurableObject } from "cloudflare:workers";

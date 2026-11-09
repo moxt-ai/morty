@@ -78,7 +78,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
     await registerRuntimeFixture(computerId, runtimeId);
 
     // The authenticated daemon, through the verified Worker -> Durable Object boundary.
-    const daemonResponse = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
+    const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
         `https://runtime.internal/computers/${computerId}/daemon`,
         {
             headers: {
@@ -135,7 +135,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
     expect(http.status).toBe(401);
 
     // The host sends nothing, yet the Relay's scheduled connection check ends its access.
-    expect(await runDurableObjectAlarm(env.RUNTIME_RELAY.getByName(runtimeId))).toBe(true);
+    expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
     expect(await hostInbox.closed.promise).toEqual({ code: 1008, reason: "Channel access revoked" });
     daemon.close(1000, "done");
 });
