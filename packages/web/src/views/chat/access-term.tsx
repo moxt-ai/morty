@@ -1,4 +1,4 @@
-import { Clock3, ShieldCheck } from "lucide-react";
+import { Clock3, MonitorSmartphone, ShieldCheck } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
@@ -24,8 +24,8 @@ const accessNoticeTitleRowClassName = "flex items-start gap-2";
 const accessNoticeTitleIconClassName = "mt-[3px] size-3.5 shrink-0";
 const accessNoticeIconSpacerClassName = "size-3.5 shrink-0";
 const accessNoticeIndentedRowClassName = "flex items-start gap-2";
-const accessNoticeTitleClassName = "text-13 font-semibold leading-5";
-const accessNoticeDetailClassName = "text-12 leading-4 text-muted-foreground";
+const accessNoticeTitleClassName = "text-13 font-semibold leading-5 max-sm:truncate";
+const accessNoticeDetailClassName = "[font-size:var(--text-12)] leading-4 text-muted-foreground";
 export const sidebarAccessNoticeActionClassName = "max-w-full whitespace-normal";
 const accessNoticeActionsClassName = "flex flex-wrap items-center gap-1.5 pt-2 pb-1";
 /** Menu surface is bg-background (#fafafb); fill sits between that and user-message-surface (#e6e8eb). */
@@ -39,17 +39,23 @@ const accessTermIconRowClassName = "flex h-5 shrink-0 items-center";
 export function SidebarAccessNoticeCard({
     actions,
     body,
+    bodyClassName,
     detail,
+    detailClassName,
     icon: Icon,
     label,
     title,
+    mobileTitleSuffix,
 }: {
     readonly actions: ReactNode;
     readonly body?: ReactNode;
+    readonly bodyClassName?: string;
     readonly detail: string;
+    readonly detailClassName?: string;
     readonly icon: typeof ShieldCheck;
     readonly label: string;
     readonly title: string;
+    readonly mobileTitleSuffix?: string;
 }) {
     if (body === undefined) {
         return (
@@ -57,7 +63,7 @@ export function SidebarAccessNoticeCard({
                 <div aria-hidden="true" className={accessNoticeCardShadowClassName} />
                 <ScrollArea
                     className={accessNoticeCardScrollClassName}
-                    viewportClassName="h-full max-h-[inherit] px-3 py-3"
+                    viewportClassName="h-full max-h-[inherit] px-3 py-3 max-sm:[&>div]:block!"
                 >
                     <div className={accessNoticeTitleRowClassName}>
                         <Icon aria-hidden="true" className={accessNoticeTitleIconClassName} />
@@ -66,7 +72,7 @@ export function SidebarAccessNoticeCard({
                     <div className={cn(accessNoticeIndentedRowClassName, "mt-1")}>
                         <div aria-hidden="true" className={accessNoticeIconSpacerClassName} />
                         <div className="min-w-0 flex-1">
-                            <p className={accessNoticeDetailClassName}>{detail}</p>
+                            <p className={cn(accessNoticeDetailClassName, detailClassName)}>{detail}</p>
                             <div className={accessNoticeActionsClassName}>{actions}</div>
                         </div>
                     </div>
@@ -80,16 +86,40 @@ export function SidebarAccessNoticeCard({
             <div aria-hidden="true" className={accessNoticeCardShadowClassName} />
             <div className={cn(accessNoticeTitleRowClassName, "relative shrink-0")}>
                 <Icon aria-hidden="true" className={accessNoticeTitleIconClassName} />
-                <p className={cn(accessNoticeTitleClassName, "min-w-0 flex-1")}>{title}</p>
+                <p
+                    className={cn(
+                        accessNoticeTitleClassName,
+                        "min-w-0 flex-1",
+                        mobileTitleSuffix !== undefined && "max-sm:flex max-sm:items-center max-sm:gap-2",
+                    )}
+                >
+                    {mobileTitleSuffix === undefined ? (
+                        title
+                    ) : (
+                        <>
+                            <span className="max-sm:shrink-0 max-sm:whitespace-nowrap">
+                                {title}
+                                <span className="sm:hidden">:</span>
+                            </span>
+                            <span
+                                className="flex min-w-0 items-center gap-1.5 font-medium text-foreground/80 sm:hidden"
+                                title={mobileTitleSuffix}
+                            >
+                                <MonitorSmartphone aria-hidden="true" className="size-3.5 shrink-0" />
+                                <span className="min-w-0 truncate">{mobileTitleSuffix}</span>
+                            </span>
+                        </>
+                    )}
+                </p>
             </div>
-            <div className="relative mt-2 flex min-h-0 gap-2">
+            <div className={cn("relative mt-2 flex min-h-0 gap-2", bodyClassName)}>
                 <div aria-hidden="true" className={cn(accessNoticeIconSpacerClassName, "self-start")} />
                 <div className="relative min-h-0 min-w-0 flex-1">{body}</div>
             </div>
             <div className={cn(accessNoticeIndentedRowClassName, "relative mt-1 shrink-0")}>
                 <div aria-hidden="true" className={accessNoticeIconSpacerClassName} />
                 <div className="min-w-0 flex-1">
-                    <p className={accessNoticeDetailClassName}>{detail}</p>
+                    <p className={cn(accessNoticeDetailClassName, detailClassName)}>{detail}</p>
                     <div className={accessNoticeActionsClassName}>{actions}</div>
                 </div>
             </div>
@@ -128,6 +158,7 @@ function JoinedAccessNoticeCard({
                 </>
             }
             detail="Only devices you add can use your computer. See them, or disconnect any, in Devices."
+            detailClassName="max-sm:hidden"
             icon={ShieldCheck}
             label="This browser's access"
             title={`This browser can use ${computerName || "your computer"} until ${formatMoment(expiresAt)}.`}
@@ -150,6 +181,7 @@ function EndingAccessNoticeCard({
                 </Button>
             }
             detail="To keep using Morty here, open a new link from your computer or another device. Your local agent and tasks keep running."
+            detailClassName="max-sm:hidden"
             icon={Clock3}
             label="Access ending soon"
             title={`Access in this browser ends ${formatMoment(expiresAt)}`}
