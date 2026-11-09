@@ -18,12 +18,13 @@ Moxt resources, credentials, local state and release channels remain independent
 
 ## Cloud deployment
 
-The Morty Cloud workflow builds a checksummed portable artifact, validates its
-source revision and pinned destination, then archives it. Pull requests build
-without deployment secrets. Ordinary production publication is owned by the
-Morty CLI workflow after a merge to main; a separate cloud workflow must never
-automatically deploy a competing build. Manual cloud operations are limited to
-service credential provisioning and recovery of an accepted archived release.
+The release pipeline builds the checksummed portable cloud artifact together with
+the CLI archive, validates its source revision and pinned destination, then
+archives it. Pull requests build without deployment secrets. Ordinary production
+publication is owned by the Morty CLI workflow after a merge to main; a separate
+cloud workflow must never automatically deploy a competing build. The Morty Cloud
+workflow only runs manual cloud operations: service credential provisioning and
+recovery of an accepted archived release.
 
 The `morty-production` deployment environment supplies `CLOUDFLARE_API_TOKEN` and
 `MORTY_SERVICE_SECRET` individually. The latter authenticates Morty's internal
@@ -60,11 +61,18 @@ owner or rotate the environment's service credential through storage operations.
 Build each release once. The merge queue runs the complete source validation,
 security scan and browser acceptance on the exact commit that main becomes. It
 assigns that commit's stable patch version, builds one CLI archive and its matching
-cloud artifact, and tests the archive on every supported OS/Node combination. The
-release workflow publishes that accepted archive instead of rebuilding and
-retesting the same source; a commit without an accepted archive is built and
-validated by the release workflow before publication. Pull requests exercise the
-gates without publication credentials.
+cloud artifact, and tests the archive on every supported OS/Node combination. Pull
+requests exercise the same gates without publication credentials, testing the
+archive on Linux across the supported Node versions; the merge queue adds macOS
+and Windows before anything reaches main.
+
+Release only the newest main commit, and only when it changes something other than
+Markdown since the production release. An older commit's changes ship with the
+newest one instead of queueing a release of their own, and a Markdown-only change
+publishes nothing. The release workflow publishes the archive the merge queue
+accepted instead of rebuilding and retesting the same source; a commit without an
+accepted archive is built and validated by the release workflow before
+publication.
 
 Expose a release only after production verified it. The release deploys the cloud
 Workers first and verifies production health, assets and Session access. If any
