@@ -2,7 +2,7 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
+import { refreshSessions, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
@@ -28,12 +28,7 @@ function readyComposer(element: HTMLElement): boolean {
     return element instanceof HTMLTextAreaElement && !element.disabled;
 }
 
-/**
- * Opens a saved conversation whose Session the Chat Worker is known to be watching. A reply that completes while
- * another conversation is selected reaches Chat only through the Worker's stream of Session events, as an unread
- * badge, so the badge proves that a later close of the Session would be announced.
- */
-async function openWatchedConversation(app: TestApp): Promise<string> {
+async function openSavedConversation(app: TestApp): Promise<string> {
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -56,6 +51,7 @@ async function openWatchedConversation(app: TestApp): Promise<string> {
     }
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     await daemon.continueReply(HELD_PROMPT, { outcome: "complete", output: [] });
+    await refreshSessions(app);
     await app.queryElementByTestId(
         dataTestId.sessionStatus,
         (element) => element.getAttribute("aria-label") === "Unread response",
@@ -75,7 +71,7 @@ test("Given an open conversation, When another client closes its Session and the
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
-    const sessionId = await openWatchedConversation(app);
+    const sessionId = await openSavedConversation(app);
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -100,7 +96,7 @@ test("Given a closed Session, When the user reopens it, Then the notice goes awa
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
-    const sessionId = await openWatchedConversation(app);
+    const sessionId = await openSavedConversation(app);
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -129,7 +125,7 @@ test("Given a closed Session and an offline Runtime, When the user tries to reop
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
-    const sessionId = await openWatchedConversation(app);
+    const sessionId = await openSavedConversation(app);
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -214,7 +210,7 @@ test("Given a reply that is still running, When its turn outcome precedes a dela
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
     const app = await createTestApp({ connectAgent: true, environment });
-    const sessionId = await openWatchedConversation(app);
+    const sessionId = await openSavedConversation(app);
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");

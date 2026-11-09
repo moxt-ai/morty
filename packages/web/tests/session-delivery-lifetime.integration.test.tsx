@@ -1,7 +1,7 @@
 import { getByLabelText, getByRole, queryAllByLabelText, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
+import { refreshSessions, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
@@ -193,6 +193,7 @@ test("Given a message the network has not delivered yet, When I switch to anothe
         outcome: "complete",
         output: [{ kind: "text", text: "Finished while you were away" }],
     });
+    await refreshSessions(app);
     await app.waitForView(() =>
         expect(
             sessionEntry(app, "Established session")

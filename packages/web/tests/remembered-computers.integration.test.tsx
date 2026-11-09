@@ -439,11 +439,11 @@ test("Given a saved computer and a failed connection, When I retry after reconne
     window.location.href = `${app.origin}/`;
     // A reload gets its own page transport; the previous one was disposed.
     const transport = new TestApiTransport(app.origin);
+    transport.disconnect();
     const unavailable = await createTestApp({
         application: { ...app, transport, close: () => transport.dispose() },
         page: { kind: "reload" },
     });
-    unavailable.transport.disconnect();
     const retry = await unavailable.waitForView(() => getByRole(document.body, "button", { name: "Retry" }));
     expect(document.body.textContent).toContain("Your saved computers are still here");
     unavailable.transport.open();
@@ -790,11 +790,11 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
     // The switched-to page loses its connection while it opens the computer.
     window.location.href = firstLink.href;
     const transport = new TestApiTransport(second.origin);
+    transport.disconnect();
     const unavailable = await createTestApp({
         application: { ...second, transport, close: () => transport.dispose() },
         page: { kind: "reload" },
     });
-    unavailable.transport.disconnect();
     const retry = await unavailable.waitForView(() => getByRole(document.body, "button", { name: "Retry" }));
     unavailable.transport.open();
     await unavailable.user.click(retry);

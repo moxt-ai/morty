@@ -51,7 +51,12 @@ export function describePageFailure(
 
 // A revoked Session credential is replaced on the next attempt, which asks Chat again and so learns whether the
 // access behind it ended.
-const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable", "credential_revoked"]);
+const retryableRuntimeFailureCodes = new Set([
+    "runtime_offline",
+    "service_unavailable",
+    "credential_revoked",
+    "operation_timeout",
+]);
 
 /**
  * Map a caught error to the single user-facing message for it. Known error
@@ -80,7 +85,11 @@ export function isSessionClosedFailure(cause: unknown): boolean {
  * upgrade), so the Session keeps retrying them instead of settling as failed.
  */
 export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
-    if (isApiConnectionError(cause) || isRuntimeConnectionFailure(cause)) {
+    if (
+        isApiConnectionError(cause) ||
+        isRuntimeConnectionFailure(cause) ||
+        (cause instanceof DOMException && cause.name === "TimeoutError")
+    ) {
         return true;
     }
     return cause instanceof MortyError && retryableRuntimeFailureCodes.has(cause.code);

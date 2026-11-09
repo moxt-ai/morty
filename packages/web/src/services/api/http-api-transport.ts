@@ -34,7 +34,8 @@ export class HttpApiTransport {
                 throw new Error("Unexpected Morty API origin.");
             }
             const signal = AbortSignal.any([request.signal, this.#lifetime.signal]);
-            const raw = await fetch(request, { signal });
+            signal.throwIfAborted();
+            const raw = await fetch(new Request(request, { signal }));
             const response = new Response(raw.body, raw);
             if (isWatchable(request.method, new URL(request.url).pathname)) {
                 this.#baselines.set(this.#key(request), `${response.status}\0${await response.clone().text()}`);
