@@ -1,4 +1,3 @@
-
 import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
 import { ProjectDurableObject as Project } from "../../src/components/project/project-durable-object.ts";
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
