@@ -16,7 +16,6 @@ import {
 } from "../../components/chat/tools/tool-contract.ts";
 
 type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
-const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
 export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
 
@@ -281,10 +280,6 @@ function mergeToolPresentation(
     };
 }
 
-function isBotInstructions(content: ContentBlock): boolean {
-    return content.type === "resource" && content.resource.uri === BOT_INSTRUCTIONS_URI;
-}
-
 function userDisplayContent(content: ContentBlock): ContentBlock {
     if (content.type !== "text") {
         return content;
@@ -368,9 +363,6 @@ function compactionStatus(
 function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessionUpdate): SessionMessage | null {
     switch (update.sessionUpdate) {
         case "user_message_chunk": {
-            if (isBotInstructions(update.content)) {
-                return null;
-            }
             return {
                 commandId: null,
                 contents: [userDisplayContent(update.content)],

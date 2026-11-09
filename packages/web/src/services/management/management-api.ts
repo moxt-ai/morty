@@ -7,7 +7,6 @@ const managedBotDetailSchema = v.pipe(
         botId: identifier,
         displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
         configured: v.boolean(),
-        instructions: v.pipe(v.string(), v.maxLength(100000)),
     }),
     v.readonly(),
 );

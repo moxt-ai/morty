@@ -302,6 +302,13 @@
             "when": 1794198150210,
             "tag": "0054_machine_ownership",
             "breakpoints": true
+        },
+        {
+            "idx": 55,
+            "version": "6",
+            "when": 1794201285355,
+            "tag": "0055_drop_machine_instructions",
+            "breakpoints": true
         }
     ]
 }
