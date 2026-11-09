@@ -112,10 +112,7 @@ export class ManagedBotStorage {
                 and(
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
-                    or(
-                        isNull(managedBot.computerId),
-                        eq(managedBot.computerId, value.computerId),
-                    ),
+                    or(isNull(managedBot.computerId), eq(managedBot.computerId, value.computerId)),
                 ),
             )
             .run();

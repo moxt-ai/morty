@@ -338,7 +338,6 @@ export class RuntimeInstallationStore {
         return current === null ? [] : [current];
     };
 
-
     readonly setConnectionActivation = async (
         connectionId: string,
         activation: RuntimeConnectionActivation,

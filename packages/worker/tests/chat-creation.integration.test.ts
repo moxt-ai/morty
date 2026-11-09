@@ -139,7 +139,7 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
     });
     const configuredSetupRuntimes = await fixture.request(`chat/bots/${fixture.botId}/setup/runtimes`, {});
     expect(configuredSetupRuntimes.status).toBe(200);
-    expect(await configuredSetupRuntimes.json()).toMatchObject({runtimes: [{computerId: fixture.computerId}]});
+    expect(await configuredSetupRuntimes.json()).toMatchObject({ runtimes: [{ computerId: fixture.computerId }] });
 
     const rebound = await fixture.request(`chat/bots/${fixture.botId}/setup`, {
         ...setup,
