@@ -90,13 +90,14 @@ and shows that failure there.
 
 ### Managed Session
 
-A Morty Session that Morty has registered for a User and Bot so it can appear in
-the conversation directory and be reopened. The managed record is ownership and
-discovery metadata; it does not mean Morty stores a complete copy of the Agent's
-history.
+A Morty Session that the computer's Runtime holds, so it can appear in the
+conversation directory and be reopened. The Runtime's record is the only
+directory of Managed Sessions; it is discovery metadata and does not mean Morty
+stores a complete copy of the Agent's history. The cloud keeps no separate list.
 
-Archiving a Managed Session removes it from Morty's managed conversation list. It
-must not be assumed to delete the Agent's Native Session or local history.
+Archiving a Managed Session closes it and removes the Runtime's record, so it
+leaves Morty's conversation list. It must not be assumed to delete the Agent's
+Native Session or local history; importing that Native Session brings it back.
 
 ### Machine
 
