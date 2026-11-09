@@ -57,10 +57,13 @@ owner or rotate the environment's service credential through storage operations.
 
 ## Automatic release sequence
 
-After each merge to main, the release workflow runs the complete source validation,
-security scan and browser acceptance. It then assigns a stable patch version,
-builds one CLI archive and its matching cloud artifact, and tests the archive on
-every supported OS/Node combination before publishing it. npm publication and
+Build each release once. The merge queue runs the complete source validation,
+security scan and browser acceptance on the exact commit that main becomes. It
+assigns that commit's stable patch version, builds one CLI archive and its matching
+cloud artifact, and tests the archive on every supported OS/Node combination. The
+release workflow publishes that accepted archive instead of rebuilding and
+retesting the same source; a commit without an accepted archive is built and
+validated by the release workflow before publication. npm publication and
 registry integrity verification precede production deployment. Only successful
 production health and artifact checks allow creation of the source tag and GitHub
 Release. Pull requests exercise the gates without publication credentials.
