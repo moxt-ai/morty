@@ -6,7 +6,7 @@ export const platformDashboardAuditEvent = sqliteTable(
     {
         auditId: text("audit_id").primaryKey(),
         appId: text("service_id").notNull(),
-        computerId: text("account_id").notNull(),
+        computerId: text("computer_id").notNull(),
         actorKind: text("actor_kind").notNull(),
         actorId: text("actor_id").notNull(),
         actorRef: text("actor_ref").notNull(),

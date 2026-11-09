@@ -64,6 +64,13 @@
             "when": 1794208945751,
             "tag": "0008_computer_authorization",
             "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "6",
+            "when": 1794222689858,
+            "tag": "0009_computer_storage",
+            "breakpoints": true
         }
     ]
 }

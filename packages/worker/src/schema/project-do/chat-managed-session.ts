@@ -3,7 +3,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "driz
 export const chatManagedSession = sqliteTable(
     "chat_managed_session",
     {
-        computerId: text("project_id").notNull(),
+        computerId: text("computer_id").notNull(),
         userId: text("user_id").notNull(),
         resourceId: text("resource_id").notNull(),
         harness: text("harness"),

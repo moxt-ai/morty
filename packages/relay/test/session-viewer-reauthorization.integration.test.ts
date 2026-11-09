@@ -146,7 +146,7 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
 
     // The revocation commits, but its push never reaches this Runtime's Relay (or reached it before the view opened).
     await env.PLATFORM_DIRECTORY_DATABASE.prepare(
-        "INSERT INTO machine_access_revocations (account_id, revoked_at) VALUES (?, ?)",
+        "INSERT INTO machine_access_revocations (computer_id, revoked_at) VALUES (?, ?)",
     )
         .bind(computerId, Date.now())
         .run();

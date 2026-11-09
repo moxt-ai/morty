@@ -14,11 +14,9 @@ import {
     type RequestRuntimePairing,
     type RevokeRuntime,
     type RuntimePairingRequest,
-    runtimeConnectionDurableObjectMigrations,
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
-import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { logger } from "@morty-build/relay-core/logging";
 import { ComputerChat } from "../../../worker/src/components/project/computer-chat.ts";
 import { cloudComputerId } from "../../../worker/src/middleware/computer-context.ts";
@@ -27,7 +25,6 @@ import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
 import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
-import { computerDurableObjectMigrations } from "../generated/project-do-migrations.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 import {
@@ -37,6 +34,7 @@ import {
     createPlatformWorker,
 } from "../platform-worker.ts";
 import { SqlitePlatformProjectStore } from "../storage/sqlite-platform-project-store.ts";
+import { migrateComputerStorage } from "./migrate-computer-storage.ts";
 import { createPlatformDurableObjectContext } from "./platform-durable-object-context.ts";
 
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
@@ -68,6 +66,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
     }
 
     private createConnections() {
+        migrateComputerStorage(this.ctx.storage);
         const context = createPlatformDurableObjectContext(this.ctx, this.env, {
             database: new DurableObjectSqlDatabase(this.ctx.storage),
             storeFor: (computerId) => this.#operate(computerId),
@@ -97,8 +96,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
             return null;
         }
         if (this.#store === null) {
-            applyDurableObjectMigrations(this.ctx.storage, computerDurableObjectMigrations);
-            applyDurableObjectMigrations(this.ctx.storage, runtimeConnectionDurableObjectMigrations, "connections/");
+            migrateComputerStorage(this.ctx.storage);
             this.#store = new SqlitePlatformProjectStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),

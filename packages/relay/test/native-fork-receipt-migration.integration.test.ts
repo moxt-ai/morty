@@ -9,7 +9,7 @@ import { NativeSessionForkStorage } from "../../relay-core/src/storage/native-se
 afterEach(() => vi.useRealTimers());
 afterAll(async () => await abortAllDurableObjects());
 
-it("Given pre-recovery Fork receipts, When upgraded and written by either deployment, Then completed results and unknown attempts retain their meaning", async () => {
+it("Given pre-recovery Fork receipts, When upgraded and written by the current deployment, Then completed results and unknown attempts retain their meaning", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
     await runInDurableObject(
         env.COMPUTER_RELAY.getByName(`fork-migration-${crypto.randomUUID()}`),
@@ -32,10 +32,10 @@ it("Given pre-recovery Fork receipts, When upgraded and written by either deploy
                     "hash",
                     result,
                 );
-            const oldRead = (id: string) =>
+            const readStored = (id: string) =>
                 state.storage.sql
                     .exec(
-                        "SELECT request_hash, result_json FROM native_session_forks WHERE project_id = ? AND operation_id = ?",
+                        "SELECT request_hash, result_json FROM native_session_forks WHERE computer_id = ? AND operation_id = ?",
                         "project",
                         id,
                     )
@@ -57,16 +57,16 @@ it("Given pre-recovery Fork receipts, When upgraded and written by either deploy
             });
             const attempt = JSON.stringify({ source: "resolved source", targetSessionId: "first-target" });
             receipts.start("project", "new", "hash", attempt);
-            expect(oldRead("new")).toEqual({ request_hash: "hash", result_json: null });
+            expect(readStored("new")).toEqual({ request_hash: "hash", result_json: null });
             expect(receipts.read("project", "new")?.attemptJson).toBe(attempt);
             receipts.complete("project", "new", completed);
-            expect(oldRead("new")).toEqual({ request_hash: "hash", result_json: completed });
+            expect(readStored("new")).toEqual({ request_hash: "hash", result_json: completed });
             expect(receipts.read("project", "new")?.attemptJson).toBeNull();
-            oldWrite("rollback-unknown", null);
-            expect(receipts.read("project", "rollback-unknown")).toEqual({
+            receipts.start("project", "new-pending", "hash", attempt);
+            expect(receipts.read("project", "new-pending")).toEqual({
                 requestHash: "hash",
                 resultJson: null,
-                attemptJson: null,
+                attemptJson: attempt,
             });
         },
     );
