@@ -461,11 +461,7 @@ export class PlatformProjectGateway {
         credentialLifetimeSeconds: number,
         signal: AbortSignal,
     ) => {
-        const access = await client.sessions.createAccess(
-            session.target,
-            credentialLifetimeSeconds,
-            signal,
-        );
+        const access = await client.sessions.createAccess(session.target, credentialLifetimeSeconds, signal);
         return {
             endpoint: this.configuration().origin,
             computerId,

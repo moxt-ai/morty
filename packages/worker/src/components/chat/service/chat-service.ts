@@ -483,7 +483,7 @@ export class ChatService {
                       scope,
                       await this.#ownedNativeSessionTarget(scope, input),
                       notInRecentSessions,
-                       (session) => this.#reopenManagedSession(session),
+                      (session) => this.#reopenManagedSession(session),
                   );
         return access;
     };
