@@ -33,8 +33,9 @@ Machine
 
 A Bot gives an authorized User a browser entry into a paired Runtime. A Runtime can
 serve many Sessions and can advertise more than one Agent. A Native Session belongs
-to an Agent, not to Morty. Morty can ask the Runtime to open or fork one, but that does not
-make the Native Session and the Morty Session the same resource.
+to an Agent, not to Morty. Morty uses that Agent-owned identity to continue work
+through an authorized Runtime; it does not allocate a second Session identity.
+Sharing an identity does not transfer ownership of the Agent's history to Morty.
 
 ## Morty application concepts
 
@@ -66,10 +67,24 @@ many conversations over the same Runtime.
 The user-facing chat Morty opens in the browser. A conversation presents messages,
 tool activity, interactions, files, and controls around a Morty Session.
 
-In the common path, one open Morty conversation is backed by one active Morty
-Session. Contributors should still avoid using `conversationId`, `sessionId`, and a
-Native Session ID interchangeably: they describe different boundaries even when a
-particular flow assigns equal string values.
+An established Morty conversation uses the underlying Agent's Native Session ID.
+Morty does not assign an independent conversation or Session identity. The native
+identity is scoped to the selected Agent and Runtime within an authorized Project;
+the same native value elsewhere does not identify or authorize the same work.
+
+### New Chat draft
+
+New Chat is a browser-only draft containing the user's selected Agent, workspace,
+settings, prompt, and attachments. Opening or abandoning it creates neither an
+Agent session nor a managed conversation record.
+
+Sending the first prompt asks the Runtime to create a real session through the
+Agent harness and submit that prompt to it. The returned Native Session ID becomes
+the conversation's identity. Pending work is tracked as an operation, not as a
+provisional Session. Retrying an uncertain first send must not create another
+session or submit the same prompt twice. A creation failure preserves the draft;
+if creation succeeds but the prompt fails, Morty retains the real conversation
+and shows that failure there.
 
 ### Managed Session
 
@@ -124,8 +139,10 @@ Agent and workspace context, receives turns and control operations, and publishe
 events to Morty. This is the Session Morty's browser connects to and the Session
 stored in the managed conversation directory.
 
-A new Morty conversation creates a Morty Session. Opening existing Agent history
-also results in a Morty Session through which Morty continues the work.
+The first send from a New Chat draft creates a real Agent session before submitting
+the prompt. Morty uses the returned Native Session ID for the resulting execution
+scope and managed conversation. Opening existing Agent history uses its existing
+native identity rather than allocating a Morty-specific one.
 
 ### Native Session
 
@@ -144,10 +161,9 @@ versus a **Native Session** owned by the Agent.
 ### Native Session entry
 
 A discovery result representing one Agent-owned conversation in a particular
-workspace. Its entry ID is an opaque handle for the current discovery operation;
-it is not necessarily the Native Session ID or a Morty Session ID. Refreshing the
-directory can produce a new discovery context, so stale entries must not authorize
-later operations.
+workspace. Its entry ID is an opaque handle for the current discovery operation,
+not a conversation identity. Refreshing the directory can produce a new discovery
+context, so stale entries must not authorize later operations.
 
 ### Open / import
 
@@ -164,23 +180,25 @@ between Morty and the native client can diverge or be refused.
 ### Fork
 
 Create an independent continuation from a selected Native Session when the Agent
-supports native forking. The fork receives a new target Session identity while
-preserving the source context available to the Agent. Further messages in the fork
-must not be assumed to update the source Native Session.
+supports native forking. The Agent harness creates the fork and returns its new
+Native Session ID; Morty does not preassign a destination Session identity. The fork
+preserves the source context available to the Agent. Further messages in the fork
+must not be assumed to update the source Native Session. An uncertain fork outcome
+must not automatically start another fork.
 
 Fork is a capability, not a fallback implementation for import. If the Agent cannot
 fork reliably, Morty must report that limitation rather than simulate success.
 
-### Session entry ID, Morty Session ID, and Native Session ID
+### Discovery handles and Native Session identity
 
 - A **Session entry ID** selects an item returned by native-session discovery.
-- A **Morty Session ID** addresses live and managed Session operations through the
-  Runtime and Relay.
-- A **Native Session ID** identifies the Agent-owned conversation.
+- A **Native Session ID** identifies the Agent-owned conversation and is also the
+  identity Morty uses for its established conversation and execution scope.
 
-Some creation paths deliberately reuse a value across layers. That is an
-implementation choice, not permission to collapse the concepts or skip validation
-at a boundary.
+Native identity must be scoped by Project, Runtime, and Agent. Neither a native
+identity nor a discovery handle replaces validation and authorization at the local
+execution boundary. Request and operation identities track pending work and
+recovery, not separate conversations.
 
 ### History
 
