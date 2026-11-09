@@ -1,3 +1,3 @@
 export interface MachineAccountDirectory {
-    readonly requireActiveAccount: (projectId: string, signal: AbortSignal) => Promise<void>;
+    readonly requireActiveAccount: (accountId: string, signal: AbortSignal) => Promise<void>;
 }

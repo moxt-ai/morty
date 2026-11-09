@@ -32,14 +32,14 @@ export function createRemoteAccessOperations(options: {
     readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly origin: string;
     readonly identity: {
-        readonly projectId: string;
+        readonly accountId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string>;
     };
     readonly onEnded: () => void;
     /** The page's access as its owner confirms it, or null when it no longer opens the computer. */
     readonly currentAccess: (
         signal: AbortSignal,
-    ) => Promise<{ readonly projectId: string; readonly token: string } | null>;
+    ) => Promise<{ readonly accountId: string; readonly token: string } | null>;
     /** Tells the owner of the page's access that the Worker refused it; settles once the owner checked it. */
     readonly credentialRejected: () => Promise<void>;
 }): RemoteAccessOperations {
@@ -47,7 +47,7 @@ export function createRemoteAccessOperations(options: {
     const currentAccessToken = async (signal: AbortSignal): Promise<string> => {
         const localIdentity = await options.currentAccess(signal);
         signal.throwIfAborted();
-        return localIdentity?.projectId === options.identity.projectId
+        return localIdentity?.accountId === options.identity.accountId
             ? localIdentity.token
             : await options.identity.getToken(signal);
     };
@@ -64,7 +64,7 @@ export function createRemoteAccessOperations(options: {
             try {
                 await withStoredAccessLock(signal, async () =>
                     api.endRemoteAccess(
-                        storedTokenForProject(options.identity.projectId) ?? (await options.identity.getToken(signal)),
+                        storedTokenForProject(options.identity.accountId) ?? (await options.identity.getToken(signal)),
                         signal,
                     ),
                 );

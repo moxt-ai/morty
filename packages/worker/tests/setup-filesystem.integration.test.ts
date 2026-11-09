@@ -83,7 +83,7 @@ type SavedReplacement =
 /** The saved setup state of a ready identity, in the representation setup writes. */
 function savedSetupState(
     origin: string,
-    identity: { readonly userId: string; readonly token: string; readonly projectId: string },
+    identity: { readonly userId: string; readonly token: string; readonly accountId: string },
     replacement: SavedReplacement = { kind: "unchanged" },
 ) {
     return JSON.stringify({
@@ -93,7 +93,7 @@ function savedSetupState(
             kind: "ready",
             user_id: identity.userId,
             user_token: identity.token,
-            project_id: identity.projectId,
+            project_id: identity.accountId,
             pairing: { kind: "none" },
             replacement,
         },
@@ -139,11 +139,11 @@ test.each([
                     replacementState === "unknown"
                         ? previous
                         : v.parse(
-                              v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
+                              v.object({ userId: v.string(), accountId: v.string(), token: v.string() }),
                               await (
                                   await worker.fetch(
                                       new Request(
-                                          `${fixture.origin}/morty/api/projects/${previous.projectId}/management/project/replacement`,
+                                          `${fixture.origin}/morty/api/accounts/${previous.accountId}/management/account/replacement`,
                                           { method: "POST", headers: { authorization: `Bearer ${previous.token}` } },
                                       ),
                                       fixture.environment(fixture.origin),
@@ -158,7 +158,7 @@ test.each([
                         current,
                         replacementState === "unknown"
                             ? { kind: "unknown" }
-                            : { kind: "revoked", previous: { kind: "retired", project_id: previous.projectId } },
+                            : { kind: "revoked", previous: { kind: "retired", project_id: previous.accountId } },
                     ),
                     { mode: 0o600 },
                 );
@@ -537,7 +537,7 @@ for (const [failure, scenario] of starterFailures) {
             const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
-                const runtime = await fixture.connectAgent(identity.projectId);
+                const runtime = await fixture.connectAgent(identity.accountId);
                 const request = async (path: string, body?: object) => {
                     const response = await fetch(`${fixture.origin}/morty/api/${path}`, {
                         method: body === undefined ? "GET" : "POST",
@@ -550,9 +550,9 @@ for (const [failure, scenario] of starterFailures) {
                 };
                 const { botId } = v.parse(
                     v.object({ botId: v.string() }),
-                    await request(`projects/${identity.projectId}/management/bot`),
+                    await request(`accounts/${identity.accountId}/management/bot`),
                 );
-                await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
+                await request(`chat/accounts/${identity.accountId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "codex",
                 });
@@ -881,7 +881,7 @@ async function setupMachine(
             paths.workspace,
             "--harness",
             run.harness ?? "settings-test",
-            ...(run.replaceProject === undefined ? [] : ["--replace-project", run.replaceProject]),
+            ...(run.replaceProject === undefined ? [] : ["--replace-account", run.replaceProject]),
             ...(run.sessionArgument === null ? [] : ["--session-id", run.sessionArgument ?? "native-upgrade-project"]),
         ],
         {
@@ -1017,7 +1017,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect(redeemed.status).toBe(200);
         const browser = v.parse(v.object({ token: v.string() }), await redeemed.json());
         const session = async () =>
-            await fetch(`${paths.origin}/morty/api/projects/${config.project_id}/session`, {
+            await fetch(`${paths.origin}/morty/api/accounts/${config.project_id}/session`, {
                 headers: { authorization: `Bearer ${browser.token}` },
                 signal: AbortSignal.timeout(10000),
             });
@@ -1031,7 +1031,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect(blocked.events.at(-1)).toMatchObject({
                 error: {
                     code: "PROJECT_REPLACEMENT_REQUIRED",
-                    replacement: { projectId: config.project_id, reason: "managed_runtime_missing" },
+                    replacement: { accountId: config.project_id, reason: "managed_runtime_missing" },
                 },
             });
             expect((await session()).status).toBe(200);
@@ -1041,10 +1041,10 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
         expect(approved.code, JSON.stringify(approved.events)).toBe(0);
         expect(approved.events).toContainEqual(
-            expect.objectContaining({ status: "replacement_access_revoked", previousProjectId: config.project_id }),
+            expect.objectContaining({ status: "replacement_access_revoked", previousAccountId: config.project_id }),
         );
         expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
-        const retired = await fetch(`${paths.origin}/morty/api/projects/${config.project_id}/session`, {
+        const retired = await fetch(`${paths.origin}/morty/api/accounts/${config.project_id}/session`, {
             headers: { authorization: `Bearer ${config.user_token}` },
             signal: AbortSignal.timeout(10000),
         });
@@ -1062,7 +1062,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
         expect(stale.code).toBe(1);
         expect(stale.events.at(-1)).toMatchObject({
-            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { projectId: current.project_id } },
+            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { accountId: current.project_id } },
         });
     });
 });
@@ -1081,13 +1081,13 @@ test("Given an approved replacement request times out, When setup is retried wit
         });
         expect(uncertain.code).toBe(1);
         expect(uncertain.events.at(-1)).toMatchObject({
-            error: { replacementAccess: { kind: "unknown", previousProjectId: config.project_id } },
+            error: { replacementAccess: { kind: "unknown", previousAccountId: config.project_id } },
         });
         const retry = await setupMachine(runtime, paths);
         expect(retry.events.at(-1)).toMatchObject({
             error: {
                 code: "PROJECT_REPLACEMENT_REQUIRED",
-                replacementAccess: { kind: "unknown", previousProjectId: config.project_id },
+                replacementAccess: { kind: "unknown", previousAccountId: config.project_id },
             },
         });
         const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
@@ -1105,7 +1105,7 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
             v.looseObject({ identity: v.record(v.string(), v.unknown()) }),
             JSON.parse(await readFile(configPath, "utf8")),
         );
-        const projectId = v.parse(v.string(), config.identity["project_id"]);
+        const accountId = v.parse(v.string(), config.identity["project_id"]);
         // A previous run recorded its intent, but was interrupted before it could record the response.
         await writeFile(
             configPath,
@@ -1117,12 +1117,12 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
         expect(blocked.events.at(-1)).toMatchObject({
             error: {
                 code: "PROJECT_REPLACEMENT_REQUIRED",
-                replacement: { projectId, reason: "replacement_result_unknown" },
+                replacement: { accountId, reason: "replacement_result_unknown" },
                 replacementAccess: { kind: "unknown" },
             },
         });
         expect(blocked.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
-        expect((await setupMachine(runtime, paths, undefined, { replaceProject: projectId })).code).toBe(0);
+        expect((await setupMachine(runtime, paths, undefined, { replaceProject: accountId })).code).toBe(0);
     });
 });
 
@@ -1146,7 +1146,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
             expect(stopped.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
             expect(stopped.events.at(-1)).toMatchObject({
                 error: {
-                    replacementAccess: { kind: "revoked", previousProjectId: config.project_id, setupReady: false },
+                    replacementAccess: { kind: "revoked", previousAccountId: config.project_id, setupReady: false },
                 },
             });
 
@@ -1205,14 +1205,14 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         const other = await fixture.createAnonymousUser();
         const configuration = savedSetupState(fixture.origin, owner);
         await writeFile(join(configurationDirectory, "config.json"), configuration, { mode: 0o600 });
-        const request = (projectId: string, path: string, token: string, method = "GET") =>
-            fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
+        const request = (accountId: string, path: string, token: string, method = "GET") =>
+            fetch(`${fixture.origin}/morty/api/accounts/${accountId}${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}` },
                 signal,
             });
-        const share = async (projectId: string, token: string) => {
-            const response = await request(projectId, "/identity/transfers", token, "POST");
+        const share = async (accountId: string, token: string) => {
+            const response = await request(accountId, "/identity/transfers", token, "POST");
             expect(response.status).toBe(201);
             return v.parse(v.object({ url: v.string() }), await response.json()).url;
         };
@@ -1226,7 +1226,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 }),
                 fixture.environment(fixture.origin),
             );
-        const links = [await share(owner.projectId, owner.token), await share(owner.projectId, owner.token)];
+        const links = [await share(owner.accountId, owner.token), await share(owner.accountId, owner.token)];
         const tokens: string[] = [];
         for (const link of links) {
             const response = await redeem(link);
@@ -1234,13 +1234,13 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             tokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
         }
         const remote = v.parse(v.string(), tokens[0]);
-        const recovery = await request(owner.projectId, "/identity/recovery-token", owner.token, "POST");
+        const recovery = await request(owner.accountId, "/identity/recovery-token", owner.token, "POST");
         expect(recovery.status).toBe(201);
         const recoveryToken = v.parse(v.object({ token: v.string() }), await recovery.json()).token;
         for (const token of [remote, recoveryToken]) {
-            expect((await request(owner.projectId, "/identity/revoke-all-access", token, "POST")).status).toBe(403);
+            expect((await request(owner.accountId, "/identity/revoke-all-access", token, "POST")).status).toBe(403);
         }
-        const otherLink = await share(other.projectId, other.token);
+        const otherLink = await share(other.accountId, other.token);
         const mismatchEvents: Readonly<Record<string, unknown>>[] = [];
         expect(
             await runSetup(["revoke-all-access", "--base-url", "http://127.0.0.1:1"], {
@@ -1263,17 +1263,17 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: (event) => events.push(event),
             }),
         ).toBe(0);
-        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: owner.projectId });
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", accountId: owner.accountId });
         expect(JSON.stringify(events)).not.toContain(owner.token);
         for (const link of links) {
             expect((await redeem(link)).status).toBe(410);
         }
         for (const token of [...tokens, recoveryToken]) {
-            expect((await request(owner.projectId, "/session", token)).status).toBe(401);
-            expect((await request(owner.projectId, "/identity/transfers", token, "POST")).status).toBe(401);
+            expect((await request(owner.accountId, "/session", token)).status).toBe(401);
+            expect((await request(owner.accountId, "/identity/transfers", token, "POST")).status).toBe(401);
         }
         expect(await readFile(join(configurationDirectory, "config.json"), "utf8")).toBe(configuration);
-        expect((await request(owner.projectId, "/session", owner.token)).status).toBe(200);
+        expect((await request(owner.accountId, "/session", owner.token)).status).toBe(200);
         expect((await redeem(otherLink)).status).toBe(200);
         expect(
             await runSetup(["revoke-all-access", "--base-url", fixture.origin], {
@@ -1282,7 +1282,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: () => undefined,
             }),
         ).toBe(0);
-        expect((await redeem(await share(owner.projectId, owner.token))).status).toBe(200);
+        expect((await redeem(await share(owner.accountId, owner.token))).status).toBe(200);
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
@@ -1297,16 +1297,16 @@ test("Given setup replaced the Project but stopped before ending the previous id
     const signal = AbortSignal.timeout(30000);
     try {
         const previous = await fixture.createAnonymousUser();
-        const request = (projectId: string, path: string, token: string, method = "GET") =>
-            fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
+        const request = (accountId: string, path: string, token: string, method = "GET") =>
+            fetch(`${fixture.origin}/morty/api/accounts/${accountId}${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}` },
                 signal,
             });
-        const replaced = await request(previous.projectId, "/management/project/replacement", previous.token, "POST");
+        const replaced = await request(previous.accountId, "/management/account/replacement", previous.token, "POST");
         expect(replaced.status).toBe(201);
         const current = v.parse(
-            v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
+            v.object({ userId: v.string(), accountId: v.string(), token: v.string() }),
             await replaced.json(),
         );
         // What setup saved before it stopped: the successor's identity, with the previous one still to end.
@@ -1314,11 +1314,11 @@ test("Given setup replaced the Project but stopped before ending the previous id
             join(configurationDirectory, "config.json"),
             savedSetupState(fixture.origin, current, {
                 kind: "revoked",
-                previous: { kind: "pending", project_id: previous.projectId, user_token: previous.token },
+                previous: { kind: "pending", project_id: previous.accountId, user_token: previous.token },
             }),
             { mode: 0o600 },
         );
-        expect((await request(previous.projectId, "/session", previous.token)).status).toBe(200);
+        expect((await request(previous.accountId, "/session", previous.token)).status).toBe(200);
 
         const events: Readonly<Record<string, unknown>>[] = [];
         const code = await runSetup(["revoke-all-access"], {
@@ -1328,16 +1328,16 @@ test("Given setup replaced the Project but stopped before ending the previous id
         });
         expect(code, JSON.stringify(events)).toBe(0);
 
-        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: current.projectId });
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", accountId: current.accountId });
         expect(JSON.stringify(events)).not.toContain(previous.token);
-        expect((await request(previous.projectId, "/session", previous.token)).status).toBe(401);
-        expect((await request(previous.projectId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
-        expect((await request(current.projectId, "/session", current.token)).status).toBe(200);
+        expect((await request(previous.accountId, "/session", previous.token)).status).toBe(401);
+        expect((await request(previous.accountId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
+        expect((await request(current.accountId, "/session", current.token)).status).toBe(200);
         expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
             JSON.parse(
                 savedSetupState(fixture.origin, current, {
                     kind: "revoked",
-                    previous: { kind: "retired", project_id: previous.projectId },
+                    previous: { kind: "retired", project_id: previous.accountId },
                 }),
             ),
         );

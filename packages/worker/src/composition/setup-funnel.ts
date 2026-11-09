@@ -14,12 +14,12 @@ const funnelSteps = [
     {
         event: "sharing_link_issued",
         method: "POST",
-        path: /^\/morty\/api(?:\/projects\/[^/]+)?\/identity\/transfers$/u,
+        path: /^\/morty\/api(?:\/accounts\/[^/]+)?\/identity\/transfers$/u,
     },
     {
         event: "sharing_link_redeemed",
         method: "POST",
-        path: /^\/morty\/api(?:\/projects\/[^/]+)?\/identity\/transfers\/redeem$/u,
+        path: /^\/morty\/api(?:\/accounts\/[^/]+)?\/identity\/transfers\/redeem$/u,
     },
 ] as const;
 

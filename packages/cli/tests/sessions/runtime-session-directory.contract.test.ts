@@ -19,7 +19,7 @@ for (const client of ["SDK", "HTTP"] as const) {
                 },
                 cancellation.signal,
             );
-            const runtime = await platform.connectAgent(project.projectId);
+            const runtime = await platform.connectAgent(project.accountId);
             const sessionId = `session-${crypto.randomUUID()}`;
             const request = {
                 additionalDirectoryIds: [],
@@ -34,7 +34,7 @@ for (const client of ["SDK", "HTTP"] as const) {
             } else {
                 const response = await platform.app.request(
                     new Request(
-                        `${platform.baseUrl}/morty/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/sessions`,
+                        `${platform.baseUrl}/morty/api/v1/accounts/${project.accountId}/runtimes/${runtime.runtimeId}/sessions`,
                         {
                             method: "POST",
                             headers: {
@@ -98,7 +98,7 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.projectId);
+    const runtime = await platform.connectAgent(project.accountId);
     for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         const path = join(tmpdir(), `missing-${crypto.randomUUID()}`, ...Array.from({ length: 8 }, () => segment));
         const directoryId = `path-${Buffer.from(path).toString("base64url")}`;
@@ -132,7 +132,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
+        const runtime = await platform.connectAgent(project.accountId);
         const directoryId = `path-${Buffer.from(canonical).toString("base64url")}`;
         const listing = await runtime.client.runtimes.listWorkspace(runtime.runtimeId, directoryId, signal);
         expect(listing.directoryId).toBe(directoryId);
@@ -202,7 +202,7 @@ it("Given a Session with an additional directory, When the App prompts it and re
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.projectId);
+        const runtime = await platform.connectAgent(project.accountId);
         const sessionId = `session-${crypto.randomUUID()}`;
         await runtime.client.sessions.create(
             {
@@ -218,7 +218,7 @@ it("Given a Session with an additional directory, When the App prompts it and re
         const access = await runtime.client.sessions.createAccess(runtime.runtimeId, sessionId, 900, signal);
         const session = new MortyClient({
             endpoint: platform.baseUrl,
-            projectId: project.projectId,
+            accountId: project.accountId,
             credentialProvider: new StaticMortyCredentialProvider(access.credential),
             transport: { fetch: async (request: Request) => await platform.app.request(request) },
         });

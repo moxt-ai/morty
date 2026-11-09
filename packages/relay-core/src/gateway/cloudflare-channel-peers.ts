@@ -30,7 +30,7 @@ const attachmentSchema = v.union([
         signingKeyId: v.optional(v.nullable(v.string()), null),
         // Every view receives events; the attachment keeps the format earlier Relay versions read.
         eventFormat: v.literal("events"),
-        projectId: v.string(),
+        accountId: v.string(),
         runtimeId: v.string(),
         sessionFilter: v.string(),
     }),
@@ -48,7 +48,7 @@ const attachmentSchema = v.union([
             ),
         ),
         runtimeId: v.string(),
-        projectId: v.string(),
+        accountId: v.string(),
         historyRequest: v.optional(historyRequestSchema),
         pendingAgentSettingsDiscoveries: v.optional(v.array(pendingAgentSettingsDiscoverySchema), []),
     }),
@@ -57,14 +57,14 @@ const attachmentSchema = v.union([
         historyRequest: v.optional(historyRequestSchema),
         channelId: v.string(),
         runtimeId: v.string(),
-        projectId: v.string(),
+        accountId: v.string(),
     }),
     v.object({
         role: v.picklist(["daemon", "replaced-daemon"]),
         connectionEpoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
         connectionId: v.pipe(v.string(), v.minLength(1)),
         runtimeId: v.string(),
-        projectId: v.string(),
+        accountId: v.string(),
     }),
 ]);
 
@@ -88,7 +88,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 credential: { kind: attachment.credentialKind, credentialId: attachment.credentialId },
                 ...(attachment.nativeRequestId === undefined ? {} : { nativeRequestId: attachment.nativeRequestId }),
                 ...(attachment.sessionFilter === undefined ? {} : { sessionFilter: attachment.sessionFilter }),
-                projectId: attachment.projectId,
+                accountId: attachment.accountId,
                 role: attachment.role,
                 runtimeId: attachment.runtimeId,
             };
@@ -106,7 +106,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                               issuedAt: attachment.credentialIssuedAt,
                           },
                 expiresAt: attachment.expiresAt,
-                projectId: attachment.projectId,
+                accountId: attachment.accountId,
                 role: attachment.role,
                 runtimeId: attachment.runtimeId,
                 sessionFilter: attachment.sessionFilter,
@@ -116,7 +116,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
             return {
                 connectionEpoch: attachment.connectionEpoch,
                 connectionId: attachment.connectionId,
-                projectId: attachment.projectId,
+                accountId: attachment.accountId,
                 role: attachment.role,
                 runtimeId: attachment.runtimeId,
             };

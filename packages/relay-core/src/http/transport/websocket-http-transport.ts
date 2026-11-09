@@ -22,7 +22,7 @@ const FORBIDDEN_HEADERS = new Set([
     "host",
     "origin",
     "upgrade",
-    "x-morty-project-id",
+    "x-morty-account-id",
 ]);
 
 type DispatchRequest = (request: Request) => Promise<Response>;

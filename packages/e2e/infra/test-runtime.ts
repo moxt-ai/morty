@@ -55,11 +55,11 @@ export async function createTestRuntime(
                 "anonymous identity",
             );
             const token = text(identity["token"], "anonymous token");
-            const projectId = text(identity["projectId"], "projectId");
+            const accountId = text(identity["accountId"], "accountId");
             const userId = text(identity["userId"], "userId");
             const botId = text(object(identity["bot"], "anonymous bot")["botId"], "botId");
             const url = new URL(stack.chatOrigin);
-            url.searchParams.set("identity", encodeIdentityScope({ botId, projectId, userId }));
+            url.searchParams.set("identity", encodeIdentityScope({ botId, accountId, userId }));
             await page.addInitScript(
                 ({ key, raw }) => {
                     if (window === window.top) {
@@ -76,8 +76,8 @@ export async function createTestRuntime(
                 },
             );
             await page.goto(url.href);
-            const user = await chat.useBrowserIdentity({ projectId, token });
-            return { botId: user.botId, projectId: user.projectId };
+            const user = await chat.useBrowserIdentity({ accountId, token });
+            return { botId: user.botId, accountId: user.accountId };
         };
 
         return {

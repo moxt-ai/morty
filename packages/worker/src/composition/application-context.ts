@@ -36,7 +36,7 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
         logger,
     };
     const storages = Object.freeze({
-        identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_PROJECT_ID ?? null),
+        identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_ACCOUNT_ID ?? null),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
         chatSessions: new ManagedSessionStorage(bindings.DATABASE),
     });

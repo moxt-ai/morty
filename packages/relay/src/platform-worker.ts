@@ -10,6 +10,7 @@ import {
 } from "@morty-build/client/protocol";
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
 import {
+    AccountScope,
     CloudflareChannelRuntime,
     createMortyApplication,
     createWorkerContext,
@@ -18,7 +19,6 @@ import {
     instrumentD1Database,
     interactionResponseRequest,
     PairingDirectoryError,
-    ProjectScope,
     type RelayContext,
     RequestAccessMetrics,
     requestTimeoutMiddleware,
@@ -42,11 +42,11 @@ import { RuntimeRelay } from "./durable-objects/runtime-relay.ts";
 import type { PlatformAuthenticationConfiguration } from "./entity/platform-control-plane.ts";
 import { SessionAccessSigner } from "./entity/session-access-credential.ts";
 import {
-    type ProjectDurableObjectExecutionBindings,
-    type ProjectWorkerRoutingBindings,
-    routeProjectDurableObject,
-} from "./gateway/project-durable-object-routing.ts";
-import { ProjectDurableObjectStores } from "./gateway/project-durable-object-store.ts";
+    type AccountDurableObjectExecutionBindings,
+    type AccountWorkerRoutingBindings,
+    routeAccountDurableObject,
+} from "./gateway/account-durable-object-routing.ts";
+import { AccountDurableObjectStores } from "./gateway/account-durable-object-store.ts";
 import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
 import { createPlatformControlApplication } from "./http/platform-routes.ts";
 import { createProjectApplication } from "./http/project-routes.ts";
@@ -67,7 +67,7 @@ import {
 import { PlatformControlPlaneStorage } from "./storage/platform-control-plane-storage.ts";
 import { type PlatformStorageBindings, PlatformStorageRegistry } from "./storage/platform-storage-registry.ts";
 
-export interface PlatformRelayBindings extends PlatformStorageBindings, ProjectWorkerRoutingBindings {
+export interface PlatformRelayBindings extends PlatformStorageBindings, AccountWorkerRoutingBindings {
     readonly PLATFORM_DIRECTORY_DATABASE: D1Database;
     readonly R2_BUCKET_APAC: R2Bucket;
     readonly RUNTIME_RELAY: DurableObjectNamespace<RuntimeRelay>;
@@ -75,16 +75,16 @@ export interface PlatformRelayBindings extends PlatformStorageBindings, ProjectW
     readonly MORTY_SESSION_SIGNING_SECRET: string;
 }
 
-export interface ProjectPlatformRelayBindings extends PlatformRelayBindings, ProjectDurableObjectExecutionBindings {}
+export interface AccountPlatformRelayBindings extends PlatformRelayBindings, AccountDurableObjectExecutionBindings {}
 
 export interface RuntimeExecutionBindings extends PlatformRelayBindings {
     readonly MORTY_RUNTIME_EXECUTION: {
-        readonly projectId: string;
+        readonly accountId: string;
         readonly runtimeId: string;
         readonly operations: LocalSessionOperations;
     };
 }
-type PlatformApplicationBindings = PlatformRelayBindings | ProjectPlatformRelayBindings | RuntimeExecutionBindings;
+type PlatformApplicationBindings = PlatformRelayBindings | AccountPlatformRelayBindings | RuntimeExecutionBindings;
 
 export interface ConfiguredPlatformRelayBindings extends PlatformRelayBindings, PlatformAuthenticationEnvironment {}
 
@@ -107,10 +107,10 @@ function authorizedSessionControl(
     access: SessionAccess,
     sessionId: string,
 ): SessionControl {
-    const scope = new ProjectScope(access.projectId);
+    const scope = new AccountScope(access.accountId);
     return new SessionControl(async (command, permission) => {
         await access.authorize(permission, context.req.raw.signal);
-        return await sessionOperations(context).requestProjectScopeControl(
+        return await sessionOperations(context).requestAccountScopeControl(
             scope,
             access.runtimeId,
             command,
@@ -174,7 +174,7 @@ type DispatchEnvironment = {
     readonly Variables: {
         readonly control: PlatformControlPlaneService;
         readonly appAuthentication: AppCredentialAuthenticationService;
-        readonly stores: ProjectDurableObjectStores;
+        readonly stores: AccountDurableObjectStores;
         readonly projects: PlatformProjectStorageDirectory;
         readonly identityStores: readonly ProjectStore[];
         readonly relay: RelayContext;
@@ -194,10 +194,10 @@ function optionalExecutionContext(context: Pick<Context, "executionCtx">): Conte
 
 export function createPlatformAccessServices(environment: PlatformApplicationBindings) {
     const execution =
-        "MORTY_PROJECT_STORE" in environment
-            ? { projectId: environment.MORTY_PROJECT_ID, store: environment.MORTY_PROJECT_STORE }
+        "MORTY_ACCOUNT_STORE" in environment
+            ? { accountId: environment.MORTY_ACCOUNT_ID, store: environment.MORTY_ACCOUNT_STORE }
             : null;
-    const stores = new ProjectDurableObjectStores(environment.PROJECT_RELAY, execution);
+    const stores = new AccountDurableObjectStores(environment.ACCOUNT_RELAY, execution);
     const identityStores = execution === null ? [] : [execution.store];
     const controlStorage = new PlatformControlPlaneStorage(environment.PLATFORM_DIRECTORY_DATABASE, stores);
     const storageRegistry = new PlatformStorageRegistry(environment);
@@ -242,7 +242,7 @@ export function createPlatformApplication(
                 .post("/machine-accounts", controlHandler)
                 .all("/platform/*", controlHandler)
                 .route(
-                    "/projects/:projectId",
+                    "/accounts/:accountId",
                     new Hono<DispatchEnvironment>()
                         .all("/storage-placement", controlHandler)
                         .all("/storage-placement/", controlHandler)
@@ -319,7 +319,7 @@ export function createPlatformApplication(
                 expiresAtEpochMilliseconds: target.expiresAtEpochMilliseconds,
                 issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
                 kind: "expiring",
-                projectId: target.projectId,
+                accountId: target.accountId,
                 runtimeId: target.runtimeId,
             });
         })
@@ -466,7 +466,7 @@ export function createPlatformApplication(
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
             return await sessionOperations(context).readProjectSessionFile(
-                new ProjectScope(access.projectId),
+                new AccountScope(access.accountId),
                 access.runtimeId,
                 decodeFileReadCommand(
                     JSON.stringify({ kind: "file.read", maxBytes, path, requestId: crypto.randomUUID(), sessionId }),
@@ -506,7 +506,7 @@ export function createPlatformApplication(
             }
             name = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
             const available = await sessionOperations(context).writeProjectSessionContent(
-                new ProjectScope(access.projectId),
+                new AccountScope(access.accountId),
                 access.runtimeId,
                 decodeContentWriteCommand(
                     JSON.stringify({
@@ -663,7 +663,7 @@ export function createPlatformApplication(
                 return context.json(events);
             }
             return await sessionOperations(context).openPublicSessionEvents(
-                new ProjectScope(target.projectId),
+                new AccountScope(target.accountId),
                 target.runtimeId,
                 context.req.param("sessionId"),
                 {
@@ -684,19 +684,19 @@ export function createPlatformApplication(
             );
         }
         v.parse(v.strictObject({}), await context.req.json());
-        if (!("MORTY_PROJECT_STORE" in context.env)) {
-            throw new Error("Session access is revoked only in the Project's ProjectDO");
+        if (!("MORTY_ACCOUNT_STORE" in context.env)) {
+            throw new Error("Session access is revoked only in the Project's AccountDO");
         }
-        const projectId = validateIdentifier(context.req.param("projectId") ?? "", "project_id");
-        const store = context.env.MORTY_PROJECT_STORE;
+        const accountId = validateIdentifier(context.req.param("accountId") ?? "", "project_id");
+        const store = context.env.MORTY_ACCOUNT_STORE;
         const channel = gateways(context.env).channel;
         const revoked = await context.var.sessionAccess.revoke(
-            projectId,
+            accountId,
             credential,
             {
                 runtimeIds: async (signal) => (await store.listRuntimes(signal)).map((runtime) => runtime.runtime_id),
                 disconnect: (runtimeId, revokedThrough, signal) =>
-                    channel.disconnectSessionViewers(projectId, runtimeId, revokedThrough, signal),
+                    channel.disconnectSessionViewers(accountId, runtimeId, revokedThrough, signal),
             },
             context.req.raw.signal,
         );
@@ -710,7 +710,7 @@ export function createPlatformApplication(
         .all("/runtimes/*", projectHandler)
         .all("/*", projectHandler);
     const versionedRoutes = new Hono<DispatchEnvironment>()
-        .route("/projects/:projectId", projectRoutes)
+        .route("/accounts/:accountId", projectRoutes)
         .all("/runtime-pairings/*", projectHandler)
         .all("/runtimes/connect", projectHandler)
         .all("/*", projectHandler);
@@ -726,7 +726,7 @@ export function createPlatformApplication(
             const routed =
                 "MORTY_RUNTIME_EXECUTION" in context.env
                     ? null
-                    : await routeProjectDurableObject(context.req.raw, context.env, authentication.allowedOrigins);
+                    : await routeAccountDurableObject(context.req.raw, context.env, authentication.allowedOrigins);
             if (routed !== null) {
                 return routed;
             }

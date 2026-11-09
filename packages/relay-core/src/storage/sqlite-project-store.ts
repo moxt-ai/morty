@@ -10,17 +10,17 @@ import { RuntimeDirectoryStorage } from "./runtime-directory-storage.ts";
  * operation runs there as one unit, so its reads, writes and audit events cannot interleave with another operation.
  */
 export class SqliteProjectStore implements ProjectStore {
-    readonly #projectId: string;
+    readonly #accountId: string;
     readonly #database: SqlDatabase;
     readonly #pairings: PairingStorage;
     readonly #runtimes: RuntimeDirectoryStorage;
     readonly #credentials: ChannelCredentialStorage;
 
-    constructor(projectId: string, database: SqlDatabase) {
-        this.#projectId = projectId;
+    constructor(accountId: string, database: SqlDatabase) {
+        this.#accountId = accountId;
         this.#database = database;
         this.#pairings = new PairingStorage(database);
-        this.#runtimes = new RuntimeDirectoryStorage(projectId, database);
+        this.#runtimes = new RuntimeDirectoryStorage(accountId, database);
         this.#credentials = new ChannelCredentialStorage(database);
     }
 
@@ -30,7 +30,7 @@ export class SqliteProjectStore implements ProjectStore {
     };
 
     readonly isHostCredentialActive: ProjectStore["isHostCredentialActive"] = async (identity, signal) =>
-        identity.projectId === this.#projectId && (await this.#credentials.readActive(identity, signal));
+        identity.accountId === this.#accountId && (await this.#credentials.readActive(identity, signal));
 
     readonly listLinkedDevices: ProjectStore["listLinkedDevices"] = async (channelId, signal) =>
         await this.#pairings.listLinked(channelId, signal);
@@ -77,13 +77,13 @@ export class SqliteProjectStore implements ProjectStore {
             return { kind: "not_redeemed" };
         }
         const channel = await this.#runtimes.readChannel(value.channelId, signal);
-        return channel === null ? { kind: "channel_missing" } : { kind: "redeemed", projectId: channel.project_id };
+        return channel === null ? { kind: "channel_missing" } : { kind: "redeemed", accountId: channel.project_id };
     };
 
     readonly createBrowserCredential: ProjectStore["createBrowserCredential"] = async (value, signal) =>
         await this.#pairings.createBrowser(
             value.credentialId,
-            this.#projectId,
+            this.#accountId,
             value.tokenHash,
             value.ownerCredentialId,
             value.now,
@@ -92,13 +92,13 @@ export class SqliteProjectStore implements ProjectStore {
         );
 
     readonly revokeBrowserCredential: ProjectStore["revokeBrowserCredential"] = async (credentialId, now, signal) =>
-        await this.#pairings.revokeBrowser(this.#projectId, credentialId, now, signal);
+        await this.#pairings.revokeBrowser(this.#accountId, credentialId, now, signal);
 
     readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (channelId, tokenHash, agents, signal) =>
         (await this.#runtimes.updateAgents(channelId, tokenHash, agents, signal)).meta.changes === 1;
 
     readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (runtimeId, signal) =>
-        await this.#credentials.readActiveRuntime({ projectId: this.#projectId, runtimeId }, signal);
+        await this.#credentials.readActiveRuntime({ accountId: this.#accountId, runtimeId }, signal);
 
     readonly readRuntime: ProjectStore["readRuntime"] = async (runtimeId, signal) =>
         await this.#runtimes.readRuntime(runtimeId, signal);
@@ -119,7 +119,7 @@ export class SqliteProjectStore implements ProjectStore {
         await this.#runtimes.recordAudit(
             {
                 auditId: value.rejectionAuditId,
-                projectId: this.#projectId,
+                accountId: this.#accountId,
                 pairingId: value.pairingId,
                 runtimeId: value.runtimeId,
                 actorKind: value.actorKind,
@@ -156,7 +156,7 @@ export class SqliteProjectStore implements ProjectStore {
         await this.#runtimes.recordAudit(
             {
                 auditId: value.rejectionAuditId,
-                projectId: this.#projectId,
+                accountId: this.#accountId,
                 pairingId: value.pairingId,
                 runtimeId: pairing?.runtime_id ?? "",
                 actorKind: "pairing_code",

@@ -45,8 +45,8 @@ connection configuration. Setting up a new connection will invalidate earlier
 sharing links and browser access, and you will need to share a new link. Continue?**
 Wait for explicit approval unless the user already authorized both the reset and
 revoking earlier shared access. Merely asking to run setup or reconnect is not approval.
-After approval, rerun the same command with `--replace-project <projectId>`, using
-the exact `projectId` from `error.replacement`. Approval applies only to that Project.
+After approval, rerun the same command with `--replace-account <accountId>`, using
+the exact `accountId` from `error.replacement`. Approval applies only to that machine account.
 Do not retry with this option automatically, delete local state, or create another
 identity to bypass confirmation. If the user declines, stop and keep the saved state.
 Approved replacement keeps the user, replaces the Project and Machine, and pairs a

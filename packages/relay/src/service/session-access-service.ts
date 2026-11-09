@@ -5,7 +5,7 @@ import type { AppCredentialAuthenticationService } from "./app-credential-authen
 import type { PlatformControlPlaneService } from "./platform-control-plane-service.ts";
 
 export type SessionAccessTarget =
-    | { readonly kind: "session"; readonly projectId: string; readonly sessionId: string }
+    | { readonly kind: "session"; readonly accountId: string; readonly sessionId: string }
     | { readonly kind: "unavailable" };
 
 /** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
@@ -15,7 +15,7 @@ export interface SessionAccess {
     readonly credentialId: string;
     readonly issuedAtEpochMilliseconds: number;
     readonly expiresAtEpochMilliseconds: number;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
     readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
 }
@@ -75,7 +75,7 @@ export class SessionAccessService {
         readonly credential: string;
         readonly credentialId: string;
         readonly expiresAt: string;
-        readonly projectId: string;
+        readonly accountId: string;
         readonly sessionId: string;
     }> => {
         if (target.kind !== "session") {
@@ -88,7 +88,7 @@ export class SessionAccessService {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
         const access = await this.#control.authorizePlatformCredential(
-            target.projectId,
+            target.accountId,
             appCredential,
             ProjectPermission.SessionWrite,
             "",
@@ -97,7 +97,7 @@ export class SessionAccessService {
         // A revocation also revokes credentials issued within a clock margin after it, so a credential issued inside
         // that margin would be refused from its first use. Issuing waits the margin out instead: a credential issued
         // after a revocation is never revoked by it.
-        const revokedThrough = await this.#control.readSessionAccessRevokedThrough(target.projectId, signal);
+        const revokedThrough = await this.#control.readSessionAccessRevokedThrough(target.accountId, signal);
         if (revokedThrough !== null && Date.now() <= revokedThrough) {
             await waitFor(revokedThrough + 1 - Date.now(), signal);
         }
@@ -106,7 +106,7 @@ export class SessionAccessService {
         const credential = await this.#signer.issue(access.publicCredentialId, {
             expiresAtEpochMilliseconds,
             issuedAtEpochMilliseconds,
-            projectId: target.projectId,
+            accountId: target.accountId,
             purpose: "session-access",
             runtimeId,
             sessionId: target.sessionId,
@@ -115,7 +115,7 @@ export class SessionAccessService {
             credential,
             credentialId: `sac_${crypto.randomUUID()}`,
             expiresAt: new Date(expiresAtEpochMilliseconds).toISOString(),
-            projectId: target.projectId,
+            accountId: target.accountId,
             sessionId: target.sessionId,
         };
     };
@@ -126,12 +126,12 @@ export class SessionAccessService {
      * close one leaves the revocation in force for the caller to retry; retries do not move the revocation back.
      */
     readonly revoke = async (
-        projectId: string,
+        accountId: string,
         appCredential: string,
         viewers: SessionViewers,
         signal: AbortSignal,
     ): Promise<{ readonly revokedThrough: string }> => {
-        const revokedThrough = await this.#control.revokeSessionAccess(projectId, appCredential, signal);
+        const revokedThrough = await this.#control.revokeSessionAccess(accountId, appCredential, signal);
         for (const runtimeId of await viewers.runtimeIds(signal)) {
             await viewers.disconnect(runtimeId, revokedThrough, signal);
         }
@@ -200,23 +200,23 @@ export class SessionAccessService {
             }
             throw cause;
         }
-        if (claims.projectId !== target.projectId || claims.sessionId !== target.sessionId) {
+        if (claims.accountId !== target.accountId || claims.sessionId !== target.sessionId) {
             throw new ProjectAuthenticationError(
                 "project_permission_denied",
                 "The credential authorizes only the selected Session",
             );
         }
-        const projectId = target.projectId;
+        const accountId = target.accountId;
         return {
             signingKeyId: await this.#signer.keyId(),
             credentialId: application.credential_id,
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
-            projectId: claims.projectId,
+            accountId: claims.accountId,
             runtimeId: claims.runtimeId,
             authorize: async (permission, authorizationSignal) => {
                 await this.#control.authorizeSessionCredentialRecord(
-                    projectId,
+                    accountId,
                     application,
                     sessionScopedPermission(permission),
                     claims.issuedAtEpochMilliseconds,

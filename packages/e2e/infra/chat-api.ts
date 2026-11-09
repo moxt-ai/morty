@@ -8,7 +8,7 @@ interface RequestOptions {
 
 interface BrowserIdentity {
     readonly botId: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly token: string;
 }
 
@@ -44,8 +44,8 @@ export async function jsonRequest(
         headers["x-morty-oidc-provider"] = provider;
     }
     const scopedPath =
-        project !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/projects/")
-            ? path.replace("/morty/api/", `/morty/api/projects/${encodeURIComponent(project)}/`)
+        project !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/accounts/")
+            ? path.replace("/morty/api/", `/morty/api/accounts/${encodeURIComponent(project)}/`)
             : path;
     const response = await fetch(new URL(scopedPath, origin), {
         method: body === undefined ? "GET" : "POST",
@@ -78,16 +78,16 @@ export class ChatApi {
 
     async useBrowserIdentity(value: unknown) {
         const identity = object(value, "anonymous identity");
-        const projectId = text(identity["projectId"], "projectId");
+        const accountId = text(identity["accountId"], "accountId");
         const token = text(identity["token"], "anonymous token");
         const bot = await jsonRequest(this.origin, "/morty/api/management/bot", {
-            project: projectId,
+            project: accountId,
             token,
             signal: this.signal,
         });
         this.identity = {
             botId: text(bot["botId"], "botId"),
-            projectId,
+            accountId,
             token,
         };
         return this.identity;
@@ -114,7 +114,7 @@ export class ChatApi {
     async bindAgent(runtimeId: string, agentId: string) {
         const identity = this.#requireIdentity();
         await this.#request(
-            `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
+            `/morty/api/chat/accounts/${encodeURIComponent(identity.accountId)}/bots/${encodeURIComponent(identity.botId)}/setup`,
             {
                 body: { runtimeId, agentRef: agentId },
             },
@@ -124,7 +124,7 @@ export class ChatApi {
     async readBinding(agentId: string) {
         const identity = this.#requireIdentity();
         const configuration = await this.#request(
-            `/morty/api/chat/projects/${encodeURIComponent(identity.projectId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
+            `/morty/api/chat/accounts/${encodeURIComponent(identity.accountId)}/bots/${encodeURIComponent(identity.botId)}/workspace`,
             { body: {} },
         );
         const runtime = object(configuration["runtime"], "runtime");
@@ -148,7 +148,7 @@ export class ChatApi {
         const identity = this.#requireIdentity();
         return await jsonRequest(this.origin, path, {
             ...options,
-            project: identity.projectId,
+            project: identity.accountId,
             token: identity.token,
             signal: this.signal,
         });

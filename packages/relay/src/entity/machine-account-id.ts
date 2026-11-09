@@ -16,7 +16,7 @@ const placements: ReadonlyMap<string, PlatformProjectPlacement> = new Map([
 ]);
 
 /** Platform IDs contain a locally mapped shard code followed by a 144-bit local identifier. */
-export function encodePlatformProjectId(placement: PlatformProjectPlacement, localId: string): string {
+export function encodePlatformAccountId(placement: PlatformProjectPlacement, localId: string): string {
     for (const [code, candidate] of placements) {
         if (candidate.locationHint === placement.locationHint) {
             return `prj_${code}_01_${localId}`;
@@ -29,10 +29,10 @@ export function encodePlatformProjectId(placement: PlatformProjectPlacement, loc
     );
 }
 
-export function decodePlatformProjectPlacement(projectId: string): PlatformProjectPlacement | null {
-    const match = /^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_([A-Za-z0-9_-]{24})$/.exec(projectId);
+export function decodeAccountPlacement(accountId: string): PlatformProjectPlacement | null {
+    const match = /^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_([A-Za-z0-9_-]{24})$/.exec(accountId);
     const code = match?.[1];
-    if (match?.[0] !== projectId || code === undefined) {
+    if (match?.[0] !== accountId || code === undefined) {
         return null;
     }
     return placements.get(code) ?? null;
@@ -44,8 +44,8 @@ export function projectBucketLocation(locationHint: ProjectLocationHint): "apac"
         : "wnam";
 }
 
-export function projectIdFromPrefixedValue(value: string): string | null {
+export function accountIdFromPrefixedValue(value: string): string | null {
     const match = /(?:^|_)(prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24})(?:[._]|$)/.exec(value);
-    const projectId = match?.[1];
-    return projectId !== undefined && decodePlatformProjectPlacement(projectId) !== null ? projectId : null;
+    const accountId = match?.[1];
+    return accountId !== undefined && decodeAccountPlacement(accountId) !== null ? accountId : null;
 }

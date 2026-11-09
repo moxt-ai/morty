@@ -18,7 +18,7 @@ test("Given local, browser and recovery credentials, When their operations end a
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET") =>
         fetchPublicApplication(
-            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}${path}`, {
                 method,
                 headers: { authorization: `Bearer ${token}` },
             }),
@@ -48,10 +48,10 @@ test("Given local, browser and recovery credentials, When their operations end a
         { token: owner.token, path: "/identity/v1/local-credential" },
         { token: browser, path: "/identity/v1/browser-access" },
     ];
-    const namespace = fixture.environment().CHAT_PROJECTS;
-    const storage = namespace.get(namespace.idFromName(owner.projectId));
+    const namespace = fixture.environment().CHAT_ACCOUNTS;
+    const storage = namespace.get(namespace.idFromName(owner.accountId));
     const kinds = async () =>
-        await (await storage.fetch(new Request("https://project.internal/credential-kinds"))).json();
+        await (await storage.fetch(new Request("https://account.internal/credential-kinds"))).json();
     expect(await kinds()).toEqual(expect.arrayContaining(["local", "browser", "recovery"]));
     for (const operation of operations) {
         const session = await request("/session", operation.token);
@@ -90,7 +90,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
             }),
             fixture.environment(),
         );
-    const project = `/projects/${owner.projectId}`;
+    const project = `/accounts/${owner.accountId}`;
     const botId = v.parse(
         v.object({ botId: v.string() }),
         await (await request(`${project}/management/bot`, owner.token)).json(),
@@ -116,7 +116,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
             await request(`${project}/management/runtime-pairings`, token, "POST", {
                 idempotencyKey: "shared-pairing",
             }),
-            await request(`/chat/projects/${owner.projectId}/bots/${botId}/setup`, token, "POST", {
+            await request(`/chat/accounts/${owner.accountId}/bots/${botId}/setup`, token, "POST", {
                 runtimeId: "shared-runtime",
                 agentRef: "codex",
             }),
@@ -135,13 +135,13 @@ test("Given browser access granted through a link, When the access term its link
     const owner = await fixture.createAnonymousUser();
     const session = (token: string) =>
         fetchPublicApplication(
-            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/session`, {
+            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/session`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
             fixture.environment(),
         );
     const transfer = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
+        new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/transfers`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}` },
         }),
@@ -159,9 +159,9 @@ test("Given browser access granted through a link, When the access term its link
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     expect((await session(browser)).status).toBe(200);
 
-    const namespace = fixture.environment().CHAT_PROJECTS;
-    const storage = namespace.get(namespace.idFromName(owner.projectId));
-    const aged = await storage.fetch(new Request("https://project.internal/aged-links", { method: "POST" }));
+    const namespace = fixture.environment().CHAT_ACCOUNTS;
+    const storage = namespace.get(namespace.idFromName(owner.accountId));
+    const aged = await storage.fetch(new Request("https://account.internal/aged-links", { method: "POST" }));
     expect(aged.status).toBe(204);
 
     const expired = await session(browser);
@@ -176,7 +176,7 @@ test("Given browser access granted through a link, When that browser shares a ne
     const owner = await fixture.createAnonymousUser();
     const share = async (token: string) => {
         const response = await fetchPublicApplication(
-            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
+            new Request(`${APP_ORIGIN}/morty/api/accounts/${owner.accountId}/identity/transfers`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${token}` },
             }),
@@ -205,16 +205,16 @@ test("Given browser access granted through a link, When that browser shares a ne
 });
 
 test("Given a well-formed Project identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {
-    const projectId = `prj_ap_01_${"N".repeat(24)}`;
+    const accountId = `prj_ap_01_${"N".repeat(24)}`;
     const response = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${projectId}/session`),
+        new Request(`${APP_ORIGIN}/morty/api/accounts/${accountId}/session`),
         fixture.environment(),
     );
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: { code: "PROJECT_NOT_FOUND" } });
-    const namespace = fixture.environment().CHAT_PROJECTS;
+    const namespace = fixture.environment().CHAT_ACCOUNTS;
     const stored = await namespace
-        .get(namespace.idFromName(projectId))
-        .fetch(new Request("https://project.internal/stored-state"));
+        .get(namespace.idFromName(accountId))
+        .fetch(new Request("https://account.internal/stored-state"));
     expect(await stored.json()).toEqual({ keys: [], tables: [] });
 });

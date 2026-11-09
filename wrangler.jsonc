@@ -26,8 +26,8 @@
         "bindings": [
             { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
             {
-                "name": "CHAT_PROJECTS",
-                "class_name": "ProjectDurableObject"
+                "name": "CHAT_ACCOUNTS",
+                "class_name": "AccountDurableObject"
             }
         ]
     },
@@ -35,7 +35,11 @@
         { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
         { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] },
         { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] },
-        { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] }
+        { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] },
+        {
+            "tag": "rename-machine-account-object",
+            "renamed_classes": [{ "from": "ProjectDurableObject", "to": "AccountDurableObject" }]
+        }
     ],
     "env": {
         "production": {
@@ -60,8 +64,8 @@
                 "bindings": [
                     { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
                     {
-                        "name": "CHAT_PROJECTS",
-                        "class_name": "ProjectDurableObject"
+                        "name": "CHAT_ACCOUNTS",
+                        "class_name": "AccountDurableObject"
                     }
                 ]
             },

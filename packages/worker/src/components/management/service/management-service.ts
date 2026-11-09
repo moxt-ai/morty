@@ -1,8 +1,8 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import type { BootstrapOrigin } from "../entity/account-bootstrap.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
-import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
@@ -26,7 +26,7 @@ export class ManagementService {
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
-        this.#accountId = cx.config.bindings.CHAT_PROJECT_ID;
+        this.#accountId = cx.config.bindings.CHAT_ACCOUNT_ID;
         this.#platform = cx.gateways.platformProjects;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
     }
@@ -41,8 +41,8 @@ export class ManagementService {
         signal: AbortSignal,
         origin: BootstrapOrigin,
     ) => {
-        const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin, signal);
-        const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
+        const token = await bootstrapToken(this.#credentialKey, userId, project.accountId, origin, signal);
+        const identity = await this.#authentication.createAnonymous(userId, project.accountId, signal, token);
         const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, bot: { botId, displayName } };
     };
@@ -93,7 +93,7 @@ export class ManagementService {
         const machine = await this.#managedBots.readMachine(userId, signal);
         return machine === null || this.#accountId === undefined
             ? null
-            : { projectId: this.#accountId, displayName: machine.displayName };
+            : { accountId: this.#accountId, displayName: machine.displayName };
     };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
@@ -105,12 +105,12 @@ export class ManagementService {
         // A successor needs its own Platform reference: clientReference is unique per (app, reference)
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
-        const reference = `${userId}.${previous.projectId}`;
+        const reference = `${userId}.${previous.accountId}`;
         const project = await this.#platform.create(
             userId,
             "Morty",
             signal,
-            projectRegion(previous.projectId),
+            projectRegion(previous.accountId),
             reference,
         );
         return project;
@@ -118,13 +118,13 @@ export class ManagementService {
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        const pairing = await this.#platform.createPairing(project.projectId, idempotencyKey, signal);
+        const pairing = await this.#platform.createPairing(project.accountId, idempotencyKey, signal);
         return pairing;
     };
 
     readonly readRuntimePairing = async (userId: string, pairingId: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        return await this.#platform.readPairing(project.projectId, pairingId, signal);
+        return await this.#platform.readPairing(project.accountId, pairingId, signal);
     };
 
     /**
@@ -165,7 +165,7 @@ export class ManagementService {
 async function bootstrapToken(
     serverKey: CloudBindings["CHAT_CREDENTIAL_KEY"],
     userId: string,
-    projectId: string,
+    accountId: string,
     origin: BootstrapOrigin,
     signal: AbortSignal,
 ) {
@@ -174,13 +174,13 @@ async function bootstrapToken(
         case "created":
             return await derivedToken(
                 serverKey,
-                ["morty-anonymous-user-v1", userId, projectId, origin.creationKey],
+                ["morty-anonymous-user-v1", userId, accountId, origin.creationKey],
                 signal,
             );
         case "replacement":
             return await derivedToken(
                 serverKey,
-                ["morty-project-replacement-v1", userId, origin.previousProjectId, projectId, origin.token],
+                ["morty-project-replacement-v1", userId, origin.previousAccountId, accountId, origin.token],
                 signal,
             );
     }

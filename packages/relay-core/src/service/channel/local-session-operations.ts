@@ -7,8 +7,8 @@ import type {
 } from "@morty-build/client/protocol";
 import { decodeNativeSessionCancel } from "@morty-build/client/protocol";
 import type { DurableObjectContext } from "../../di/create-durable-object-dependencies.ts";
-import type { ProjectScope as Scope } from "../../entity/do/session.ts";
-import { ProjectScope } from "../../entity/do/session.ts";
+import type { AccountScope as Scope } from "../../entity/do/session.ts";
+import { AccountScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
 import {
@@ -57,16 +57,16 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
 
 export function createLocalSessionOperations(
     cx: DurableObjectContext,
-    projectId: string,
+    accountId: string,
     runtimeId: string,
 ): LocalSessionOperations {
     const checkTarget = (requestedProject: string, requestedRuntime: string) => {
         const current = cx.services.connections.current();
-        if (requestedProject !== projectId || requestedRuntime !== runtimeId || current?.runtimeId !== runtimeId) {
+        if (requestedProject !== accountId || requestedRuntime !== runtimeId || current?.runtimeId !== runtimeId) {
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
         const daemon = cx.gateways.peers.sockets().find(({ identity }) => identity.role === "daemon");
-        if (daemon !== undefined && daemon.identity.projectId !== projectId) {
+        if (daemon !== undefined && daemon.identity.accountId !== accountId) {
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
     };
@@ -76,7 +76,7 @@ export function createLocalSessionOperations(
         return cx.gateways.requests.open(requestId, sessionId, async (socket, message) => {
             if (!signal.aborted) {
                 await cx.services.runtime.receiveOperation(
-                    new ProjectScope(projectId),
+                    new AccountScope(accountId),
                     runtimeId,
                     socket,
                     message,
@@ -99,7 +99,7 @@ export function createLocalSessionOperations(
             );
             try {
                 await cx.services.runtime.receiveOperation(
-                    new ProjectScope(projectId),
+                    new AccountScope(accountId),
                     runtimeId,
                     socket,
                     message,
@@ -110,48 +110,48 @@ export function createLocalSessionOperations(
             }
         });
     };
-    const requestProjectScopeControl: SessionRuntimeOperations["requestProjectScopeControl"] = async (
+    const requestAccountScopeControl: SessionRuntimeOperations["requestAccountScopeControl"] = async (
         scope,
         requestedRuntime,
         command,
         signal,
     ) => {
-        checkTarget(scope.projectId, requestedRuntime);
+        checkTarget(scope.accountId, requestedRuntime);
         const sessionId = "sessionId" in command ? command.sessionId : "";
         const socket = await connect(runtimeControlRequestId(command), sessionId, signal);
         return await requestRuntimeControl(socket, command, signal);
     };
     return {
         forkNativeSession: async (scope, requestedRuntime, operationId, input, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             return await cx.services.nativeForks.fork(
                 scope,
                 requestedRuntime,
                 operationId,
                 input,
-                requestProjectScopeControl,
+                requestAccountScopeControl,
                 signal,
             );
         },
         requestWorkspace: async (scope, requestedRuntime, command, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             return await requestRuntimeWorkspace(await connect(command.requestId, "", signal), command, signal);
         },
         requestAgentSettings: async (scope, requestedRuntime, command, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             return await requestRuntimeAgentSettings(await connect(command.requestId, "", signal), command, signal);
         },
         openPublicSessionEvents: async (scope, requestedRuntime, sessionId, credential, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             signal.throwIfAborted();
             await cx.services.runtime.expireSilentDaemons();
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             if (!cx.services.runtime.isOnline(runtimeId)) {
                 throw new PairingDirectoryError("runtime_offline", "The Runtime is offline");
             }
             return cx.gateways.peers.accept({
                 role: "viewer",
-                projectId,
+                accountId,
                 runtimeId,
                 sessionFilter: sessionId,
                 expiresAt: credential.expiresAt,
@@ -162,9 +162,9 @@ export function createLocalSessionOperations(
                 },
             }).response;
         },
-        requestProjectScopeControl,
+        requestAccountScopeControl,
         readProjectSessionFile: async (scope, requestedRuntime, command, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             const socket = await connect(command.requestId, command.sessionId, signal);
             try {
                 const stream = await requestRuntimeFile(socket, command, signal);
@@ -176,7 +176,7 @@ export function createLocalSessionOperations(
             }
         },
         writeProjectSessionContent: async (scope, requestedRuntime, command, body, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
+            checkTarget(scope.accountId, requestedRuntime);
             const socket = await connect(command.requestId, command.sessionId, signal);
             try {
                 return await requestRuntimeContentWrite(socket, command, body, signal);

@@ -98,7 +98,7 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
     const url = new URL(path, window.location.origin);
     url.searchParams.set(
         "identity",
-        encodeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId }),
+        encodeIdentityScope({ botId: identity.botId, accountId: identity.accountId, userId: identity.userId }),
     );
     return url;
 }
@@ -143,7 +143,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             const chat = new BotChatApi({
                 fetchRequest,
                 origin: window.location.origin,
-                projectId: identity.projectId,
+                accountId: identity.accountId,
                 // The access this browser holds: another tab may have replaced the one this link issued.
                 getToken: async () => storedToken(identity.userId) ?? identity.token,
                 replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
@@ -279,14 +279,14 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     // to its Project. Validate only the explicit scope, or a remembered
                     // scope for this exact Project when the old link has no scope.
                     if (cause instanceof IdentityApiError && cause.code === "TRANSFER_UNAVAILABLE") {
-                        const projectId = transferCodeProject(state.code);
+                        const accountId = transferCodeProject(state.code);
                         const explicit = readIdentityScope();
                         const scopes = hasIdentityScope()
                             ? explicit === null
                                 ? []
                                 : [explicit]
                             : rememberedComputers().map((computer) => computer.scope);
-                        const matching = scopes.filter((scope) => scope.projectId === projectId);
+                        const matching = scopes.filter((scope) => scope.accountId === accountId);
                         const visited = new Set<string>();
                         try {
                             for (const scope of matching) {

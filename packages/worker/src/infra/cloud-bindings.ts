@@ -22,7 +22,7 @@ export const webSocketNamespaceBindingSchema = v.custom<DurableObjectNamespace>(
 
 export const projectStorageBindingsSchema = v.pipe(
     v.object({
-        CHAT_PROJECT_ID: v.string(),
+        CHAT_ACCOUNT_ID: v.string(),
         DATABASE: d1DatabaseBindingSchema,
     }),
     v.readonly(),
@@ -43,13 +43,13 @@ export const platformCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_
 
 export interface CloudBindings {
     readonly CHAT_WEBSOCKETS?: unknown;
-    readonly CHAT_PROJECTS?: unknown;
+    readonly CHAT_ACCOUNTS?: unknown;
     readonly CHAT_ATTACHMENTS_APAC?: unknown;
     readonly ANONYMOUS_CREATION_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
     readonly DATABASE?: unknown;
-    readonly CHAT_PROJECT_ID?: string;
+    readonly CHAT_ACCOUNT_ID?: string;
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
     /** The Project object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;

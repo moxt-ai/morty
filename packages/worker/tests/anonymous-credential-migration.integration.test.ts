@@ -5,7 +5,7 @@ import anonymousIdentity from "../migrations/project-do/0002_anonymous_identity.
 import remoteAccess from "../migrations/project-do/0008_remote_access.sql?raw";
 import credentialBrowser from "../migrations/project-do/0032_lively_arachne.sql?raw";
 import anonymousCredentialRevocation from "../migrations/project-do/0034_anonymous_credential_revocation.sql?raw";
-import { projectDurableObjectMigrations as migrations } from "../src/generated/project-do-migrations.ts";
+import { accountDurableObjectMigrations as migrations } from "../src/generated/project-do-migrations.ts";
 
 test("Given saved active and revoked credentials, When their schema is migrated, Then credential facts and revocation times are preserved", () => {
     using database = new DatabaseSync(":memory:");

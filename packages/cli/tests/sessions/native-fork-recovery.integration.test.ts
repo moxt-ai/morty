@@ -31,7 +31,7 @@ test.each(["request", "result"] as const)(
             credential: platform.appCredential,
             origin: platform.baseUrl,
             relayOrigin: proxy.origin,
-            projectId: project.projectId,
+            accountId: project.accountId,
             server: platform.app,
             signal,
             nativeSessionIds: new Set(["native-fork-source"]),
@@ -107,7 +107,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.projectId, undefined, new Set(["recovery-native-source"]));
+    const runtime = await platform.connectAgent(project.accountId, undefined, new Set(["recovery-native-source"]));
     const listingInput = {
         action: "list" as const,
         additionalDirectoryIds: [],
@@ -152,7 +152,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     });
     await listen(proxy);
     try {
-        const url = `http://127.0.0.1:${port(proxy)}/morty/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/native-session-forks/${crypto.randomUUID()}`;
+        const url = `http://127.0.0.1:${port(proxy)}/morty/api/v1/accounts/${project.accountId}/runtimes/${runtime.runtimeId}/native-session-forks/${crypto.randomUUID()}`;
         const send = () =>
             fetch(url, {
                 method: "POST",

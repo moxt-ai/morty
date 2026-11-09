@@ -3,7 +3,7 @@ import type { ProjectAccessContext, ProjectPermission } from "../entity/authenti
 /** The host authenticates an opaque credential and authorizes a resolved Project. */
 export interface ProjectAccessAuthorizer {
     readonly authorizeProject: (
-        projectId: string,
+        accountId: string,
         credentialValue: string,
         requiredPermission: ProjectPermission,
         actorReference: string,
@@ -17,7 +17,7 @@ export interface ProjectAccessAuthorizer {
  */
 export interface ProjectCredentialAuthority {
     readonly grants: (
-        projectId: string,
+        accountId: string,
         credentialId: string,
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,
@@ -28,7 +28,7 @@ export interface ProjectCredentialAuthority {
      * ends the view.
      */
     readonly grantsSessionCredential: (
-        projectId: string,
+        accountId: string,
         credentialId: string,
         issuedAt: number,
         requiredPermissions: readonly ProjectPermission[],

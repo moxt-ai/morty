@@ -51,9 +51,9 @@ export function createPlatformControlApplication() {
         )
         .use("*", createBrowserCors(["GET", "POST"], ["authorization", "content-type"]))
         .get("/health", (context) => context.json({ service: "morty-relay", status: "ok" }))
-        .get("/v1/projects/:projectId/storage-placement", (context) =>
+        .get("/v1/accounts/:accountId/storage-placement", (context) =>
             context.json(
-                context.env.control.resolveProjectPlacement(path(context.req.param("projectId")), context.var.signal),
+                context.env.control.resolveProjectPlacement(path(context.req.param("accountId")), context.var.signal),
             ),
         )
         .post(

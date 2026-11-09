@@ -5,8 +5,8 @@ export const machineAccountGrant = sqliteTable(
     "machine_account_grants",
     {
         credentialId: text("credential_id").notNull(),
-        projectId: text("account_id").notNull(),
+        accountId: text("account_id").notNull(),
         createdAt: integer("created_at").notNull(),
     },
-    (table) => [primaryKey({ columns: [table.credentialId, table.projectId] })],
+    (table) => [primaryKey({ columns: [table.credentialId, table.accountId] })],
 );

@@ -13,7 +13,7 @@ const managedBotDetailSchema = v.pipe(
 );
 export type ManagedBotDetail = v.InferOutput<typeof managedBotDetailSchema>;
 const projectSchema = v.pipe(
-    v.object({ projectId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
+    v.object({ accountId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
     v.readonly(),
 );
 export type ManagedProject = v.InferOutput<typeof projectSchema>;
@@ -23,20 +23,20 @@ const runtimeBindingSchema = v.object({ botId: identifier, runtimeId: v.nullable
 export type RuntimeBinding = { readonly kind: "unbound" } | { readonly kind: "bound"; readonly runtimeId: Identifier };
 
 /** The Machine's Runtime binding resource, read by setup and the page and watched through the Chat bridge. */
-export function runtimeBindingUrl(origin: string, projectId: string, botId: string): URL {
+export function runtimeBindingUrl(origin: string, accountId: string, botId: string): URL {
     return managementUrl(
         origin,
-        decodeIdentifier(projectId),
+        decodeIdentifier(accountId),
         `/bots/${encodeURIComponent(decodeIdentifier(botId))}/runtime-binding`,
     );
 }
 
-function managementUrl(origin: string, projectId: Identifier, path: string): URL {
-    return new URL(`/morty/api/projects/${encodeURIComponent(projectId)}/management${path}`, origin);
+function managementUrl(origin: string, accountId: Identifier, path: string): URL {
+    return new URL(`/morty/api/accounts/${encodeURIComponent(accountId)}/management${path}`, origin);
 }
 
 export interface ManagementApiOptions {
-    readonly projectId: string;
+    readonly accountId: string;
     readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly origin: string;
@@ -48,21 +48,21 @@ export class ManagementApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #origin: string;
-    readonly #projectId: Identifier;
+    readonly #accountId: Identifier;
     readonly #credentialRejected: (() => void) | undefined;
     constructor(options: ManagementApiOptions) {
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#origin = options.origin;
-        this.#projectId = decodeIdentifier(options.projectId);
+        this.#accountId = decodeIdentifier(options.accountId);
         this.#credentialRejected = options.credentialRejected;
     }
 
     readonly readProject = async (signal: AbortSignal): Promise<ManagedProject | null> =>
         v.parse(
-            v.object({ project: v.nullable(projectSchema) }),
-            await this.#request("/project", "GET", undefined, signal),
-        ).project;
+            v.object({ account: v.nullable(projectSchema) }),
+            await this.#request("/account", "GET", undefined, signal),
+        ).account;
 
     readonly readBot = async (botId: string, signal: AbortSignal): Promise<ManagedBotDetail> =>
         v.parse(
@@ -99,7 +99,7 @@ export class ManagementApi {
             throw new CloudApiError("UNAUTHENTICATED", "Sign in to continue.");
         }
         const response = await this.#fetchRequest(
-            new Request(managementUrl(this.#origin, this.#projectId, path), {
+            new Request(managementUrl(this.#origin, this.#accountId, path), {
                 method,
                 signal,
                 headers: {

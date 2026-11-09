@@ -2,9 +2,9 @@ import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import {
     type CredentialRow,
     CredentialRowSchema,
+    type PlatformAccountScopeRow,
+    PlatformAccountScopeRowSchema,
     type PlatformAuditRecord,
-    type PlatformProjectScopeRow,
-    PlatformProjectScopeRowSchema,
     type ProjectRow,
     ProjectRowSchema,
 } from "../entity/platform-records.ts";
@@ -17,7 +17,7 @@ import { projectServed } from "./platform-lifecycle.ts";
 
 // Row selections keep the SQL column names that the entity schemas decode.
 const projectRow = {
-    project_id: machineAccount.projectId,
+    project_id: machineAccount.accountId,
     app_id: machineAccount.appId,
     display_name: machineAccount.displayName,
     client_reference: machineAccount.clientReference,
@@ -68,24 +68,24 @@ export class PlatformControlPlaneStorage {
         return decodeOptionalStorageRecord(ProjectRowSchema, rows[0] ?? null);
     };
 
-    readonly readActiveProjectScope = async (
-        projectId: string,
+    readonly readActiveAccountScope = async (
+        accountId: string,
         signal: AbortSignal,
-    ): Promise<PlatformProjectScopeRow | null> => {
+    ): Promise<PlatformAccountScopeRow | null> => {
         const rows = await waitForD1(
             () =>
                 platformDrizzle(this.#database)
                     .select({
                         app_id: machineAccount.appId,
-                        project_id: machineAccount.projectId,
+                        project_id: machineAccount.accountId,
                         lifecycle: machineAccount.lifecycle,
                     })
                     .from(machineAccount)
-                    .where(and(eq(machineAccount.projectId, projectId), projectServed))
+                    .where(and(eq(machineAccount.accountId, accountId), projectServed))
                     .limit(1),
             signal,
         );
-        return decodeOptionalStorageRecord(PlatformProjectScopeRowSchema, rows[0] ?? null);
+        return decodeOptionalStorageRecord(PlatformAccountScopeRowSchema, rows[0] ?? null);
     };
 
     /**
@@ -93,7 +93,7 @@ export class PlatformControlPlaneStorage {
      * and overlapping revocations converge. Returns the Project's latest revocation time.
      */
     readonly recordSessionAccessRevocation = async (
-        projectId: string,
+        accountId: string,
         revokedAt: number,
         signal: AbortSignal,
     ): Promise<number> => {
@@ -101,9 +101,9 @@ export class PlatformControlPlaneStorage {
             () =>
                 platformDrizzle(this.#database)
                     .insert(machineAccessRevocation)
-                    .values({ projectId, revokedAt })
+                    .values({ accountId, revokedAt })
                     .onConflictDoUpdate({
-                        target: machineAccessRevocation.projectId,
+                        target: machineAccessRevocation.accountId,
                         set: {
                             revokedAt: sql`max(${machineAccessRevocation.revokedAt}, excluded.revoked_at)`,
                         },
@@ -119,13 +119,13 @@ export class PlatformControlPlaneStorage {
     };
 
     /** The latest time the Project revoked its Session credentials, or null when it never did. */
-    readonly readSessionAccessRevocation = async (projectId: string, signal: AbortSignal): Promise<number | null> => {
+    readonly readSessionAccessRevocation = async (accountId: string, signal: AbortSignal): Promise<number | null> => {
         const rows = await waitForD1(
             () =>
                 platformDrizzle(this.#database)
                     .select({ revokedAt: machineAccessRevocation.revokedAt })
                     .from(machineAccessRevocation)
-                    .where(eq(machineAccessRevocation.projectId, projectId))
+                    .where(eq(machineAccessRevocation.accountId, accountId))
                     .limit(1),
             signal,
         );
@@ -141,14 +141,14 @@ export class PlatformControlPlaneStorage {
         const rows = await waitForD1(
             () =>
                 platformDrizzle(this.#database)
-                    .select({ projectId: machineAccountGrant.projectId })
+                    .select({ accountId: machineAccountGrant.accountId })
                     .from(machineAccountGrant)
                     .where(eq(machineAccountGrant.credentialId, credentialId))
-                    .orderBy(asc(machineAccountGrant.projectId)),
+                    .orderBy(asc(machineAccountGrant.accountId)),
             signal,
         );
-        const scope = new Set(rows.map((row) => row.projectId));
-        return candidates.filter((projectId) => scope.has(projectId));
+        const scope = new Set(rows.map((row) => row.accountId));
+        return candidates.filter((accountId) => scope.has(accountId));
     };
 
     readonly readCredentialByPublicId = async (
@@ -168,20 +168,20 @@ export class PlatformControlPlaneStorage {
         return decodeOptionalStorageRecord(CredentialRowSchema, rows[0] ?? null);
     };
 
-    readonly listActiveProjectIds = async (appId: string, signal: AbortSignal): Promise<readonly string[]> => {
+    readonly listActiveAccountIds = async (appId: string, signal: AbortSignal): Promise<readonly string[]> => {
         const rows = await waitForD1(
             () =>
                 platformDrizzle(this.#database)
-                    .select({ projectId: machineAccount.projectId })
+                    .select({ accountId: machineAccount.accountId })
                     .from(machineAccount)
                     .where(and(eq(machineAccount.appId, appId), projectServed)),
             signal,
         );
-        return rows.map((row) => row.projectId);
+        return rows.map((row) => row.accountId);
     };
 
     readonly recordAudit = async (audit: PlatformAuditRecord, signal: AbortSignal): Promise<void> => {
-        await this.#projects.forProject(audit.projectId).recordAudit(audit, signal);
+        await this.#projects.forProject(audit.accountId).recordAudit(audit, signal);
     };
 
     readonly registerMachineAccount = async (
@@ -195,7 +195,7 @@ export class PlatformControlPlaneStorage {
             .select(
                 database
                     .select({
-                        projectId: sql<string>`${project.project_id}`.as("projectId"),
+                        accountId: sql<string>`${project.project_id}`.as("accountId"),
                         appId: serviceCredential.appId,
                         displayName: sql<string>`${project.display_name}`.as("displayName"),
                         clientReference: sql<string>`${project.client_reference}`.as("clientReference"),

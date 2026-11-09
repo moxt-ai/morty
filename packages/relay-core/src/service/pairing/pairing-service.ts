@@ -36,35 +36,35 @@ export class PairingService {
     };
 
     readonly createProjectRuntimePairing = (
-        projectId: string,
+        accountId: string,
         token: string,
         idempotencyKey: string,
         signal: AbortSignal,
-    ) => this.#pairings.createProjectRuntimePairing(projectId, token, idempotencyKey, signal);
+    ) => this.#pairings.createProjectRuntimePairing(accountId, token, idempotencyKey, signal);
 
     readonly createBrowserCredential = (
-        projectId: string,
+        accountId: string,
         token: string,
         lifetimeMilliseconds: number,
         signal: AbortSignal,
-    ) => this.#pairings.createBrowserCredential(projectId, token, lifetimeMilliseconds, signal);
+    ) => this.#pairings.createBrowserCredential(accountId, token, lifetimeMilliseconds, signal);
 
-    readonly revokeBrowserCredential = (projectId: string, credentialId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.revokeBrowserCredential(projectId, credentialId, token, signal);
+    readonly revokeBrowserCredential = (accountId: string, credentialId: string, token: string, signal: AbortSignal) =>
+        this.#pairings.revokeBrowserCredential(accountId, credentialId, token, signal);
 
-    readonly probeProject = async (projectId: string, token: string, signal: AbortSignal): Promise<void> => {
-        await this.#pairings.authorizeProject(projectId, token, ProjectPermission.RuntimeRead, signal);
+    readonly probeProject = async (accountId: string, token: string, signal: AbortSignal): Promise<void> => {
+        await this.#pairings.authorizeProject(accountId, token, ProjectPermission.RuntimeRead, signal);
     };
 
-    readonly listProjectRuntimes = async (projectId: string, token: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectRuntimes(projectId, token, signal);
+    readonly listProjectRuntimes = async (accountId: string, token: string, signal: AbortSignal) => {
+        const channels = await this.#pairings.listProjectRuntimes(accountId, token, signal);
         return await Promise.all(
             channels.map(
                 async (channel) =>
                     new RuntimeDescriptor(
                         channel,
                         await this.#channels.readRuntimeStatus(
-                            new VerifiedChannelAccess(channel.channelId, channel.runtimeId, channel.projectId, []),
+                            new VerifiedChannelAccess(channel.channelId, channel.runtimeId, channel.accountId, []),
                             signal,
                         ),
                     ),
@@ -72,12 +72,12 @@ export class PairingService {
         );
     };
 
-    readonly getRuntimeAgents = async (projectId: string, runtimeId: string, token: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectRuntimes(projectId, token, signal);
+    readonly getRuntimeAgents = async (accountId: string, runtimeId: string, token: string, signal: AbortSignal) => {
+        const channels = await this.#pairings.listProjectRuntimes(accountId, token, signal);
         const channel = channels.find((candidate) => candidate.runtimeId === runtimeId);
         if (channel === undefined) {
             // A revoked Runtime is not listed; saying so lets its Machine be paired again instead of waiting for it.
-            if (await this.#pairings.isProjectRuntimeRevoked(projectId, runtimeId, token, signal)) {
+            if (await this.#pairings.isProjectRuntimeRevoked(accountId, runtimeId, token, signal)) {
                 throw new PairingDirectoryError("runtime_revoked", "The Runtime has been revoked");
             }
             throw new PairingDirectoryError(
@@ -88,33 +88,33 @@ export class PairingService {
         return new RuntimeDescriptor(
             channel,
             await this.#channels.readRuntimeStatus(
-                new VerifiedChannelAccess(channel.channelId, channel.runtimeId, channel.projectId, []),
+                new VerifiedChannelAccess(channel.channelId, channel.runtimeId, channel.accountId, []),
                 signal,
             ),
         );
     };
 
     readonly forkNativeSession = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => {
-        const access = await this.#pairings.authorizeProject(projectId, token, ProjectPermission.SessionWrite, signal);
+        const access = await this.#pairings.authorizeProject(accountId, token, ProjectPermission.SessionWrite, signal);
         return await this.#operations().forkNativeSession(access.scope, runtimeId, operationId, input, signal);
     };
 
     readonly requestControl = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         command: RuntimeControlCommand,
         signal: AbortSignal,
     ) =>
         await this.requestOperationControl(
-            projectId,
+            accountId,
             runtimeId,
             token,
             command,
@@ -124,19 +124,19 @@ export class PairingService {
 
     /** Runs one command of an operation that needs `permission`, which may be the operation's rather than the command's. */
     readonly requestOperationControl = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         command: RuntimeControlCommand,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => {
-        const access = await this.#pairings.authorizeProject(projectId, token, permission, signal);
-        return await this.#operations().requestProjectScopeControl(access.scope, runtimeId, command, signal);
+        const access = await this.#pairings.authorizeProject(accountId, token, permission, signal);
+        return await this.#operations().requestAccountScopeControl(access.scope, runtimeId, command, signal);
     };
 
     readonly readRuntimeDiagnostics = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,
@@ -145,63 +145,63 @@ export class PairingService {
             JSON.stringify({ kind: "runtime.diagnostics.read", requestId: crypto.randomUUID() }),
         );
         const access = await this.#pairings.authorizeProject(
-            projectId,
+            accountId,
             token,
             runtimeControlPermission(command),
             signal,
         );
-        return await this.#operations().requestProjectScopeControl(access.scope, runtimeId, command, signal);
+        return await this.#operations().requestAccountScopeControl(access.scope, runtimeId, command, signal);
     };
 
     readonly measureRuntimeLatency = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,
     ): Promise<number> => {
         const command: RuntimeControlCommand = { kind: "runtime.ping", requestId: `ping_${crypto.randomUUID()}` };
         const access = await this.#pairings.authorizeProject(
-            projectId,
+            accountId,
             token,
             runtimeControlPermission(command),
             signal,
         );
         const started = performance.now();
-        await this.#operations().requestProjectScopeControl(access.scope, runtimeId, command, signal);
+        await this.#operations().requestAccountScopeControl(access.scope, runtimeId, command, signal);
         return Math.max(0, Math.round(performance.now() - started));
     };
 
     readonly listWorkspace = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         command: WorkspaceListCommand,
         signal: AbortSignal,
     ) => {
-        const access = await this.#pairings.authorizeProject(projectId, token, ProjectPermission.RuntimeRead, signal);
+        const access = await this.#pairings.authorizeProject(accountId, token, ProjectPermission.RuntimeRead, signal);
         return await this.#operations().requestWorkspace(access.scope, runtimeId, command, signal);
     };
 
     readonly discoverAgentSettings = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         command: AgentSettingsDiscoverCommand,
         signal: AbortSignal,
     ) => {
-        const runtimes = await this.#pairings.listProjectRuntimes(projectId, token, signal);
+        const runtimes = await this.#pairings.listProjectRuntimes(accountId, token, signal);
         if (!runtimes.some((candidate) => candidate.runtimeId === runtimeId)) {
             throw new PairingDirectoryError(
                 "runtime_access_denied",
                 "The project credential cannot access this Runtime",
             );
         }
-        const access = await this.#pairings.authorizeProject(projectId, token, ProjectPermission.RuntimeRead, signal);
+        const access = await this.#pairings.authorizeProject(accountId, token, ProjectPermission.RuntimeRead, signal);
         return await this.#operations().requestAgentSettings(access.scope, runtimeId, command, signal);
     };
 
-    readonly readProjectRuntimePairing = (projectId: string, pairingId: string, token: string, signal: AbortSignal) =>
-        this.#pairings.readProjectRuntimePairing(projectId, pairingId, token, signal);
+    readonly readProjectRuntimePairing = (accountId: string, pairingId: string, token: string, signal: AbortSignal) =>
+        this.#pairings.readProjectRuntimePairing(accountId, pairingId, token, signal);
 
     readonly redeemRuntimePairing: PairingOperations["redeemRuntimePairing"] = async (
         pairingId,
@@ -213,19 +213,19 @@ export class PairingService {
     ) => await this.#pairings.redeemRuntimePairing(pairingId, pairingCode, machineName, workspaceName, agents, signal);
 
     readonly authorizeProjectRuntimeHost = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,
-    ) => await this.#pairings.authorizeProjectRuntimeHost(projectId, runtimeId, token, signal);
+    ) => await this.#pairings.authorizeProjectRuntimeHost(accountId, runtimeId, token, signal);
 
     readonly revokeProjectRuntime = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         token: string,
         signal: AbortSignal,
     ): Promise<void> => {
-        const revoked = await this.#pairings.revokeProjectRuntime(projectId, runtimeId, token, signal);
+        const revoked = await this.#pairings.revokeProjectRuntime(accountId, runtimeId, token, signal);
         try {
             await this.#channels.disconnectRuntime(revoked.access, signal);
         } catch (cause) {

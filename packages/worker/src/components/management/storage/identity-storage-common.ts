@@ -4,7 +4,7 @@ import { createDatabase, type Database } from "../../../schema/project-do/databa
 export interface AnonymousIdentity {
     readonly token: string;
     readonly userId: string;
-    readonly projectId: string;
+    readonly accountId: string;
 }
 
 export function requireIdentityDatabase(binding: unknown): Database {

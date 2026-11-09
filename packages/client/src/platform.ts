@@ -94,7 +94,7 @@ export class MortyPlatformProject {
     readonly deletedAt: string;
     readonly displayName: string;
     readonly lifecycle: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly updatedAt: string;
 
     constructor(value: Readonly<Record<string, unknown>>) {
@@ -103,7 +103,7 @@ export class MortyPlatformProject {
         this.deletedAt = timestamp(value, "deletedAt");
         this.displayName = string(value, "displayName", 120);
         this.lifecycle = string(value, "lifecycle", 32);
-        this.projectId = identifier(value, "projectId");
+        this.accountId = identifier(value, "accountId");
         this.updatedAt = timestamp(value, "updatedAt");
     }
 }

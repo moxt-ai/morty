@@ -25,7 +25,7 @@ const runtimePairingSchema = v.object({
     channelId: v.string(),
     pairingCode: v.string(),
     pairingId: v.string(),
-    projectId: v.string(),
+    accountId: v.string(),
     runtimeId: v.string(),
 });
 
@@ -296,7 +296,7 @@ export async function createControlledAgentRuntime(options: {
     readonly behavior: ControlledAgentBehavior;
     readonly credential: string;
     readonly origin: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly server: TestServerApp;
     readonly signal: AbortSignal;
 }) {
@@ -304,7 +304,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/projects/${options.projectId}/runtime-pairings`, {
+                new Request(`${options.origin}/morty/api/v1/accounts/${options.accountId}/runtime-pairings`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,
@@ -347,7 +347,7 @@ export async function createControlledAgentRuntime(options: {
     const client = new MortyClient({
         credentialProvider: new StaticMortyCredentialProvider(options.credential),
         endpoint: options.origin,
-        projectId: pairing.projectId,
+        accountId: pairing.accountId,
         transport: { fetch: async (request: Request) => await options.server.request(request) },
     });
     return {

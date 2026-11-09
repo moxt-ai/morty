@@ -20,7 +20,7 @@ export const sessionAccessTargetMiddleware: MiddlewareHandler<SessionAccessTarge
 ) => {
     context.set("sessionAccessTarget", {
         kind: "session",
-        projectId: validateIdentifier(context.req.param("projectId") ?? "", "project_id"),
+        accountId: validateIdentifier(context.req.param("accountId") ?? "", "project_id"),
         sessionId: validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),
     });
     await next();

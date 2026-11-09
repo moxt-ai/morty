@@ -6,9 +6,9 @@ import { logger } from "../infra/logger.ts";
 function socketLogContext(webSocket: WebSocket) {
     try {
         const identity = new CloudflareChannelSocket(webSocket).identity();
-        const { projectId, runtimeId, role } = identity;
+        const { accountId, runtimeId, role } = identity;
         return {
-            projectId,
+            accountId,
             runtimeId,
             role,
             ...("connectionEpoch" in identity

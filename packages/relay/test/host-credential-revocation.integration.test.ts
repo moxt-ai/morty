@@ -64,8 +64,8 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
             }),
             env,
         );
-    const { projectId } = v.parse(
-        v.object({ projectId: v.string() }),
+    const { accountId } = v.parse(
+        v.object({ accountId: v.string() }),
         await (
             await dashboard("machine-accounts", {
                 displayName: "Repro8 Project",
@@ -75,11 +75,11 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
         ).json(),
     );
     const runtimeId = "repro8-runtime";
-    await registerRuntimeFixture(projectId, runtimeId);
+    await registerRuntimeFixture(accountId, runtimeId);
 
     // The authenticated daemon, through the verified Worker -> Durable Object boundary.
     const daemonResponse = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
-        `https://runtime.internal/projects/${projectId}/daemon`,
+        `https://runtime.internal/accounts/${accountId}/daemon`,
         {
             headers: {
                 Upgrade: "websocket",
@@ -100,7 +100,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
     // A credential in the URL is refused: URLs reach logs and traces that request headers do not.
     const inUrl = await worker.fetch(
         new Request(
-            `${origin}/v1/projects/${projectId}/runtimes/${runtimeId}/host?token=${defaultCredential.credential}`,
+            `${origin}/v1/accounts/${accountId}/runtimes/${runtimeId}/host?token=${defaultCredential.credential}`,
             { headers: { Upgrade: "websocket" } },
         ),
         env,
@@ -109,7 +109,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
 
     // The App's host, through the public route with its AppCredential.
     const opened = await worker.fetch(
-        new Request(`${origin}/v1/projects/${projectId}/runtimes/${runtimeId}/host`, {
+        new Request(`${origin}/v1/accounts/${accountId}/runtimes/${runtimeId}/host`, {
             headers: { authorization: `Bearer ${defaultCredential.credential}`, Upgrade: "websocket" },
         }),
         env,
@@ -127,7 +127,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
 
     // The same credential is refused on HTTP right away.
     const http = await worker.fetch(
-        new Request(`${origin}/v1/projects/${projectId}/runtimes`, {
+        new Request(`${origin}/v1/accounts/${accountId}/runtimes`, {
             headers: { authorization: `Bearer ${defaultCredential.credential}` },
         }),
         env,

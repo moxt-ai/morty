@@ -3,7 +3,7 @@ import { PlatformProjectError } from "../components/management/entity/platform-p
 import { projectRegion } from "../components/management/entity/project-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
-interface ProjectObjectNamespace {
+interface AccountObjectNamespace {
     readonly get: (
         id: unknown,
         options?: { readonly locationHint?: "apac" | "apac-ne" | "apac-se" | "wnam" },
@@ -11,7 +11,7 @@ interface ProjectObjectNamespace {
     readonly idFromName: (name: string) => unknown;
 }
 
-function projectObjects(value: unknown): ProjectObjectNamespace {
+function accountObjects(value: unknown): AccountObjectNamespace {
     const parsed = v.safeParse(durableObjectNamespaceBindingSchema(), value);
     if (!parsed.success) {
         throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
@@ -44,21 +44,21 @@ function projectObjects(value: unknown): ProjectObjectNamespace {
     };
 }
 
-export async function routeProjectObject(
+export async function routeAccountObject(
     request: Request,
     bindings: CloudBindings,
-    projectId: string | null,
+    accountId: string | null,
 ): Promise<Response | null> {
-    if (projectId === null) {
+    if (accountId === null) {
         return null;
     }
-    if (bindings.CHAT_PROJECT_ID !== undefined) {
-        if (bindings.CHAT_PROJECT_ID !== projectId) {
+    if (bindings.CHAT_ACCOUNT_ID !== undefined) {
+        if (bindings.CHAT_ACCOUNT_ID !== accountId) {
             throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
         }
         return null;
     }
-    const stub = projectObject(bindings, projectId);
+    const stub = accountObject(bindings, accountId);
     request.signal.throwIfAborted();
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), 120_000);
@@ -87,7 +87,7 @@ export async function routeProjectObject(
     }
 }
 
-export function projectObject(bindings: CloudBindings, projectId: string) {
-    const namespace = projectObjects(bindings.CHAT_PROJECTS);
-    return namespace.get(namespace.idFromName(projectId), { locationHint: projectRegion(projectId) });
+export function accountObject(bindings: CloudBindings, accountId: string) {
+    const namespace = accountObjects(bindings.CHAT_ACCOUNTS);
+    return namespace.get(namespace.idFromName(accountId), { locationHint: projectRegion(accountId) });
 }

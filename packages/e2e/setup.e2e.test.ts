@@ -61,12 +61,12 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When th
         "setup-reconnect-session",
         undefined,
         undefined,
-        original.identity.projectId,
+        original.identity.accountId,
     );
 
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
     expect(connected.identity.userId).toBe(original.identity.userId);
-    expect(connected.identity.projectId).not.toBe(original.identity.projectId);
+    expect(connected.identity.accountId).not.toBe(original.identity.accountId);
     expect(connected.botId).not.toBe(original.botId);
     const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
@@ -89,13 +89,13 @@ test("Given a browser opened the saved Machine's link, When the user approves re
         "setup-reconnect-session",
         undefined,
         undefined,
-        original.identity.projectId,
+        original.identity.accountId,
     );
 
-    expect(connected.identity.projectId).not.toBe(original.identity.projectId);
+    expect(connected.identity.accountId).not.toBe(original.identity.accountId);
     expect(connected.configuration["replacement"]).toEqual({ kind: "unchanged" });
     const session = await page.request.get(
-        `${runtime.origin}/morty/api/projects/${original.identity.projectId}/session`,
+        `${runtime.origin}/morty/api/accounts/${original.identity.accountId}/session`,
         { headers: { authorization: `Bearer ${String(previousToken)}` } },
     );
     expect(session.status()).toBe(401);

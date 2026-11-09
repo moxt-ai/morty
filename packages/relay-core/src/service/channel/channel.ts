@@ -13,7 +13,7 @@ export class RuntimeDescriptor {
     readonly channelId: string;
     readonly machineName: string;
     readonly online: boolean;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
     readonly workspaceName: string;
 
@@ -22,7 +22,7 @@ export class RuntimeDescriptor {
         this.channelId = channel.channelId;
         this.machineName = channel.machineName;
         this.online = status.online;
-        this.projectId = channel.projectId;
+        this.accountId = channel.accountId;
         this.runtimeId = channel.runtimeId;
         this.workspaceName = channel.workspaceName;
     }

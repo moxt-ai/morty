@@ -2,12 +2,12 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import { accountBootstrap } from "./components/management/entity/account-bootstrap.ts";
 import {
     clientLocationHeader,
     clientLocationOf,
     encodeClientLocation,
 } from "./components/management/entity/client-location.ts";
-import { projectBootstrap } from "./components/management/entity/project-bootstrap.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
@@ -23,13 +23,13 @@ const notFound = (): never => {
 };
 
 async function bootstrapProject(request: Request, bindings: CloudBindings): Promise<Response> {
-    const projectId = bindings.CHAT_PROJECT_ID;
-    if (projectId === undefined) {
+    const accountId = bindings.CHAT_ACCOUNT_ID;
+    if (accountId === undefined) {
         return notFound();
     }
     const input: unknown = await request.json();
-    const parsed = v.parse(projectBootstrap, input);
-    if (parsed.project.projectId !== projectId) {
+    const parsed = v.parse(accountBootstrap, input);
+    if (parsed.account.accountId !== accountId) {
         throw new RequestError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
     }
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
@@ -38,7 +38,7 @@ async function bootstrapProject(request: Request, bindings: CloudBindings): Prom
         JSON.stringify(
             await dependencies.services.management.initializeAnonymousUser(
                 parsed.userId,
-                parsed.project,
+                parsed.account,
                 signal,
                 parsed.origin,
             ),
@@ -72,7 +72,7 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
         }
         return namespace.get(namespace.newUniqueId()).fetch(new Request(context.req.raw, { headers }));
     })
-    .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
+    .post("/__account/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
     .route("/morty/api", cloudRoutes)
     .notFound(notFound);
 

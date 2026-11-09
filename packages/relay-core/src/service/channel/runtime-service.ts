@@ -10,7 +10,7 @@ import {
     SESSION_EVENT_KIND,
 } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
-import { ProjectScope } from "../../entity/do/session.ts";
+import { AccountScope } from "../../entity/do/session.ts";
 import { type HostCredential, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import { logger } from "../../infra/logger.ts";
 import { runtimeCommandPermission } from "../pairing/runtime-control-registry.ts";
@@ -43,7 +43,7 @@ export type RuntimeSocketIdentity =
               readonly signingKeyId: string;
               readonly issuedAt: number;
           } | null;
-          readonly projectId: string;
+          readonly accountId: string;
           readonly runtimeId: string;
           readonly sessionFilter: string;
       }
@@ -51,7 +51,7 @@ export type RuntimeSocketIdentity =
           readonly role: "relay";
           readonly channelId: string;
           readonly runtimeId: string;
-          readonly projectId: string;
+          readonly accountId: string;
       }
     | {
           readonly role: "host";
@@ -60,14 +60,14 @@ export type RuntimeSocketIdentity =
           readonly nativeRequestId?: string;
           readonly sessionFilter?: string;
           readonly runtimeId: string;
-          readonly projectId: string;
+          readonly accountId: string;
       }
     | {
           readonly role: "daemon" | "replaced-daemon";
           readonly connectionEpoch: number;
           readonly connectionId: string;
           readonly runtimeId: string;
-          readonly projectId: string;
+          readonly accountId: string;
       };
 
 export interface RuntimeSocket extends ChannelSocket {
@@ -110,7 +110,7 @@ interface RuntimeContext {
                 signal: AbortSignal,
             ) => Promise<"granted" | "revoked">;
         };
-        readonly channel: (runtimeId: string, scope: ProjectScope) => ChannelActor;
+        readonly channel: (runtimeId: string, scope: AccountScope) => ChannelActor;
     };
     readonly gateways: {
         readonly peers: RuntimePeers;
@@ -143,7 +143,7 @@ export class RuntimeService {
     #acceptTail: Promise<void> = Promise.resolve();
     readonly #accepting = new Set<{
         readonly runtimeId: string;
-        readonly scope: ProjectScope;
+        readonly scope: AccountScope;
         readonly controller: AbortController;
     }>();
 
@@ -151,7 +151,7 @@ export class RuntimeService {
         this.#cx = cx;
     }
 
-    readonly acceptDaemon = (runtimeId: string, scope: ProjectScope, signal: AbortSignal) =>
+    readonly acceptDaemon = (runtimeId: string, scope: AccountScope, signal: AbortSignal) =>
         this.admit(runtimeId, scope, signal, (admission) => {
             const operation = this.#acceptTail.then(() => this.acceptDaemonSocket(runtimeId, scope, admission));
             this.#acceptTail = operation.then(
@@ -169,7 +169,7 @@ export class RuntimeService {
      */
     private readonly admit = async <T>(
         runtimeId: string,
-        scope: ProjectScope,
+        scope: AccountScope,
         signal: AbortSignal,
         accept: (admission: AbortSignal) => Promise<T>,
     ): Promise<T | { readonly kind: "revoked" }> => {
@@ -177,7 +177,7 @@ export class RuntimeService {
         this.#accepting.add(pending);
         try {
             const admission = AbortSignal.any([signal, pending.controller.signal]);
-            const runtime = { projectId: scope.projectId, runtimeId };
+            const runtime = { accountId: scope.accountId, runtimeId };
             if (!(await this.#cx.services.credentials.isRuntimeActive(runtime, admission))) {
                 return { kind: "revoked" };
             }
@@ -195,7 +195,7 @@ export class RuntimeService {
 
     private readonly acceptDaemonSocket = (
         runtimeId: string,
-        scope: ProjectScope,
+        scope: AccountScope,
         signal: AbortSignal,
     ): RuntimeAcceptance => {
         // Nothing below awaits, so this admission check and accept + connect are one step.
@@ -208,7 +208,7 @@ export class RuntimeService {
             .sockets()
             .filter(({ identity, socket }) => identity.role === "daemon" && socket.isOpen());
         for (const attachment of this.#attachments) {
-            if (attachment.identity.runtimeId === runtimeId && attachment.identity.projectId === scope.projectId) {
+            if (attachment.identity.runtimeId === runtimeId && attachment.identity.accountId === scope.accountId) {
                 attachment.controller.abort(new DOMException("Runtime connection replaced", "AbortError"));
             }
         }
@@ -218,7 +218,7 @@ export class RuntimeService {
         const identity: DaemonSocketIdentity = {
             ...prepared.identity,
             role: "daemon",
-            projectId: scope.projectId,
+            accountId: scope.accountId,
         };
         const accepted = this.#cx.gateways.peers.accept(identity);
         this.#cx.services.connections.connected(prepared.identity, Date.now());
@@ -230,7 +230,7 @@ export class RuntimeService {
     private readonly deferDaemonAttachment = (
         identity: DaemonSocketIdentity,
         socket: RuntimeSocket,
-        scope: ProjectScope,
+        scope: AccountScope,
         replaced: boolean,
     ): void => {
         const attachment = { controller: new AbortController(), identity };
@@ -274,7 +274,7 @@ export class RuntimeService {
         identity: Extract<RuntimeSocketIdentity, { readonly role: "host" | "relay" }>,
         signal: AbortSignal,
     ): Promise<RuntimeAdmission> => {
-        const scope = new ProjectScope(identity.projectId);
+        const scope = new AccountScope(identity.accountId);
         return this.admit(identity.runtimeId, scope, signal, async (admission): Promise<RuntimeAdmission> => {
             admission.throwIfAborted();
             const accepted = this.#cx.gateways.peers.accept(identity);
@@ -287,11 +287,11 @@ export class RuntimeService {
      * Ends the live Session views opened with a Session credential the Project no longer honors: one issued no later
      * than `revokedThrough`. Views opened with App access are unaffected.
      */
-    readonly revokeSessionViewers = (scope: ProjectScope, revokedThrough: number): void => {
+    readonly revokeSessionViewers = (scope: AccountScope, revokedThrough: number): void => {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
             if (
                 identity.role === "viewer" &&
-                identity.projectId === scope.projectId &&
+                identity.accountId === scope.accountId &&
                 identity.credential !== null &&
                 identity.credential.issuedAt <= revokedThrough
             ) {
@@ -300,7 +300,7 @@ export class RuntimeService {
         }
     };
 
-    readonly revokeHost = (channelId: string, credentialId: string, runtimeId: string, scope: ProjectScope): void => {
+    readonly revokeHost = (channelId: string, credentialId: string, runtimeId: string, scope: AccountScope): void => {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
             if (
                 identity.role === "host" &&
@@ -308,7 +308,7 @@ export class RuntimeService {
                 identity.credential.kind === "channel" &&
                 identity.credential.credentialId === credentialId &&
                 identity.runtimeId === runtimeId &&
-                identity.projectId === scope.projectId
+                identity.accountId === scope.accountId
             ) {
                 socket.close(1008, "Channel access revoked");
             }
@@ -318,7 +318,7 @@ export class RuntimeService {
     readonly revokeRuntime = async (
         channelId: string,
         runtimeId: string,
-        scope: ProjectScope,
+        scope: AccountScope,
         signal: AbortSignal,
     ): Promise<void> => {
         signal.throwIfAborted();
@@ -331,17 +331,17 @@ export class RuntimeService {
             this.#cx.services.connections.disconnected(current, Date.now());
         }
         for (const accepting of this.#accepting) {
-            if (accepting.runtimeId === runtimeId && accepting.scope.projectId === scope.projectId) {
+            if (accepting.runtimeId === runtimeId && accepting.scope.accountId === scope.accountId) {
                 accepting.controller.abort(new DOMException("Runtime revoked", "AbortError"));
             }
         }
         for (const attachment of this.#attachments) {
-            if (attachment.identity.runtimeId === runtimeId && attachment.identity.projectId === scope.projectId) {
+            if (attachment.identity.runtimeId === runtimeId && attachment.identity.accountId === scope.accountId) {
                 attachment.controller.abort(new DOMException("Runtime revoked", "AbortError"));
             }
         }
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
-            if (identity.runtimeId !== runtimeId || identity.projectId !== scope.projectId) {
+            if (identity.runtimeId !== runtimeId || identity.accountId !== scope.accountId) {
                 continue;
             }
             if (identity.role === "daemon") {
@@ -393,7 +393,7 @@ export class RuntimeService {
 
     readonly attachDaemon = async (
         runtimeId: string,
-        scope: ProjectScope,
+        scope: AccountScope,
         replaced: boolean,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -401,12 +401,12 @@ export class RuntimeService {
         await channel.attachDaemon(replaced, signal);
     };
 
-    readonly attachHost = (runtimeId: string, scope: ProjectScope, socket: ChannelSocket, signal: AbortSignal) =>
+    readonly attachHost = (runtimeId: string, scope: AccountScope, socket: ChannelSocket, signal: AbortSignal) =>
         this.channel(runtimeId, scope).attachHost(socket, signal);
 
     /** The public HTTP handler already authorized this operation; no host credential is involved. */
     readonly receiveOperation = async (
-        scope: ProjectScope,
+        scope: AccountScope,
         runtimeId: string,
         socket: ChannelSocket,
         message: unknown,
@@ -425,7 +425,7 @@ export class RuntimeService {
                 );
             if (
                 daemon !== undefined &&
-                (daemon.identity.projectId !== scope.projectId || daemon.identity.runtimeId !== runtimeId)
+                (daemon.identity.accountId !== scope.accountId || daemon.identity.runtimeId !== runtimeId)
             ) {
                 throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
             }
@@ -447,7 +447,7 @@ export class RuntimeService {
         signal: AbortSignal,
     ): Promise<void> => {
         signal.throwIfAborted();
-        const scope = new ProjectScope(identity.projectId);
+        const scope = new AccountScope(identity.accountId);
         if (identity.role === "host" || identity.role === "relay" || identity.role === "viewer") {
             // Closing first makes this command see the Runtime as offline and fail at once; detaching
             // afterwards releases commands already sent into the silent connection.
@@ -598,9 +598,9 @@ export class RuntimeService {
         return ["runtime"];
     };
 
-    private readonly channel = (runtimeId: string, scope: ProjectScope): ChannelActor => {
+    private readonly channel = (runtimeId: string, scope: AccountScope): ChannelActor => {
         const key = JSON.stringify({
-            projectId: scope.projectId,
+            accountId: scope.accountId,
             runtimeId,
         });
         const existing = this.#channels.get(key);
@@ -633,7 +633,7 @@ export class RuntimeService {
             return;
         }
         this.#cx.services.connections.disconnected(identity, Date.now());
-        await this.channel(identity.runtimeId, new ProjectScope(identity.projectId)).detachDaemon(socket, signal);
+        await this.channel(identity.runtimeId, new AccountScope(identity.accountId)).detachDaemon(socket, signal);
     };
 
     private readonly closeSilentDaemons = (): readonly RuntimePeer[] => {

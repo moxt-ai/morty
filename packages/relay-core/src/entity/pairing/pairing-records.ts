@@ -23,7 +23,7 @@ export interface AuthorizedChannelRow extends PairingScopeRow {
 export interface ChannelCredentialIdentity {
     readonly channelId: string;
     readonly credentialId: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
 }
 
@@ -73,7 +73,7 @@ export interface RuntimePairingRow extends PairingScopeRow {
 
 export interface RuntimePairingAudit {
     readonly auditId: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly pairingId: string;
     readonly runtimeId: string;
     readonly actorKind: string;

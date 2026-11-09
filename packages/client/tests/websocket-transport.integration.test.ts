@@ -10,7 +10,7 @@ const sessionClaims = btoa(
         issuedAtEpochMilliseconds: 0,
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
-        projectId: "project-1",
+        accountId: "project-1",
         runtimeId: "runtime-1",
         sessionId: "session-1",
     }),
@@ -22,10 +22,10 @@ const sessionCredential = `msession_${"a".repeat(22)}_${sessionClaims}_${"A".rep
 
 function runtimeRequest(address: string, init?: RequestInit): Request {
     const url = new URL(address);
-    if (!url.pathname.startsWith("/morty/api/v1/projects/")) {
-        url.pathname = `/morty/api/v1/projects/project-1/runtimes/runtime-1${url.pathname}`;
+    if (!url.pathname.startsWith("/morty/api/v1/accounts/")) {
+        url.pathname = `/morty/api/v1/accounts/project-1/runtimes/runtime-1${url.pathname}`;
     } else {
-        url.pathname = url.pathname.replace("/projects/project/", "/projects/project-1/");
+        url.pathname = url.pathname.replace("/accounts/project/", "/accounts/project-1/");
     }
     const headers = new Headers(init?.headers);
     headers.set("authorization", `Bearer ${sessionCredential}`);
@@ -163,15 +163,15 @@ it("Given a browser bound to one Runtime, When it opens another Session or addre
     try {
         await transport.fetch(runtimeRequest("https://relay.example.test/first"));
         const events = await transport.openSessionLiveEvents(
-            runtimeRequest("https://relay.example.test/morty/api/v1/projects/project-1/sessions/session-2/events-v2"),
+            runtimeRequest("https://relay.example.test/morty/api/v1/accounts/project-1/sessions/session-2/events-v2"),
         );
         expect(connector.sockets).toHaveLength(1);
         expect(connector.sockets[0]?.url).toBe(
-            "wss://relay.example.test/morty/api/v1/projects/project-1/runtimes/runtime-1/transport",
+            "wss://relay.example.test/morty/api/v1/accounts/project-1/runtimes/runtime-1/transport",
         );
         await expect(
             transport.fetch(
-                runtimeRequest("https://relay.example.test/morty/api/v1/projects/project-1/runtimes/runtime-2/agents"),
+                runtimeRequest("https://relay.example.test/morty/api/v1/accounts/project-1/runtimes/runtime-2/agents"),
             ),
         ).rejects.toThrow("cannot connect to multiple Runtimes");
         expect((await transport.fetch(runtimeRequest("https://relay.example.test/after-rejection"))).status).toBe(204);
@@ -246,7 +246,7 @@ it("Given a Unicode JSON request and response, When the browser uses the WebSock
     const requestBody = JSON.stringify({ prompt: "show café ☕" });
 
     const response = await transport.fetch(
-        runtimeRequest("https://relay.example.test/morty/api/v1/projects/project/sessions/session-1/turns", {
+        runtimeRequest("https://relay.example.test/morty/api/v1/accounts/project/sessions/session-1/turns", {
             body: requestBody,
             headers: { "content-type": "application/json" },
             method: "POST",
@@ -293,7 +293,7 @@ it("Given a replacement WebSocket carries a live subscription, When the old sock
         throw new Error("Expected the replacement WebSocket connection");
     }
     const events = await transport.openSessionLiveEvents(
-        runtimeRequest("https://relay.example.test/morty/api/v1/projects/project/sessions/session/events-v2"),
+        runtimeRequest("https://relay.example.test/morty/api/v1/accounts/project/sessions/session/events-v2"),
     );
     const subscriptionId = second.subscriptionIds[0];
     if (subscriptionId === undefined) {
@@ -330,7 +330,7 @@ it("Given an idle Session stream and a brief network interruption, When connecti
     const client = new MortyClient({
         credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
         endpoint: "https://relay.example.test",
-        projectId: "project-1",
+        accountId: "project-1",
         transport,
     });
     const reconciliations: string[] = [];
@@ -369,7 +369,7 @@ it("Given a live Session stream cannot reconnect, When its retry budget expires,
         credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
         endpoint: "https://relay.example.test",
         maxStreamReconnectAttempts: 1,
-        projectId: "project-1",
+        accountId: "project-1",
         transport,
     });
     const controller = new AbortController();
@@ -397,7 +397,7 @@ it("Given caller-owned Session recovery, When its live stream disconnects, Then 
         credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
         endpoint: "https://relay.example.test",
         maxStreamReconnectAttempts: 0,
-        projectId: "project-1",
+        accountId: "project-1",
         transport,
     });
     try {
@@ -430,7 +430,7 @@ it("Given caller-owned Session recovery, When its live stream receives nothing p
         credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
         endpoint: "https://relay.example.test",
         maxStreamReconnectAttempts: 0,
-        projectId: "project-1",
+        accountId: "project-1",
         transport,
     });
     try {

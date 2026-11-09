@@ -302,7 +302,7 @@ export class WsTransport implements MortyHttpTransport {
             throw new MortyValidationError("A WebSocket subscription requires a Runtime target");
         }
         const endpoint = new URL(
-            `${MORTY_API_PREFIX}/v1/projects/${target.projectId}/runtimes/${target.runtimeId}/transport`,
+            `${MORTY_API_PREFIX}/v1/accounts/${target.accountId}/runtimes/${target.runtimeId}/transport`,
             request.url,
         );
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";

@@ -14,7 +14,7 @@ export class ChannelCredentialStorage {
     }
 
     readonly readActiveRuntime = async (
-        identity: { readonly projectId: string; readonly runtimeId: string },
+        identity: { readonly accountId: string; readonly runtimeId: string },
         signal: AbortSignal,
     ): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
@@ -25,7 +25,7 @@ export class ChannelCredentialStorage {
             .where(
                 and(
                     eq(runtimeIdentity.runtimeId, identity.runtimeId),
-                    eq(runtimeIdentity.projectId, identity.projectId),
+                    eq(runtimeIdentity.accountId, identity.accountId),
                     isNull(runtimeIdentity.revokedAt),
                 ),
             )
@@ -44,7 +44,7 @@ export class ChannelCredentialStorage {
                     eq(channelHostCredential.credentialId, identity.credentialId),
                     eq(channelHostCredential.channelId, identity.channelId),
                     eq(runtimeIdentity.runtimeId, identity.runtimeId),
-                    eq(runtimeIdentity.projectId, identity.projectId),
+                    eq(runtimeIdentity.accountId, identity.accountId),
                     hostCredentialValid(database),
                 ),
             )

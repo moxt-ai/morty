@@ -8,13 +8,13 @@ export const runtimeIdentity = sqliteTable(
     {
         runtimeId: text("runtime_id").primaryKey(),
         channelId: text("channel_id").notNull().unique(),
-        projectId: text("project_id").notNull(),
+        accountId: text("project_id").notNull(),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
         revokedByOwnerCredentialId: text("revoked_by_owner_credential_id"),
     },
     (table) => [
-        index("runtimes_project_listing").on(table.projectId, table.createdAt, table.channelId),
+        index("runtimes_project_listing").on(table.accountId, table.createdAt, table.channelId),
         check(
             "runtimes_revoked_at_check",
             sql`${table.revokedAt} is null or (typeof(${table.revokedAt}) = 'integer' and ${table.revokedAt} >= 0)`,

@@ -1,28 +1,28 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { logger } from "@morty-build/relay-core/logging";
-import type { ProjectDO } from "../durable-objects/project-do.ts";
-import { decodePlatformProjectPlacement, projectIdFromPrefixedValue } from "../entity/platform-project-id.ts";
-import { encodeProjectDurableObjectPath } from "../entity/project-durable-object-path.ts";
+import type { AccountDO } from "../durable-objects/account-do.ts";
+import { encodeAccountDurableObjectPath } from "../entity/account-durable-object-path.ts";
+import { accountIdFromPrefixedValue, decodeAccountPlacement } from "../entity/machine-account-id.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 
-export interface ProjectWorkerRoutingBindings {
-    readonly PROJECT_RELAY: DurableObjectNamespace<ProjectDO>;
+export interface AccountWorkerRoutingBindings {
+    readonly ACCOUNT_RELAY: DurableObjectNamespace<AccountDO>;
 }
 
-/** A request executing inside the Project Durable Object, beside the Project's own store. */
-export interface ProjectDurableObjectExecutionBindings extends ProjectWorkerRoutingBindings {
-    readonly MORTY_PROJECT_STORE: PlatformProjectStore;
-    readonly MORTY_PROJECT_ID: string;
+/** A request executing inside the Account Durable Object, beside the Project's own store. */
+export interface AccountDurableObjectExecutionBindings extends AccountWorkerRoutingBindings {
+    readonly MORTY_ACCOUNT_STORE: PlatformProjectStore;
+    readonly MORTY_ACCOUNT_ID: string;
 }
 
-export type ProjectDurableObjectRoutingBindings = ProjectWorkerRoutingBindings | ProjectDurableObjectExecutionBindings;
+export type AccountDurableObjectRoutingBindings = AccountWorkerRoutingBindings | AccountDurableObjectExecutionBindings;
 
 function failure(code: string, status: number): Response {
-    return Response.json({ error: { code, message: "Project routing is unavailable" } }, { status });
+    return Response.json({ error: { code, message: "Account routing is unavailable" } }, { status });
 }
 
-function projectIdFromPath(pathname: string): string | null {
-    const prefix = `${MORTY_API_PREFIX}/v1/projects/`;
+function accountIdFromPath(pathname: string): string | null {
+    const prefix = `${MORTY_API_PREFIX}/v1/accounts/`;
     if (!pathname.startsWith(prefix)) {
         return null;
     }
@@ -33,7 +33,7 @@ function projectIdFromPath(pathname: string): string | null {
     }
 }
 
-async function projectIdFromUnscopedRequest(request: Request): Promise<string | null> {
+async function accountIdFromUnscopedRequest(request: Request): Promise<string | null> {
     const pathname = new URL(request.url).pathname;
     for (const segment of pathname.split("/")) {
         let value: string;
@@ -42,16 +42,16 @@ async function projectIdFromUnscopedRequest(request: Request): Promise<string | 
         } catch {
             return "";
         }
-        const projectId = projectIdFromPrefixedValue(value);
-        if (projectId !== null) {
-            return projectId;
+        const accountId = accountIdFromPrefixedValue(value);
+        if (accountId !== null) {
+            return accountId;
         }
     }
     const pairingPrefix = `${MORTY_API_PREFIX}/v1/runtime-pairings/`;
     if (pathname.startsWith(pairingPrefix) && pathname.endsWith("/redeem")) {
         try {
             const pairingId = decodeURIComponent(pathname.slice(pairingPrefix.length, -"/redeem".length));
-            return projectIdFromPrefixedValue(pairingId) ?? "";
+            return accountIdFromPrefixedValue(pairingId) ?? "";
         } catch {
             return "";
         }
@@ -59,31 +59,31 @@ async function projectIdFromUnscopedRequest(request: Request): Promise<string | 
     if (pathname === `${MORTY_API_PREFIX}/v1/runtimes/connect`) {
         const authorization = request.headers.get("authorization") ?? "";
         const token = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-        return projectIdFromPrefixedValue(token) ?? "";
+        return accountIdFromPrefixedValue(token) ?? "";
     }
     const authorization = request.headers.get("authorization") ?? "";
     const bearer = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-    const credentialProject = projectIdFromPrefixedValue(bearer);
+    const credentialProject = accountIdFromPrefixedValue(bearer);
     if (credentialProject !== null) {
         return credentialProject;
     }
     return null;
 }
 
-export async function routeProjectDurableObject(
+export async function routeAccountDurableObject(
     request: Request,
-    bindings: ProjectDurableObjectRoutingBindings,
+    bindings: AccountDurableObjectRoutingBindings,
     allowedOrigins: ReadonlySet<string>,
 ): Promise<Response | null> {
-    if ("MORTY_PROJECT_STORE" in bindings) {
+    if ("MORTY_ACCOUNT_STORE" in bindings) {
         return null;
     }
     const pathname = new URL(request.url).pathname;
     if (pathname === `${MORTY_API_PREFIX}/dashboard` || pathname.startsWith(`${MORTY_API_PREFIX}/dashboard/`)) {
         return null;
     }
-    const projectId = projectIdFromPath(pathname) ?? (await projectIdFromUnscopedRequest(request));
-    if (projectId === null) {
+    const accountId = accountIdFromPath(pathname) ?? (await accountIdFromUnscopedRequest(request));
+    if (accountId === null) {
         return null;
     }
     const origin = request.headers.get("origin");
@@ -93,17 +93,17 @@ export async function routeProjectDurableObject(
             { status: 403 },
         );
     }
-    const placement = decodePlatformProjectPlacement(projectId);
+    const placement = decodeAccountPlacement(accountId);
     if (placement === null) {
         return failure("project_id_invalid", 400);
     }
     request.signal.throwIfAborted();
     const durableObjectUrl = new URL(request.url);
-    durableObjectUrl.pathname = encodeProjectDurableObjectPath(projectId, durableObjectUrl.pathname);
+    durableObjectUrl.pathname = encodeAccountDurableObjectPath(accountId, durableObjectUrl.pathname);
     const body = request.body === null ? undefined : await request.arrayBuffer();
     request.signal.throwIfAborted();
     try {
-        return await bindings.PROJECT_RELAY.getByName(projectId, { locationHint: placement.locationHint }).fetch(
+        return await bindings.ACCOUNT_RELAY.getByName(accountId, { locationHint: placement.locationHint }).fetch(
             durableObjectUrl,
             {
                 method: request.method,
@@ -117,9 +117,9 @@ export async function routeProjectDurableObject(
         logger.error(
             {
                 event: "project_relay_request_failed",
-                durableObjectClass: "ProjectDO",
-                durableObjectId: bindings.PROJECT_RELAY.idFromName(projectId).toString(),
-                projectId,
+                durableObjectClass: "AccountDO",
+                durableObjectId: bindings.ACCOUNT_RELAY.idFromName(accountId).toString(),
+                accountId,
                 cfRay: request.headers.get("cf-ray")?.slice(0, 128) ?? null,
                 method: request.method,
                 path: durableObjectUrl.pathname,

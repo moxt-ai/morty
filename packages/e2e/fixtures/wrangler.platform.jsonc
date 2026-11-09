@@ -7,7 +7,7 @@
     "durable_objects": {
         "bindings": [
             { "name": "RUNTIME_RELAY", "class_name": "RuntimeRelay" },
-            { "name": "PROJECT_RELAY", "class_name": "ProjectDO" }
+            { "name": "ACCOUNT_RELAY", "class_name": "AccountDO" }
         ]
     },
     "migrations": [
@@ -17,7 +17,8 @@
         },
         { "tag": "platform-rename-project-do", "renamed_classes": [{ "from": "ProjectRelay", "to": "ProjectDO" }] },
         { "tag": "platform-websocket-transport", "new_sqlite_classes": ["WebSocketTransport"] },
-        { "tag": "platform-runtime-browser-transport", "deleted_classes": ["WebSocketTransport"] }
+        { "tag": "platform-runtime-browser-transport", "deleted_classes": ["WebSocketTransport"] },
+        { "tag": "rename-machine-account-object", "renamed_classes": [{ "from": "ProjectDO", "to": "AccountDO" }] }
     ],
     "d1_databases": [
         {

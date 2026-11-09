@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import * as v from "valibot";
+import { accountObject } from "../../../gateway/account-object-routing.ts";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
-import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser, optionalBodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
+import { anonymousCreationKey } from "../entity/account-bootstrap.ts";
 import {
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
@@ -11,7 +12,6 @@ import {
 } from "../entity/authentication/credential.ts";
 import { clientLocationHeader, decodeClientLocation } from "../entity/client-location.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -104,10 +104,10 @@ export function createAuthenticationRoutes() {
                 signal,
                 input.locationHint ?? projectLocationHint(request),
             );
-            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
-                new Request("https://project.internal/__project/bootstrap", {
+            const response = await accountObject(context.env.config.bindings, project.accountId).fetch(
+                new Request("https://account.internal/__account/bootstrap", {
                     body: JSON.stringify({
-                        project,
+                        account: project,
                         userId,
                         origin: { kind: "created", creationKey: input.creationKey },
                     }),

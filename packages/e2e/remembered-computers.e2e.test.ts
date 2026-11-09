@@ -135,11 +135,11 @@ for (const viewport of [
         );
         // The sharing code can expire independently of the access it issued.
         const scope = new URL(secondAddress).searchParams.get("identity");
-        const projectId = scope?.split("~")[1];
-        if (projectId === undefined) {
+        const accountId = scope?.split("~")[1];
+        if (accountId === undefined) {
             throw new Error("Expected the computer's project in its address");
         }
-        await page.goto(new URL(`/continue#code=morty_transfer_v1.${projectId}.${"a".repeat(43)}`, secondAddress).href);
+        await page.goto(new URL(`/continue#code=morty_transfer_v1.${accountId}.${"a".repeat(43)}`, secondAddress).href);
         await expectCurrentComputer(page, mobile, "Office MacBook");
         expect(new URL(page.url()).searchParams.get("identity")).toBe(scope);
     });

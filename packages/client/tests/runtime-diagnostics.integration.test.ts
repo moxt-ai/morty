@@ -48,7 +48,7 @@ describe("Runtime diagnostics SDK", () => {
         const client = new MortyClient({
             credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
-            projectId: "project-1",
+            accountId: "project-1",
         });
         const signal = new AbortController().signal;
         try {
@@ -57,7 +57,7 @@ describe("Runtime diagnostics SDK", () => {
             client.close();
         }
         expect(received).toEqual([
-            { method: "GET", path: "/morty/api/v1/projects/project-1/runtimes/runtime-1/diagnostics" },
+            { method: "GET", path: "/morty/api/v1/accounts/project-1/runtimes/runtime-1/diagnostics" },
         ]);
     });
 
@@ -79,7 +79,7 @@ describe("Runtime diagnostics SDK", () => {
         const client = new MortyClient({
             credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
-            projectId: "project-1",
+            accountId: "project-1",
         });
         const signal = new AbortController().signal;
         try {

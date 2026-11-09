@@ -74,7 +74,7 @@ function validateTimestamp(value: string, field: string): string {
 export class MortySessionAccess {
     readonly credential: string;
     readonly credentialId: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly sessionId: string;
     readonly expiresAt: string;
     constructor(value: unknown) {
@@ -84,7 +84,7 @@ export class MortySessionAccess {
             throw invalidResponse("The Session credential is invalid");
         }
         this.credentialId = identifierField(resource, "credentialId");
-        this.projectId = identifierField(resource, "projectId");
+        this.accountId = identifierField(resource, "accountId");
         this.sessionId = identifierField(resource, "sessionId");
         this.expiresAt = validateTimestamp(stringField(resource, "expiresAt", 128), "expiresAt");
     }
@@ -173,13 +173,13 @@ export class MortyRuntimePairingRequest {
 export class MortyBrowserCredential {
     readonly credentialId: string;
     readonly expiresAt: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly token: string;
 
-    constructor(credentialId: string, expiresAt: string, projectId: string, token: string) {
+    constructor(credentialId: string, expiresAt: string, accountId: string, token: string) {
         this.credentialId = credentialId;
         this.expiresAt = expiresAt;
-        this.projectId = projectId;
+        this.accountId = accountId;
         this.token = token;
     }
 }
@@ -189,7 +189,7 @@ export function decodeMortyBrowserCredential(value: unknown): MortyBrowserCreden
     return new MortyBrowserCredential(
         identifierField(credential, "credentialId"),
         validateTimestamp(stringField(credential, "expiresAt", 128), "expiresAt"),
-        identifierField(credential, "projectId"),
+        identifierField(credential, "accountId"),
         stringField(credential, "token", 256),
     );
 }
@@ -252,12 +252,12 @@ export function decodeMortyLinkedChannelDeviceList(value: unknown): readonly Mor
 export class MortyRedeemedChannelCredential {
     readonly channelId: string;
     readonly hostToken: string;
-    readonly projectId: string;
+    readonly accountId: string;
 
-    constructor(channelId: string, hostToken: string, projectId: string) {
+    constructor(channelId: string, hostToken: string, accountId: string) {
         this.channelId = channelId;
         this.hostToken = hostToken;
-        this.projectId = projectId;
+        this.accountId = accountId;
     }
 }
 
@@ -270,7 +270,7 @@ export function decodeMortyRedeemedChannelCredential(value: unknown): MortyRedee
     return new MortyRedeemedChannelCredential(
         identifierField(credential, "channelId"),
         hostToken,
-        identifierField(credential, "projectId"),
+        identifierField(credential, "accountId"),
     );
 }
 
@@ -329,7 +329,7 @@ export class MortyRuntimeDescriptor {
     readonly channelId: string;
     readonly machineName: string;
     readonly online: boolean;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
     readonly workspaceName: string;
 
@@ -338,7 +338,7 @@ export class MortyRuntimeDescriptor {
         channelId: string,
         machineName: string,
         online: boolean,
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         workspaceName: string,
     ) {
@@ -346,7 +346,7 @@ export class MortyRuntimeDescriptor {
         this.channelId = channelId;
         this.machineName = machineName;
         this.online = online;
-        this.projectId = projectId;
+        this.accountId = accountId;
         this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }
@@ -356,7 +356,7 @@ export class MortyChannelDescriptor {
     readonly agents: readonly MortyAgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
     readonly workspaceName: string;
 
@@ -364,14 +364,14 @@ export class MortyChannelDescriptor {
         agents: readonly MortyAgentDescriptor[],
         channelId: string,
         machineName: string,
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         workspaceName: string,
     ) {
         this.agents = agents;
         this.channelId = channelId;
         this.machineName = machineName;
-        this.projectId = projectId;
+        this.accountId = accountId;
         this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }
@@ -383,7 +383,7 @@ export function decodeMortyChannelDescriptor(value: unknown): MortyChannelDescri
         arrayField(channel, "agents", 100).map(decodeAgentDescriptor),
         identifierField(channel, "channelId"),
         stringField(channel, "machineName", 255),
-        identifierField(channel, "projectId"),
+        identifierField(channel, "accountId"),
         identifierField(channel, "runtimeId"),
         stringField(channel, "workspaceName", 255),
     );
@@ -396,7 +396,7 @@ export function decodeRuntimeDescriptor(value: unknown): MortyRuntimeDescriptor 
         identifierField(runtime, "channelId"),
         stringField(runtime, "machineName", 255),
         booleanField(runtime, "online"),
-        identifierField(runtime, "projectId"),
+        identifierField(runtime, "accountId"),
         identifierField(runtime, "runtimeId"),
         stringField(runtime, "workspaceName", 255),
     );
@@ -413,7 +413,7 @@ export class MortyRuntimePairing {
     readonly pairingCode: string;
     readonly pairingId: string;
     readonly pollToken: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
 
     constructor(
@@ -422,7 +422,7 @@ export class MortyRuntimePairing {
         pairingCode: string,
         pairingId: string,
         pollToken: string,
-        projectId: string,
+        accountId: string,
         runtimeId: string,
     ) {
         this.channelId = channelId;
@@ -430,7 +430,7 @@ export class MortyRuntimePairing {
         this.pairingCode = pairingCode;
         this.pairingId = pairingId;
         this.pollToken = pollToken;
-        this.projectId = projectId;
+        this.accountId = accountId;
         this.runtimeId = runtimeId;
     }
 }
@@ -471,7 +471,7 @@ export function decodeMortyRuntimePairing(value: unknown): MortyRuntimePairing {
         pairingCode,
         identifierField(pairing, "pairingId"),
         pollToken,
-        identifierField(pairing, "projectId"),
+        identifierField(pairing, "accountId"),
         identifierField(pairing, "runtimeId"),
     );
 }
@@ -505,7 +505,7 @@ export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
     readonly agents: readonly MortyAgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
-    readonly projectId: string;
+    readonly accountId: string;
     readonly runtimeId: string;
     readonly status = MortyRuntimePairingLifecycle.Paired;
     readonly workspaceName: string;
@@ -514,7 +514,7 @@ export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
         agents: readonly MortyAgentDescriptor[],
         channelId: string,
         machineName: string,
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         workspaceName: string,
     ) {
@@ -522,7 +522,7 @@ export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
         this.agents = agents;
         this.channelId = channelId;
         this.machineName = machineName;
-        this.projectId = projectId;
+        this.accountId = accountId;
         this.runtimeId = runtimeId;
         this.workspaceName = workspaceName;
     }
@@ -559,7 +559,7 @@ export function decodeMortyRuntimePairingStatus(value: unknown): MortyRuntimePai
             arrayField(status, "agents", 100).map(decodeAgentDescriptor),
             identifierField(status, "channelId"),
             stringField(status, "machineName", 255),
-            identifierField(status, "projectId"),
+            identifierField(status, "accountId"),
             identifierField(status, "runtimeId"),
             stringField(status, "workspaceName", 255),
         );

@@ -1,12 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
-import type { ProjectDO } from "../../../relay/src/durable-objects/project-do.ts";
+import type { AccountDO } from "../../../relay/src/durable-objects/account-do.ts";
 import { RuntimeRelay as PlatformRuntimeRelay } from "../../../relay/src/durable-objects/runtime-relay.ts";
 import type { ConfiguredPlatformRelayBindings } from "../../../relay/src/platform-worker.ts";
 import { errorMiddleware, rethrowHonoError } from "../../../relay-core/src/http/middleware/error-middleware.ts";
 import platform from "../../src/platform-worker-entry.ts";
 
-export { ProjectDO } from "../../../relay/src/durable-objects/project-do.ts";
+export { AccountDO } from "../../../relay/src/durable-objects/account-do.ts";
 
 function failure(kind: string): unknown {
     if (kind === "primitive") {
@@ -86,8 +86,8 @@ export class UnavailableProject extends DurableObject {
 
 interface TestBindings extends ConfiguredPlatformRelayBindings {
     readonly RUNTIME_RELAY: DurableObjectNamespace<RuntimeRelay>;
-    // Stands in for PROJECT_RELAY: every request and operation sent to it fails.
-    readonly UNAVAILABLE_PROJECT: DurableObjectNamespace<ProjectDO>;
+    // Stands in for ACCOUNT_RELAY: every request and operation sent to it fails.
+    readonly UNAVAILABLE_PROJECT: DurableObjectNamespace<AccountDO>;
 }
 
 const application = new Hono<{ Bindings: TestBindings }>()
@@ -104,7 +104,7 @@ export default {
             return platform.fetch(
                 request,
                 request.headers.has("x-test-project-failure")
-                    ? { ...environment, PROJECT_RELAY: environment.UNAVAILABLE_PROJECT }
+                    ? { ...environment, ACCOUNT_RELAY: environment.UNAVAILABLE_PROJECT }
                     : environment,
             );
         }

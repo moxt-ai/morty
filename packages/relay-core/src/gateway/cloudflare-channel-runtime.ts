@@ -65,7 +65,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         const response = await this.fetchRuntime(
             access,
             new Request(
-                `https://runtime.internal/projects/${encodeURIComponent(access.projectId)}/host-credentials/revoke`,
+                `https://runtime.internal/accounts/${encodeURIComponent(access.accountId)}/host-credentials/revoke`,
                 {
                     headers,
                     method: "DELETE",
@@ -87,7 +87,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
         const response = await this.fetchRuntime(
             access,
-            new Request(`https://runtime.internal/projects/${encodeURIComponent(access.projectId)}/runtime/revoke`, {
+            new Request(`https://runtime.internal/accounts/${encodeURIComponent(access.accountId)}/runtime/revoke`, {
                 headers,
                 method: "DELETE",
                 signal,
@@ -101,7 +101,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     readonly disconnectSessionViewers = async (
-        projectId: string,
+        accountId: string,
         runtimeId: string,
         revokedThrough: number,
         signal: AbortSignal,
@@ -110,8 +110,8 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         const headers = new Headers();
         headers.set(INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER, String(revokedThrough));
         const response = await this.fetchRuntime(
-            { projectId, runtimeId },
-            new Request(`https://runtime.internal/projects/${encodeURIComponent(projectId)}/session-viewers/revoke`, {
+            { accountId, runtimeId },
+            new Request(`https://runtime.internal/accounts/${encodeURIComponent(accountId)}/session-viewers/revoke`, {
                 headers,
                 method: "DELETE",
                 signal,
@@ -158,13 +158,13 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         headers.set(INTERNAL_CHANNEL_ID_HEADER, access.channelId);
         headers.set(INTERNAL_RUNTIME_ID_HEADER, access.runtimeId);
         const endpoint = new URL(request.url);
-        endpoint.pathname = `/projects/${encodeURIComponent(access.projectId)}${endpoint.pathname}`;
+        endpoint.pathname = `/accounts/${encodeURIComponent(access.accountId)}${endpoint.pathname}`;
         const forwarded = new Request(endpoint, { method: request.method, headers, signal });
         return await this.fetchRuntime(access, forwarded, signal);
     };
 
     private readonly fetchRuntime = async (
-        access: Pick<VerifiedChannelAccess, "projectId" | "runtimeId"> & { readonly channelId?: string },
+        access: Pick<VerifiedChannelAccess, "accountId" | "runtimeId"> & { readonly channelId?: string },
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -180,7 +180,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
                     event: "runtime_relay_request_failed",
                     durableObjectClass: "RuntimeRelay",
                     durableObjectId: objectId.toString(),
-                    projectId: access.projectId,
+                    accountId: access.accountId,
                     channelId: access.channelId,
                     runtimeId: access.runtimeId,
                     err: error,

@@ -179,7 +179,7 @@ export class ChannelActor {
                 reason,
                 skippedCount: this.#skippedCount,
                 runtimeId: this.#runtimeId,
-                projectId: this.#projectId,
+                accountId: this.#accountId,
             },
             "Relay skipped unsupported input",
         );
@@ -187,23 +187,23 @@ export class ChannelActor {
         this.#skippedCount = 0;
     };
     readonly #peers: ChannelPeers;
-    readonly #projectId: string;
+    readonly #accountId: string;
     readonly #runtimeId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
-        readonly config: { readonly projectId: string; readonly runtimeId: string };
+        readonly config: { readonly accountId: string; readonly runtimeId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
             readonly notifications?: SessionStatusNotifications;
         };
     }) {
-        const { projectId, runtimeId } = cx.config;
+        const { accountId, runtimeId } = cx.config;
         const { peers, notifications } = cx.gateways;
         this.#peers = peers;
-        this.#projectId = projectId;
+        this.#accountId = accountId;
         this.#runtimeId = runtimeId;
-        this.#liveEvents = new SessionLiveEventRelay(projectId, runtimeId, peers, notifications);
+        this.#liveEvents = new SessionLiveEventRelay(accountId, runtimeId, peers, notifications);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {
@@ -289,7 +289,7 @@ export class ChannelActor {
             if (kind === SESSION_INFO_UPDATED_KIND) {
                 this.broadcast(
                     this.#peers.hosts(),
-                    JSON.stringify({ ...JSON.parse(wire), projectId: this.#projectId }),
+                    JSON.stringify({ ...JSON.parse(wire), accountId: this.#accountId }),
                     message.sessionId,
                 );
                 return;

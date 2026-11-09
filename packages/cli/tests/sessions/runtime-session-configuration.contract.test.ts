@@ -16,7 +16,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
             cancellation.signal,
         );
         const sessionId = crypto.randomUUID();
-        const runtime = await platform.connectAgent(project.projectId, undefined, new Set([sessionId]));
+        const runtime = await platform.connectAgent(project.accountId, undefined, new Set([sessionId]));
         const ready = await runtime.client.sessions.create(
             {
                 additionalDirectoryIds: [],

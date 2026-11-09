@@ -8,19 +8,19 @@ import {
 /** Unverified claims select a destination only. The destination authorizes the complete request. */
 export function runtimeRequestTarget(
     request: Request,
-): { readonly projectId: string; readonly runtimeId: string } | null {
+): { readonly accountId: string; readonly runtimeId: string } | null {
     const url = new URL(request.url);
-    const prefix = `${MORTY_API_PREFIX}/v1/projects/`;
+    const prefix = `${MORTY_API_PREFIX}/v1/accounts/`;
     if (!url.pathname.startsWith(prefix)) {
         return null;
     }
     const parts = url.pathname.slice(prefix.length).split("/");
-    const projectId = parts[0];
-    if (!isIdentifier(projectId)) {
+    const accountId = parts[0];
+    if (!isIdentifier(accountId)) {
         return null;
     }
     if (parts[1] === "runtimes" && isIdentifier(parts[2])) {
-        return { projectId, runtimeId: parts[2] };
+        return { accountId, runtimeId: parts[2] };
     }
     if (parts[1] !== "sessions" || parts.length < 4 || parts[3] === "access-credentials") {
         return null;
@@ -30,7 +30,7 @@ export function runtimeRequestTarget(
         return null;
     }
     try {
-        return { projectId, runtimeId: decodeSessionAccessCredential(credential).claims.runtimeId };
+        return { accountId, runtimeId: decodeSessionAccessCredential(credential).claims.runtimeId };
     } catch (cause) {
         if (cause instanceof ProtocolMessageError) {
             return null;

@@ -5,16 +5,16 @@ import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 import { platformAuditEvent } from "../schema/project-do/index.ts";
 
 /**
- * A Project's Relay and Platform operations over its own SQLite storage. Only the Project Durable Object
+ * A Project's Relay and Platform operations over its own SQLite storage. Only the Account Durable Object
  * constructs this; everything else reaches these tables through its operations.
  */
 export class SqlitePlatformProjectStore extends SqliteProjectStore implements PlatformProjectStore {
-    readonly #projectId: string;
+    readonly #accountId: string;
     readonly #database: SqlDatabase;
 
-    constructor(projectId: string, database: SqlDatabase) {
-        super(projectId, database);
-        this.#projectId = projectId;
+    constructor(accountId: string, database: SqlDatabase) {
+        super(accountId, database);
+        this.#accountId = accountId;
         this.#database = database;
     }
 
@@ -22,9 +22,9 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
         await relayDrizzle(this.#database, signal)
             .insert(platformAuditEvent)
             .values({
-                auditId: audit.action === "project.created" ? `pae_created_${this.#projectId}` : audit.auditId,
+                auditId: audit.action === "project.created" ? `pae_created_${this.#accountId}` : audit.auditId,
                 appId: audit.appId,
-                projectId: this.#projectId,
+                accountId: this.#accountId,
                 actorKind: audit.actorKind,
                 actorId: audit.actorId,
                 actorRef: audit.actorRef,
@@ -41,7 +41,7 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
         const rows = await relayDrizzle(this.#database, signal)
             .select()
             .from(platformAuditEvent)
-            .where(eq(platformAuditEvent.projectId, this.#projectId))
+            .where(eq(platformAuditEvent.accountId, this.#accountId))
             .orderBy(desc(platformAuditEvent.recordedAt), desc(platformAuditEvent.auditId))
             .limit(limit);
         return rows.map((row) => ({
@@ -53,7 +53,7 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
             audit_id: row.auditId,
             details_json: row.detailsJson,
             outcome: row.outcome,
-            project_id: row.projectId,
+            project_id: row.accountId,
             recorded_at: row.recordedAt,
             subject_id: row.subjectId,
         }));

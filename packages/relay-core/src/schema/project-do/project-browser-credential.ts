@@ -4,7 +4,7 @@ export const projectBrowserCredential = sqliteTable(
     "machine_browser_credentials",
     {
         credentialId: text("credential_id").primaryKey(),
-        projectId: text("project_id").notNull(),
+        accountId: text("project_id").notNull(),
         tokenHash: text("token_hash").notNull().unique(),
         createdByCredentialId: text("created_by_credential_id").notNull(),
         createdAt: integer("created_at").notNull(),
@@ -14,7 +14,7 @@ export const projectBrowserCredential = sqliteTable(
     },
     (table) => [
         index("machine_browser_credentials_project").on(
-            table.projectId,
+            table.accountId,
             table.revokedAt,
             table.expiresAt,
             table.createdAt,

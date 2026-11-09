@@ -4,7 +4,7 @@ export type { RelayContext } from "./di/create-relay-dependencies.ts";
 export { createWorkerContext, type WorkerRuntimeGateways } from "./di/create-worker-context.ts";
 export { RuntimeRelay } from "./durable-objects/runtime-relay.ts";
 export * from "./entity/authentication/project-authentication.ts";
-export { ProjectScope, SessionRuntimeError } from "./entity/do/session.ts";
+export { AccountScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { type HttpError, type HttpErrorJson, isHttpError, toHttpError } from "./entity/http-error.ts";
 export {
     ACCESS_GRANT_LIFETIME_MILLISECONDS,

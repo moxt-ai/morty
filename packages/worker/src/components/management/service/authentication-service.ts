@@ -161,16 +161,16 @@ function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbi
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
     readonly #platform: Pick<PlatformProjectGateway, "revokeSessionAccess">;
-    readonly #projectId: string | null;
+    readonly #accountId: string | null;
 
     constructor(cx: {
-        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_PROJECT_ID"> };
+        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_ACCOUNT_ID"> };
         readonly storages: { readonly identities: IdentityStorage };
         readonly gateways: { readonly platformProjects: Pick<PlatformProjectGateway, "revokeSessionAccess"> };
     }) {
         this.identities = cx.storages.identities;
         this.#platform = cx.gateways.platformProjects;
-        this.#projectId = cx.config.bindings.CHAT_PROJECT_ID ?? null;
+        this.#accountId = cx.config.bindings.CHAT_ACCOUNT_ID ?? null;
     }
 
     readonly #lookup = async (token: string | undefined, signal: AbortSignal): Promise<CredentialLookup> => {
@@ -205,11 +205,11 @@ export class AuthenticationService {
 
     readonly createAnonymous = async (
         userId: string,
-        projectId: string,
+        accountId: string,
         signal: AbortSignal,
         token: string,
     ): Promise<AnonymousIdentity> => {
-        const identity = await this.identities.createAnonymous(userId, projectId, Date.now(), signal, token);
+        const identity = await this.identities.createAnonymous(userId, accountId, Date.now(), signal, token);
         if (identity === null) {
             throw new ManagementError("LOCAL_CREDENTIAL_UNAVAILABLE", "The credential is no longer available.", 409);
         }
@@ -413,13 +413,13 @@ export class AuthenticationService {
 
     /** Revoking is safe to repeat, so a failure the Platform may recover from is retried a bounded number of times. */
     readonly #revokeIssuedSessionAccess = async (signal: AbortSignal): Promise<IssuedSessionAccess> => {
-        const projectId = this.#projectId;
-        if (projectId === null) {
+        const accountId = this.#accountId;
+        if (accountId === null) {
             throw new Error("Access is revoked only inside its Project");
         }
         for (let attempt = 1; ; attempt += 1) {
             try {
-                await this.#platform.revokeSessionAccess(projectId, signal);
+                await this.#platform.revokeSessionAccess(accountId, signal);
                 return { kind: "revoked" };
             } catch (cause) {
                 signal.throwIfAborted();
