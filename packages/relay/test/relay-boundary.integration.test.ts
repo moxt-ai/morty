@@ -1331,35 +1331,39 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         201,
     );
     const computerId = text(project, "computerId");
-    const pairing = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
-                body: JSON.stringify({ idempotencyKey: `${slug}-runtime` }),
-                headers: credentialHeaders(appCredential),
-                method: "POST",
-            }),
-            environment,
-        ),
-        201,
-    );
-    const claimed = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
-                body: JSON.stringify({
-                    agents: readyAgents,
-                    machineName: `${slug} Runtime`,
-                    pairingCode: text(pairing, "pairingCode"),
-                    workspaceName: `${slug}-workspace`,
+    /** Pairs the computer as setup does and returns the credential the redeeming daemon saves. */
+    const pairComputer = async (idempotencyKey: string): Promise<DaemonCredential> => {
+        const pairing = await responseJson(
+            await worker.fetch(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+                    body: JSON.stringify({ idempotencyKey }),
+                    headers: credentialHeaders(appCredential),
+                    method: "POST",
                 }),
-                headers: { "content-type": "application/json" },
-                method: "POST",
-            }),
-            environment,
-        ),
-        200,
-    );
+                environment,
+            ),
+            201,
+        );
+        const claimed = await responseJson(
+            await worker.fetch(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
+                    body: JSON.stringify({
+                        agents: readyAgents,
+                        machineName: `${slug} Runtime`,
+                        pairingCode: text(pairing, "pairingCode"),
+                        workspaceName: `${slug}-workspace`,
+                    }),
+                    headers: { "content-type": "application/json" },
+                    method: "POST",
+                }),
+                environment,
+            ),
+            200,
+        );
+        return new DaemonCredential(text(claimed, "runtimeCredential"));
+    };
     const sessionId = `${slug}-session`;
-    const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+    const daemonCredential = await pairComputer(`${slug}-runtime`);
     const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
     if (daemonResponse.webSocket === null) {
         throw new Error("Expected the Runtime socket");
@@ -1422,6 +1426,8 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 environment,
             ),
         reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
+        pairAgain: pairComputer,
+        connect: (credential: DaemonCredential) => credential.connect((request) => worker.fetch(request, environment)),
         subscribe: () =>
             worker.fetch(
                 new Request(
@@ -1715,8 +1721,8 @@ it.each(["text", "binary"])(
             await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF state ON computer
-                BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
+                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at
+                ON runtime_connection BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
                 expect(await responseJson(await runtime.revoke(), 503)).toMatchObject({
@@ -1757,6 +1763,39 @@ it.each(["text", "binary"])(
         }
     },
 );
+
+it("Given a Runtime its owner revoked and then paired again, When the earlier daemon reconnects with its saved credential, Then the Relay tells it the Runtime was revoked while the new daemon connects", async () => {
+    const runtime = await connectRuntimeDaemon("paired-again");
+    try {
+        expect((await runtime.revoke()).status).toBe(204);
+        expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Runtime revoked" });
+        const replacement = await runtime.pairAgain("paired-again-replacement");
+
+        const earlier = await runtime.reconnect();
+
+        expect(earlier.status).toBe(101);
+        const refused = earlier.webSocket;
+        if (refused === null) {
+            throw new Error("Expected the refused Runtime socket");
+        }
+        const refusal = new Promise<CloseEvent>((resolve) =>
+            refused.addEventListener("close", resolve, { once: true }),
+        );
+        refused.accept();
+        expect(await refusal).toMatchObject({ code: 1008, reason: "Runtime revoked" });
+        const connected = await runtime.connect(replacement);
+        const daemon = connected.webSocket;
+        if (daemon === null) {
+            throw new Error("Expected the paired Runtime socket");
+        }
+        const messages = new SocketMessages(daemon);
+        daemon.accept();
+        expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+        daemon.close(1000, "Test complete");
+    } finally {
+        runtime.daemon.close(1000, "Test complete");
+    }
+});
 
 it("Given Chat reads the Session execution naming an unconfirmed command, When the Runtime reports that command's delivery, Then the Relay returns the delivery", async () => {
     const runtime = await connectRuntimeDaemon("command-delivery");

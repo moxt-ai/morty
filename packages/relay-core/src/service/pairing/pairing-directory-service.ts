@@ -92,7 +92,6 @@ export class PairingDirectoryService implements PairingOperations {
         await storage.revokeRuntime(
             {
                 computerId: rotation.access.computerId,
-                ownerId: null,
                 now: Date.now(),
                 actorKind: "relay",
                 actorId: "runtime_credential_reuse",
@@ -251,7 +250,6 @@ export class PairingDirectoryService implements PairingOperations {
         const row = await storage.revokeRuntime(
             {
                 computerId: validateIdentifier(computerId, "computer_id"),
-                ownerId: owner.credentialId,
                 now: Date.now(),
                 actorKind: owner.actor.kind.value,
                 actorId: owner.actor.actorId,

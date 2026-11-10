@@ -8,35 +8,37 @@ export class RuntimeConnectionService {
         this.#storage = storage;
     }
 
+    /** The current connection; null when the latest one closed or the generation it was admitted under ended. */
     readonly current = () => this.#storage.read();
 
-    readonly prepare = (
-        computerId: string,
-    ): { readonly kind: "conflict" } | { readonly kind: "ready"; readonly identity: RuntimeConnectionIdentity } => {
-        const previous = this.#storage.read();
-        if (previous?.state === "online" && previous.computerId !== computerId) {
-            return { kind: "conflict" };
+    readonly latest = () => this.#storage.latest();
+
+    /** The identity of the next connection: every connection takes a later epoch than any before it. */
+    readonly next = (computerId: string): RuntimeConnectionIdentity => ({
+        computerId,
+        connectionEpoch: (this.#storage.latest()?.connectionEpoch ?? 0) + 1,
+    });
+
+    readonly isCurrent = (identity: RuntimeConnectionIdentity): boolean => this.standing(identity) === "current";
+
+    /**
+     * Where a daemon connection stands: still the current one; `replaced` by a later connection or closed; or `ended`
+     * because the generation it was admitted under no longer authorizes it.
+     */
+    readonly standing = (identity: RuntimeConnectionIdentity): "current" | "replaced" | "ended" => {
+        const latest = this.#storage.latest();
+        if (
+            latest?.kind !== "connected" ||
+            latest.computerId !== identity.computerId ||
+            latest.connectionEpoch !== identity.connectionEpoch
+        ) {
+            return "replaced";
         }
-        return {
-            kind: "ready",
-            identity: {
-                computerId,
-                connectionEpoch: (previous?.connectionEpoch ?? 0) + 1,
-            },
-        };
+        return this.#storage.read() === null ? "ended" : "current";
     };
 
-    readonly isCurrent = (identity: RuntimeConnectionIdentity): boolean => {
-        const current = this.#storage.read();
-        return (
-            current?.state === "online" &&
-            current.computerId === identity.computerId &&
-            current.connectionEpoch === identity.connectionEpoch
-        );
-    };
-
-    readonly connected = (identity: RuntimeConnectionIdentity, now: number): void => {
-        this.#storage.connect(identity, now);
+    readonly connected = (identity: RuntimeConnectionIdentity, generation: number, now: number): void => {
+        this.#storage.connect(identity, generation, now);
     };
 
     readonly disconnected = (identity: RuntimeConnectionIdentity, now: number): void => {

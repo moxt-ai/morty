@@ -24,8 +24,8 @@ export class SqliteProjectStore implements ProjectStore {
     readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (computerId, tokenHash, agents, signal) =>
         (await this.#runtimes.updateAgents(computerId, tokenHash, agents, signal)).meta.changes === 1;
 
-    readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (computerId, signal) =>
-        computerId === this.#computerId && (await this.#credentials.readActiveRuntime({ computerId }, signal));
+    readonly readActiveGeneration: ProjectStore["readActiveGeneration"] = async (computerId, signal) =>
+        computerId === this.#computerId ? await this.#credentials.readActiveGeneration({ computerId }, signal) : null;
 
     readonly readRuntime: ProjectStore["readRuntime"] = async (computerId, signal) =>
         await this.#runtimes.readRuntime(computerId, signal);

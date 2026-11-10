@@ -13,6 +13,7 @@ import {
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
+import type { RuntimeConnectionIdentity } from "../../entity/channel/runtime-connection.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
 import { type HostCredential, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import { logger } from "../../infra/logger.ts";
@@ -90,7 +91,7 @@ interface RuntimeContext {
     readonly services: {
         readonly connections: RuntimeConnectionService;
         readonly credentials: {
-            readonly isRuntimeActive: ChannelCredentialService["isRuntimeActive"];
+            readonly activeGeneration: ChannelCredentialService["activeGeneration"];
             /**
              * Whether the credential that opened a host connection still authorizes it ("revoked" when not) and
              * grants the permission one message needs ("denied" when not).
@@ -122,8 +123,6 @@ export type RuntimeAdmission =
     | { readonly kind: "revoked" }
     | { readonly kind: "accepted"; readonly response: Response };
 
-type RuntimeAcceptance = RuntimeAdmission | { readonly kind: "conflict" };
-
 type DaemonSocketIdentity = Extract<RuntimeSocketIdentity, { readonly role: "daemon" | "replaced-daemon" }> & {
     readonly role: "daemon";
 };
@@ -148,8 +147,8 @@ export class RuntimeService {
     }
 
     readonly acceptDaemon = (scope: ComputerScope, signal: AbortSignal) =>
-        this.admit(scope, signal, (admission) => {
-            const operation = this.#acceptTail.then(() => this.acceptDaemonSocket(scope, admission));
+        this.admit(scope, signal, (admission, generation) => {
+            const operation = this.#acceptTail.then(() => this.acceptDaemonSocket(scope, admission, generation));
             this.#acceptTail = operation.then(
                 () => undefined,
                 () => undefined,
@@ -158,7 +157,7 @@ export class RuntimeService {
         });
 
     /**
-     * Admits a connection only while the Project serves this Runtime and has not revoked it. The pending
+     * Admits a connection only while a generation of this Runtime is active, under that generation. The pending
      * admission is registered before that authority is read: a revocation committed after the read is notified
      * after it, and the notification aborts the admission. `accept` must check the admission signal and then
      * accept without awaiting, so a later notification finds the accepted socket and closes it.
@@ -166,17 +165,18 @@ export class RuntimeService {
     private readonly admit = async <T>(
         scope: ComputerScope,
         signal: AbortSignal,
-        accept: (admission: AbortSignal) => Promise<T>,
+        accept: (admission: AbortSignal, generation: number) => Promise<T>,
     ): Promise<T | { readonly kind: "revoked" }> => {
         const pending = { computerId: scope.computerId, scope, controller: new AbortController() };
         this.#accepting.add(pending);
         try {
             const admission = AbortSignal.any([signal, pending.controller.signal]);
             const runtime = { computerId: scope.computerId };
-            if (!(await this.#cx.services.credentials.isRuntimeActive(runtime, admission))) {
+            const generation = await this.#cx.services.credentials.activeGeneration(runtime, admission);
+            if (generation === null) {
                 return { kind: "revoked" };
             }
-            return await accept(admission);
+            return await accept(admission, generation);
         } catch (error) {
             signal.throwIfAborted();
             if (pending.controller.signal.aborted) {
@@ -188,15 +188,16 @@ export class RuntimeService {
         }
     };
 
-    private readonly acceptDaemonSocket = (scope: ComputerScope, signal: AbortSignal): RuntimeAcceptance => {
+    private readonly acceptDaemonSocket = (
+        scope: ComputerScope,
+        signal: AbortSignal,
+        generation: number,
+    ): RuntimeAdmission => {
         // Nothing below awaits, so this admission check and accept + connect are one step.
         signal.throwIfAborted();
-        const prepared = this.#cx.services.connections.prepare(scope.computerId);
-        if (prepared.kind === "conflict") {
-            return prepared;
-        }
-        const previousConnection = this.#cx.services.connections.current();
-        if (previousConnection?.state === "revoked") {
+        const latest = this.#cx.services.connections.latest();
+        // The connections opened during an earlier generation belong to the Runtime that generation paired.
+        if (latest !== null && latest.generation !== generation) {
             for (const { socket } of this.#cx.gateways.peers.sockets()) {
                 socket.close(1000, "Previous daemon disconnected");
             }
@@ -215,13 +216,10 @@ export class RuntimeService {
         for (const { socket } of previous) {
             socket.replaceDaemon();
         }
-        const identity: DaemonSocketIdentity = {
-            ...prepared.identity,
-            role: "daemon",
-            computerId: scope.computerId,
-        };
+        const connection = this.#cx.services.connections.next(scope.computerId);
+        const identity: DaemonSocketIdentity = { ...connection, role: "daemon" };
         const accepted = this.#cx.gateways.peers.accept(identity);
-        this.#cx.services.connections.connected(prepared.identity, Date.now());
+        this.#cx.services.connections.connected(connection, generation, Date.now());
         logger.info({ ...identity, event: "runtime_websocket_accepted" }, "Runtime WebSocket accepted");
         this.deferDaemonAttachment(identity, accepted.socket, scope, previous.length > 0);
         return { kind: "accepted", response: accepted.response };
@@ -289,13 +287,13 @@ export class RuntimeService {
         // daemon message read that authority, so this notification only cleans up promptly. Its one fallible
         // step runs first, so a failed notification leaves this Relay unchanged for the caller to retry.
         // A delayed disconnect must not close the daemon that claimed a fresh authorization.
-        if (await this.#cx.services.credentials.isRuntimeActive({ computerId: scope.computerId }, signal)) {
+        if ((await this.#cx.services.credentials.activeGeneration({ computerId: scope.computerId }, signal)) !== null) {
             return;
         }
-        const current = this.#cx.services.connections.current();
-        const connected = current !== null && current.computerId === scope.computerId;
+        const latest = this.#cx.services.connections.latest();
+        const connected = latest?.kind === "connected" && latest.computerId === scope.computerId;
         if (connected) {
-            this.#cx.services.connections.disconnected(current, Date.now());
+            this.#cx.services.connections.disconnected(latest, Date.now());
         }
         for (const accepting of this.#accepting) {
             if (accepting.computerId === scope.computerId && accepting.scope.computerId === scope.computerId) {
@@ -354,11 +352,7 @@ export class RuntimeService {
 
     readonly isOnline = (computerId: string): boolean => {
         const current = this.#cx.services.connections.current();
-        return (
-            current?.state === "online" &&
-            current.computerId === computerId &&
-            this.#cx.gateways.peers.daemons().length > 0
-        );
+        return current !== null && current.computerId === computerId && this.#cx.gateways.peers.daemons().length > 0;
     };
 
     readonly attachDaemon = async (scope: ComputerScope, replaced: boolean, signal: AbortSignal): Promise<void> => {
@@ -519,14 +513,13 @@ export class RuntimeService {
             socket.close(1012, "Daemon connection replaced");
             return false;
         }
-        if (!this.#cx.services.connections.isCurrent(identity)) {
-            socket.replaceDaemon();
+        if (this.fenceDaemon(identity, socket)) {
             return false;
         }
-        // Disconnect delivery can fail after revocation commits in Project storage. Read that
-        // authority before every business message; the local connection fence alone is insufficient.
+        // Disconnect delivery can fail after revocation commits in Project storage, and the Project can stop being
+        // served. Read that authority before every business message; the local connection fence alone is insufficient.
         try {
-            if (!(await this.#cx.services.credentials.isRuntimeActive(identity, signal))) {
+            if ((await this.#cx.services.credentials.activeGeneration(identity, signal)) === null) {
                 socket.close(1008, "Runtime revoked");
                 return false;
             }
@@ -540,11 +533,30 @@ export class RuntimeService {
             return false;
         }
         // A replacement may have been accepted while the authoritative lookup was in flight.
-        if (!this.#cx.services.connections.isCurrent(identity)) {
-            socket.replaceDaemon();
+        if (this.fenceDaemon(identity, socket)) {
             return false;
         }
         return socket.isOpen();
+    };
+
+    /**
+     * Closes a daemon connection that is no longer the current one, telling a replaced daemon to reconnect and the
+     * daemon of an ended generation that its Runtime was revoked. True when it closed the connection.
+     */
+    private readonly fenceDaemon = (identity: RuntimeConnectionIdentity, socket: RuntimeSocket): boolean => {
+        const standing = this.#cx.services.connections.standing(identity);
+        switch (standing) {
+            case "current":
+                return false;
+            case "replaced":
+                socket.replaceDaemon();
+                return true;
+            case "ended":
+                socket.close(1008, "Runtime revoked");
+                return true;
+            default:
+                return standing satisfies never;
+        }
     };
 
     /**
@@ -577,7 +589,11 @@ export class RuntimeService {
         socket: ChannelSocket,
         signal: AbortSignal,
     ): Promise<void> => {
-        if (identity.role !== "daemon" || !this.#cx.services.connections.isCurrent(identity)) {
+        // The latest connection detaches once it closes, also after its generation ended: what was sent into it
+        // must still be released.
+        const latest = () =>
+            identity.role === "daemon" && this.#cx.services.connections.standing(identity) !== "replaced";
+        if (identity.role !== "daemon" || !latest()) {
             return;
         }
         for (const attachment of this.#attachments) {
@@ -589,7 +605,7 @@ export class RuntimeService {
             }
         }
         await this.#daemonMessages.idle(signal);
-        if (!this.#cx.services.connections.isCurrent(identity)) {
+        if (!latest()) {
             return;
         }
         this.#cx.services.connections.disconnected(identity, Date.now());
@@ -605,8 +621,7 @@ export class RuntimeService {
             }
             // The host answers heartbeats without running the Relay, so a superseded connection that
             // keeps heartbeating is retired here instead of when it heartbeats.
-            if (!this.#cx.services.connections.isCurrent(identity)) {
-                socket.replaceDaemon();
+            if (this.fenceDaemon(identity, socket)) {
                 continue;
             }
             const heardAt = heartbeat.kind === "received" ? heartbeat.at : this.firstHeartbeatDue();

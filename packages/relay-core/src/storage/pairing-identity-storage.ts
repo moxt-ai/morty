@@ -1,10 +1,11 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { validateIdentifier } from "../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../entity/pairing/pairing-identity.ts";
 import type { PairingScopeRow } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { computer, daemonCredential, runtimePairingRequest } from "../schema/project-do/index.ts";
+import { daemonCredential, runtimePairing } from "../schema/project-do/index.ts";
+import { activeGeneration, currentGeneration } from "./runtime-generation.ts";
 
 /** The Projects in this storage whose credential matches. */
 export async function credentialMatches(
@@ -14,35 +15,38 @@ export async function credentialMatches(
 ): Promise<readonly PairingScopeRow[]> {
     const orm = relayDrizzle(database, signal);
     switch (credential.kind) {
-        case "daemon":
+        case "daemon": {
+            const computerId = validateIdentifier(credential.computerId, "computer_id");
             return orm
-                .select({ computer_id: computer.computerId })
-                .from(computer)
-                .innerJoin(daemonCredential, eq(daemonCredential.computerId, computer.computerId))
+                .select({ computer_id: runtimePairing.computerId })
+                .from(daemonCredential)
+                .innerJoin(runtimePairing, eq(runtimePairing.generation, daemonCredential.generation))
                 .where(
                     and(
-                        eq(computer.computerId, validateIdentifier(credential.computerId, "computer_id")),
+                        eq(runtimePairing.computerId, computerId),
                         eq(daemonCredential.tokenHash, credential.tokenHash),
-                        isNotNull(computer.claimedAt),
-                        isNull(computer.revokedAt),
+                        inArray(daemonCredential.generation, activeGeneration(computerId)),
                     ),
                 );
-        case "pairing":
+        }
+        case "pairing": {
+            // Only the current generation's poll token reads the computer's pairing.
+            const computerId = validateIdentifier(credential.computerId, "computer_id");
             return orm
-                .select({ computer_id: computer.computerId })
-                .from(runtimePairingRequest)
-                .innerJoin(computer, eq(computer.computerId, runtimePairingRequest.computerId))
+                .select({ computer_id: runtimePairing.computerId })
+                .from(runtimePairing)
                 .where(
                     and(
-                        eq(runtimePairingRequest.computerId, validateIdentifier(credential.computerId, "computer_id")),
-                        eq(runtimePairingRequest.pollTokenHash, credential.tokenHash),
+                        eq(runtimePairing.computerId, computerId),
+                        eq(runtimePairing.pollTokenHash, credential.tokenHash),
+                        inArray(runtimePairing.generation, currentGeneration(computerId)),
                     ),
                 );
+        }
         case "pairing-code":
             return orm
-                .select({ computer_id: computer.computerId })
-                .from(runtimePairingRequest)
-                .innerJoin(computer, eq(computer.computerId, runtimePairingRequest.computerId))
-                .where(eq(runtimePairingRequest.pairingCodeHash, credential.codeHash));
+                .select({ computer_id: runtimePairing.computerId })
+                .from(runtimePairing)
+                .where(eq(runtimePairing.pairingCodeHash, credential.codeHash));
     }
 }

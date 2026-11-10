@@ -4,7 +4,7 @@ import { RELAY_APP_PROJECT_PERMISSIONS, type SessionAccessHolder } from "@morty-
 import { eq } from "drizzle-orm";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
-import { computer } from "../../relay-core/src/schema/project-do/index.ts";
+import { runtimePairing, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../../worker/src/components/management/storage/managed-bot-storage.ts";
 import { ComputerChat } from "../../worker/src/components/project/computer-chat.ts";
@@ -90,19 +90,27 @@ export async function registerRuntimeFixture(computerId: string): Promise<{ read
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
         migrateComputerStorage(state.storage);
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
-        await database.batch([
-            database
-                .insert(computer)
-                .values({
-                    computerId,
-                    createdAt: registeredAt,
-                    claimedAt: registeredAt,
-                    machineName: "Registered test Runtime",
-                    workspaceName: "Registered test workspace",
-                    agentsJson: "[]",
-                })
-                .onConflictDoNothing(),
-        ]);
+        const [pairing] = await database
+            .insert(runtimePairing)
+            .values({
+                computerId,
+                pairingCodeHash: `fixture-code-${computerId}`,
+                pollTokenHash: `fixture-poll-${computerId}`,
+                expiresAt: registeredAt,
+                creationIdempotencyKey: `fixture-${computerId}`,
+                createdByOwnerCredentialId: `fixture-owner-${computerId}`,
+            })
+            .onConflictDoNothing()
+            .returning({ generation: runtimePairing.generation });
+        if (pairing !== undefined) {
+            await database.insert(runtimeRegistration).values({
+                generation: pairing.generation,
+                claimedAt: registeredAt,
+                machineName: "Registered test Runtime",
+                workspaceName: "Registered test workspace",
+                agentsJson: "[]",
+            });
+        }
     });
     const project = await directory
         .select({ appId: machineAccount.appId })
