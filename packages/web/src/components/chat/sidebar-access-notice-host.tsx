@@ -1,4 +1,4 @@
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useMemo } from "react";
 
 function mergeAttachHandlers(
     ...handlers: readonly ((node: HTMLElement | null) => (() => void) | undefined)[]
@@ -28,20 +28,19 @@ export function SidebarAccessNoticeHost({
     readonly attachLinkedDevices: ((node: HTMLElement | null) => (() => void) | undefined) | null;
     readonly children: ReactNode;
 }) {
-    const cleanupRef = useRef<(() => void) | undefined>(undefined);
-    const attach = mergeAttachHandlers(
-        ...(attachLinkedDevices === null ? [] : [attachLinkedDevices]),
-        ...(attachAccess === null ? [] : [attachAccess]),
+    // The stores follow their data while the host is attached, so the ref must change only when they do: a ref created
+    // per render would detach and reattach on every render and restart their reads each time.
+    const attach = useMemo(
+        () =>
+            mergeAttachHandlers(
+                ...(attachLinkedDevices === null ? [] : [attachLinkedDevices]),
+                ...(attachAccess === null ? [] : [attachAccess]),
+            ),
+        [attachAccess, attachLinkedDevices],
     );
 
     return (
-        <div
-            className="relative z-30 w-full min-w-0 shrink-0"
-            ref={(node) => {
-                cleanupRef.current?.();
-                cleanupRef.current = node === null ? undefined : attach(node);
-            }}
-        >
+        <div className="relative z-30 w-full min-w-0 shrink-0" ref={attach}>
             {children}
         </div>
     );
