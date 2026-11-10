@@ -364,9 +364,9 @@ export class PiAdapter implements Adapter {
                 const callbacks = piClientCallbacks(params, this.#dependencies.contentExternalizer, lifetime);
                 const client = await createPiClient(runtime, callbacks, signal);
                 return {
+                    client,
                     load: (id) => client.loadSession({ cwd: scoped.cwd, sessionId: id, mcpServers: [] }),
                     drained: callbacks.drained,
-                    closeProcess: () => client.dispose(),
                 };
             },
         });

@@ -395,10 +395,10 @@ export class ClaudeAdapter implements Adapter {
                 const client = await createClaudeClient(runtime, callbacks, signal);
                 await initializeClaudeClient(client);
                 return {
+                    client,
                     load: (id, signal) =>
                         client.loadSession({ cwd: scoped.cwd, sessionId: id, mcpServers: [] }, signal),
                     drained: callbacks.drained,
-                    closeProcess: () => client.dispose(),
                 };
             },
         });

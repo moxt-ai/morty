@@ -5,13 +5,13 @@ import type { NativeSessionPreviewRequest, NativeSessionQuery } from "../native-
 import { NativeHistoryPreviewSnapshots } from "../native-history/preview-snapshots.ts";
 import { sessionIdSchema } from "../protocol/native-session.ts";
 import { type HarnessCallbackParams, harnessPreviewCallbacks } from "./harness-client-events.ts";
-import type { HarnessLifetime } from "./harness-session.ts";
+import { disposeHarnessClient, type HarnessClient, type HarnessLifetime } from "./harness-session.ts";
 import { nativeSessionPreviewKey, nativeSessionQueryKey } from "./query-scope.ts";
 
 interface HarnessHistorySource {
+    readonly client: HarnessClient;
     readonly load: (sessionId: string, signal: AbortSignal) => Promise<unknown>;
     readonly drained: () => Promise<void>;
-    readonly closeProcess: () => Promise<void>;
 }
 
 /** Shared read-only snapshot ownership and transient process capacity for replay-based harnesses. */
@@ -64,8 +64,11 @@ export class HarnessHistoryPreviews {
                         source,
                         lifetime,
                         closeProcess: async () => {
-                            lifetime.abort();
-                            await source.closeProcess();
+                            try {
+                                await disposeHarnessClient(source.client, sessionId, source.drained);
+                            } finally {
+                                lifetime.abort();
+                            }
                         },
                     };
                 },

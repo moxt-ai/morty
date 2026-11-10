@@ -15,6 +15,27 @@ export interface HarnessLifetime {
     readonly fail: (cause: unknown) => void;
 }
 
+/** Shared retirement policy for accepted writers and transient history readers. */
+export async function disposeHarnessClient(
+    agent: HarnessClient,
+    sessionId: SessionId,
+    drained: () => Promise<void>,
+    mode?: "force",
+): Promise<void> {
+    if (mode !== "force" && !agent.signal.aborted) {
+        // Give the provider a bounded opportunity to persist interrupted work before retiring it.
+        try {
+            await waitForAgentOperation(agent.cancel({ sessionId }), AbortSignal.timeout(1_000));
+        } catch {
+            // Retirement must still release resources when cancellation fails or stalls.
+        }
+    }
+    await agent.dispose("force");
+    if (mode !== "force") {
+        await drained();
+    }
+}
+
 /** Owns one accepted provider session. Vendor adapters supply operations, not lifecycle policy. */
 export class HarnessSession<Client extends HarnessClient> {
     readonly sessionId: SessionId;
@@ -71,7 +92,7 @@ export class HarnessSession<Client extends HarnessClient> {
             };
         } catch (cause) {
             lifetime.abort(cause);
-            await agent.dispose();
+            await agent.dispose("force");
             params.signal.throwIfAborted();
             throw agentOperationError(cause);
         }
@@ -139,17 +160,16 @@ export class HarnessSession<Client extends HarnessClient> {
 
     readonly dispose = (mode?: "force"): Promise<void> => {
         if (this.#closing === null) {
-            this.#closing = this.agent
-                .dispose(mode)
-                .then(async () => {
-                    if (mode !== "force") {
-                        await this.#drained();
-                    }
-                })
-                .finally(() => {
-                    this.#lifetime.abort(new DOMException("The harness session was released", "AbortError"));
-                });
+            this.#closing = this.#dispose(mode);
         }
         return this.#closing;
+    };
+
+    readonly #dispose = async (mode: "force" | undefined): Promise<void> => {
+        try {
+            await disposeHarnessClient(this.agent, this.sessionId, this.#drained, mode);
+        } finally {
+            this.#lifetime.abort(new DOMException("The harness session was released", "AbortError"));
+        }
     };
 }
