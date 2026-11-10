@@ -202,14 +202,7 @@ export function createRelayApplication(
             "*",
             createBrowserCors(
                 ["GET", "POST", "PUT"],
-                [
-                    "authorization",
-                    "content-type",
-                    "x-morty-byte-length",
-                    "x-morty-content-kind",
-                    "x-morty-file-name",
-                    "x-morty-oidc-provider",
-                ],
+                ["authorization", "content-type", "x-morty-byte-length", "x-morty-content-kind", "x-morty-file-name"],
                 authentication.allowedOrigins,
             ),
         )
@@ -233,7 +226,6 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
-            // The public shape of this answer, not the internal access record: it names no AppCredential.
             return context.json({
                 expiresAtEpochMilliseconds: target.expiresAtEpochMilliseconds,
                 issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
@@ -724,8 +716,5 @@ export function createRelayWorker() {
     };
 }
 
-const worker = createRelayWorker();
-
 export { relayAuthenticationFromEnvironment } from "./composition/relay-authentication-environment.ts";
 export { RelayAuthenticationConfiguration } from "./entity/computer-management.ts";
-export default worker;

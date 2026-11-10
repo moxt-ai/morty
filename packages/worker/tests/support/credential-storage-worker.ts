@@ -1,5 +1,5 @@
 import { ComputerRelay as ProductionComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
-import type { ConfiguredRelayRelayBindings } from "../../../relay/src/worker.ts";
+import type { ConfiguredRelayRelayBindings } from "../../../relay/src/relay-worker.ts";
 import { requestTestRuntimeControl } from "../../../relay-test-support/src/backend-fixture.ts";
 import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
 import chat from "../../src/index.ts";

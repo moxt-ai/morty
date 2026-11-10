@@ -409,9 +409,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(@vitest/coverage-istanbul@4.1.12)(happy-dom@21.0.4(bufferutil@4.1.0)(utf-8-validate@6.0.6))(vite@8.3.6(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.14)(yaml@2.9.1))
-      wrangler:
-        specifier: 'catalog:'
-        version: 4.154.0(@cloudflare/workers-types@5.20261028.1)(@types/node@24.19.2)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   packages/relay-core:
     dependencies:

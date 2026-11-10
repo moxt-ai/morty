@@ -167,7 +167,6 @@ export interface MortyResponseMetadata {
 }
 
 export interface MortyEndpointOptions {
-    readonly authenticationProviderId?: string;
     readonly credentialProvider: MortyCredentialProvider;
     readonly endpoint: string;
     /** Set to zero when the caller owns live-stream recovery. */
@@ -361,7 +360,6 @@ class LiveEventConnection {
 }
 
 export class MortyRequestExecutor {
-    readonly #authenticationProviderId: string;
     readonly #credentialProvider: MortyCredentialProvider;
     readonly #endpoint: URL;
     readonly #operationTimeoutMilliseconds: number;
@@ -371,15 +369,6 @@ export class MortyRequestExecutor {
     readonly #transport: MortyHttpTransport;
 
     constructor(options: MortyEndpointOptions) {
-        const authenticationProviderId = options.authenticationProviderId ?? "";
-        if (
-            authenticationProviderId.length > 128 ||
-            authenticationProviderId.includes("\r") ||
-            authenticationProviderId.includes("\n")
-        ) {
-            throw new MortyValidationError("The Morty authentication provider identifier is invalid");
-        }
-        this.#authenticationProviderId = authenticationProviderId;
         this.#credentialProvider = options.credentialProvider;
         this.#endpoint = normalizeEndpoint(options.endpoint);
         this.#operationTimeoutMilliseconds = validatePositiveInteger(
@@ -626,11 +615,7 @@ export class MortyRequestExecutor {
     };
 
     private readonly authenticationHeaders = (credential: string, accept: string): Headers => {
-        const headers = new Headers({ accept, authorization: `Bearer ${credential}` });
-        if (this.#authenticationProviderId.length > 0) {
-            headers.set("x-morty-oidc-provider", this.#authenticationProviderId);
-        }
-        return headers;
+        return new Headers({ accept, authorization: `Bearer ${credential}` });
     };
 }
 
