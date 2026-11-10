@@ -6,7 +6,8 @@ import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import {
     chatSessionColumnClassName,
     chatSessionExecutionHeaderClassName,
-    chatSessionMessageScrollClassName,
+    chatSessionMessageScrollAreaClassName,
+    chatSessionMessageViewportClassName,
     chatSessionPaneEnterClassName,
     chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
@@ -321,10 +322,13 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                             ) : (
                                 <MobileSessionTitlePortal>{pendingTitle}</MobileSessionTitlePortal>
                             )}
+                            {/* Radix wraps viewport children in a table; fill its height so the landing can center. */}
                             <FollowLatestScrollArea
                                 followThreshold={80}
                                 followRevision={model.scrollFollowRevision}
-                                className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
+                                className={chatSessionMessageScrollAreaClassName}
+                                useProductScrollbar
+                                viewportClassName={`[&>div]:h-full ${chatSessionMessageViewportClassName}`}
                                 role="log"
                                 aria-label="Messages"
                             >

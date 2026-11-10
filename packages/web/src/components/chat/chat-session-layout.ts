@@ -12,8 +12,10 @@ export const chatSessionInteractionColumnClassName =
  * stack; while one is up, `--composer-overlay-block` replaces that overhang
  * with the notice's own height, so the log's visible bottom edge stops at the
  * notice's top edge and no scroll position passes under its frost.
+ * The product scrollbar owns the frame; padding stays on the actual scroll viewport.
  */
-export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] mb-[var(--composer-overlay-block,-1rem)] sm:pt-10`;
+export const chatSessionMessageScrollAreaClassName = "min-h-0 flex-1 mb-[var(--composer-overlay-block,-1rem)]";
+export const chatSessionMessageViewportClassName = "pt-6 pb-[72px] sm:pt-10";
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 

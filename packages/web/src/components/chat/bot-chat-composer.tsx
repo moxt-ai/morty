@@ -327,7 +327,7 @@ export function BotChatComposer({
                             {submitAction || outputState === "sending" ? (
                                 <ArrowUp aria-hidden="true" className="size-[18px]" />
                             ) : (
-                                <Square aria-hidden="true" className="size-3 fill-current" />
+                                <Square aria-hidden="true" className="size-3! fill-current" />
                             )}
                         </Button>
                     </div>

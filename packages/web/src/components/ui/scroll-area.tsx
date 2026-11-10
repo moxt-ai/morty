@@ -1,5 +1,5 @@
 import { ScrollArea as Primitive } from "radix-ui";
-import type { ComponentProps, UIEventHandler } from "react";
+import type { AriaRole, ComponentProps, UIEventHandler } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ type ScrollAreaProps = ComponentProps<typeof Primitive.Root> & {
     readonly viewportClassName?: string;
     readonly viewportRef?: ComponentProps<typeof Primitive.Viewport>["ref"];
     readonly viewportLabel?: string | undefined;
+    readonly viewportRole?: AriaRole | undefined;
     readonly viewportStyle?: ComponentProps<typeof Primitive.Viewport>["style"];
 };
 
@@ -26,6 +27,7 @@ export function ScrollArea({
     type = "auto",
     viewportClassName,
     viewportRef,
+    viewportRole,
     viewportStyle,
     viewportLabel,
     ...props
@@ -40,7 +42,7 @@ export function ScrollArea({
             <Primitive.Viewport
                 className={cn("w-full rounded-[inherit]", viewportClassName)}
                 data-slot="scroll-area-viewport"
-                role={viewportLabel === undefined ? undefined : "region"}
+                role={viewportRole ?? (viewportLabel === undefined ? undefined : "region")}
                 aria-label={viewportLabel}
                 onScroll={onViewportScroll}
                 ref={viewportRef}
