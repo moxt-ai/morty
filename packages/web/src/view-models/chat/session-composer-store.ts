@@ -1,5 +1,6 @@
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
     agentQuestionChoicesEntry,
     centralSessionStorage,
@@ -7,6 +8,7 @@ import {
 } from "../../services/session-storage/central-session-storage.ts";
 import type { AgentQuestionChoices } from "./agent-question-answer.ts";
 import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
+import { returnToComposer } from "./composer-return.ts";
 import { prependToDraft } from "./session-delivery-store.ts";
 
 /**
@@ -30,7 +32,7 @@ export interface SessionComposerStore {
      * Returns a message the user takes back for editing to the composer, ahead of what was written since.
      * `filesLost` says whether files it had could not be restored here.
      */
-    readonly returnMessage: (content: string, filesLost: boolean) => void;
+    readonly returnMessage: (content: string, filesLost: boolean, restored: readonly ComposerAttachment[]) => void;
     /** The draft page that followed its first message here hands over the text and files written meanwhile. */
     readonly adoptHandoff: (draft: string, attachments: StoreApi<ComposerAttachmentStore>) => void;
     readonly openTitleEdit: (title: string) => void;
@@ -82,9 +84,14 @@ export function createSessionComposerStore(
                 get().attachments.getState().clear();
                 setDraft("", false);
             },
-            returnMessage: (content, filesLost) => {
-                const current = get().draft;
-                setDraft(current.trim() === "" ? content : prependToDraft(content, current), filesLost);
+            returnMessage: (content, filesLost, restored) => {
+                const current = get();
+                const files = current.attachments.getState();
+                const returned = returnToComposer(current.draft, files.attachments, content, restored);
+                if (restored.length > 0) {
+                    files.restore(returned.attachments);
+                }
+                setDraft(returned.draft, filesLost);
             },
             adoptHandoff: (draft, attachments) => {
                 saveDraft(draft);

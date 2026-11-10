@@ -87,7 +87,7 @@ function savedSetupState(
     replacement: SavedReplacement = { kind: "unchanged" },
 ) {
     return JSON.stringify({
-        version: 2,
+        version: 3,
         base_url: origin,
         identity: {
             kind: "ready",

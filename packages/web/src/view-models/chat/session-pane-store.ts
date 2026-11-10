@@ -1327,12 +1327,8 @@ export function createSessionPaneModel(options: {
                     .returnMessage(
                         message.content,
                         message.attachments.kind === "uploaded" && message.attachments.values.length > 0,
+                        message.attachments.kind === "local" ? message.attachments.values : [],
                     );
-                if (message.attachments.kind === "local") {
-                    composerAttachments
-                        .getState()
-                        .restore([...message.attachments.values, ...composerAttachments.getState().attachments]);
-                }
             },
             discardFailedMessage: () => {
                 delivery.getState().takeFailedMessage();

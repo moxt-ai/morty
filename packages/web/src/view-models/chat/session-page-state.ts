@@ -6,7 +6,6 @@ import {
 } from "@morty-build/client";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
-import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
     centralSessionStorage,
     elicitationAnswerDraftsEntry,
@@ -99,11 +98,8 @@ export function createSessionPageState(options: {
                 .returnMessage(
                     message.prompt,
                     message.attachments.kind === "unrestorable" && message.attachments.count > 0,
+                    message.attachments.kind === "restorable" ? message.attachments.values : [],
                 );
-            const attachments = composer.getState().attachments;
-            const restored: readonly ComposerAttachment[] =
-                message.attachments.kind === "restorable" ? message.attachments.values : [];
-            attachments.getState().restore([...restored, ...attachments.getState().attachments]);
         },
     });
     /** Answers the Agent through whichever pane follows the Session, within the answer's own budget. */

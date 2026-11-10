@@ -17,6 +17,7 @@ import {
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
+import { returnToComposer } from "./composer-return.ts";
 import {
     type ConversationCreationState,
     failedDraftMessage,
@@ -32,6 +33,7 @@ import {
 import { type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
 import { canRetryFirstMessage, canSendFirstMessage, type NewConversationFacts } from "./new-conversation-rules.ts";
 import type { OpenMortySession } from "./open-session.ts";
+import { createPairingDialogStore } from "./pairing-dialog-store.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
 import { prependToDraft, type SubmittedMessage } from "./session-delivery-store.ts";
@@ -113,16 +115,6 @@ export interface BotChatNavigation {
     readonly showManaged: (target: NativeSessionTarget) => void;
 }
 
-/**
- * One-shot entry notices. The workflow marks a notice `visible` exactly once
- * when it resolves; dismissal hides it for the rest of the entry.
- */
-type ChatEntryNotice = { readonly kind: "hidden" } | { readonly kind: "visible" };
-
-interface ChatEntryNotices {
-    readonly pairing: ChatEntryNotice;
-}
-
 export interface BotChatHomeStore {
     readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
     /** The draft written while creating the Session the page followed, until that Session's composer takes it. */
@@ -147,22 +139,14 @@ export interface BotChatHomeStore {
     readonly selection: ConversationSelectionState;
     readonly creation: ConversationCreationState;
     readonly draft: string;
-    /** The draft the composer text belongs to. Only starting a new draft changes it. */
-    readonly draftKey: string;
     /** Bumped whenever the message list should re-arm following the latest message. */
     readonly scrollFollowRevision: number;
-    /** The pairing dialog the user opened manually from the sidebar. */
-    readonly pairingDialogOpen: boolean;
-    /** Entry notices that surface a dialog once when the workflow resolves. */
-    readonly notices: ChatEntryNotices;
-    readonly dismissNotice: () => void;
+    readonly pairingDialog: ReturnType<typeof createPairingDialogStore>;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly newConversation: () => void;
     readonly openManaged: (target: NativeSessionTarget) => void;
     readonly retry: () => void;
     readonly setDraft: (draft: string) => void;
-    readonly showPairingDialog: () => void;
-    readonly closePairingDialog: () => void;
     readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
     /** Hands the draft written during creation to the Session the page followed; null for any other Session. */
     readonly takeNextDraft: (sessionTarget: NativeSessionTarget) => {
@@ -365,10 +349,16 @@ export const createBotChatHomeStore = (
                 return;
             }
             releaseUnsentFirstMessage(message.commandId);
+            const restored = returnToComposer(
+                current.draft,
+                composer.attachments,
+                message.content,
+                message.attachments,
+            );
             if (message.attachments.length > 0) {
-                composer.restore([...message.attachments, ...composer.attachments]);
+                composer.restore(restored.attachments);
             }
-            current.setDraft(prependToDraft(message.content, current.draft));
+            current.setDraft(restored.draft);
         };
         return {
             composerAttachments: createComposerAttachmentStore(),
@@ -384,11 +374,8 @@ export const createBotChatHomeStore = (
             selection,
             creation: { kind: "draft" },
             draft: "",
-            draftKey: selection.kind === "draft" ? selection.key : options.createId(),
             scrollFollowRevision: 0,
-            pairingDialogOpen: false,
-            notices: { pairing: { kind: "hidden" } },
-            dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
+            pairingDialog: createPairingDialogStore(),
             load: async (signal) => {
                 signal.throwIfAborted();
                 let recoveryNotice: AbortController | null = null;
@@ -613,6 +600,7 @@ export const createBotChatHomeStore = (
                     signal.throwIfAborted();
                     set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
                     if (binding.kind === "unbound") {
+                        get().pairingDialog.getState().show();
                         set((current) => ({
                             selection:
                                 current.selection.kind === "pending" || current.selection.kind === "loading"
@@ -624,9 +612,6 @@ export const createBotChatHomeStore = (
                                       })
                                     : current.selection,
                             initialization: { kind: "ready" },
-                            ...(current.notices.pairing.kind === "hidden"
-                                ? { notices: { ...current.notices, pairing: { kind: "visible" as const } } }
-                                : {}),
                         }));
                         // The interruption during the setup wait is handled by
                         // the same repeatable recovery loop that owns every
@@ -648,11 +633,7 @@ export const createBotChatHomeStore = (
                     observeConfiguration(configuration, { kind: "read" });
                     const currentSelection = get().selection;
                     if (currentSelection.kind === "ready") {
-                        set((current) => ({
-                            ...(current.notices.pairing.kind === "visible"
-                                ? { notices: { ...current.notices, pairing: { kind: "hidden" as const } } }
-                                : {}),
-                        }));
+                        get().pairingDialog.getState().dismiss();
                         await watchRuntimeConfigurationChanges();
                         return;
                     }
@@ -666,11 +647,7 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (currentTarget === null) {
-                        set((current) => ({
-                            ...(current.notices.pairing.kind === "visible"
-                                ? { notices: { ...current.notices, pairing: { kind: "hidden" as const } } }
-                                : {}),
-                        }));
+                        get().pairingDialog.getState().dismiss();
                         await watchRuntimeConfigurationChanges();
                         return;
                     }
@@ -803,7 +780,6 @@ export const createBotChatHomeStore = (
                     }),
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
                     draft: "",
-                    draftKey,
                     scrollFollowRevision: state.scrollFollowRevision + 1,
                 }));
                 const waiting = failed === null ? returned : [...returned, failed];
@@ -852,8 +828,6 @@ export const createBotChatHomeStore = (
                 }
                 set({ draft });
             },
-            showPairingDialog: () => set({ pairingDialogOpen: true }),
-            closePairingDialog: () => set({ pairingDialogOpen: false }),
             createConversation: async (signal) => {
                 const current = get();
                 const composer = get().composerAttachments.getState();
