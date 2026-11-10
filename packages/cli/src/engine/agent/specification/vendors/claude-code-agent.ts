@@ -56,7 +56,7 @@ export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification
                     normalizeAcpCapabilities(initialized),
                 );
             } finally {
-                await client.dispose();
+                await client.dispose("graceful");
             }
         } catch (cause) {
             params.signal.throwIfAborted();

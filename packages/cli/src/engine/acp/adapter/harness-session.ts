@@ -7,7 +7,7 @@ export interface HarnessClient {
     readonly signal: AbortSignal;
     readonly prompt: (request: PromptRequest) => Promise<PromptResponse>;
     readonly cancel: (request: { readonly sessionId: string }) => Promise<void>;
-    readonly dispose: (mode?: "force") => Promise<void>;
+    readonly dispose: (mode: "graceful" | "force") => Promise<void>;
 }
 
 export interface HarnessLifetime {
@@ -20,7 +20,7 @@ export async function disposeHarnessClient(
     agent: HarnessClient,
     sessionId: SessionId,
     drained: () => Promise<void>,
-    mode?: "force",
+    mode: "graceful" | "force",
 ): Promise<void> {
     if (mode !== "force" && !agent.signal.aborted) {
         // Give the provider a bounded opportunity to persist interrupted work before retiring it.
@@ -158,14 +158,14 @@ export class HarnessSession<Client extends HarnessClient> {
         }
     };
 
-    readonly dispose = (mode?: "force"): Promise<void> => {
+    readonly dispose = (mode: "graceful" | "force"): Promise<void> => {
         if (this.#closing === null) {
             this.#closing = this.#dispose(mode);
         }
         return this.#closing;
     };
 
-    readonly #dispose = async (mode: "force" | undefined): Promise<void> => {
+    readonly #dispose = async (mode: "graceful" | "force"): Promise<void> => {
         try {
             await disposeHarnessClient(this.agent, this.sessionId, this.#drained, mode);
         } finally {

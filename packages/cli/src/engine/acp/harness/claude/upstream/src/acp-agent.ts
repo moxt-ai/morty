@@ -5234,7 +5234,7 @@ export class ClaudeAcpAgent {
     }
 
     /** Release SDK resources; callers may skip graceful interruption after their own cancellation deadline. */
-    async dispose(mode?: "force"): Promise<void> {
+    async dispose(mode: "graceful" | "force"): Promise<void> {
         if (this.closing === null) {
             this.lifetime.abort(new DOMException("The Claude client closed", "AbortError"));
             for (const controller of this.creationControllers) {

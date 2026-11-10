@@ -100,7 +100,7 @@ export class ClaudeAdapter implements Adapter {
             open,
         );
         if (this.#lifetime.signal.aborted || this.#sessions.has(session.sessionId)) {
-            await session.dispose();
+            await session.dispose("graceful");
             this.#lifetime.signal.throwIfAborted();
             throw new AcpExecutionError("Another writer is using this session", {}, "session_busy");
         }
@@ -245,7 +245,7 @@ export class ClaudeAdapter implements Adapter {
         const session = this.#sessions.get(sessionId);
         if (session !== undefined) {
             this.#sessions.delete(sessionId);
-            await session.dispose();
+            await session.dispose("graceful");
         }
     };
     readonly releaseSession: Adapter["releaseSession"] = async (params) => {

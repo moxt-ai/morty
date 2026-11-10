@@ -134,7 +134,7 @@ export class PiAdapter implements Adapter {
             start,
         );
         if (this.#lifetime.signal.aborted || this.#sessions.has(session.sessionId)) {
-            await session.dispose();
+            await session.dispose("graceful");
             this.#lifetime.signal.throwIfAborted();
             throw new AcpExecutionError("Another writer is using this native session", {}, "session_busy");
         }
@@ -258,7 +258,7 @@ export class PiAdapter implements Adapter {
         const session = this.#sessions.get(sessionId);
         if (session !== undefined) {
             this.#sessions.delete(sessionId);
-            await session.dispose();
+            await session.dispose("graceful");
         }
     };
 

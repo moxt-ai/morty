@@ -65,7 +65,7 @@ export class HarnessHistoryPreviews {
                         lifetime,
                         closeProcess: async () => {
                             try {
-                                await disposeHarnessClient(source.client, sessionId, source.drained);
+                                await disposeHarnessClient(source.client, sessionId, source.drained, "graceful");
                             } finally {
                                 lifetime.abort();
                             }
