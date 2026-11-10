@@ -44,26 +44,6 @@ function identifierField(value: Readonly<Record<string, unknown>>, field: string
     }
 }
 
-function _booleanField(value: Readonly<Record<string, unknown>>, field: string): boolean {
-    const candidate = value[field];
-    if (typeof candidate !== "boolean") {
-        throw invalidResponse(`The service returned an invalid ${field}`);
-    }
-    return candidate;
-}
-
-function _arrayField(
-    value: Readonly<Record<string, unknown>>,
-    field: string,
-    maximumLength = 10_000,
-): readonly unknown[] {
-    const candidate = value[field];
-    if (!Array.isArray(candidate) || candidate.length > maximumLength) {
-        throw invalidResponse(`The service returned an invalid ${field}`);
-    }
-    return candidate;
-}
-
 function validateTimestamp(value: string, field: string): string {
     if (Number.isNaN(Date.parse(value))) {
         throw invalidResponse(`The service returned an invalid ${field}`);
