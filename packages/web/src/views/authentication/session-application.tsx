@@ -13,9 +13,12 @@ const PlaygroundApplication = lazy(() =>
     })),
 );
 
+function Standard({ children }: { readonly children: ReactNode }) {
+    return <>{children}</>;
+}
+
 export function createSignedInRouter(application: MortyApplication) {
     const authorize = (signal: AbortSignal) => application.anonymousSession.getState().authorize(signal);
-    const Standard = ({ children }: { readonly children: ReactNode }) => <>{children}</>;
     return createApplicationRouter(authorize, ({ view }) => <MortyManagement application={application} view={view} />, {
         Application: Standard,
         Standard,
