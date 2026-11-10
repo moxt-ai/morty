@@ -167,7 +167,7 @@ export function createChatWorkspace(options: {
             sidebar.dialogs.getState().runtimeChanged();
             void draftControls
                 .getState()
-                .runtimeChanged(configuration, chatLifetime.signal)
+                .runtimeChanged(configuration, operationsLifetime.signal)
                 .catch(() => undefined);
             if (initialVisitPending) {
                 initialVisitPending = false;
@@ -180,12 +180,7 @@ export function createChatWorkspace(options: {
             }
             runtimeRecovery.observe(configuration.runtime.online, observation);
         },
-        onDraftSelected: () => {
-            void draftControls
-                .getState()
-                .load(chatLifetime.signal)
-                .catch(() => undefined);
-        },
+        onDraftSelected: () => enterDraft(),
         onRestart: () => {
             startHomeLoad();
             startDirectoryLoad();
@@ -209,8 +204,12 @@ export function createChatWorkspace(options: {
             if (conversationId !== null) {
                 statuses.getState().opened(conversationId);
             }
-            // A pane lives while its session record is the ready selection; any other target ends it.
+            // A pane lives while its session record is the ready selection; any other target ends it. The draft's
+            // settings live while the draft is selected.
             const selection = home.getState().selection;
+            if (selection.kind !== "draft") {
+                draftControls.getState().leave();
+            }
             if (paneEntry !== null && (selection.kind !== "ready" || selection.session !== paneEntry.session)) {
                 paneEntry.model.stop();
                 paneEntry = null;
@@ -308,16 +307,13 @@ export function createChatWorkspace(options: {
                     reportApplicationError(cause, "chat-home-load");
                 }
             });
-        // Harness settings belong to the draft composer; skip the
-        // configuration burst when the entry targets an existing session. A
-        // later new draft triggers the load through the onDraftSelected
-        // announcement.
-        if (home.getState().selection.kind === "draft") {
-            void draftControls
-                .getState()
-                .load(signal)
-                .catch(() => undefined);
-        }
+    };
+    /** The draft composer's settings live while a draft is selected, independently of how the page loads. */
+    const enterDraft = (): void => {
+        void draftControls
+            .getState()
+            .enter(operationsLifetime.signal)
+            .catch(() => undefined);
     };
     const startDirectoryLoad = (): void => {
         directoryLifetime.abort(new Error("Directory loading restarted."));
@@ -343,8 +339,7 @@ export function createChatWorkspace(options: {
         const listed = directory.getState().state.kind;
         return listed === "failed" || listed === "stale";
     };
-    const draftWaitsForRuntime = (): boolean =>
-        home.getState().selection.kind === "draft" && draftControls.getState().settings.kind === "waiting-runtime";
+    const draftWaitsForRuntime = (): boolean => draftControls.getState().settings.kind === "unreachable";
     /** The live pane, when its connection used up its automatic retries and waits for the Runtime. */
     const paneWaitingForRuntime = (): ChatWorkspacePaneEntry | null =>
         paneEntry !== null && connectionWaitsForRuntime(paneEntry.model.store.getState().connection) ? paneEntry : null;
@@ -368,7 +363,7 @@ export function createChatWorkspace(options: {
             if (draftWaitsForRuntime()) {
                 void draftControls
                     .getState()
-                    .load(chatLifetime.signal)
+                    .retry(operationsLifetime.signal)
                     .catch(() => undefined);
             }
             paneWaitingForRuntime()?.model.reconnect();
@@ -513,6 +508,9 @@ export function createChatWorkspace(options: {
                     }
                 });
             void options.computers?.refresh();
+            if (home.getState().selection.kind === "draft") {
+                enterDraft();
+            }
             startHomeLoad();
             startDirectoryLoad();
         },
@@ -529,7 +527,7 @@ export function createChatWorkspace(options: {
         retryDraftControls: () => {
             void draftControls
                 .getState()
-                .load(chatLifetime.signal)
+                .retry(operationsLifetime.signal)
                 .catch(() => undefined);
         },
         refreshDirectory: startDirectoryLoad,

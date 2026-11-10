@@ -566,7 +566,6 @@ export function ChatConfigurationMenu({
     const [open, setOpen] = useState(false);
     const [nestedControlId, setNestedControlId] = useState<string | null>(null);
     const nestedControlIdRef = useRef<string | null>(null);
-    const retainedSettingsRef = useRef<readonly ChatConfigurationControl[]>([]);
     const viewport = useConfigurationViewport();
     const desktop = viewport.desktop;
     const [page, setPage] = useState<ConfigurationPage>({ kind: "overview" });
@@ -625,15 +624,8 @@ export function ChatConfigurationMenu({
         (control): control is ChatConfigurationSelectControl => control.id === "harness" && control.kind === "select",
     );
     const settings = controls.filter((control) => control !== harness);
-    if (settings.length > 0) {
-        retainedSettingsRef.current = settings;
-    }
-    // A harness switch clears options immediately. Keep the fields already on
-    // screen until the next settings arrive, so the panel does not resize first.
-    const displayedSettings = settingsLoading && settings.length === 0 ? retainedSettingsRef.current : settings;
     const selectedHarness = harness?.options.find((option) => option.value === harness.value);
-    const selectionSource = displayedSettings.length > 0 ? displayedSettings : settings;
-    const selections = selectionSource.map((control) =>
+    const selections = settings.map((control) =>
         control.kind === "boolean"
             ? `${control.label}: ${control.checked ? "On" : "Off"}`
             : (control.options.find((option) => option.value === control.value)?.label ?? control.value),
@@ -665,7 +657,7 @@ export function ChatConfigurationMenu({
     );
     const picker =
         page.kind === "picker"
-            ? displayedSettings.find(
+            ? settings.find(
                   (control): control is ChatConfigurationSelectControl =>
                       control.id === page.controlId && control.kind === "select",
               )
@@ -781,14 +773,14 @@ export function ChatConfigurationMenu({
                         <HarnessSelect harness={harness} mutedWhenDisabled={!settingsLoading} />
                     )}
                     <div className="flex min-w-0 flex-col">
-                        {settingsLoading && displayedSettings.length === 0 ? (
+                        {settingsLoading && settings.length === 0 ? (
                             <SettingsDataSkeleton />
-                        ) : displayedSettings.length === 0 ? (
+                        ) : settings.length === 0 ? (
                             <p className="text-center text-xs text-muted-foreground">
                                 This harness has no configurable settings.
                             </p>
                         ) : (
-                            displayedSettings.map((control) => (
+                            settings.map((control) => (
                                 <div
                                     className="relative after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:border-b after:border-border/40 after:content-[''] last:after:hidden"
                                     key={control.id}

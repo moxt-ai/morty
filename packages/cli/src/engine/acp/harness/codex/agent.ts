@@ -238,6 +238,8 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                             cursor: context.params.cursor ?? null,
                             // Codex defaults to interactive sources and otherwise hides exec handoffs.
                             sourceKinds: ["cli", "vscode", "exec", "appServer"],
+                            // Rollout scans can return multiple files with the same native session identity.
+                            useStateDbOnly: true,
                         },
                         AbortSignal.any([context.signal, AbortSignal.timeout(SESSION_LIST_TIMEOUT_MILLISECONDS)]),
                     ),
