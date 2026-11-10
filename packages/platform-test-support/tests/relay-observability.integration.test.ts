@@ -411,14 +411,12 @@ it("records overload close details and connection epochs without logging healthy
             role: "daemon",
             computerId,
             durableObjectId: expect.any(String),
-            connectionId: expect.any(String),
             connectionEpoch: 1,
         });
         expect(logs).toContainEqual(
             expect.objectContaining({
                 event: "runtime_websocket_accepted",
                 connectionEpoch: 1,
-                connectionId: closed?.["connectionId"],
                 computerId,
             }),
         );

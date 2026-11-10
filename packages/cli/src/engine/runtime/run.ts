@@ -171,7 +171,7 @@ export async function runRuntime(
         connectionAnnounced = true;
         process.stdout.write("Morty Runtime connected to the relay.\n\n");
         if (config.reconnectTarget !== null) {
-            const reconnectCommand = `morty start ${config.reconnectTarget.commandArgument}`;
+            const reconnectCommand = "morty start";
             process.stdout.write(
                 `${styleText(["bold", "yellow"], `Reconnect this local connection later:\n  ${reconnectCommand}`)}\n\n`,
             );

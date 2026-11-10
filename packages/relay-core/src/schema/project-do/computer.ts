@@ -10,7 +10,6 @@ export const computer = sqliteTable(
         workspaceName: text("workspace_name"),
         agentsJson: text("agents_json"),
         connectionEpoch: integer("connection_epoch").notNull().default(0),
-        connectionId: text("connection_id"),
         state: text("state", { enum: ["online", "offline", "revoked"] }),
         connectedAt: integer("connected_at"),
         disconnectedAt: integer("disconnected_at"),
@@ -25,7 +24,7 @@ export const computer = sqliteTable(
         ),
         check(
             "computer_connection",
-            sql`(${table.connectionEpoch} = 0 and ${table.connectionId} is null and ${table.connectedAt} is null and ${table.state} is null) or (${table.connectionEpoch} > 0 and ${table.connectionId} is not null and ${table.connectedAt} is not null and ${table.state} is not null and ${table.state} in ('online', 'offline', 'revoked'))`,
+            sql`(${table.connectionEpoch} = 0 and ${table.connectedAt} is null and ${table.state} is null) or (${table.connectionEpoch} > 0 and ${table.connectedAt} is not null and ${table.state} is not null and ${table.state} in ('online', 'offline', 'revoked'))`,
         ),
         check(
             "computer_revoked_at_check",

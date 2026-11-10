@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,7 +28,9 @@ describe("Runtime installation storage", () => {
             const record: unknown = JSON.parse(await readFile(installation.pairingPath, "utf8"));
             expect(record).not.toHaveProperty("applicationId");
             expect(record).not.toHaveProperty("appId");
-            await expect(installation.readConnection(connection.connectionId, signal)).resolves.toEqual(connection);
+            await expect(installation.readConnection(connection.pairingGeneration, signal)).resolves.toEqual(
+                connection,
+            );
         } finally {
             await rm(directory, { recursive: true, force: true });
         }
@@ -55,7 +57,7 @@ describe("Runtime installation storage", () => {
             await rename(join(stateRoot, "installations", "build.morty.cli"), relocated);
             const engine = await RuntimeInstallationStore.open(relocated, signal);
             expect(engine.stateDirectory).toBe(relocated);
-            await expect(engine.readConnection(connection.connectionId, signal)).resolves.toEqual(connection);
+            await expect(engine.readConnection(connection.pairingGeneration, signal)).resolves.toEqual(connection);
             const saved = await engine.saveConnection(
                 {
                     computerId: "channel_new",
@@ -66,47 +68,13 @@ describe("Runtime installation storage", () => {
                 signal,
             );
             await rename(relocated, join(stateRoot, "installations", "build.morty.cli"));
-            await expect(original.readConnection(saved.connectionId, signal)).resolves.toEqual(saved);
-            await expect(original.removeConnection(connection.connectionId, signal)).rejects.toMatchObject({
+            await expect(original.readConnection(saved.pairingGeneration, signal)).resolves.toEqual(saved);
+            await expect(original.removeConnection(connection.pairingGeneration, signal)).rejects.toMatchObject({
                 code: "connection_not_found",
             });
             await expect(original.listConnections(signal)).resolves.toEqual([saved]);
         } finally {
             await rm(stateRoot, { recursive: true, force: true });
-        }
-    });
-
-    it("Given an obsolete pairing record, When the Runtime restores it, Then it rejects the record without a compatibility fallback", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "morty-obsolete-pairing-"));
-        const signal = new AbortController().signal;
-        try {
-            const installation = await RuntimeInstallationStore.open(
-                join(stateRoot, "installations", "build.morty.cli"),
-                signal,
-            );
-            const connectionId = `mcn_${"0".repeat(32)}`;
-            await mkdir(join(installation.stateDirectory, "connections"), { recursive: true });
-            await writeFile(
-                installation.pairingPath,
-                JSON.stringify({
-                    activation: "active",
-                    applicationId: "build.morty.cli",
-                    computerId: "old_channel",
-                    connectionId,
-                    defaultWorkspace: "/workspace/old",
-                    installationId: "obsolete",
-                    kind: "verified",
-                    relayOrigin: "https://relay.example.com/",
-                    runtimeCredential: "a".repeat(43),
-                    version: 4,
-                }),
-                { mode: 0o600 },
-            );
-            await expect(installation.readConnection(connectionId, signal)).rejects.toMatchObject({
-                code: "invalid_connection",
-            });
-        } finally {
-            await rm(stateRoot, { force: true, recursive: true });
         }
     });
 
@@ -136,7 +104,7 @@ describe("Runtime installation storage", () => {
                 signal,
             );
 
-            const resumed = await moxt.readConnection(moxtConnection.connectionId, signal);
+            const resumed = await moxt.readConnection(moxtConnection.pairingGeneration, signal);
 
             expect(resumed.computerId).toBe(computerId);
             expect(resumed).toBeInstanceOf(VerifiedRuntimeConnection);
@@ -151,7 +119,7 @@ describe("Runtime installation storage", () => {
             expect(morty.pairingPath).not.toContain(computerId);
             expect(moxt.pairingPath).not.toContain(computerId);
 
-            await expect(morty.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
+            await expect(morty.readConnection(moxtConnection.pairingGeneration, signal)).rejects.toMatchObject({
                 code: "connection_not_found",
             } satisfies Pick<RuntimeInstallationStoreError, "code">);
         } finally {

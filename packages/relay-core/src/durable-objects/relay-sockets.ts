@@ -11,7 +11,7 @@ function socketLogContext(webSocket: WebSocket) {
             computerId,
             role,
             ...("connectionEpoch" in identity
-                ? { connectionEpoch: identity.connectionEpoch, connectionId: identity.connectionId }
+                ? { connectionEpoch: identity.connectionEpoch }
                 : "computerId" in identity
                   ? { computerId: identity.computerId }
                   : {}),

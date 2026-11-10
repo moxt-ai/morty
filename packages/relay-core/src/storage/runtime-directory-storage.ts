@@ -140,9 +140,9 @@ export class RuntimeDirectoryStorage {
             .prepare(`
             INSERT INTO computer (computer_id, created_at) VALUES (?, ?)
             ON CONFLICT(computer_id) DO UPDATE SET created_at = excluded.created_at,
-                state = CASE WHEN connection_id IS NOT NULL THEN 'revoked' END,
-                connection_epoch = connection_epoch + (connection_id IS NOT NULL),
-                disconnected_at = CASE WHEN connection_id IS NOT NULL THEN excluded.created_at END,
+                state = CASE WHEN connection_epoch > 0 THEN 'revoked' END,
+                connection_epoch = connection_epoch + (connection_epoch > 0),
+                disconnected_at = CASE WHEN connection_epoch > 0 THEN excluded.created_at END,
                 claimed_at = NULL, machine_name = NULL, workspace_name = NULL, agents_json = NULL, revoked_at = NULL, revoked_by_owner_credential_id = NULL
             WHERE revoked_at IS NOT NULL OR (
                 claimed_at IS NULL

@@ -18,7 +18,7 @@ export interface MortyRuntimeEngineParams {
 }
 
 export type EngineLoopConnection =
-    | { readonly kind: "saved"; readonly connectionId: string }
+    | { readonly kind: "saved"; readonly pairingGeneration: string }
     | { readonly kind: "provided"; readonly connection: MortyRuntimeConnection };
 
 export interface RunLoopParams extends RuntimeLoopOptions {
@@ -99,7 +99,7 @@ export class MortyRuntimeEngine {
             const installation = await this.#ensureInstallation(preparationSignal);
             switch (connection.kind) {
                 case "saved": {
-                    const saved = await installation.readConnection(connection.connectionId, preparationSignal);
+                    const saved = await installation.readConnection(connection.pairingGeneration, preparationSignal);
                     return await prepareRuntimeConnection(
                         installation,
                         saved,

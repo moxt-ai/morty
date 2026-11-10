@@ -22,7 +22,6 @@ export class RuntimeConnectionService {
             identity: {
                 computerId,
                 connectionEpoch: (previous?.connectionEpoch ?? 0) + 1,
-                connectionId: `cnn_${crypto.randomUUID()}`,
             },
         };
     };
@@ -32,8 +31,7 @@ export class RuntimeConnectionService {
         return (
             current?.state === "online" &&
             current.computerId === identity.computerId &&
-            current.connectionEpoch === identity.connectionEpoch &&
-            current.connectionId === identity.connectionId
+            current.connectionEpoch === identity.connectionEpoch
         );
     };
 

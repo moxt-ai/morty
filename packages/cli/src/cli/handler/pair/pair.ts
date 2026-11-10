@@ -21,13 +21,9 @@ export function registerPairAction(command: Command, context: CliContext): void 
             await ensureDaemon(control.stateDirectory, context.entry, context.shutdownSignal);
             process.stdout.write(`morty version: ${context.version}\n`);
             const paired = await pairLocalMachine(pairArguments(requested), context.shutdownSignal);
-            const connection = await control.setConnectionActivation(
-                paired.connectionId,
-                "active",
-                context.shutdownSignal,
-            );
+            await control.setConnectionActivation(paired.pairingGeneration, "active", context.shutdownSignal);
             await reloadDaemon(control.stateDirectory, context.shutdownSignal);
-            process.stdout.write(`\nLocal machine paired.\nConnection ID: ${connection.connectionId}\n`);
+            process.stdout.write("\nLocal machine paired.\n");
             process.stdout.write("Morty daemon is running; connection will reconnect automatically.\n");
         });
 }

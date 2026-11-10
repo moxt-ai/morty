@@ -12,7 +12,7 @@ import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{
-    connection_id: string;
+    pairingGeneration: string;
     computer_id: string;
     credential: string;
     origin: string;
@@ -89,8 +89,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify(
-                    Array.from(this.#saved.values(), ({ connection_id, computer_id }) => ({
-                        connection_id,
+                    Array.from(this.#saved.values(), ({ computer_id }) => ({
                         computer_id,
                     })),
                 ),
@@ -125,7 +124,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
             return result;
         }
         if (args[0] === "start") {
-            const connection = this.#saved.get(option("--connection"));
+            const connection = Array.from(this.#saved.values()).at(-1);
             if (connection === undefined) {
                 throw new Error("Unknown controlled Runtime connection");
             }
@@ -152,12 +151,12 @@ export class ControlledSetupRuntime implements SetupRuntime {
         });
         const connection: Connection = {
             computer_id: text(claim["computerId"], "Channel ID"),
-            connection_id: crypto.randomUUID(),
+            pairingGeneration: crypto.randomUUID(),
             credential: text(claim["runtimeCredential"], "Runtime credential"),
             origin,
         };
-        this.#saved.set(connection.connection_id, connection);
-        this.#credentials.set(connection.connection_id, memoryRuntimeCredentials(connection.credential));
+        this.#saved.set(connection.pairingGeneration, connection);
+        this.#credentials.set(connection.pairingGeneration, memoryRuntimeCredentials(connection.credential));
         await this.#connect(connection, signal);
         return result;
     };
@@ -258,7 +257,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
      */
     async #connect(connection: Connection, signal: AbortSignal): Promise<void> {
         signal.throwIfAborted();
-        if (this.#active.has(connection.connection_id)) {
+        if (this.#active.has(connection.pairingGeneration)) {
             return;
         }
         const daemon = await connectControlledAgentRuntime({
@@ -266,26 +265,26 @@ export class ControlledSetupRuntime implements SetupRuntime {
             connection: {
                 computerId: connection.computer_id,
                 origin: connection.origin,
-                credentials: this.#savedCredentials(connection.connection_id),
+                credentials: this.#savedCredentials(connection.pairingGeneration),
             },
             signal: new AbortController().signal,
         });
-        this.#active.set(connection.connection_id, daemon);
+        this.#active.set(connection.pairingGeneration, daemon);
         void daemon.failure.catch((error: unknown) => {
-            if (this.#active.get(connection.connection_id) !== daemon) {
+            if (this.#active.get(connection.pairingGeneration) !== daemon) {
                 return;
             }
             // Like the manager's daemon, a revoked Runtime stops its own connection and the others keep running.
             if (Reflect.get(Object(error), "code") === "runtime_relay_revoked") {
-                this.#active.delete(connection.connection_id);
+                this.#active.delete(connection.pairingGeneration);
                 return;
             }
             this.#failed.reject(error);
         });
     }
 
-    #savedCredentials(connectionId: string): RuntimeCredentials {
-        const credentials = this.#credentials.get(connectionId);
+    #savedCredentials(pairingGeneration: string): RuntimeCredentials {
+        const credentials = this.#credentials.get(pairingGeneration);
         if (credentials === undefined) {
             throw new Error("The saved connection has no Runtime credential");
         }

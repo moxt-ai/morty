@@ -3,18 +3,19 @@ import type { Command } from "commander";
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
 import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
 import type { CliContext } from "../../context.ts";
-import { valueOption } from "../../util/options.ts";
-import type { ConnectionOptions } from "./logic/options.ts";
 
 export function registerPairStopCommand(command: Command, context: CliContext): void {
     command
         .command("stop")
-        .description("stop a saved pairing")
-        .addOption(valueOption("--connection <connection-id>", "saved Runtime connection identifier", true))
-        .action(async (options: ConnectionOptions) => {
+        .description("stop the current pairing")
+        .action(async () => {
             const installation = await openMortyInstallation(context.shutdownSignal, process.env);
-            await installation.setConnectionActivation(options.connection, "stopped", context.shutdownSignal);
+            const pairing = await installation.currentConnection(context.shutdownSignal);
+            if (pairing === null) {
+                command.error("No machine is paired. Run Morty setup first.", { code: "connection_not_found" });
+            }
+            await installation.setConnectionActivation(pairing.pairingGeneration, "stopped", context.shutdownSignal);
             await reloadDaemon(installation.stateDirectory, context.shutdownSignal);
-            process.stdout.write(`Pairing stopped: ${options.connection}\n`);
+            process.stdout.write("Pairing stopped.\n");
         });
 }

@@ -14,10 +14,6 @@ export interface PairOptions extends ParsedPairOptions {
     readonly url: string;
 }
 
-export interface ConnectionOptions {
-    readonly connection: string;
-}
-
 export interface PairListOptions {
     readonly outputJson?: string;
 }

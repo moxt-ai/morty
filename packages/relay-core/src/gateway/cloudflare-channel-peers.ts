@@ -62,7 +62,6 @@ const attachmentSchema = v.union([
     v.object({
         role: v.picklist(["daemon", "replaced-daemon"]),
         connectionEpoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
-        connectionId: v.pipe(v.string(), v.minLength(1)),
         computerId: v.string(),
     }),
 ]);
@@ -111,7 +110,6 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         if (attachment.role === "daemon" || attachment.role === "replaced-daemon") {
             return {
                 connectionEpoch: attachment.connectionEpoch,
-                connectionId: attachment.connectionId,
                 computerId: attachment.computerId,
                 role: attachment.role,
             };

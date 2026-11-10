@@ -16,19 +16,19 @@ export class ConnectionManager {
     readonly list = async (signal: AbortSignal): Promise<readonly VerifiedRuntimeConnection[]> =>
         await (await this.#ensureInstallation(signal)).listConnections(signal);
 
-    readonly read = async (connectionId: string, signal: AbortSignal): Promise<VerifiedRuntimeConnection> =>
-        await (await this.#ensureInstallation(signal)).readConnection(connectionId, signal);
+    readonly read = async (pairingGeneration: string, signal: AbortSignal): Promise<VerifiedRuntimeConnection> =>
+        await (await this.#ensureInstallation(signal)).readConnection(pairingGeneration, signal);
 
     readonly save = async (input: RuntimeConnectionInput, signal: AbortSignal): Promise<VerifiedRuntimeConnection> =>
         await (await this.#ensureInstallation(signal)).saveConnection(input, signal);
 
     readonly setActivation = async (
-        connectionId: string,
+        pairingGeneration: string,
         activation: RuntimeConnectionActivation,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection> =>
-        await (await this.#ensureInstallation(signal)).setConnectionActivation(connectionId, activation, signal);
+        await (await this.#ensureInstallation(signal)).setConnectionActivation(pairingGeneration, activation, signal);
 
-    readonly remove = async (connectionId: string, signal: AbortSignal): Promise<void> =>
-        await (await this.#ensureInstallation(signal)).removeConnection(connectionId, signal);
+    readonly remove = async (pairingGeneration: string, signal: AbortSignal): Promise<void> =>
+        await (await this.#ensureInstallation(signal)).removeConnection(pairingGeneration, signal);
 }

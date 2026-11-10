@@ -555,7 +555,6 @@ for (const [failure, scenario] of starterFailures) {
                 await runtime.disconnect();
                 const connection = {
                     computer_id: runtime.computerId,
-                    connection_id: "managed-test-connection",
                 };
                 await writeFile(join(state, "config.json"), savedSetupState(fixture.origin, identity), {
                     mode: 0o600,

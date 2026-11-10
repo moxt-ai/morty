@@ -18,13 +18,13 @@ import {
 } from "./runtime-connection.ts";
 import type { HeldRuntimeCredentials, RuntimeCredentials } from "./runtime-credentials.ts";
 
-const PAIRING_RECORD_VERSION = 8;
-const CONNECTION_ID_PATTERN = /^mcn_[a-f0-9]{32}$/;
+const PAIRING_RECORD_VERSION = 9;
+const PAIRING_GENERATION_PATTERN = /^mpg_[a-f0-9]{32}$/;
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
     "computerId",
-    "connectionId",
+    "pairingGeneration",
     "defaultWorkspace",
     "kind",
     "relayOrigin",
@@ -51,9 +51,12 @@ function hasExactKeys(value: Readonly<Record<string, unknown>>, expectedKeys: re
     return keys.length === expectedKeys.length && expectedKeys.every((key) => Object.hasOwn(value, key));
 }
 
-function validateConnectionId(value: string): string {
-    if (!CONNECTION_ID_PATTERN.test(value)) {
-        throw new RuntimeInstallationStoreError("invalid_connection_id", "The local connection ID is invalid");
+function validatePairingGeneration(value: string): string {
+    if (!PAIRING_GENERATION_PATTERN.test(value)) {
+        throw new RuntimeInstallationStoreError(
+            "invalid_pairing_generation",
+            "The local pairing generation is invalid",
+        );
     }
     return value;
 }
@@ -95,8 +98,8 @@ function parseRelayOrigin(value: string): URL {
     return origin;
 }
 
-function connectionId(): string {
-    return `mcn_${randomUUID().replaceAll("-", "")}`;
+function pairingGeneration(): string {
+    return `mpg_${randomUUID().replaceAll("-", "")}`;
 }
 
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedRuntimeConnection {
@@ -108,7 +111,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
-    const connectionId = value["connectionId"];
+    const pairingGeneration = value["pairingGeneration"];
     const defaultWorkspace = value["defaultWorkspace"];
     const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];
@@ -116,7 +119,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
     if (
         (activation !== "active" && activation !== "stopped") ||
         typeof computerId !== "string" ||
-        typeof connectionId !== "string" ||
+        typeof pairingGeneration !== "string" ||
         typeof defaultWorkspace !== "string" ||
         typeof relayOrigin !== "string" ||
         !isRecord(credentials) ||
@@ -128,7 +131,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
     }
     return new VerifiedRuntimeConnection(
         activation,
-        validateConnectionId(connectionId),
+        validatePairingGeneration(pairingGeneration),
         validateIdentifier(computerId, "invalid_connection"),
         defaultWorkspace,
         parseRelayOrigin(relayOrigin),
@@ -232,10 +235,13 @@ export class RuntimeInstallationStore {
         }
     };
 
-    readonly readConnection = async (connectionId: string, signal: AbortSignal): Promise<VerifiedRuntimeConnection> => {
-        validateConnectionId(connectionId);
+    readonly readConnection = async (
+        pairingGeneration: string,
+        signal: AbortSignal,
+    ): Promise<VerifiedRuntimeConnection> => {
+        validatePairingGeneration(pairingGeneration);
         const connection = decodeConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
-        if (connection.connectionId !== connectionId) {
+        if (connection.pairingGeneration !== pairingGeneration) {
             throw new RuntimeInstallationStoreError(
                 "connection_not_found",
                 "The requested pairing is no longer selected",
@@ -250,7 +256,7 @@ export class RuntimeInstallationStore {
     ): Promise<VerifiedRuntimeConnection> => {
         const stored = new VerifiedRuntimeConnection(
             "active",
-            connectionId(),
+            pairingGeneration(),
             validateIdentifier(input.computerId, "invalid_connection"),
             input.defaultWorkspace,
             parseRelayOrigin(input.relayOrigin.toString()),
@@ -279,15 +285,15 @@ export class RuntimeInstallationStore {
     };
 
     readonly setConnectionActivation = async (
-        connectionId: string,
+        pairingGeneration: string,
         activation: RuntimeConnectionActivation,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection> => {
         return await this.changePairing(async () => {
-            const connection = await this.readConnection(connectionId, signal);
+            const connection = await this.readConnection(pairingGeneration, signal);
             const updated = new VerifiedRuntimeConnection(
                 activation,
-                connection.connectionId,
+                connection.pairingGeneration,
                 connection.computerId,
                 connection.defaultWorkspace,
                 connection.relayOrigin,
@@ -303,10 +309,10 @@ export class RuntimeInstallationStore {
      * and re-reads the selected pairing, so activation cannot restore old credentials and an old Runtime cannot
      * overwrite a replacement. A rejected completion leaves the prepared successor durable for a safe retry.
      */
-    readonly runtimeCredentials = (connectionId: string): RuntimeCredentials => ({
+    readonly runtimeCredentials = (pairingGeneration: string): RuntimeCredentials => ({
         prepare: async (signal) =>
             await this.changePairing(async () => {
-                const connection = await this.readConnection(connectionId, signal);
+                const connection = await this.readConnection(pairingGeneration, signal);
                 const saved = connection.credentials;
                 const rotation = {
                     current: saved.current,
@@ -319,7 +325,7 @@ export class RuntimeInstallationStore {
             }),
         complete: async (rotation, signal) =>
             await this.changePairing(async () => {
-                const connection = await this.readConnection(connectionId, signal);
+                const connection = await this.readConnection(pairingGeneration, signal);
                 const saved = connection.credentials;
                 if (saved.current === rotation.successor) {
                     return;
@@ -332,7 +338,7 @@ export class RuntimeInstallationStore {
                 }
                 await this.overwriteCredentials(connection, { current: rotation.successor, successor: null }, signal);
             }),
-        held: async (signal) => (await this.readConnection(connectionId, signal)).credentials,
+        held: async (signal) => (await this.readConnection(pairingGeneration, signal)).credentials,
     });
 
     private readonly overwriteCredentials = async (
@@ -343,7 +349,7 @@ export class RuntimeInstallationStore {
         await this.overwriteConnection(
             new VerifiedRuntimeConnection(
                 connection.activation,
-                connection.connectionId,
+                connection.pairingGeneration,
                 connection.computerId,
                 connection.defaultWorkspace,
                 connection.relayOrigin,
@@ -353,9 +359,9 @@ export class RuntimeInstallationStore {
         );
     };
 
-    readonly removeConnection = async (connectionId: string, signal: AbortSignal): Promise<void> => {
+    readonly removeConnection = async (pairingGeneration: string, signal: AbortSignal): Promise<void> => {
         await this.changePairing(async () => {
-            await this.readConnection(connectionId, signal);
+            await this.readConnection(pairingGeneration, signal);
             signal.throwIfAborted();
             await removeInstallationFile(this.pairingPath);
         });
@@ -370,7 +376,7 @@ export class RuntimeInstallationStore {
             {
                 activation: connection.activation,
                 computerId: connection.computerId,
-                connectionId: connection.connectionId,
+                pairingGeneration: connection.pairingGeneration,
                 defaultWorkspace: connection.defaultWorkspace,
                 kind: connection.kind,
                 relayOrigin: connection.relayOrigin.toString(),

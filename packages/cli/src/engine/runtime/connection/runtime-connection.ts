@@ -14,7 +14,8 @@ export class VerifiedRuntimeConnection {
     readonly kind = "verified";
     readonly activation: RuntimeConnectionActivation;
     readonly computerId: string;
-    readonly connectionId: string;
+    /** Fences work from an earlier pairing, even when this computer is paired again with the same identity. */
+    readonly pairingGeneration: string;
     readonly defaultWorkspace: string;
     readonly relayOrigin: URL;
     /** The credential state saved with this pairing; live users read it through the installation store. */
@@ -22,7 +23,7 @@ export class VerifiedRuntimeConnection {
 
     constructor(
         activation: RuntimeConnectionActivation,
-        connectionId: string,
+        pairingGeneration: string,
         computerId: string,
         defaultWorkspace: string,
         relayOrigin: URL,
@@ -30,7 +31,7 @@ export class VerifiedRuntimeConnection {
     ) {
         this.activation = activation;
         this.computerId = computerId;
-        this.connectionId = connectionId;
+        this.pairingGeneration = pairingGeneration;
         this.defaultWorkspace = defaultWorkspace;
         this.relayOrigin = relayOrigin;
         this.credentials = credentials;

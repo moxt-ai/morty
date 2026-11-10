@@ -18,8 +18,8 @@ import { surviveUnhandledRejections, type UnhandledRejectionGuard } from "./unha
 
 class DaemonRuntimeError extends Error {
     readonly code = "worker_runtime_failed";
-    constructor(connectionId: string, cause: unknown) {
-        super(`Runtime ${connectionId} failed`, { cause });
+    constructor(pairingGeneration: string, cause: unknown) {
+        super(`Runtime pairing ${pairingGeneration} failed`, { cause });
     }
 }
 
@@ -110,20 +110,20 @@ async function runDaemonRuntime(
         const agentProcesses = new RuntimeAgentProcesses();
         let active:
             | {
-                  readonly connectionId: string;
+                  readonly pairingGeneration: string;
                   readonly config: RuntimeConfig;
                   readonly controller: AbortController;
                   readonly completion: Promise<void>;
               }
             | undefined;
-        const fail = (connectionId: string, cause: unknown): void => {
-            console.error(`Runtime ${connectionId} failed; stopping the daemon`, cause);
-            shutdown.abort(new DaemonRuntimeError(connectionId, cause));
+        const fail = (pairingGeneration: string, cause: unknown): void => {
+            console.error(`Runtime pairing ${pairingGeneration} failed; stopping the daemon`, cause);
+            shutdown.abort(new DaemonRuntimeError(pairingGeneration, cause));
         };
         const reconcile = async (): Promise<void> => {
             const connection = await installation.currentConnection(combined);
             if (active !== undefined) {
-                if (connection?.activation === "active" && connection.connectionId === active.connectionId) {
+                if (connection?.activation === "active" && connection.pairingGeneration === active.pairingGeneration) {
                     return;
                 }
                 active.controller.abort();
@@ -150,7 +150,7 @@ async function runDaemonRuntime(
                     const completion = loop.run(AbortSignal.any([combined, controller.signal])).then(
                         () => {
                             if (!combined.aborted && !controller.signal.aborted) {
-                                fail(connection.connectionId, new Error("The Runtime stopped unexpectedly"));
+                                fail(connection.pairingGeneration, new Error("The Runtime stopped unexpectedly"));
                             }
                         },
                         async (cause: unknown) => {
@@ -158,7 +158,7 @@ async function runDaemonRuntime(
                                 return;
                             }
                             if (!(cause instanceof RuntimeRelayRevokedError)) {
-                                fail(connection.connectionId, cause);
+                                fail(connection.pairingGeneration, cause);
                                 return;
                             }
                             // A revoked Runtime never connects again; setup pairs this computer anew, and the daemon
@@ -166,22 +166,22 @@ async function runDaemonRuntime(
                             lifecycleLog.record(
                                 JSON.stringify({
                                     kind: "runtime_revoked",
-                                    connectionId: connection.connectionId,
+                                    pairingGeneration: connection.pairingGeneration,
                                     timestamp: new Date().toISOString(),
                                 }),
                             );
                             console.error(
-                                `Morty disconnected Runtime ${connection.connectionId}: its connection key was used somewhere else. Run Morty setup on this computer again to reconnect.`,
+                                "Morty disconnected this Runtime: its connection key was used somewhere else. Run Morty setup on this computer again to reconnect.",
                             );
                             await installation
-                                .setConnectionActivation(connection.connectionId, "stopped", combined)
-                                .catch((failure: unknown) => fail(connection.connectionId, failure));
+                                .setConnectionActivation(connection.pairingGeneration, "stopped", combined)
+                                .catch((failure: unknown) => fail(connection.pairingGeneration, failure));
                         },
                     );
-                    active = { connectionId: connection.connectionId, config, controller, completion };
+                    active = { pairingGeneration: connection.pairingGeneration, config, controller, completion };
                 } catch (cause) {
                     combined.throwIfAborted();
-                    fail(connection.connectionId, cause);
+                    fail(connection.pairingGeneration, cause);
                     throw cause;
                 }
             }
