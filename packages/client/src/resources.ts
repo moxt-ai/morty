@@ -96,15 +96,6 @@ export class MortySessionAccess {
     }
 }
 
-/** A revocation of a Project's Session credentials: every one issued no later than `revokedThrough`. */
-export class MortySessionAccessRevocation {
-    readonly revokedThrough: string;
-    constructor(value: unknown) {
-        const resource = record(value, "Session access revocation");
-        this.revokedThrough = validateTimestamp(stringField(resource, "revokedThrough", 128), "revokedThrough");
-    }
-}
-
 /** Creates an Agent-owned Session with its initial settings. Reuse the operation ID after response loss. */
 export interface CreateMortySessionRequest {
     readonly harness: string;

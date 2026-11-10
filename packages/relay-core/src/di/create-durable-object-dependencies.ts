@@ -72,14 +72,10 @@ function createRuntimeRelayDependencies(cx: {
                 : "denied";
         },
         authorizeViewer: async (identity, signal) => {
-            // A persisted view without complete authorization metadata must reconnect.
-            if (identity.credential === null) {
-                return "revoked";
-            }
             return (await cx.gateways.projectCredentials.grantsSessionCredential(
                 identity.computerId,
                 identity.credential.credentialId,
-                identity.credential.issuedAt,
+                identity.credential.holder,
                 [ProjectPermission.SessionRead],
                 signal,
             ))

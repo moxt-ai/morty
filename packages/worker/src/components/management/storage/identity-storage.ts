@@ -130,7 +130,15 @@ export class IdentityStorage {
         return credential === undefined ? null : { token, userId, computerId };
     };
 
-    readonly findCredential = async (token: string, signal: AbortSignal) => {
+    readonly findCredential = async (token: string, signal: AbortSignal) =>
+        await this.#storedCredential(eq(anonymousCredential.tokenHash, await digest(token)), signal);
+
+    /** The owner's credential with this identifier, as `findCredential` reads it. */
+    readonly findCredentialById = async (credentialId: string, signal: AbortSignal) =>
+        await this.#storedCredential(eq(anonymousCredential.id, credentialId), signal);
+
+    /** A credential of the computer's owner and what its access depends on; null for any other credential. */
+    readonly #storedCredential = async (credential: SQL, signal: AbortSignal) => {
         if (this.#computerId === null) {
             return null;
         }
@@ -162,7 +170,30 @@ export class IdentityStorage {
                     eq(browserDevice.userId, anonymousCredential.userId),
                 ),
             )
-            .where(eq(anonymousCredential.tokenHash, await digest(token)))
+            .where(credential)
+            .get();
+        signal.throwIfAborted();
+        return result ?? null;
+    };
+
+    /** A browser device of the computer's owner: when its access was ended, if it was, and its term. */
+    readonly findDevice = async (
+        deviceId: string,
+        signal: AbortSignal,
+    ): Promise<{ readonly endedAt: number | null; readonly accessExpiresAt: number | null } | null> => {
+        if (this.#computerId === null) {
+            return null;
+        }
+        signal.throwIfAborted();
+        const database = requireIdentityDatabase(this.#database);
+        const result = await database
+            .select({
+                endedAt: browserDevice.endedAt,
+                accessExpiresAt: deviceAccessExpiresAt(database, browserDevice.id).as("device_access_expires_at"),
+            })
+            .from(browserDevice)
+            .innerJoin(managedBot, eq(managedBot.userId, browserDevice.userId))
+            .where(eq(browserDevice.id, deviceId))
             .get();
         signal.throwIfAborted();
         return result ?? null;

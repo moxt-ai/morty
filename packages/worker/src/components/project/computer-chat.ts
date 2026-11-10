@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { computerApplication as application } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
@@ -7,6 +8,8 @@ import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
 import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
 import { relayIdentifier } from "../management/entity/computer-management.ts";
+import { holdsAccess } from "../management/service/authentication-service.ts";
+import { IdentityStorage } from "../management/storage/identity-storage.ts";
 
 /**
  * One computer's storage. Only the computer's bootstrap binds the object and creates its schema; a request for an computer
@@ -15,20 +18,26 @@ import { relayIdentifier } from "../management/entity/computer-management.ts";
 export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
-    readonly #revokeAccess: (
-        computerId: string,
-        change: () => Promise<boolean>,
-        signal: AbortSignal,
-    ) => Promise<boolean>;
-    constructor(
-        storage: DurableObjectStorage,
-        owns: (id: string) => boolean,
-        revokeAccess: (computerId: string, change: () => Promise<boolean>, signal: AbortSignal) => Promise<boolean>,
-    ) {
+    readonly #accessEnded: () => Promise<void>;
+    /** `accessEnded` closes at once the live connections an identity change no longer authorizes. */
+    constructor(storage: DurableObjectStorage, owns: (id: string) => boolean, accessEnded: () => Promise<void>) {
         this.#storage = storage;
         this.#owns = owns;
-        this.#revokeAccess = revokeAccess;
+        this.#accessEnded = accessEnded;
     }
+
+    /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
+    readonly holdsAccess = async (
+        computerId: string,
+        holder: SessionAccessHolder,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        if (!this.#owns(computerId)) {
+            throw new Error("Durable Object computer identity does not match the request.");
+        }
+        this.#database ??= new DurableObjectDatabase(this.#storage);
+        return await holdsAccess(new IdentityStorage(this.#database, computerId), holder, signal);
+    };
 
     #database: DurableObjectDatabase | undefined;
     readonly #sessionOperations = new ManagedSessionOperations();
@@ -114,7 +123,7 @@ export class ComputerChat {
             ...env,
             CHAT_COMPUTER_ID: computerId,
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
-            CHAT_REVOKE_ACCESS: (change, signal) => this.#revokeAccess(computerId, change, signal),
+            CHAT_ACCESS_ENDED: this.#accessEnded,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,
             DATABASE: this.#database,
         };

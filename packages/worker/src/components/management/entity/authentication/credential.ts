@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 export const anonymousToken = v.pipe(
@@ -24,6 +25,20 @@ export type Credential = {
           readonly accessExpiresAt: number;
       }
 );
+
+/**
+ * Whose access a credential carries: a browser credential its device's, which outlives the credential's replacement;
+ * the local and recovery credentials their own.
+ */
+export function accessHolder(credential: Credential): SessionAccessHolder {
+    switch (credential.kind) {
+        case "browser":
+            return { kind: "device", deviceId: credential.deviceId };
+        case "local":
+        case "recovery":
+            return { kind: "credential", credentialId: credential.credentialId };
+    }
+}
 
 /** A browser device's access: it holds until its term unless it was ended first, and ended access never resumes. */
 export type DeviceAccess =

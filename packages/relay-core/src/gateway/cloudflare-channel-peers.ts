@@ -1,4 +1,9 @@
-import { isIdentifier, type NativeSessionTarget, ProtocolMessageError } from "@morty-build/client/protocol";
+import {
+    decodeSessionAccessHolder,
+    isIdentifier,
+    type NativeSessionTarget,
+    ProtocolMessageError,
+} from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ChannelSocket, HistoryRequestKind } from "../service/channel/channel-actor.ts";
 import type {
@@ -34,14 +39,12 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("viewer"),
         expiresAt: v.number(),
-        // Missing credential metadata is rejected by connection reauthorization.
-        credentialIssuedAt: v.optional(v.nullable(v.number()), null),
-        credentialId: v.optional(v.nullable(v.string()), null),
-        signingKeyId: v.optional(v.nullable(v.string()), null),
-        // Every view receives events; the attachment keeps the format earlier Relay versions read.
-        eventFormat: v.literal("events"),
+        credential: v.object({
+            credentialId: v.string(),
+            signingKeyId: v.string(),
+            holder: v.pipe(v.unknown(), v.transform(decodeSessionAccessHolder)),
+        }),
         computerId: v.string(),
-
         sessionFilter: targetSchema,
     }),
     v.object({
@@ -90,22 +93,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
             };
         }
         if (attachment.role === "viewer") {
-            return {
-                credential:
-                    attachment.credentialId === null ||
-                    attachment.credentialIssuedAt === null ||
-                    attachment.signingKeyId === null
-                        ? null
-                        : {
-                              credentialId: attachment.credentialId,
-                              signingKeyId: attachment.signingKeyId,
-                              issuedAt: attachment.credentialIssuedAt,
-                          },
-                expiresAt: attachment.expiresAt,
-                computerId: attachment.computerId,
-                role: attachment.role,
-                sessionFilter: attachment.sessionFilter,
-            };
+            return attachment;
         }
         if (attachment.role === "daemon" || attachment.role === "replaced-daemon") {
             return {
@@ -305,18 +293,8 @@ export class CloudflareChannelPeers implements RuntimePeers {
     };
 }
 
-/** Host and viewer attachments keep the flat credential fields that earlier Relay versions read. */
+/** Host attachments keep the flat credential field that earlier Relay versions read. */
 function attachment(identity: RuntimeSocketIdentity): v.InferInput<typeof attachmentSchema> {
-    if (identity.role === "viewer") {
-        const { credential, ...view } = identity;
-        return {
-            ...view,
-            credentialId: credential?.credentialId ?? null,
-            signingKeyId: credential?.signingKeyId ?? null,
-            credentialIssuedAt: credential?.issuedAt ?? null,
-            eventFormat: "events",
-        };
-    }
     if (identity.role !== "host") {
         return identity;
     }

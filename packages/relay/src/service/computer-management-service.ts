@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { type ProjectLocationHint, RELAY_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
 import {
     createRandomToken,
@@ -18,7 +19,6 @@ import {
     type RelayPrincipal,
 } from "../entity/computer-management.ts";
 import type { CredentialRow, ProjectRow } from "../entity/relay-records.ts";
-import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
 import { AppCredentialProjectAccess } from "./app-credential-project-access.ts";
@@ -242,40 +242,23 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         computerId: string,
         credential: CredentialRow,
         requiredPermission: ProjectPermission,
-        issuedAt: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> =>
         await this.#projectAccess.authorizeSessionCredential(
             credential,
             validateIdentifier(computerId, "computer_id"),
             [requiredPermission],
-            issuedAt,
+            holder,
             signal,
         );
-    readonly revokeSessionAccess = async (
+    /** Whether `holder`'s access to the computer holds now; a Session credential is issued for it only while it does. */
+    readonly holdsAccess = async (
         computerId: string,
-        credentialValue: string,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
-    ): Promise<number> => {
-        await this.authorizeRelayCredential(computerId, credentialValue, ProjectPermission.SessionWrite, "", signal);
-        return sessionAccessRevokedThrough(
-            await this.#storage.recordSessionAccessRevocation(
-                validateIdentifier(computerId, "computer_id"),
-                Date.now(),
-                signal,
-            ),
-        );
-    };
-    readonly readSessionAccessRevokedThrough = async (
-        computerId: string,
-        signal: AbortSignal,
-    ): Promise<number | null> => {
-        const revokedAt = await this.#storage.readSessionAccessRevocation(
-            validateIdentifier(computerId, "computer_id"),
-            signal,
-        );
-        return revokedAt === null ? null : sessionAccessRevokedThrough(revokedAt);
-    };
+    ): Promise<boolean> =>
+        await this.#storage.holdsAccess(validateIdentifier(computerId, "computer_id"), holder, signal);
     readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (computerId, signal) => {
         const project = await this.#storage.readActiveComputerScope(
             validateIdentifier(computerId, "computer_id"),

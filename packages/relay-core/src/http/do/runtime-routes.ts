@@ -10,14 +10,6 @@ function unauthorized(message: string): Response {
 export function createRuntimeRoutes(runtime: RuntimeService) {
     return new Hono().all("/computers/:computerId/*", async (c) => {
         const request = c.req.raw;
-        if (request.method === "DELETE" && new URL(request.url).pathname.endsWith("/session-viewers/revoke")) {
-            const revokedThrough = Number(request.headers.get("x-morty-session-access-revoked-through"));
-            if (!Number.isSafeInteger(revokedThrough)) {
-                return unauthorized("A verified Session access revocation is required");
-            }
-            runtime.revokeSessionViewers(new ComputerScope(c.req.param("computerId")), revokedThrough);
-            return new Response(null, { status: 204 });
-        }
         const computerId = c.req.param("computerId");
         if (!computerId) {
             return unauthorized("Verified channel access is required");

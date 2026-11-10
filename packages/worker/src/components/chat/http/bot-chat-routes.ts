@@ -2,6 +2,7 @@ import {
     encodeSessionCloseNoticeEvent,
     encodeSessionStatusChangedEvent,
     isDirectoryPath,
+    type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -73,6 +74,7 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
     readonly Variables: ChatHttpEnvironment["Variables"] & {
         readonly session: Session;
         readonly accessExpiresAt: number | null;
+        readonly accessHolder: SessionAccessHolder;
         readonly chatScope: ChatScope;
     };
 };
@@ -80,7 +82,11 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
 async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeout = 45000) {
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const computerId = v.parse(relayIdentifier, context.req.param("computerId"));
-    const requester = { userId: context.get("session").userId, accessExpiresAt: context.get("accessExpiresAt") };
+    const requester = {
+        userId: context.get("session").userId,
+        accessExpiresAt: context.get("accessExpiresAt"),
+        holder: context.get("accessHolder"),
+    };
     return await context.env.services.chat.authorize(requester, computerId, signal);
 }
 

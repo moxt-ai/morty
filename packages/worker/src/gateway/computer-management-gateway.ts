@@ -2,6 +2,7 @@ import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeRuntimeDiagnosticsResult,
     type NativeSessionTarget,
+    type SessionAccessHolder,
     type SessionReadyEvent,
 } from "@morty-build/client/protocol";
 import {
@@ -394,13 +395,22 @@ export class ComputerManagementGateway {
         session: ChatSessionTarget,
         ready: SessionReadyEvent,
         credentialLifetimeSeconds: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
         await this.#withProject(
             computerId,
             signal,
             async (client) =>
-                await this.#sessionAccess(client, computerId, session, ready, credentialLifetimeSeconds, signal),
+                await this.#sessionAccess(
+                    client,
+                    computerId,
+                    session,
+                    ready,
+                    credentialLifetimeSeconds,
+                    holder,
+                    signal,
+                ),
             120000,
         );
 
@@ -409,6 +419,7 @@ export class ComputerManagementGateway {
         computerId: string,
         input: ExistingChatSessionInput,
         credentialLifetimeSeconds: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -416,7 +427,15 @@ export class ComputerManagementGateway {
             signal,
             async (client) => {
                 const ready = this.#expectSession(await client.sessions.load(input.target, signal), input.target);
-                return await this.#sessionAccess(client, computerId, input, ready, credentialLifetimeSeconds, signal);
+                return await this.#sessionAccess(
+                    client,
+                    computerId,
+                    input,
+                    ready,
+                    credentialLifetimeSeconds,
+                    holder,
+                    signal,
+                );
             },
             120000,
         );
@@ -434,9 +453,10 @@ export class ComputerManagementGateway {
         session: ChatSessionTarget,
         ready: SessionReadyEvent,
         credentialLifetimeSeconds: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) => {
-        const access = await client.sessions.createAccess(session.target, credentialLifetimeSeconds, signal);
+        const access = await client.sessions.createAccess(session.target, credentialLifetimeSeconds, holder, signal);
         return {
             endpoint: this.configuration().origin,
             computerId,
@@ -526,10 +546,11 @@ export class ComputerManagementGateway {
         computerId: string,
         target: NativeSessionTarget,
         credentialLifetimeSeconds: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
         await this.#withProject(computerId, signal, async (client) => {
-            const access = await client.sessions.createAccess(target, credentialLifetimeSeconds, signal);
+            const access = await client.sessions.createAccess(target, credentialLifetimeSeconds, holder, signal);
             return { ...access, endpoint: this.configuration().origin };
         });
 

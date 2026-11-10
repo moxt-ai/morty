@@ -83,14 +83,10 @@ export interface ProjectStore {
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
     /**
-     * Revokes a Runtime, and with it the Session credentials issued until then, and returns its committed revocation;
-     * null when the Project has no such Runtime.
+     * Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. Session
+     * credentials carry their holder's access, not the Runtime's, so they are unaffected.
      */
     readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
-    /** Revokes the Session credentials issued until `revokedAt`; returns the latest revocation, which never moves back. */
-    readonly revokeSessionAccess: (revokedAt: number, signal: AbortSignal) => Promise<number>;
-    /** The latest time the computer revoked its Session credentials, by either operation; null when it never did. */
-    readonly readSessionAccessRevocation: (signal: AbortSignal) => Promise<number | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
     readonly findCredential: (
         credential: ComputerIdentityCredential,

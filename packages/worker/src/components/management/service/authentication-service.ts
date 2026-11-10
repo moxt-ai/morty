@@ -1,6 +1,8 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import {
+    accessHolder,
     anonymousToken,
     type Credential,
     type CredentialOperation,
@@ -28,6 +30,8 @@ type SessionResult =
            * other access does not expire.
            */
           readonly accessExpiresAt: number | null;
+          /** Whose access this is; the Session credentials it obtains last only while that access holds. */
+          readonly holder: SessionAccessHolder;
       }
     | { readonly kind: "unauthenticated" }
     /**
@@ -143,6 +147,31 @@ function classifyBrowserCredential(
     }
 }
 
+/**
+ * Whether `holder`'s access to the computer holds now, by the same rules that authenticate its credentials: a browser
+ * device's until its term unless it was ended, a local or recovery credential's until it was revoked.
+ */
+export async function holdsAccess(
+    identities: Pick<IdentityStorage, "findCredentialById" | "findDevice">,
+    holder: SessionAccessHolder,
+    signal: AbortSignal,
+): Promise<boolean> {
+    switch (holder.kind) {
+        case "device": {
+            const device = await identities.findDevice(holder.deviceId, signal);
+            return device !== null && deviceAccess(device, Date.now()).kind === "holding";
+        }
+        case "credential": {
+            const stored = await identities.findCredentialById(holder.credentialId, signal);
+            if (stored === null) {
+                return false;
+            }
+            const found = classifyCredential(stored, Date.now());
+            return found.kind === "active" && found.credential.kind !== "browser";
+        }
+    }
+}
+
 /** Outside the session check, revoked access answers like unknown access, so a retry after a lost reply stays safe. */
 function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbidden" }) {
     return { kind: access.kind === "forbidden" ? "forbidden" : "unauthenticated" } as const;
@@ -150,15 +179,15 @@ function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbi
 
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
-    readonly #commitRevocation: CloudBindings["CHAT_REVOKE_ACCESS"];
+    readonly #accessEnded: CloudBindings["CHAT_ACCESS_ENDED"];
     readonly #computerId: string | null;
 
     constructor(cx: {
-        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_REVOKE_ACCESS" | "CHAT_COMPUTER_ID"> };
+        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_ACCESS_ENDED" | "CHAT_COMPUTER_ID"> };
         readonly storages: { readonly identities: IdentityStorage };
     }) {
         this.identities = cx.storages.identities;
-        this.#commitRevocation = cx.config.bindings.CHAT_REVOKE_ACCESS;
+        this.#accessEnded = cx.config.bindings.CHAT_ACCESS_ENDED;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID ?? null;
     }
 
@@ -182,6 +211,7 @@ export class AuthenticationService {
                     kind: "authenticated",
                     session: { authentication: { kind: "anonymous" }, userId: found.credential.userId },
                     accessExpiresAt: found.credential.kind === "browser" ? found.credential.accessExpiresAt : null,
+                    holder: accessHolder(found.credential),
                     credentialKind: found.credential.kind,
                 };
             case "replaced":
@@ -362,16 +392,8 @@ export class AuthenticationService {
             return refused(access);
         }
         if (
-            !(await this.#changeAccess(
-                () =>
-                    this.identities.revokeAllAccess(
-                        access.credential.userId,
-                        access.token,
-                        successor,
-                        Date.now(),
-                        signal,
-                    ),
-                signal,
+            !(await this.#endAccess(() =>
+                this.identities.revokeAllAccess(access.credential.userId, access.token, successor, Date.now(), signal),
             ))
         ) {
             return { kind: "unauthenticated" };
@@ -391,17 +413,16 @@ export class AuthenticationService {
         if (access.kind !== "authorized") {
             return refused(access);
         }
-        await this.#changeAccess(async () => {
+        await this.#endAccess(async () => {
             await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
             return true;
-        }, signal);
+        });
         return { kind: "revoked" };
     };
 
     /**
      * Disconnects every other browser that joined through a link while the caller keeps its access, so the owner can
-     * remove a device without locking themselves out. The Relay cannot tell browsers apart, so it closes every chat
-     * window opened until now; those of the access that remains reopen with a new Session credential.
+     * remove a device without locking themselves out. Only the chat windows of the browsers it ends close.
      */
     readonly endOtherBrowserAccess = async (
         token: string | undefined,
@@ -411,7 +432,7 @@ export class AuthenticationService {
         if (access.kind !== "authorized") {
             return refused(access);
         }
-        await this.#changeAccess(async () => {
+        await this.#endAccess(async () => {
             await this.identities.endOtherBrowserAccess(
                 access.credential.userId,
                 access.credential.kind === "browser" ? access.credential.deviceId : null,
@@ -419,13 +440,13 @@ export class AuthenticationService {
                 signal,
             );
             return true;
-        }, signal);
+        });
         return { kind: "ended" };
     };
 
     /**
-     * Ends one other device's access and closes the chat windows open on it. Windows close Project-wide, so this
-     * browser's own windows reconnect. A device whose access already ended is ended still, so retrying is safe.
+     * Ends one other device's access and closes the chat windows open on it; no other window closes. A device whose
+     * access already ended is ended still, so retrying is safe.
      */
     readonly endDeviceAccess = async (
         token: string | undefined,
@@ -444,9 +465,8 @@ export class AuthenticationService {
             return { kind: "own" };
         }
         if (
-            !(await this.#changeAccess(
-                () => this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal),
-                signal,
+            !(await this.#endAccess(() =>
+                this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal),
             ))
         ) {
             return { kind: "unknown" };
@@ -454,11 +474,19 @@ export class AuthenticationService {
         return { kind: "ended" };
     };
 
-    readonly #changeAccess = async (change: () => Promise<boolean>, signal: AbortSignal): Promise<boolean> => {
-        if (this.#commitRevocation === undefined) {
+    /**
+     * Applies an identity change that may end access to the computer. Every request reads the identities, so once the
+     * change commits nothing it ended is authorized again; the live connections it ended then close at once.
+     */
+    readonly #endAccess = async (change: () => Promise<boolean>): Promise<boolean> => {
+        if (this.#accessEnded === undefined) {
             throw new ManagementError("IDENTITY_UNAVAILABLE", "Computer access storage is unavailable.", 503);
         }
-        return await this.#commitRevocation(change, signal);
+        if (!(await change())) {
+            return false;
+        }
+        await this.#accessEnded();
+        return true;
     };
 
     readonly endBrowserAccess = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> => {
@@ -469,7 +497,7 @@ export class AuthenticationService {
         // Ends this browser's device, so every credential of the device stops, including one another tab just received.
         const { userId, deviceId } = access.credential;
         return {
-            kind: (await this.identities.endDeviceAccess(userId, deviceId, Date.now(), signal))
+            kind: (await this.#endAccess(() => this.identities.endDeviceAccess(userId, deviceId, Date.now(), signal)))
                 ? "ended"
                 : "unauthenticated",
         };
@@ -493,7 +521,7 @@ export class AuthenticationService {
             return refused(access);
         }
         return {
-            kind: (await this.identities.revokeCredential(access.credential, Date.now(), signal))
+            kind: (await this.#endAccess(() => this.identities.revokeCredential(access.credential, Date.now(), signal)))
                 ? "ended"
                 : "unauthenticated",
         };

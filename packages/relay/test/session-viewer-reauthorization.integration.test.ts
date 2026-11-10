@@ -1,14 +1,12 @@
-import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+import { abortAllDurableObjects, runDurableObjectAlarm } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter } from "@morty-build/relay-core";
 import * as v from "valibot";
 import { afterAll, expect, it } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { revokeMortyCredential, seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
-import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
-import { registerRuntimeFixture } from "./registered-runtime.ts";
+import { endOwnerAccess, ownerAccessHolder, registerRuntimeFixture } from "./registered-runtime.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 
@@ -91,11 +89,12 @@ async function openSessionView(slug: string) {
     daemon.accept();
     expect(await daemonInbox.next()).toEqual({ kind: "runtime.liveness.ready" });
 
+    const holder = await ownerAccessHolder(computerId);
     const issued = await worker.fetch(
         new Request(`${origin}/v1/computers/${computerId}/harnesses/claude/sessions/${sessionId}/access-credentials`, {
             method: "POST",
             headers: { authorization: `Bearer ${defaultCredential.credential}`, "content-type": "application/json" },
-            body: JSON.stringify({ expiresInSeconds: 900 }),
+            body: JSON.stringify({ expiresInSeconds: 900, holder }),
         }),
         env,
     );
@@ -116,7 +115,7 @@ async function openSessionView(slug: string) {
     const viewInbox = new Inbox(view);
     view.accept();
 
-    return { daemon, dashboard, defaultCredential, computerId, sessionId, viewInbox };
+    return { daemon, dashboard, defaultCredential, computerId, holder, sessionId, viewInbox };
 }
 
 const liveEvent = (sessionId: string, eventId: string) => ({
@@ -141,18 +140,13 @@ it("Given a live Session view, When the AppCredential that issued its Session cr
     daemon.close(1000, "done");
 });
 
-it("Given a live Session view the revocation push missed, When the Project's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, computerId, sessionId, viewInbox } = await openSessionView("missed");
-    daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
-    expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
+it("Given a live Session view whose holder's access ends without closing it, When the Relay next checks its connections, Then it closes the view", async () => {
+    const { daemon, computerId, holder, sessionId, viewInbox } = await openSessionView("ended");
+    daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-access-ended")] }));
+    expect(await viewInbox.next()).toMatchObject([{ eventId: "before-access-ended" }]);
 
-    // The revocation commits, but its push never reaches the view (or reached it before the view opened).
-    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
-        await new SqliteComputerManagementStore(
-            computerId,
-            new DurableObjectDatabaseAdapter(state.storage),
-        ).revokeSessionAccess(Date.now(), AbortSignal.timeout(10_000));
-    });
+    // The access ends in storage alone, so only the periodic connection check can notice it.
+    await endOwnerAccess(computerId, holder);
     expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });

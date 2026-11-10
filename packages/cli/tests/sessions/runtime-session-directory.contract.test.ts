@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
-import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { expect, it } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
 
@@ -183,7 +182,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
     }
 });
 
-it("Given a Session in a selected workspace, When the App prompts it and reads its execution naming only the Session, Then the Runtime runs the Turn in the Session's own workspace", async () => {
+it("Given a Session in a selected workspace, When the App prompts it naming only the Session, Then the Runtime runs the Turn in the Session's own workspace", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "morty-session-workspace-"));
     try {
         const directoryLabel = await realpath(workspace);
@@ -210,15 +209,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
             },
             signal,
         );
-        const access = await runtime.client.sessions.createAccess(sessionTarget, 900, signal);
-        const session = new MortyClient({
-            endpoint: relay.baseUrl,
-            computerId: project.computerId,
-            credentialProvider: new StaticMortyCredentialProvider(access.credential),
-            transport: { fetch: async (request: Request) => await relay.app.request(request) },
-        });
-
-        const turn = await session.turns.submit(
+        await runtime.client.turns.submitToRuntime(
             sessionTarget,
             {
                 attachments: [],
@@ -226,9 +217,6 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
             },
             signal,
-        );
-        await expect(session.sessions.readSessionExecution(sessionTarget, signal, turn.turnId)).resolves.toHaveProperty(
-            "command",
         );
 
         expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
