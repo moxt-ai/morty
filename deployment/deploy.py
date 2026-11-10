@@ -32,6 +32,18 @@ def run(command, env):
     subprocess.run(command, cwd=ROOT, env=env, check=True, timeout=600)
 
 
+def upload_objects(command, env):
+    """Uploads idempotent R2 objects, retrying a transient storage failure a bounded number of times."""
+    for delay in [5, 20]:
+        try:
+            run(command, env)
+            return
+        except subprocess.CalledProcessError:
+            print(f'R2 upload failed; retrying in {delay} seconds', flush=True)
+            time.sleep(delay)
+    run(command, env)
+
+
 def served_versions(deployment):
     return [(version['version_id'], version['percentage']) for version in deployment['versions']]
 
@@ -133,7 +145,7 @@ def main():
     for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
         env.pop(key, None)
     if args.activate_setup:
-        run(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
+        upload_objects(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
         with urllib.request.urlopen(urllib.request.Request(expected['morty_origin'] + '/setup.mjs', headers={'User-Agent': 'Morty-Deployment/1.0', 'Cache-Control': 'no-cache'}), timeout=40) as response:
             served = hashlib.sha256(response.read()).hexdigest()
             if response.status != 200 or served != manifest['files']['setup.mjs']:
@@ -189,7 +201,8 @@ def main():
                 continue
             upload = temporary / ('assets' + extension + '.json')
             upload.write_text(json.dumps(entries))
-            run(WRANGLER + ['r2', 'bulk', 'put', expected['buckets']['web_assets'], '--filename', str(upload), '--content-type', types[extension], '--cache-control', 'public, max-age=31536000, immutable', '--concurrency', '10', '--remote', '--force', '--config', str(configs['morty'])], env)
+            # Assets are content-addressed and immutable, so uploading one again writes the same bytes.
+            upload_objects(WRANGLER + ['r2', 'bulk', 'put', expected['buckets']['web_assets'], '--filename', str(upload), '--content-type', types[extension], '--cache-control', 'public, max-age=31536000, immutable', '--concurrency', '10', '--remote', '--force', '--config', str(configs['morty'])], env)
         run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['platform'])], env)
         # From the first Worker activation on, a failed check restores the Workers that served before this release.
         try:

@@ -21,6 +21,8 @@ jobs:
       # Never check out or execute the PR's code: this policy runs from the base branch.
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
+          # Each call reads, or writes this commit's status: a transient GitHub 5xx is safe to retry.
+          retries: 3
           script: |
             const repo = context.repo;
             const statusContext = 'markdown-pr-policy';
