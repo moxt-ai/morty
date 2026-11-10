@@ -665,7 +665,7 @@ export function createRelayApplication(
         if (!("MORTY_COMPUTER_STORE" in context.env)) {
             throw new Error("Session access is revoked only in the Project's ComputerRelay");
         }
-        const computerId = validateIdentifier(context.req.param("computerId") ?? "", "project_id");
+        const computerId = validateIdentifier(context.req.param("computerId") ?? "", "computer_id");
         const _store = context.env.MORTY_COMPUTER_STORE;
         const channel = gateways(context.env).channel;
         const revoked = await context.var.sessionAccess.revoke(

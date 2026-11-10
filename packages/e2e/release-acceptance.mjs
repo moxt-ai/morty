@@ -115,10 +115,10 @@ try {
     } finally {
         try {
             identity = JSON.parse(await readFile(join(state, "config.json"), "utf8")).identity;
-            receipt.computerId = identity.project_id;
+            receipt.computerId = identity.computer_id;
             await writeFile(
                 join(output, `${label}-owned-project.json`),
-                `${JSON.stringify({ computerId: identity.project_id, origin })}\n`,
+                `${JSON.stringify({ computerId: identity.computer_id, origin })}\n`,
             );
         } catch {
             /* A preflight failure may leave no identity. */
@@ -212,11 +212,11 @@ try {
         }
     }
     receipt.localCleanup = localClean;
-    if (identity?.project_id && identity?.user_token) {
+    if (identity?.computer_id && identity?.user_token) {
         // Revoking all access replaces the local credential; the replacement is then retired too.
         const successor = `morty_anon_v1_${randomBytes(32).toString("base64url")}`;
         const call = (path, method, token, body) =>
-            fetch(new URL(`/morty/api/computers/${encodeURIComponent(identity.project_id)}${path}`, origin), {
+            fetch(new URL(`/morty/api/computers/${encodeURIComponent(identity.computer_id)}${path}`, origin), {
                 method,
                 headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),

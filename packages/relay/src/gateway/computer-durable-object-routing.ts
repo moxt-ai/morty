@@ -98,7 +98,7 @@ export async function routeComputerDurableObject(
     }
     const placement = decodeComputerPlacement(computerId);
     if (placement === null) {
-        return failure("project_id_invalid", 400);
+        return failure("computer_id_invalid", 400);
     }
     request.signal.throwIfAborted();
     const durableObjectUrl = new URL(request.url);

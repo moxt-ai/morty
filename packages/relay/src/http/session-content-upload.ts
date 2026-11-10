@@ -40,7 +40,7 @@ export async function authorizeSessionContentUpload(request: Request, sessions: 
         const access = await sessions.authorizeSession(
             {
                 kind: "session",
-                computerId: validateIdentifier(computerId, "project_id"),
+                computerId: validateIdentifier(computerId, "computer_id"),
                 target,
             },
             credential,

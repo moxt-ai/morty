@@ -20,7 +20,7 @@ export const sessionAccessTargetMiddleware: MiddlewareHandler<SessionAccessTarge
 ) => {
     context.set("sessionAccessTarget", {
         kind: "session",
-        computerId: validateIdentifier(context.req.param("computerId") ?? "", "project_id"),
+        computerId: validateIdentifier(context.req.param("computerId") ?? "", "computer_id"),
         target: {
             harness: validateIdentifier(context.req.param("harness") ?? "", "harness"),
             sessionId: validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),

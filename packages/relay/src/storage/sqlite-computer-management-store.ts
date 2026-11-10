@@ -57,7 +57,7 @@ export class SqliteComputerManagementStore extends SqliteProjectStore implements
                 audit_id: row.auditId,
                 details_json: row.detailsJson,
                 outcome: row.outcome,
-                project_id: row.computerId,
+                computer_id: row.computerId,
                 recorded_at: row.recordedAt,
                 subject_id: row.subjectId,
             }),

@@ -50,7 +50,7 @@ function projectResource(row: ProjectRow): object {
         deletedAt: typeof row.deleted_at === "number" ? iso(row.deleted_at) : "",
         displayName: row.display_name,
         lifecycle: row.lifecycle,
-        computerId: row.project_id,
+        computerId: row.computer_id,
         updatedAt: iso(row.updated_at),
     };
 }
@@ -150,7 +150,7 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
             idempotency_key: normalizedIdempotencyKey,
             lifecycle: "active",
             location_hint: placement.locationHint,
-            project_id: computerId,
+            computer_id: computerId,
             updated_at: now,
         };
         if (!(await this.#storage.registerMachineAccount(project, principal.credentialId, signal))) {
@@ -185,12 +185,12 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
                 actorKind: principal.kind,
                 actorRef: principal.credentialId,
                 appId: principal.appId,
-                auditId: `pae_created_${project.project_id}`,
+                auditId: `pae_created_${project.computer_id}`,
                 detailsJson: "{}",
                 outcome: "succeeded",
-                computerId: project.project_id,
+                computerId: project.computer_id,
                 recordedAt: project.created_at,
-                subjectId: project.project_id,
+                subjectId: project.computer_id,
             },
             signal,
         );
@@ -232,7 +232,7 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         const row = await this.authenticatedCredential(credentialValue, signal);
         return await this.authorizeCredentialForProject(
             row,
-            validateIdentifier(computerId, "project_id"),
+            validateIdentifier(computerId, "computer_id"),
             requiredPermission,
             actorReference(actorRef),
             signal,
@@ -247,7 +247,7 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
     ): Promise<ProjectAccessContext> =>
         await this.#projectAccess.authorizeSessionCredential(
             credential,
-            validateIdentifier(computerId, "project_id"),
+            validateIdentifier(computerId, "computer_id"),
             [requiredPermission],
             issuedAt,
             signal,
@@ -260,7 +260,7 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         await this.authorizeRelayCredential(computerId, credentialValue, ProjectPermission.SessionWrite, "", signal);
         return sessionAccessRevokedThrough(
             await this.#storage.recordSessionAccessRevocation(
-                validateIdentifier(computerId, "project_id"),
+                validateIdentifier(computerId, "computer_id"),
                 Date.now(),
                 signal,
             ),
@@ -271,14 +271,14 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         signal: AbortSignal,
     ): Promise<number | null> => {
         const revokedAt = await this.#storage.readSessionAccessRevocation(
-            validateIdentifier(computerId, "project_id"),
+            validateIdentifier(computerId, "computer_id"),
             signal,
         );
         return revokedAt === null ? null : sessionAccessRevokedThrough(revokedAt);
     };
     readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (computerId, signal) => {
         const project = await this.#storage.readActiveComputerScope(
-            validateIdentifier(computerId, "project_id"),
+            validateIdentifier(computerId, "computer_id"),
             signal,
         );
         if (project === null) {
@@ -295,7 +295,7 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         const row = await this.authenticatedCredential(credentialValue, signal);
         const project = await this.authorizeCredentialForProject(
             row,
-            validateIdentifier(computerId, "project_id"),
+            validateIdentifier(computerId, "computer_id"),
             requiredPermission,
             actorReference(actorRef),
             signal,

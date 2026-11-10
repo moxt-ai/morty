@@ -187,7 +187,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
             kind: "ready",
             user_token: identity.token,
             user_id: identity.userId,
-            project_id: identity.computerId,
+            computer_id: identity.computerId,
         });
         expect(new Set(creationKeys)).toEqual(new Set([pending["creation_key"]]));
         const session = await fetch(`${origin}/morty/api/computers/${identity.computerId}/session`, {
