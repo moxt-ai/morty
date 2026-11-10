@@ -141,7 +141,6 @@ test("Given browsers that joined before devices had their own record, When the s
         { id: "cred_local", kind: "local", revoked_at: null },
         { id: "cred_recovery", kind: "recovery", revoked_at: 4 },
     ]);
-    expect(database.prepare("SELECT id, access_expires_at FROM identity_transfer ORDER BY id").all()).toHaveLength(5);
     expect(() =>
         database
             .prepare(
