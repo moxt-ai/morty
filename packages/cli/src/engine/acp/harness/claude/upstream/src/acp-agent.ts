@@ -8658,6 +8658,7 @@ export function toAcpNotifications(
             case "container_upload":
             case "advisor_tool_result":
             case "fallback":
+            case "mcp_tool_listing":
                 break;
             case "compaction":
             case "compaction_delta": {
