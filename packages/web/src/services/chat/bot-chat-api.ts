@@ -13,6 +13,7 @@ import {
     decodeNativeSessionEvents,
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
+    decodeSessionAccessCredential,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
     type Identifier,
@@ -29,13 +30,24 @@ import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-ca
 import { CloudApiError, ManagementApi, machineUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
+const sessionCredentialSchema = v.pipe(
+    v.string(),
+    v.check((credential) => {
+        try {
+            decodeSessionAccessCredential(credential);
+            return true;
+        } catch {
+            return false;
+        }
+    }, "Invalid Session credential"),
+);
 const nativeSessionTargetSchema = v.pipe(v.strictObject({ harness: identifier, sessionId: identifier }), v.readonly());
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
         computerId: identifier,
         target: nativeSessionTargetSchema,
-        credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/u)),
+        credential: sessionCredentialSchema,
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         ready: v.unknown(),
         harness: identifier,
@@ -48,7 +60,7 @@ const managedSessionStatusSchema = v.variant("kind", [
     v.pipe(
         v.object({
             kind: v.literal("idle"),
-            /** The Runtime's account that the Session's last turn failed; Runtimes before it existed omit it. */
+            /** Present when the Runtime reports that the Session's last turn failed. */
             failedTurn: v.optional(
                 v.pipe(v.object({ code: v.string(), commandId: identifier, message: v.string() }), v.readonly()),
             ),
@@ -130,7 +142,7 @@ export type ConversationActiveTurn =
 const sessionAccessSchema = v.object({
     target: nativeSessionTargetSchema,
     computerId: identifier,
-    credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/u)),
+    credential: sessionCredentialSchema,
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });

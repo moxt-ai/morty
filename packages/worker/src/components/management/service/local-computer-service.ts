@@ -27,7 +27,7 @@ import * as v from "valibot";
 import type { ComputerBackendService } from "../../../../../relay/src/service/computer-backend-service.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ComputerManagementError, relayIdentifier } from "../entity/computer-management.ts";
-import { type RuntimePairing, runtimeRevoked } from "../entity/runtime-pairing.ts";
+import type { RuntimePairing } from "../entity/runtime-pairing.ts";
 
 type ChatSessionTarget = {
     readonly target: NativeSessionTarget;
@@ -96,9 +96,6 @@ export class LocalComputerService {
             parent.throwIfAborted();
             if (deadline.signal.aborted) {
                 throw new ComputerManagementError("RELAY_TIMEOUT", "Morty did not respond in time.", 504, { cause });
-            }
-            if (isHttpError(cause) && cause.toHttpJson().body.error.code === "runtime_revoked") {
-                throw runtimeRevoked({ cause });
             }
             if (cause instanceof ComputerManagementError || isHttpError(cause)) {
                 throw cause;

@@ -745,7 +745,7 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    if (cause instanceof CloudApiError && cause.code === "RUNTIME_REVOKED") {
+                    if (cause instanceof CloudApiError && cause.code === "runtime_revoked") {
                         // An operation reported the revocation, so the page's last pairing read may predate it. Waiting
                         // starts from a read after it; one that already differs means setup is pairing again.
                         const pairing = await requests.readRuntimePairing(signal);

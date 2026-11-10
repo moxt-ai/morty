@@ -959,9 +959,10 @@ describe.sequential("Relay Session-only boundary", () => {
                 }),
             );
             expect(JSON.parse(await transportMessages.next())).toMatchObject({
-                kind: "http.response",
+                kind: "http.error",
                 requestId: "runtime-agents",
-                status: 404,
+                code: "invalid_target",
+                status: 400,
             });
             daemon.send(answer);
             expect(

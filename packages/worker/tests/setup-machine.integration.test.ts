@@ -286,8 +286,8 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
             headers: { authorization: `Bearer ${before.identity.user_token}` },
         }),
     );
-    expect(revokedWorkspace.status).toBe(410);
-    expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "RUNTIME_REVOKED" } });
+    expect(revokedWorkspace.status).toBe(401);
+    expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "runtime_revoked" } });
 
     expect((await machineRuntime()).runtimePairing).toBe("revoked");
 

@@ -1,14 +1,11 @@
 import {
     decodeIdentifier,
     decodeSessionAccessCredential,
-    decodeSessionCapabilities,
     decodeTurn,
     type Identifier,
-    isIdentifier,
     type NativeSessionTarget,
     type PromptAttachment,
     readNativeSessionTarget,
-    type SessionCapabilities,
     type SessionConfigurationSelection,
     type SessionPromptDisposition,
     type TurnRequest,
@@ -47,7 +44,7 @@ function identifierField(value: Readonly<Record<string, unknown>>, field: string
     }
 }
 
-function booleanField(value: Readonly<Record<string, unknown>>, field: string): boolean {
+function _booleanField(value: Readonly<Record<string, unknown>>, field: string): boolean {
     const candidate = value[field];
     if (typeof candidate !== "boolean") {
         throw invalidResponse(`The service returned an invalid ${field}`);
@@ -55,7 +52,7 @@ function booleanField(value: Readonly<Record<string, unknown>>, field: string): 
     return candidate;
 }
 
-function arrayField(
+function _arrayField(
     value: Readonly<Record<string, unknown>>,
     field: string,
     maximumLength = 10_000,
@@ -97,15 +94,6 @@ export class MortySessionAccess {
     }
 }
 
-/** Creates an Agent-owned Session with its initial settings. Reuse the operation ID after response loss. */
-export interface CreateMortySessionRequest {
-    readonly harness: string;
-    readonly configurations: readonly SessionConfigurationSelection[];
-    readonly directory: string;
-    readonly computerId: string;
-    readonly operationId: string;
-}
-
 /** A Turn's content. The Runtime runs it with the Agent and directory of the Session it holds. */
 interface SubmitMortyTurnContent {
     readonly attachments: readonly PromptAttachment[];
@@ -129,246 +117,6 @@ export type SubmitMortyTurnRequest = SubmitMortyTurnContent &
 export interface MortyTurnCancellation {
     readonly turnId: string;
     readonly stopReason: string;
-}
-
-export class MortyRuntimePairingRequest {
-    readonly idempotencyKey: string;
-
-    constructor(idempotencyKey: string) {
-        if (!isIdentifier(idempotencyKey)) {
-            throw new MortyValidationError("The Runtime pairing idempotency key is invalid");
-        }
-        this.idempotencyKey = idempotencyKey;
-    }
-}
-
-export class MortyAgentDescriptor {
-    readonly agentPath: string;
-    readonly agentVersion: string;
-    readonly capabilities: SessionCapabilities;
-    readonly harness: string;
-    readonly label: string;
-
-    constructor(
-        agentPath: string,
-        agentVersion: string,
-        capabilities: SessionCapabilities,
-        harness: string,
-        label: string,
-    ) {
-        this.agentPath = agentPath;
-        this.agentVersion = agentVersion;
-        this.capabilities = Object.freeze({ ...capabilities });
-        this.harness = harness;
-        this.label = label;
-    }
-}
-
-export function decodeMortyAgentCapabilities(value: unknown): SessionCapabilities {
-    try {
-        return decodeSessionCapabilities(value);
-    } catch (cause) {
-        throw new MortyProtocolError("The service returned invalid Agent capabilities", { cause });
-    }
-}
-
-function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
-    const agent = record(value, "Agent descriptor");
-    if (
-        !Object.hasOwn(agent, "agentPath") ||
-        !Object.hasOwn(agent, "agentVersion") ||
-        !Object.hasOwn(agent, "capabilities") ||
-        !Object.hasOwn(agent, "harness") ||
-        !Object.hasOwn(agent, "label")
-    ) {
-        throw invalidResponse("The service returned an invalid Agent descriptor");
-    }
-    const agentPath = stringField(agent, "agentPath", 4_096);
-    const agentVersion = stringField(agent, "agentVersion", 128);
-    const label = stringField(agent, "label", 80);
-    if (agentPath.trim().length === 0 || agentVersion.trim().length === 0 || label.trim().length === 0) {
-        throw invalidResponse("The service returned an invalid Agent descriptor");
-    }
-    return new MortyAgentDescriptor(
-        agentPath,
-        agentVersion,
-        decodeMortyAgentCapabilities(agent["capabilities"]),
-        identifierField(agent, "harness"),
-        label.trim(),
-    );
-}
-
-export class MortyRuntimeDescriptor {
-    readonly agents: readonly MortyAgentDescriptor[];
-    readonly machineName: string;
-    readonly online: boolean;
-    readonly computerId: string;
-    readonly workspaceName: string;
-
-    constructor(
-        agents: readonly MortyAgentDescriptor[],
-        machineName: string,
-        online: boolean,
-        computerId: string,
-        workspaceName: string,
-    ) {
-        this.agents = agents;
-        this.computerId = computerId;
-        this.machineName = machineName;
-        this.online = online;
-        this.workspaceName = workspaceName;
-    }
-}
-
-export function decodeRuntimeDescriptor(value: unknown): MortyRuntimeDescriptor {
-    const runtime = record(value, "Runtime descriptor");
-    return new MortyRuntimeDescriptor(
-        arrayField(runtime, "agents", 100).map(decodeAgentDescriptor),
-        stringField(runtime, "machineName", 255),
-        booleanField(runtime, "online"),
-        identifierField(runtime, "computerId"),
-        stringField(runtime, "workspaceName", 255),
-    );
-}
-
-export function decodeMortyRuntimeList(value: unknown): readonly MortyRuntimeDescriptor[] {
-    const response = record(value, "Runtime list");
-    return arrayField(response, "runtimes", 100).map(decodeRuntimeDescriptor);
-}
-
-export class MortyRuntimePairing {
-    readonly expiresAt: string;
-    readonly pairingCode: string;
-    readonly pollToken: string;
-    readonly computerId: string;
-
-    constructor(expiresAt: string, pairingCode: string, pollToken: string, computerId: string) {
-        this.computerId = computerId;
-        this.expiresAt = expiresAt;
-        this.pairingCode = pairingCode;
-        this.pollToken = pollToken;
-    }
-}
-
-export class MortyRuntimePairingWaitOptions {
-    readonly pollIntervalMilliseconds: number;
-    readonly timeoutMilliseconds: number;
-
-    constructor(timeoutMilliseconds = 120_000, pollIntervalMilliseconds = 1_000) {
-        if (
-            !Number.isSafeInteger(timeoutMilliseconds) ||
-            timeoutMilliseconds < 1 ||
-            timeoutMilliseconds > 30 * 60 * 1_000 ||
-            !Number.isSafeInteger(pollIntervalMilliseconds) ||
-            pollIntervalMilliseconds < 1 ||
-            pollIntervalMilliseconds > timeoutMilliseconds
-        ) {
-            throw new MortyValidationError("The Runtime pairing wait bounds are invalid");
-        }
-        this.pollIntervalMilliseconds = pollIntervalMilliseconds;
-        this.timeoutMilliseconds = timeoutMilliseconds;
-    }
-}
-
-export function decodeMortyRuntimePairing(value: unknown): MortyRuntimePairing {
-    const pairing = record(value, "Runtime pairing");
-    const pairingCode = stringField(pairing, "pairingCode", 24);
-    const pollToken = stringField(pairing, "pollToken", 256);
-    if (
-        !/^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/.test(pairingCode) ||
-        !/^[a-zA-Z0-9_-]{32,256}$/.test(pollToken)
-    ) {
-        throw invalidResponse("The service returned invalid Runtime pairing credentials");
-    }
-    return new MortyRuntimePairing(
-        validateTimestamp(stringField(pairing, "expiresAt", 128), "expiresAt"),
-        pairingCode,
-        pollToken,
-        identifierField(pairing, "computerId"),
-    );
-}
-
-export const MortyRuntimePairingLifecycle = Object.freeze({
-    Expired: "expired",
-    Paired: "paired",
-    Pending: "pending",
-    Revoked: "revoked",
-});
-
-export abstract class MortyRuntimePairingStatus {
-    abstract readonly status: string;
-}
-
-export class MortyPendingRuntimePairingStatus extends MortyRuntimePairingStatus {
-    readonly expiresAt: string;
-    readonly status = MortyRuntimePairingLifecycle.Pending;
-
-    constructor(expiresAt: string) {
-        super();
-        this.expiresAt = expiresAt;
-    }
-}
-
-export class MortyExpiredRuntimePairingStatus extends MortyRuntimePairingStatus {
-    readonly status = MortyRuntimePairingLifecycle.Expired;
-}
-
-export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
-    readonly agents: readonly MortyAgentDescriptor[];
-    readonly machineName: string;
-    readonly computerId: string;
-    readonly status = MortyRuntimePairingLifecycle.Paired;
-    readonly workspaceName: string;
-
-    constructor(
-        agents: readonly MortyAgentDescriptor[],
-        machineName: string,
-        computerId: string,
-        workspaceName: string,
-    ) {
-        super();
-        this.agents = agents;
-        this.computerId = computerId;
-        this.machineName = machineName;
-        this.workspaceName = workspaceName;
-    }
-}
-
-export class MortyRevokedRuntimePairingStatus extends MortyRuntimePairingStatus {
-    readonly revokedAt: string;
-    readonly status = MortyRuntimePairingLifecycle.Revoked;
-
-    constructor(revokedAt: string) {
-        super();
-        this.revokedAt = revokedAt;
-    }
-}
-
-export function decodeMortyRuntimePairingStatus(value: unknown): MortyRuntimePairingStatus {
-    const status = record(value, "Runtime pairing status");
-    const lifecycle = stringField(status, "status", 32);
-    if (lifecycle === MortyRuntimePairingLifecycle.Pending) {
-        return new MortyPendingRuntimePairingStatus(
-            validateTimestamp(stringField(status, "expiresAt", 128), "expiresAt"),
-        );
-    }
-    if (lifecycle === MortyRuntimePairingLifecycle.Expired) {
-        return new MortyExpiredRuntimePairingStatus();
-    }
-    if (lifecycle === MortyRuntimePairingLifecycle.Revoked) {
-        return new MortyRevokedRuntimePairingStatus(
-            validateTimestamp(stringField(status, "revokedAt", 128), "revokedAt"),
-        );
-    }
-    if (lifecycle === MortyRuntimePairingLifecycle.Paired) {
-        return new MortyPairedRuntimePairingStatus(
-            arrayField(status, "agents", 100).map(decodeAgentDescriptor),
-            stringField(status, "machineName", 255),
-            identifierField(status, "computerId"),
-            stringField(status, "workspaceName", 255),
-        );
-    }
-    throw invalidResponse("The service returned an unsupported Runtime pairing status");
 }
 
 export abstract class MortyInteractionResponseRequest {
