@@ -365,6 +365,13 @@
             "when": 1794297376347,
             "tag": "0063_drop_anonymous_credential",
             "breakpoints": true
+        },
+        {
+            "idx": 64,
+            "version": "6",
+            "when": 1794299044415,
+            "tag": "0064_machine_derived_state",
+            "breakpoints": true
         }
     ]
 }

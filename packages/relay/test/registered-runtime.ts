@@ -36,7 +36,7 @@ export async function ownerAccessHolder(computerId: string): Promise<SessionAcce
         const database = new DurableObjectDatabase(state.storage);
         const userId = `user_${computerId}`;
         const token = `morty_anon_v1_${"o".repeat(43)}`;
-        await new ManagedBotStorage(database).claimMachine(userId, { displayName: "My Machine" }, Date.now(), signal);
+        await new ManagedBotStorage(database).claimMachine(userId, Date.now(), signal);
         const identities = new IdentityStorage(database, computerId);
         await identities.createAnonymous(userId, computerId, Date.now(), signal, token);
         const credential = await identities.findCredential(token, Date.now(), signal);

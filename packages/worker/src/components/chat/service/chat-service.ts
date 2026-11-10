@@ -1,6 +1,5 @@
 import { nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
 import {
-    decodeIdentifier,
     decodeMessageKind,
     decodeRuntimeStatusEvent,
     decodeSessionCloseNoticeEvent,
@@ -13,8 +12,8 @@ import {
 } from "@morty-build/client/protocol";
 import type { ComputerManagementGateway } from "../../../gateway/computer-management-gateway.ts";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
+import { runtimeRevoked } from "../../management/entity/runtime-pairing.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
-import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
@@ -90,7 +89,7 @@ type NewChatInput = {
     readonly workspaceRef: string;
 };
 type OpenChatInput = NativeSessionTarget | NewChatInput;
-type ConfigureBotInput = {
+type AgentSetupInput = {
     readonly computerId: string;
     readonly harness: string;
 };
@@ -123,20 +122,15 @@ function notInRecentSessions(): never {
  */
 export class ChatService {
     readonly #identities: IdentityStorage;
-    readonly #managedBots: ManagedBotStorage;
     readonly #relay: ComputerManagementGateway;
     readonly #sessionOperations: ManagedSessionOperations | undefined;
 
     constructor(cx: {
         readonly sessionOperations: ManagedSessionOperations | undefined;
         readonly gateways: { readonly computerManagements: ComputerManagementGateway };
-        readonly storages: {
-            readonly identities: IdentityStorage;
-            readonly managedBots: ManagedBotStorage;
-        };
+        readonly storages: { readonly identities: IdentityStorage };
     }) {
         this.#identities = cx.storages.identities;
-        this.#managedBots = cx.storages.managedBots;
         this.#relay = cx.gateways.computerManagements;
         this.#sessionOperations = cx.sessionOperations;
     }
@@ -159,19 +153,19 @@ export class ChatService {
     };
 
     readonly runtimeConfiguration = async (scope: ChatScope) => {
-        await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         return {
             runtime: await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal),
         };
     };
 
     readonly daemonDiagnostics = async (scope: ChatScope) => {
-        const _runtime = await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         return await this.#relay.readRuntimeDiagnostics(scope.computerId, scope.signal);
     };
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
-        const _runtime = await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
             this.#relay.measureRelayLatency(scope.computerId, scope.signal),
             this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
@@ -183,34 +177,32 @@ export class ChatService {
         };
     };
 
-    readonly setupRuntimes = async (scope: ChatScope) => {
-        await this.#bot(scope);
-        return { runtimes: await this.#relay.chatRuntimes(scope.computerId, scope.signal) };
-    };
+    readonly setupRuntimes = async (scope: ChatScope) => ({
+        runtimes: await this.#relay.chatRuntimes(scope.computerId, scope.signal),
+    });
 
     readonly listDirectory = async (scope: ChatScope, directory: string) => {
-        const bot = await this.#bot(scope);
-        if (bot.configuration === null) {
-            throw new ComputerManagementError("AGENT_REQUIRED", "Choose a connected harness.", 409);
-        }
+        await this.#requirePairedRuntime(scope);
         const listing = await this.#relay.listChatDirectory(scope.computerId, directory, scope.signal);
         return listing;
     };
 
-    readonly #bot = async (scope: ChatScope) => {
-        const bot = await this.#managedBots.readBot(scope.userId, scope.signal);
-        if (bot === null) {
-            throw new ComputerManagementError("NOT_FOUND", "Your Machine was not found.", 404);
+    /**
+     * Requires the computer to have a paired Runtime, as the Relay records it. Until it has one the Machine needs an
+     * Agent connected; once its Runtime was revoked it needs setup run again.
+     */
+    readonly #requirePairedRuntime = async (scope: ChatScope): Promise<void> => {
+        const pairing = await this.#relay.readRuntimePairing(scope.computerId, scope.signal);
+        switch (pairing) {
+            case "paired":
+                return;
+            case "unpaired":
+                throw new ComputerManagementError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
+            case "revoked":
+                throw runtimeRevoked();
+            default:
+                return pairing satisfies never;
         }
-        return bot;
-    };
-
-    readonly localRuntime = async (scope: ChatScope) => {
-        const bot = await this.#bot(scope);
-        if (bot.configuration === null) {
-            throw new ComputerManagementError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
-        }
-        return bot.configuration;
     };
 
     /**
@@ -241,18 +233,13 @@ export class ChatService {
         return this.#sessionOperations.run(sessionKey, signal, operation);
     };
 
-    readonly #nativeSessionRuntime = async (scope: ChatScope, requestedComputerId: string) => {
-        const runtime = await this.localRuntime(scope);
+    readonly #requireNativeSessionRuntime = async (scope: ChatScope, requestedComputerId: string) => {
         // The client names the Runtime its native-session identity came from. Discovery and entry identifiers belong to
         // that Runtime and must not be silently redirected to another one.
-        if (requestedComputerId !== runtime.computerId) {
-            throw new ComputerManagementError(
-                "BOT_RUNTIME_FIXED",
-                "This Machine is bound to a different Runtime.",
-                409,
-            );
+        if (requestedComputerId !== scope.computerId) {
+            throw new ComputerManagementError("BOT_RUNTIME_FIXED", "This request names a different computer.", 409);
         }
-        return runtime;
+        await this.#requirePairedRuntime(scope);
     };
 
     readonly #requireRuntimeAgent = async (scope: ChatScope, harness: string) => {
@@ -268,7 +255,7 @@ export class ChatService {
 
     /** The Sessions the Runtime holds, most recently updated first. */
     readonly managedSessions = async (scope: ChatScope) => {
-        const _runtime = await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         const sessions = await this.#relay.listChatSessions(scope.computerId, LISTED_SESSION_LIMIT, scope.signal);
         return {
             sessions: sessions.map((session) => ({
@@ -293,7 +280,7 @@ export class ChatService {
         publish: (event: ManagedSessionEvent) => Promise<void>,
         signal: AbortSignal,
     ): Promise<void> => {
-        const _runtime = await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         scope.signal.throwIfAborted();
         const socket = await this.#relay.openChatRuntimeHost(scope.computerId, signal);
         // The authorization deadline bounds opening the stream, not the reads made while it runs.
@@ -403,24 +390,18 @@ export class ChatService {
         scope: ChatScope,
         draft: { readonly harness: string; readonly workspaceRef: string },
     ) => {
-        const bot = await this.#bot(scope);
-        if (bot?.configuration === null || bot === null) {
-            throw new ComputerManagementError("AGENT_REQUIRED", "Choose a connected harness.", 409);
-        }
+        await this.#requirePairedRuntime(scope);
         await this.#requireRuntimeAgent(scope, draft.harness);
         const discovered = await this.#relay.discoverChatAgentSettings(
             scope.computerId,
-            { computerId: bot.configuration.computerId, ...draft },
+            { computerId: scope.computerId, ...draft },
             scope.signal,
         );
         return { settings: discovered };
     };
 
     readonly openChat = async (scope: ChatScope, input: OpenChatInput) => {
-        const bot = await this.#bot(scope);
-        if (bot.configuration === null) {
-            throw new ComputerManagementError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
-        }
+        await this.#requirePairedRuntime(scope);
         const access =
             "conversationKey" in input
                 ? await this.#openNewChat(scope, input)
@@ -476,7 +457,7 @@ export class ChatService {
 
     /** Issues a credential for a Session the Runtime holds. */
     readonly nativeSessionAccess = async (scope: ChatScope, target: NativeSessionTarget) => {
-        const _runtime = await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         const session = await this.#heldSession(scope, target);
         return await this.#relay.nativeSessionAccess(
             scope.computerId,
@@ -488,11 +469,10 @@ export class ChatService {
     };
 
     readonly managedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
-        await this.#bot(scope);
         return await this.#withSession(scope, target, async () => {
-            const runtime = await this.localRuntime(scope);
+            await this.#requirePairedRuntime(scope);
             const session = await this.#heldSession(scope, target);
-            const restored = await this.#relay.readChatSession(scope.computerId, runtime, target, scope.signal);
+            const restored = await this.#relay.readChatSession(scope.computerId, target, scope.signal);
             if (!sameNativeSession(restored.ready.target, session.target)) {
                 throw new ComputerManagementError(
                     "RELAY_INVALID_RESPONSE",
@@ -510,14 +490,14 @@ export class ChatService {
      * holds stays listed. Archiving a Session the Runtime does not hold succeeds.
      */
     readonly archiveManagedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
-        const _runtime = await this.localRuntime(scope);
+        await this.#requirePairedRuntime(scope);
         return await this.#withSession(scope, target, async () => ({
             target: await this.#relay.archiveChatSession(scope.computerId, target, scope.signal),
         }));
     };
 
     readonly nativeSessions = async (scope: ChatScope, requestedComputerId: string, input: NativeListInput) => {
-        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
         const result = await this.#relay.nativeSessions(scope.computerId, input, scope.signal);
         if (result.action !== "list") {
             throw new ComputerManagementError(
@@ -531,11 +511,10 @@ export class ChatService {
 
     /** Imports the native session a setup handoff names, found by its native identifier in the default workspace. */
     readonly continueNativeSession = async (scope: ChatScope, harness: string, sessionId: string) => {
-        const bot = await this.#bot(scope);
         const runtime =
-            bot.configuration === null
-                ? undefined
-                : await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal);
+            (await this.#relay.readRuntimePairing(scope.computerId, scope.signal)) === "paired"
+                ? await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal)
+                : undefined;
         const agent = runtime?.agents.find((item) => item.harness === harness);
         if (runtime === undefined || agent === undefined) {
             throw new ComputerManagementError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
@@ -571,7 +550,7 @@ export class ChatService {
         requestedComputerId: string,
         input: NativePreviewInput,
     ) => {
-        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
         const events = await this.#relay.previewRuntimeNativeEvents(
             scope.computerId,
             { harness: input.harness, sessionId: input.sessionId },
@@ -588,7 +567,7 @@ export class ChatService {
         sessionId: string,
         input: NativeEntryInput,
     ) => {
-        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
         const result = await this.#relay.nativeSessions(
             scope.computerId,
             { ...input, sessionId, action: "import" },
@@ -610,7 +589,7 @@ export class ChatService {
         operationId: string,
         input: NativePreviewInput,
     ) => {
-        const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
         // Operation identity belongs to this user and Machine, even when they share a Relay Project.
         const scopedOperationId = await scopedNativeForkOperationId(
             scope.computerId,
@@ -619,29 +598,16 @@ export class ChatService {
         return await this.#relay.forkNativeSession(scope.computerId, scopedOperationId, input, scope.signal);
     };
 
-    readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
-        await this.#bot(scope);
+    /**
+     * Setup's check that the computer's paired Runtime offers `harness` and can open its settings in the default
+     * working directory. It records nothing: whether the Machine has a Runtime is the Relay's pairing.
+     */
+    readonly verifyAgent = async (scope: ChatScope, input: AgentSetupInput) => {
         if (input.computerId !== scope.computerId) {
-            throw new ComputerManagementError("BOT_RUNTIME_FIXED", "This chat belongs to a different computer.", 409);
+            throw new ComputerManagementError("BOT_RUNTIME_FIXED", "This request names a different computer.", 409);
         }
         await this.#requireRuntimeAgent(scope, input.harness);
         await this.#relay.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
-        const result = await this.#managedBots.configureBot(
-            scope.userId,
-            { computerId: decodeIdentifier(input.computerId) },
-            Date.now(),
-            scope.signal,
-        );
-        if (result !== "configured") {
-            if (result === "runtime-mismatch") {
-                throw new ComputerManagementError(
-                    "BOT_RUNTIME_FIXED",
-                    "Create a new Machine to pair a different Runtime.",
-                    409,
-                );
-            }
-            throw new ComputerManagementError("NOT_FOUND", "Your Machine was not found.", 404);
-        }
         return { status: "active" };
     };
 }

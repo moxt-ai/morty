@@ -43,6 +43,9 @@ export type BotChatHomeStoreApi = Omit<ReturnType<typeof createBotChatHomeStore>
 
 type SetupReason = "unconfigured" | "runtime-revoked" | "agent-missing" | "runtime-offline" | "agent-required";
 
+/** Why a Session load waiting on a revoked Runtime fails. */
+const RUNTIME_REVOKED_MESSAGE = "This computer was disconnected. Run Morty setup on it again to reconnect.";
+
 /** Initialization owns only the entry request, never the selected session or the Runtime's availability. */
 type HomeInitialization =
     | { readonly kind: "loading" }
@@ -247,8 +250,8 @@ export const createBotChatHomeStore = (
         | "conversationSession"
         | "createConversation"
         | "managedSession"
-        | "readRuntimeBinding"
-        | "waitForRuntimeBindingChange"
+        | "readRuntimePairing"
+        | "waitForRuntimePairingChange"
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
@@ -525,7 +528,29 @@ export const createBotChatHomeStore = (
                     });
                     options.onRuntimeConfiguration(configuration, observation);
                 };
-                /** Refresh binding and workspace after an interrupted API read. */
+                /**
+                 * The computer's Runtime was revoked. The page says so, and starts over once setup pairs the computer
+                 * again: every Session connection it opened belongs to the revoked Runtime.
+                 */
+                const awaitRuntimeReplacement = async (message: string, watchSignal: AbortSignal): Promise<void> => {
+                    set((current) => ({
+                        pairing: { kind: "revoked" },
+                        initialization: { kind: "ready" },
+                        selection:
+                            current.selection.kind === "pending" || current.selection.kind === "loading"
+                                ? transitionConversationSelection(current.selection, {
+                                      kind: "session-load-failed",
+                                      failure: "unavailable",
+                                      message,
+                                      target: current.selection.target,
+                                  })
+                                : current.selection,
+                    }));
+                    await requests.waitForRuntimePairingChange(watchSignal);
+                    watchSignal.throwIfAborted();
+                    options.onRuntimeReplaced();
+                };
+                /** Refresh the pairing and workspace after an interrupted API read. */
                 const followConfigurationChanges = async (watchSignal: AbortSignal): Promise<void> => {
                     let dropped = true;
                     let armed = false;
@@ -533,14 +558,18 @@ export const createBotChatHomeStore = (
                         try {
                             if (dropped) {
                                 watchSignal.throwIfAborted();
-                                const binding = await requests.readRuntimeBinding(watchSignal);
+                                const pairing = await requests.readRuntimePairing(watchSignal);
                                 watchSignal.throwIfAborted();
-                                set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
-                                if (binding.kind === "unbound") {
-                                    // An unbound Machine waits for the binding
+                                if (pairing === "revoked") {
+                                    await awaitRuntimeReplacement(RUNTIME_REVOKED_MESSAGE, watchSignal);
+                                    return;
+                                }
+                                set({ pairing: { kind: pairing } });
+                                if (pairing === "unpaired") {
+                                    // An unpaired Machine waits for the pairing
                                     // it just read to change; the pairing flow
                                     // completes by restarting the load.
-                                    await requests.waitForRuntimeBindingChange(watchSignal);
+                                    await requests.waitForRuntimePairingChange(watchSignal);
                                     watchSignal.throwIfAborted();
                                     completeSetup();
                                     return;
@@ -596,10 +625,14 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    const binding = await requests.readRuntimeBinding(signal);
+                    const pairing = await requests.readRuntimePairing(signal);
                     signal.throwIfAborted();
-                    set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
-                    if (binding.kind === "unbound") {
+                    if (pairing === "revoked") {
+                        await awaitRuntimeReplacement(RUNTIME_REVOKED_MESSAGE, signal);
+                        return;
+                    }
+                    set({ pairing: { kind: pairing } });
+                    if (pairing === "unpaired") {
                         get().pairingDialog.getState().show();
                         set((current) => ({
                             selection:
@@ -708,24 +741,15 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "RUNTIME_REVOKED") {
-                        // Setup on that computer pairs the Machine with a new Runtime; the page loads again once the
-                        // Machine's binding names it.
-                        set((current) => ({
-                            pairing: { kind: "revoked" },
-                            initialization: { kind: "ready" },
-                            selection:
-                                current.selection.kind === "pending" || current.selection.kind === "loading"
-                                    ? transitionConversationSelection(current.selection, {
-                                          kind: "session-load-failed",
-                                          failure: "unavailable",
-                                          message: cause.message,
-                                          target: current.selection.target,
-                                      })
-                                    : current.selection,
-                        }));
-                        await requests.waitForRuntimeBindingChange(signal);
+                        // An operation reported the revocation, so the page's last pairing read may predate it. Waiting
+                        // starts from a read after it; one that already differs means setup is pairing again.
+                        const pairing = await requests.readRuntimePairing(signal);
                         signal.throwIfAborted();
-                        options.onRuntimeReplaced();
+                        if (pairing !== "revoked") {
+                            options.onRuntimeReplaced();
+                            return;
+                        }
+                        await awaitRuntimeReplacement(cause.message, signal);
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {

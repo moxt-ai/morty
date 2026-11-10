@@ -216,9 +216,6 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     expect(setupRuntimes).toMatchObject({
         runtimes: [{ computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] }],
     });
-    const draftRuntimeConfiguration = await fixture.request(`chat/workspace`, {});
-    expect(draftRuntimeConfiguration.status).toBe(409);
-    expect(await draftRuntimeConfiguration.json()).toMatchObject({ error: { code: "AGENT_REQUIRED" } });
     expect((await fixture.request(`chat/setup`, setup)).status).toBe(202);
 
     const runtimeConfigurationResponse = await fixture.request(`chat/workspace`, {});
@@ -517,66 +514,56 @@ test("Given dependent Agent settings, When applying a later selection changes an
     });
 });
 
-for (const configured of [false, true]) {
-    test(`Given a Bot ${configured ? "bound to another Runtime" : "without a Runtime"}, When its owner browses or opens native sessions using a client-selected Runtime, Then Chat rejects every operation without creating sessions`, async ({
-        cloud,
-    }) => {
-        const sessionId = crypto.randomUUID();
-        await using fixture = await createChatFixture(cloud, undefined, new Set([sessionId]));
-        await using bound = configured ? await createChatFixture(cloud) : null;
-        const owner = bound ?? fixture;
-        if (bound !== null) {
-            expect(
-                (
-                    await owner.request(`chat/setup`, {
-                        computerId: bound.runtime.computerId,
-                        harness: "codex",
-                    })
-                ).status,
-            ).toBe(202);
-        }
-        const computerId = fixture.runtime.computerId;
-        const identity = { harness: "codex", directory: "." };
-        // Obtain a valid discovery on the other Runtime through its public Relay API, so rejection cannot be
-        // attributed to a nonexistent Runtime, entry, or discovery.
-        const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
-            { ...identity, sessionId },
-            AbortSignal.timeout(10_000),
-        );
-        const before = await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000));
-        const entry = { ...identity, computerId, directory: found.entry.directory };
-        const paths = [
-            { path: "native-sessions", input: { ...entry, action: "list", cursor: null } },
-            { path: `native-session/${found.entry.sessionId}`, input: { ...entry } },
-            {
-                path: `native-session/${found.entry.sessionId}/import`,
-                input: { ...entry },
-            },
-            { path: "native-session-forks/fork-operation", input: { ...entry, sessionId } },
-        ];
-        const responses = [];
-        for (const { path, input } of paths) {
-            const response = await owner.request(`chat/${path}`, input);
-            responses.push({ path, status: response.status, body: await response.json() });
-        }
-        expect.soft(responses).toMatchObject(
-            paths.map(({ path }) => ({
-                path,
-                status: 409,
-                body: { error: { code: configured ? "BOT_RUNTIME_FIXED" : "AGENT_REQUIRED" } },
-            })),
-        );
-        expect
-            .soft(await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000)))
-            .toEqual(before);
-        if (!configured) {
-            expect((await owner.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
-        }
-        const managed = await owner.request(`chat/managed-sessions`, {});
-        expect(managed.status).toBe(200);
-        expect(await managed.json()).toEqual({ sessions: [] });
-    });
-}
+test("Given a Machine paired with its own Runtime, When its owner browses or opens native sessions naming another computer's Runtime, Then Chat rejects every operation without creating sessions", async ({
+    cloud,
+}) => {
+    const sessionId = crypto.randomUUID();
+    await using fixture = await createChatFixture(cloud, undefined, new Set([sessionId]));
+    await using owner = await createChatFixture(cloud);
+    expect(
+        (
+            await owner.request(`chat/setup`, {
+                computerId: owner.runtime.computerId,
+                harness: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const computerId = fixture.runtime.computerId;
+    const identity = { harness: "codex", directory: "." };
+    // Obtain a valid discovery on the other Runtime through its public Relay API, so rejection cannot be
+    // attributed to a nonexistent Runtime, entry, or discovery.
+    const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
+        { ...identity, sessionId },
+        AbortSignal.timeout(10_000),
+    );
+    const before = await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000));
+    const entry = { ...identity, computerId, directory: found.entry.directory };
+    const paths = [
+        { path: "native-sessions", input: { ...entry, action: "list", cursor: null } },
+        { path: `native-session/${found.entry.sessionId}`, input: { ...entry } },
+        {
+            path: `native-session/${found.entry.sessionId}/import`,
+            input: { ...entry },
+        },
+        { path: "native-session-forks/fork-operation", input: { ...entry, sessionId } },
+    ];
+    const responses = [];
+    for (const { path, input } of paths) {
+        const response = await owner.request(`chat/${path}`, input);
+        responses.push({ path, status: response.status, body: await response.json() });
+    }
+    expect.soft(responses).toMatchObject(
+        paths.map(({ path }) => ({
+            path,
+            status: 409,
+            body: { error: { code: "BOT_RUNTIME_FIXED" } },
+        })),
+    );
+    expect.soft(await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000))).toEqual(before);
+    const managed = await owner.request(`chat/managed-sessions`, {});
+    expect(managed.status).toBe(200);
+    expect(await managed.json()).toEqual({ sessions: [] });
+});
 
 test("Given a Bot connected through one Agent, When a Session uses another Agent, Then that Session reopens with its own Agent", async ({
     cloud,

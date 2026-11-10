@@ -13,13 +13,14 @@ import {
     MortyRelayAppClient,
     MortyTimeoutError,
 } from "@morty-build/client/relay";
-import { MortyClient, MortyRuntimePairingRequest } from "@morty-build/client/server";
+import { MortyClient, MortyRuntimePairingLifecycle, MortyRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
     ComputerManagementError,
     computerManagementSchema,
     relayIdentifier,
 } from "../components/management/entity/computer-management.ts";
+import { type RuntimePairing, runtimeRevoked } from "../components/management/entity/runtime-pairing.ts";
 import type { ProjectLocationHint } from "../components/management/util/project-location.ts";
 import {
     appOriginBindingSchema,
@@ -157,11 +158,7 @@ export class ComputerManagementGateway {
             if (!response.ok) {
                 const refusal = v.safeParse(relayErrorSchema, await response.json().catch(() => null));
                 if (refusal.success && refusal.output.error.code === "runtime_revoked") {
-                    throw new ComputerManagementError(
-                        "RUNTIME_REVOKED",
-                        "This computer was disconnected because its connection key was used somewhere else. Run Morty setup on it again to reconnect.",
-                        410,
-                    );
+                    throw runtimeRevoked();
                 }
                 throw new ComputerManagementError(
                     response.status === 404 ? "NOT_FOUND" : "RELAY_UNAVAILABLE",
@@ -490,12 +487,7 @@ export class ComputerManagementGateway {
             120000,
         );
 
-    readonly readChatSession = async (
-        computerId: string,
-        _selection: { readonly computerId: string },
-        target: NativeSessionTarget,
-        signal: AbortSignal,
-    ) =>
+    readonly readChatSession = async (computerId: string, target: NativeSessionTarget, signal: AbortSignal) =>
         await this.#withProject(
             computerId,
             signal,
@@ -609,6 +601,26 @@ export class ComputerManagementGateway {
 
     readonly readPairing = async (computerId: string, signal: AbortSignal) =>
         await this.#withProject(computerId, signal, async (client) => await client.runtimePairings.read(signal));
+
+    /** Where the computer's Runtime pairing stands. The Relay owns this fact; a computer never paired is unpaired. */
+    readonly readRuntimePairing = async (computerId: string, signal: AbortSignal): Promise<RuntimePairing> =>
+        await this.#withProject(computerId, signal, async (client) => {
+            try {
+                switch ((await client.runtimePairings.read(signal)).status) {
+                    case MortyRuntimePairingLifecycle.Paired:
+                        return "paired";
+                    case MortyRuntimePairingLifecycle.Revoked:
+                        return "revoked";
+                    default:
+                        return "unpaired";
+                }
+            } catch (cause) {
+                if (cause instanceof MortyApiError && cause.code === "pairing_not_found") {
+                    return "unpaired";
+                }
+                throw cause;
+            }
+        });
 
     readonly #withProject = async <T>(
         computerId: string,

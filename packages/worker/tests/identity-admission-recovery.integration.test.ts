@@ -35,7 +35,6 @@ const identitySchema = v.object({
     token: v.string(),
     userId: v.string(),
     computerId: v.string(),
-    bot: v.object({ displayName: v.string() }),
 });
 
 // Stateful external admission port, explicitly replenished by the scenario; no real-time quota window.
