@@ -6,7 +6,7 @@ import type {
     WorkspaceEntriesEvent,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
-import { decodeNativeSessionCancel } from "@morty-build/client/protocol";
+import { decodeNativeSessionCancel, requestReplyAddress } from "@morty-build/client/protocol";
 import type { DurableObjectContext } from "../../di/create-durable-object-dependencies.ts";
 import type { ComputerScope as Scope } from "../../entity/do/session.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
@@ -18,7 +18,6 @@ import {
     requestRuntimeControl,
     requestRuntimeFile,
     requestRuntimeWorkspace,
-    runtimeControlRequestId,
 } from "../pairing/runtime-control-request.ts";
 import type { NativeSessionForks } from "./native-session-forks.ts";
 
@@ -103,7 +102,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
     ) => {
         checkTarget(scope.computerId);
         const target = "target" in command ? command.target : undefined;
-        const socket = await connect(runtimeControlRequestId(command), target, signal);
+        const socket = await connect(requestReplyAddress(command), target, signal);
         return await requestRuntimeControl(socket, command, signal);
     };
     return {

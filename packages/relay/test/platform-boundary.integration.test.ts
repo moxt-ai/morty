@@ -3219,6 +3219,30 @@ describe.sequential("Platform Turn submission", () => {
         }
     });
 
+    it.each([
+        { kind: "permission", responderId: "member-1", outcome: "selected", optionId: "allow_once" },
+        { kind: "elicitation", responderId: "member-1", action: "accept", content: '{"answer":"continue"}' },
+    ] as const)(
+        "Given a daemon whose heartbeats stopped, When an app answers a pending $kind request, Then the answer is refused at once as runtime_offline",
+        async (body) => {
+            const runtime = await connectRuntimeDaemon(`offline-${body.kind}-answer`, { anchorClockToHeartbeat: true });
+            // The clock now reads when Cloudflare answered the daemon's heartbeat.
+            const heartbeatAt = Date.now();
+            try {
+                vi.setSystemTime(heartbeatAt + 36_000);
+                const answer = await runtime.appSessionRequest("/interactions/offline-interaction/responses", {
+                    method: "POST",
+                    body,
+                });
+                expect(await responseJson(answer, 503)).toMatchObject({ error: { code: "runtime_offline" } });
+                expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Runtime heartbeat timed out" });
+            } finally {
+                vi.setSystemTime(heartbeatAt);
+                runtime.daemon.close();
+            }
+        },
+    );
+
     it("Given a daemon whose heartbeats stopped, When an app reads the Runtime, Then it is reported offline and its connection is closed", async () => {
         const runtime = await connectRuntimeDaemon("silent-presence", { anchorClockToHeartbeat: true });
         // The clock now reads when Cloudflare answered the daemon's heartbeat.
