@@ -716,5 +716,4 @@ export function createRelayWorker() {
     };
 }
 
-export { relayAuthenticationFromEnvironment } from "./composition/relay-authentication-environment.ts";
 export { RelayAuthenticationConfiguration } from "./entity/computer-management.ts";

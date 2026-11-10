@@ -31,7 +31,11 @@
             "entry": ["tests/*-types.contract.ts"]
         },
         "packages/relay": {
-            "entry": ["src/schema/**/*.ts"]
+            "entry": ["src/schema/**/*.ts"],
+            "includeEntryExports": true
+        },
+        "packages/relay-core": {
+            "includeEntryExports": true
         },
         "packages/relay-test-support": {
             "entry": ["src/relay-worker-entry.ts"]

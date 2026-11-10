@@ -15,7 +15,7 @@ export function createMortyApplication(apiPrefix: string = MORTY_API_PREFIX) {
 }
 
 /** Unmatched routes must carry a stable machine-readable code so SDK callers can branch on it. */
-export function notFoundResponse(): Response {
+function notFoundResponse(): Response {
     return Response.json(
         { error: { code: "not_found", message: "The requested Morty resource does not exist" } },
         { status: 404 },
