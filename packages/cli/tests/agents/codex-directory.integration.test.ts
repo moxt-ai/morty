@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { harnessAdapters } from "../../src/engine/acp/adapter/registry.ts";
@@ -7,54 +7,33 @@ import { codexFixture } from "../support/agents/codex-native.ts";
 import { previewCodexHistory } from "../support/codex-history-preview.ts";
 import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
 
-it("Given saved Codex side chats and ordinary sessions, When the native session directory is listed, Then side chats are hidden and ordinary sessions remain visible", async () => {
+it("Given multiple Codex rollout files share an indexed session identity, When the native session directory is listed, Then the conversation appears only once", async () => {
     const f = await codexFixture();
     try {
+        const sessionId = await f.seed("Indexed conversation");
         const home = f.agent.environment["CODEX_HOME"];
         if (home === undefined) {
             throw new Error("Missing isolated Codex home");
         }
-        const directory = join(home, "sessions", "2026", "11", "10");
-        await mkdir(directory, { recursive: true });
-        const expected: string[] = [];
-        for (const source of ["tui_side_chat", "user", null, undefined]) {
-            const id = randomUUID();
-            if (source !== "tui_side_chat") {
-                expected.push(id);
-            }
-            const timestamp = "2026-11-10T00:00:00.000Z";
-            // Native persisted input is read and indexed by the real Codex app-server.
-            const records = [
-                {
-                    type: "session_meta",
-                    payload: {
-                        id,
-                        timestamp,
-                        cwd: f.workspace,
-                        originator: "codex_cli_rs",
-                        cli_version: "0.162.1",
-                        source: "cli",
-                        thread_source: source,
-                        model_provider: "morty",
-                    },
-                },
-                {
-                    type: "event_msg",
-                    payload: {
-                        type: "user_message",
-                        message: "Saved conversation",
-                        images: [],
-                        local_images: [],
-                        text_elements: [],
-                    },
-                },
-            ];
-            await writeFile(
-                join(directory, `rollout-2026-11-10T00-00-00-${id}.jsonl`),
-                `${records.map((record) => JSON.stringify({ timestamp, ...record })).join("\n")}\n`,
+        const directory = join(home, "sessions");
+        const rollout = (await readdir(directory, { recursive: true })).find((file) =>
+            file.endsWith(`${sessionId}.jsonl`),
+        );
+        if (rollout === undefined) {
+            throw new Error("Missing saved Codex rollout");
+        }
+        for (let index = 0; index < 2; index++) {
+            await copyFile(
+                join(directory, rollout),
+                join(directory, rollout.replace(/\.jsonl$/u, `_${randomUUID()}.jsonl`)),
             );
         }
-        expect((await f.list()).entries.map((entry) => entry.sessionId).sort()).toEqual(expected.sort());
+
+        const result = await f.list();
+
+        expect(result.entries.map((entry) => entry.sessionId)).toEqual([sessionId]);
+        expect(result.entries[0]?.title).toBe("Indexed conversation");
+        expect(result.nextCursor).toBeNull();
     } finally {
         await f.close();
     }

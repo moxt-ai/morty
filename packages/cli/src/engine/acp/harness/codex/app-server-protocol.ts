@@ -346,9 +346,7 @@ const threadSummarySchema = z.object({
     cwd: boundedText(2_048),
     id: boundedText(256),
     name: threadTitleSchema.nullish(),
-    path: boundedText(8_192).nullish(),
     preview: threadTitleSchema.nullish(),
-    threadSource: boundedText(256).nullish(),
     updatedAt: z.number().int().nonnegative(),
 });
 
