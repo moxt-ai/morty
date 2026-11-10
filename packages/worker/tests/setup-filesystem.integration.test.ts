@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
@@ -14,20 +14,30 @@ import { claimMortyState } from "../../local-state/src/ownership.ts";
 import worker from "../src/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
-// Exercise the package-runner boundary, including the production argument prefix.
-async function writeNpxFixture(bin: string, body: string): Promise<void> {
-    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@morty-build/cli@latest'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
-    if (process.platform === "win32") {
-        const directory = join(bin, "node_modules", "npm", "bin");
-        await mkdir(directory, { recursive: true });
-        await writeFile(join(directory, "npx-cli.js"), script);
-        await writeFile(
-            join(bin, "npx.cmd"),
-            '@ECHO off\r\nSET "NODE_EXE=node.exe"\r\nSET "NPX_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npx-cli.js"\r\n"%NODE_EXE%" "%NPX_CLI_JS%" %*\r\n',
-        );
-    } else {
-        await writeFile(join(bin, "npx"), script, { mode: 0o700 });
-    }
+async function writeCliFixture(bin: string, body: string): Promise<string> {
+    const entry = join(bin, "morty.mjs");
+    await writeFile(entry, body, { mode: 0o700 });
+    return entry;
+}
+
+async function writeSetupRunner(directory: string, cliEntry: string): Promise<string> {
+    const entry = join(directory, "run-setup.mjs");
+    await writeFile(
+        entry,
+        `
+import { runSetup } from ${JSON.stringify(new URL("../../cli/src/setup/setup.ts", import.meta.url).href)};
+const cancellation = new AbortController();
+process.once('SIGINT', () => cancellation.abort());
+process.once('SIGTERM', () => cancellation.abort());
+process.exitCode = await runSetup(process.argv.slice(2), {
+    state: process.env.MORTY_STATE_DIRECTORY,
+    cliEntry: ${JSON.stringify(cliEntry)},
+    signal: cancellation.signal,
+    emit: event => console.log(JSON.stringify(event)),
+});
+`,
+    );
+    return entry;
 }
 
 // Budgets for the scenarios that run Setup as a child process. CI also runs some of them on Windows, the slowest
@@ -47,6 +57,7 @@ interface SetupModule {
         args: readonly string[],
         host: {
             readonly state: string;
+            readonly cliEntry?: string;
             readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
             readonly signal: AbortSignal;
             readonly runtime?: ControlledSetupRuntime;
@@ -63,9 +74,8 @@ function isSetupModule(value: unknown): value is SetupModule {
     return value !== null && typeof value === "object" && "runSetup" in value && typeof value.runSetup === "function";
 }
 
-// Setup has its own Node compilation environment; load its public entrypoint at
-// runtime rather than typechecking it with the Worker's Cloudflare globals.
-const setupModule: unknown = await import(new URL("../../setup/src/setup.ts", import.meta.url).href);
+// Load the Node workflow at runtime rather than typechecking it with the Worker's Cloudflare globals.
+const setupModule: unknown = await import(new URL("../../cli/src/setup/setup.ts", import.meta.url).href);
 if (!isSetupModule(setupModule)) {
     throw new Error("Missing setup entrypoint");
 }
@@ -116,17 +126,12 @@ async function savedIdentity(state: string) {
     return saved.identity;
 }
 
-test.each([
-    { replacementState: "fresh", launcher: "npx" },
-    { replacementState: "unknown", launcher: "npx" },
-    { replacementState: "revoked", launcher: "npx" },
-    { replacementState: "fresh", launcher: "local" },
-] as const)(
-    "Given an invalid Morty state root and $replacementState replacement state using $launcher, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
+test.each(["fresh", "unknown", "revoked"] as const)(
+    "Given an invalid Morty state root and %s replacement state, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
     {
         timeout: SETUP_PROCESS_TEST_TIMEOUT_MS,
     },
-    async ({ replacementState, launcher }) => {
+    async (replacementState) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-state-root-"));
         const state = join(directory, "state");
         const bin = join(directory, "bin");
@@ -167,21 +172,16 @@ test.each([
             // Morty refuses another root's installation data with EX_CONFIG.
             const refusal =
                 "MORTY_STATE_DIRECTORY is Morty installation data, not a state root. Use the state root that owns it: MORTY_STATE_DIRECTORY=/owning-root";
-            if (launcher === "npx") {
-                await writeNpxFixture(
-                    bin,
-                    `process.stderr.write(${JSON.stringify(`${refusal}\n`)}); process.exit(78);`,
-                );
-            }
-            const localCli = join(bin, "local-morty.cjs");
-            if (launcher === "local") {
-                await writeFile(localCli, `process.stderr.write(${JSON.stringify(refusal)}); process.exit(78);`);
-            }
+            const localCli = await writeCliFixture(
+                bin,
+                `process.stderr.write(${JSON.stringify(refusal)}); process.exit(78);`,
+            );
+            const runner = await writeSetupRunner(directory, localCli);
             let output = "";
             const child = spawn(
                 process.execPath,
                 [
-                    fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                    runner,
                     "setup",
                     "--base-url",
                     fixture.origin,
@@ -198,7 +198,6 @@ test.each([
                         PATH: bin,
                         MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
                         MORTY_STATE_DIRECTORY: state,
-                        MORTY_LOCAL_CLI: launcher === "local" ? localCli : undefined,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
                     signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
@@ -244,16 +243,14 @@ test.each(["missing", "unlaunchable"] as const)(
         await mkdir(bin);
         const fixture = await createIdentityFixture();
         try {
-            if (failure !== "missing") {
-                const entry = join(bin, "broken.mjs");
-                await writeFile(entry, "await using = ;");
-                await writeNpxFixture(bin, `await import(${JSON.stringify(pathToFileURL(entry).href)});`);
-            }
+            const localCli =
+                failure === "missing" ? join(bin, "missing.mjs") : await writeCliFixture(bin, "await using = ;");
+            const runner = await writeSetupRunner(directory, localCli);
             let output = "";
             const child = spawn(
                 process.execPath,
                 [
-                    fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                    runner,
                     "setup",
                     "--base-url",
                     fixture.origin,
@@ -304,20 +301,15 @@ test("Given a local workspace and a private state directory, When setup creates 
     const workspace = join(directory, "workspace with spaces & quotes '");
     await mkdir(workspace);
     const fixture = await createIdentityFixture();
-    const bin = join(directory, "bin");
-    await mkdir(bin);
-    await writeNpxFixture(
-        bin,
-        `await import(${JSON.stringify(new URL("../../../packages/cli/dist/cli.js", import.meta.url).href)});`,
-    );
-    const runner = join(directory, "setup.mjs");
+    const runner = join(directory, "run-setup.mjs");
     await writeFile(
         runner,
         `
-import { runSetup } from ${JSON.stringify(new URL("../../setup/src/setup.ts", import.meta.url).href)};
+import { runSetup } from ${JSON.stringify(new URL("../../cli/src/setup/setup.ts", import.meta.url).href)};
 const cancellation = new AbortController();
 process.exitCode = await runSetup(process.argv.slice(2), {
     state: process.env.MORTY_STATE_DIRECTORY,
+    cliEntry: ${JSON.stringify(fileURLToPath(new URL("../../cli/dist/cli.js", import.meta.url)))},
     agentEnvironment: {},
     signal: cancellation.signal,
     emit(event) {
@@ -346,7 +338,6 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                 ...process.env,
                 MORTY_STATE_DIRECTORY: state,
                 MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
-                PATH: `${bin}${process.platform === "win32" ? ";" : ":"}${process.env["PATH"] ?? ""}`,
             },
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: true,
@@ -449,12 +440,6 @@ test.runIf(process.platform !== "win32")(
                 : join(directory, ".local", "state", "morty", "v3");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
-        const bin = join(directory, "bin");
-        await mkdir(bin);
-        await writeNpxFixture(
-            bin,
-            `await import(${JSON.stringify(new URL("../../../packages/cli/dist/cli.js", import.meta.url).href)});`,
-        );
         const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
             Object.entries(process.env).filter(([name]) => !["MORTY_STATE_DIRECTORY", "XDG_STATE_HOME"].includes(name)),
@@ -462,7 +447,7 @@ test.runIf(process.platform !== "win32")(
         const child = spawn(
             process.execPath,
             [
-                fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                fileURLToPath(new URL("../../cli/dist/cli.js", import.meta.url)),
                 "setup",
                 "--base-url",
                 fixture.origin,
@@ -478,7 +463,6 @@ test.runIf(process.platform !== "win32")(
                     ...environment,
                     HOME: directory,
                     MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
-                    PATH: `${bin}:${environment["PATH"] ?? ""}`,
                 },
                 stdio: ["ignore", "pipe", "pipe"],
                 signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
@@ -561,7 +545,7 @@ for (const [failure, scenario] of starterFailures) {
                 });
                 await writeFile(join(directory, "connections.json"), JSON.stringify([connection]));
                 await writeFile(join(directory, "attempts.txt"), "0");
-                await writeNpxFixture(
+                const localCli = await writeCliFixture(
                     bin,
                     `
 import { spawn } from 'node:child_process';
@@ -571,7 +555,7 @@ if (process.argv[2] === '--version' || process.argv[2] === 'install') { process.
 if (process.argv[2] === 'start' && ${JSON.stringify(failure === "cancel-download")}) {
     ${
         failure === "cancel-download"
-            ? `// A package runner does not promise to forward termination to its children.
+            ? `// A CLI invocation may own descendants that also need cancellation.
     const download = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     writeFileSync('download.pid', String(download.pid));
     process.kill(process.ppid, 'SIGUSR2');
@@ -595,12 +579,13 @@ else if (${JSON.stringify(failure === "stuck-start")}) {
                 const runner = join(directory, "run.mjs");
                 await writeFile(
                     runner,
-                    `import { runSetup } from ${JSON.stringify(new URL("../../setup/src/setup.ts", import.meta.url).href)};
+                    `import { runSetup } from ${JSON.stringify(new URL("../../cli/src/setup/setup.ts", import.meta.url).href)};
 const cancellation = new AbortController();
 process.on('SIGUSR2', () => cancellation.abort());
 let time = Date.parse('2026-09-15T12:00:00Z');
 process.exitCode = await runSetup(process.argv.slice(2), {
     state: process.env.MORTY_STATE_DIRECTORY, signal: cancellation.signal,
+    cliEntry: ${JSON.stringify(localCli)},
     emit(event) { console.log(JSON.stringify(event)); ${failure === "cancel" ? "if (event.status === 'runtime_retrying') cancellation.abort();" : ""} },
     clock: { now: () => new Date(time), wait: async (milliseconds, signal) => { signal.throwIfAborted(); time += milliseconds; } },
 });

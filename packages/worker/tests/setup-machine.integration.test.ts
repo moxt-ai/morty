@@ -6,8 +6,8 @@ import { createResponseLossProxy } from "@morty-build/relay-test-support/respons
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
+import { runSetup } from "../../cli/src/setup/setup.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
-import { runSetup } from "../../setup/src/setup.ts";
 import worker from "../src/application.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 

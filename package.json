@@ -12,8 +12,7 @@
     "scripts": {
         "dev": "vite",
         "local-dev": "node scripts/local-dev.cjs",
-        "build": "pnpm build:setup && vite build",
-        "build:setup": "pnpm --filter @morty-build/setup build",
+        "build": "vite build",
         "typecheck": "pnpm typegen && pnpm --filter './packages/**' --recursive --if-present typecheck && pnpm --filter './packages/**' --recursive --if-present typecheck:tests && pnpm typecheck:tooling",
         "check:no-chinese": "node scripts/check-no-chinese.ts",
         "check:store-subscribe": "node scripts/check-store-subscribe.ts",

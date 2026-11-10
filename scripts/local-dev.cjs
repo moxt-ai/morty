@@ -33,9 +33,7 @@ const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const MORTY_ROOT = REPO_ROOT;
 const MORTY_LOCKFILE = path.join(MORTY_ROOT, "pnpm-lock.yaml");
 const MORTY_INSTALLED_LOCKFILE = path.join(MORTY_ROOT, "node_modules", ".pnpm", "lock.yaml");
-const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
-const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
-/** An identifier the setup bundle and Relay accept for a harness or native session. */
+/** An identifier the CLI and Relay accept for a harness or native session. */
 const HARNESS_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
 
 async function availablePort() {
@@ -517,28 +515,9 @@ async function prepare(options) {
         );
 
         if (options.build !== false) {
-            log("building Chat Worker and setup bundle");
+            log("building Chat Worker");
             await run("pnpm", ["build"]);
         }
-        if (!fs.existsSync(path.join(REPO_ROOT, SETUP_BUNDLE))) {
-            throw new Error(`Missing setup bundle at ${SETUP_BUNDLE}; run without --no-build`);
-        }
-
-        log("seeding setup bundle into local R2");
-        await wrangler([
-            "r2",
-            "object",
-            "put",
-            `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
-            "--file",
-            SETUP_BUNDLE,
-            "--local",
-            "--persist-to",
-            chatPersist,
-            "--config",
-            CHAT_CONFIG,
-        ]);
-
         const variables = {
             APP_ORIGIN: chatOrigin,
             MORTY_SERVICE_SECRET: appSecret,
@@ -683,7 +662,7 @@ function readSetupRecord(line) {
 }
 
 /**
- * Runs the Chat-served setup bundle's `setup` flow with Morty's writable
+ * Runs the installed CLI's `setup` flow with Morty's writable
  * location isolated under the stack's state directory. `morty/` isolates
  * Morty's saved setup state, CLI manager and connection
  * state, and `workspace/` is the default working directory. On success prints
@@ -721,36 +700,16 @@ async function setup(options) {
     const localCli = await installLocalCli(stack);
     const origin = new URL(stack.chatOrigin).origin;
 
-    log(`downloading the setup bundle from ${origin}`);
-    const setupBundle = path.join(stack.stateDir, "setup.mjs");
-    const setupResponse = await fetch(`${origin}/setup.mjs`, { signal: AbortSignal.timeout(20_000) });
-    if (!setupResponse.ok) {
-        fail(`downloading setup.mjs failed (${setupResponse.status})`);
-    }
-    fs.writeFileSync(setupBundle, Buffer.from(await setupResponse.arrayBuffer()), { mode: 0o600 });
-
     const setupLog = path.join(stack.stateDir, "setup.log");
     fs.writeFileSync(setupLog, "", { mode: 0o600 });
     log(`running setup for harness "${harness}" against workspace ${workspace}`);
     const runtimePid = await startProcess(
         "setup runtime",
-        [
-            setupBundle,
-            "setup",
-            "--base-url",
-            origin,
-            "--cwd",
-            workspace,
-            "--harness",
-            harness,
-            "--session-id",
-            sessionId,
-        ],
+        [localCli, "setup", "--base-url", origin, "--cwd", workspace, "--harness", harness, "--session-id", sessionId],
         setupLog,
         process.execPath,
         {
             MORTY_STATE_DIRECTORY: mortyStateDirectory,
-            MORTY_LOCAL_CLI: localCli,
         },
         workspace,
     );
@@ -853,24 +812,6 @@ async function reload(options) {
         // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
         await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
         controller.signal.throwIfAborted();
-        log("refreshing the local setup bundle");
-        await run(
-            WRANGLER,
-            [
-                "r2",
-                "object",
-                "put",
-                `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
-                "--file",
-                SETUP_BUNDLE,
-                "--local",
-                "--persist-to",
-                chatPersist,
-                "--config",
-                CHAT_CONFIG,
-            ],
-            operation,
-        );
         await waitForHttp(
             stack.chatOrigin,
             (response) => response.ok,
@@ -1064,7 +1005,7 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|relay|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
-            "reload rebuilds web/Chat and refreshes setup.mjs without restarting Relay or runtimes.",
+            "reload rebuilds web/Chat without restarting Relay or runtimes.",
             "",
         ].join("\n"),
     );

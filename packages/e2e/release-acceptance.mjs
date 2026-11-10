@@ -42,7 +42,7 @@ const environment = {
     npm_config_cache: join(root, "npm-cache"),
     npm_config_userconfig: join(root, "npmrc"),
 };
-for (const key of ["CODEX_THREAD_ID", "CLAUDE_CODE_SESSION_ID", "MORTY_LOCAL_CLI"]) {
+for (const key of ["CODEX_THREAD_ID", "CLAUDE_CODE_SESSION_ID"]) {
     delete environment[key];
 }
 await writeFile(environment.npm_config_userconfig, "", { mode: 0o600 });
@@ -85,9 +85,6 @@ try {
         await readFile(join(root, "package/node_modules/@morty-build/cli/package.json"), "utf8"),
     );
     receipt.version = metadata.version;
-    if (!origin.startsWith("https:")) {
-        environment.MORTY_LOCAL_CLI = entry;
-    }
     stage("create-real-native-session");
     const session = randomUUID();
     const seeded = await run(agent.executable, [
@@ -102,16 +99,9 @@ try {
     ]);
     assert.ok(seeded.stdout.includes(answer));
     stage("fresh-setup-and-pairing");
-    const setup = await fetch(new URL("/setup.mjs", origin), { signal: AbortSignal.timeout(60_000) });
-    assert.equal(setup.status, 200);
-    const setupBytes = Buffer.from(await setup.arrayBuffer());
-    receipt.setupSha256 = createHash("sha256").update(setupBytes).digest("hex");
-    const setupFile = join(root, "setup.mjs");
-    await writeFile(setupFile, setupBytes, { mode: 0o600 });
     let setupOutput;
     try {
-        setupOutput = await run(process.execPath, [
-            setupFile,
+        setupOutput = await cli(
             "setup",
             "--base-url",
             origin,
@@ -121,7 +111,7 @@ try {
             "claude",
             "--session-id",
             session,
-        ]);
+        );
     } finally {
         try {
             identity = JSON.parse(await readFile(join(state, "config.json"), "utf8")).identity;

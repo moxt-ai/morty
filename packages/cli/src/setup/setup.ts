@@ -7,18 +7,12 @@ import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { decodeIdentifier, isIdentifier } from "@morty-build/client/protocol";
-import { claimMortyState } from "@morty-build/local-state";
+import { claimMortyState, mortyStateDirectory } from "@morty-build/local-state";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
-import { validateLocalPath } from "../../../packages/cli/src/engine/util/filesystem/private-path.ts";
-import {
-    executableLaunch,
-    findExecutableOnPath,
-    spawnProcess,
-    stopProcessTree,
-} from "../../../packages/cli/src/engine/util/process/executable.ts";
-import { resolveStateDirectory } from "./platform/index.ts";
+import { validateLocalPath } from "../engine/util/filesystem/private-path.ts";
+import { spawnProcess, stopProcessTree } from "../engine/util/process/executable.ts";
 
 export interface SetupRuntime {
     /** Runs a Morty command; `input`, when given, is written to its standard input, which is then closed. */
@@ -34,7 +28,7 @@ export interface SetupRuntime {
     }>;
 }
 
-export interface SetupHost {
+interface SetupEnvironment {
     /**
      * Where this computer keeps Morty's private state. Empty selects the operating system's local application data directory,
      * which is not synced to the user's other computers.
@@ -44,7 +38,6 @@ export interface SetupHost {
     readonly emit: (value: Readonly<Record<string, unknown>>) => void;
     /** The calling Agent's environment, where its harness exposes the current session. Defaults to this process's. */
     readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
-    readonly runtime?: SetupRuntime;
     readonly clock?: {
         readonly now: () => Date;
         readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
@@ -52,6 +45,12 @@ export interface SetupHost {
         readonly deadline?: (milliseconds: number) => AbortSignal;
     };
 }
+
+export type SetupHost = SetupEnvironment &
+    (
+        | { readonly runtime: SetupRuntime }
+        | { /** The invoking CLI release, never another release resolved through npm. */ readonly cliEntry: string }
+    );
 
 /** Where each supported harness exposes its current session to the commands its Agent runs. */
 const harnessSessionVariables: ReadonlyMap<string, string> = new Map([
@@ -393,7 +392,7 @@ class RuntimeStartError extends Error {
 class RuntimePreflightError extends Error {
     readonly code = "RUNTIME_PREFLIGHT_FAILED";
     readonly nextStep =
-        "Install Node.js 22.19+ or 24.20+ with npx, run npx --yes @morty-build/cli@latest --version in the same terminal, then rerun setup.";
+        "Use Node.js 22.19+ or 24.20+, run morty --version in the same terminal, and repair the installed Morty release before rerunning setup.";
 
     constructor(message: string, cause?: unknown) {
         super(message, { cause });
@@ -1144,7 +1143,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         input?: string,
     ) {
         operation.throwIfAborted();
-        if (host.runtime !== undefined) {
+        if ("runtime" in host) {
             return await host.runtime.run(directory, args, cwd, operation, input);
         }
         const logPath = join(directory, `runtime-${crypto.randomUUID()}.log`);
@@ -1156,26 +1155,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let child: ChildProcess | undefined;
         try {
             await safeLocalPath(logPath, false, true);
-            const localCli = process.env["MORTY_LOCAL_CLI"];
-            let launch: ReturnType<typeof executableLaunch>;
-            if (localCli !== undefined) {
-                if (!isAbsolute(localCli)) {
-                    fail("RUNTIME_NOT_INSTALLED");
-                }
-                launch = { command: process.execPath, arguments: [await realpath(localCli), ...args] };
-            } else {
-                const executable = await findExecutableOnPath("npx", process.env);
-                if (executable === null) {
-                    fail("RUNTIME_NOT_INSTALLED");
-                }
-                launch = executableLaunch(executable.path, [
-                    "--yes",
-                    "--prefer-online",
-                    "@morty-build/cli@latest",
-                    ...args,
-                ]);
+            const localCli = host.cliEntry;
+            if (!isAbsolute(localCli)) {
+                fail("RUNTIME_NOT_INSTALLED");
             }
-            child = spawnProcess(launch.command, launch.arguments, {
+            child = spawnProcess(process.execPath, [await realpath(localCli), ...args], {
                 cwd,
                 stdio: [input === undefined ? "ignore" : "pipe", log.fd, log.fd],
                 windowsHide: true,
@@ -1208,7 +1192,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // Only terminate the child this invocation still owns; an exited PID may be reused.
             if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
                 try {
-                    // Cancel the whole invocation, including npm's shell and CLI descendants.
+                    // Cancel the whole invocation, including any CLI descendants.
                     await stopProcessTree(child);
                 } catch {
                     // Cleanup must not replace the launch failure or prevent its diagnostic from being written.
@@ -1790,7 +1774,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
-        const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        const directory = await prepareStateDirectory(
+            mortyStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
+        );
         const saved = await readSavedState(directory);
         if (saved === null || saved.identity.kind !== "ready") {
             return fail("LOCAL_IDENTITY_REQUIRED");
@@ -1838,7 +1824,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
-        const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        const directory = await prepareStateDirectory(
+            mortyStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
+        );
         const location: StateLocation = { directory, base: options.base };
         // Refuses a state that belongs to another service before anything runs, and explains a previous replacement
         // even when this run fails its local startup checks.

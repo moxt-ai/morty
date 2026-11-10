@@ -147,19 +147,6 @@ export class LocalStack {
             MORTY_SERVICE_SECRET: application.appSecret,
             MORTY_RELAY_URL: this.relayOrigin,
         };
-        await this.harness.run(wranglerExecutable, [
-            "r2",
-            "object",
-            "put",
-            "morty-local-e2e-attachments/artifacts/setup.mjs",
-            "--file",
-            join(repository, "packages/setup/dist/setup.mjs"),
-            "--local",
-            "--persist-to",
-            this.directories.chat,
-            "--config",
-            chatConfiguration,
-        ]);
         await this.harness.stage("start-chat", async () => {
             const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
             await this.harness.startWorker("morty", wranglerExecutable, [
