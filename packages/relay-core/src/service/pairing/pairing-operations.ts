@@ -9,7 +9,6 @@ import type {
     ClaimedPairing,
     CreatedRuntimePairing,
     PairingStatus,
-    ProjectCredentialHostAccess,
     RevokedProjectRuntime,
     VerifiedChannelAccess,
 } from "../../entity/pairing/pairing.ts";
@@ -25,20 +24,14 @@ export interface PairingOperations {
     ) => Promise<
         { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
     >;
-    readonly authorizePairedHost: (
-        computerId: string,
-        token: string,
-        signal: AbortSignal,
-    ) => Promise<ProjectCredentialHostAccess>;
+    readonly authorizePairedHost: (computerId: string, signal: AbortSignal) => Promise<VerifiedChannelAccess>;
     readonly authorizeProject: (
         computerId: string,
-        token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<ProjectAccessContext>;
     readonly authorizePairing: (
         computerId: string,
-        token: string,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
@@ -47,24 +40,16 @@ export interface PairingOperations {
     // or revocation. A failed response may follow a commit; retry the same key.
     readonly createProjectRuntimePairing: (
         computerId: string,
-        token: string,
+        pairingKey: string,
         idempotencyKey: string,
         signal: AbortSignal,
     ) => Promise<CreatedRuntimePairing>;
-    readonly listProjectRuntimes: (
-        computerId: string,
-        token: string,
-        signal: AbortSignal,
-    ) => Promise<readonly ChannelDescriptor[]>;
+    readonly listProjectRuntimes: (computerId: string, signal: AbortSignal) => Promise<readonly ChannelDescriptor[]>;
     /** Whether the Project's Runtime was revoked; false for one the Project never had. */
-    readonly isProjectRuntimeRevoked: (computerId: string, token: string, signal: AbortSignal) => Promise<boolean>;
+    readonly isProjectRuntimeRevoked: (computerId: string, signal: AbortSignal) => Promise<boolean>;
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that
     // order. Passing the deadline never expires an already registered Runtime.
-    readonly readProjectRuntimePairing: (
-        computerId: string,
-        token: string,
-        signal: AbortSignal,
-    ) => Promise<PairingStatus>;
+    readonly readProjectRuntimePairing: (computerId: string, signal: AbortSignal) => Promise<PairingStatus>;
     // v1: one unrevoked, unexpired request can be consumed by one daemon. The
     // registration, credential, and audit commit together. Concurrent/repeated
     // claims fail; a lost successful response cannot replay the daemon secret.
@@ -79,11 +64,7 @@ export interface PairingOperations {
     // Revoke identity and channel credentials atomically, preserving the first
     // revocation timestamp. Retrying after a lost response or disconnect failure
     // is safe; an unclaimed identity can also be cancelled through this command.
-    readonly revokeProjectRuntime: (
-        computerId: string,
-        token: string,
-        signal: AbortSignal,
-    ) => Promise<RevokedProjectRuntime>;
+    readonly revokeProjectRuntime: (computerId: string, signal: AbortSignal) => Promise<RevokedProjectRuntime>;
     /**
      * Records the daemon's Agent catalog. The daemon presents its credential with the successor it saved, if any:
      * while it saves a rotation its connection just made, the Relay already holds the successor as current.

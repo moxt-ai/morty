@@ -1,6 +1,5 @@
-import { MortyAppCredentialProvider, MortyRelayAppClient } from "@morty-build/client/relay";
 import { createTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
-import { seedMortyService } from "@morty-build/relay-test-support/service-fixture";
+import { createTestOwner } from "../../../../packages/relay-test-support/src/identity-fixture.ts";
 import type { FakeAgentHarnessDefinition } from "./agent-harness.ts";
 import { createFakeAgentHarnessRuntime } from "./relay-agent-harness.ts";
 
@@ -11,13 +10,13 @@ export async function startTestRelay(options: { readonly allowedOrigins?: Readon
     const bindings = await createTestMortyRelayBindings(options.allowedOrigins);
     try {
         const app = { request: bindings.request };
-        const application = await seedMortyService(bindings.env.RELAY_DIRECTORY_DATABASE);
-        const credential = application.credential;
-        const service = new MortyRelayAppClient({
-            endpoint: bindings.origin,
-            credentialProvider: new MortyAppCredentialProvider(credential),
-            transport: { fetch: bindings.request },
-        });
+        await bindings.configure({ APP_ORIGIN: bindings.origin });
+        const owners = new Map<string, string>();
+        const createOwner = async () => {
+            const owner = await createTestOwner(bindings.request, bindings.origin, cancellation.signal);
+            owners.set(owner.computerId, owner.token);
+            return owner;
+        };
         const close = async (): Promise<void> => {
             cancellation.abort(new Error("Test Relay stopped"));
             try {
@@ -28,16 +27,17 @@ export async function startTestRelay(options: { readonly allowedOrigins?: Readon
         };
         return {
             app,
-            appId: application.appId,
-            appCredential: credential,
-            attachments: bindings.env.R2_BUCKET_APAC,
             baseUrl: bindings.origin,
-            service,
+            createOwner,
             connectAgent: async (
                 computerId: string,
                 harnesses?: readonly FakeAgentHarnessDefinition[],
                 sessionIds?: ReadonlySet<string>,
             ) => {
+                const credential = owners.get(computerId);
+                if (credential === undefined) {
+                    throw new Error("Create the computer owner first");
+                }
                 const runtime = await createFakeAgentHarnessRuntime({
                     credential,
                     ...(harnesses === undefined ? {} : { harnesses }),

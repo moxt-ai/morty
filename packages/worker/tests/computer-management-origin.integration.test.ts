@@ -1,45 +1,10 @@
-import { DatabaseSync } from "node:sqlite";
 import { createResponseLossProxy } from "@morty-build/relay-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect, test } from "vitest";
-import legacyMapping from "../migrations/project-do/0003_platform_project.sql?raw";
-import relayComputerIdentity from "../migrations/project-do/0033_platform_project_identity.sql?raw";
-import ownerKeyedMapping from "../migrations/project-do/0051_key_project_mapping_by_owner.sql?raw";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
-test("Given a Project mapping saved under an old origin and service setting, When its schema is migrated, Then its owner's Project and its saved facts are preserved", () => {
-    using database = new DatabaseSync(":memory:");
-    database.exec(legacyMapping);
-    database
-        .prepare(
-            "INSERT INTO platform_project_mapping (user_id, platform_origin, app_id, project_id, display_name, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-            "usr_existing",
-            "https://old-relay.example.test",
-            "app_morty",
-            "prj_existing",
-            "Existing Project",
-            1793059200000,
-        );
-
-    for (const migration of [relayComputerIdentity, ownerKeyedMapping]) {
-        database.exec("BEGIN");
-        database.exec(migration);
-        database.exec("COMMIT");
-    }
-
-    // The deployment setting no longer names the mapping; its owner alone does.
-    expect(database.prepare("SELECT * FROM platform_project_mapping WHERE user_id = ?").get("usr_existing")).toEqual({
-        user_id: "usr_existing",
-        project_id: "prj_existing",
-        display_name: "Existing Project",
-        created_at: 1793059200000,
-    });
-});
-
-test("Given a machine owner and a deployment service credential, When the owner opens management, Then they can pair a Runtime for their account", async () => {
+test("Given a machine owner, When the owner opens management, Then they can pair a Runtime for their account", async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
@@ -66,8 +31,7 @@ test("Given a machine owner and a deployment service credential, When the owner 
     }
 });
 
-test("Given an existing Project and Machine, When the same Relay moves to another origin, Then the user keeps their Project and can pair and replace it", {
-    // This scenario builds and starts both real Workers, then reloads Chat at the new origin.
+test("Given an existing Project and Machine, When Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
     timeout: 30_000,
 }, async () => {
     const fixture = await createIdentityFixture();
@@ -89,9 +53,9 @@ test("Given an existing Project and Machine, When the same Relay moves to anothe
         const bot = await originalBot.json();
 
         // A second listener forwards to the same real Relay and its existing storage.
-        const relocated = await createResponseLossProxy(fixture.baseConfiguration.MORTY_RELAY_URL);
+        const relocated = await createResponseLossProxy(fixture.origin);
         try {
-            await fixture.changeRelayOrigin(relocated.origin);
+            await fixture.changeAppOrigin(relocated.origin);
             const environment = fixture.environment();
             const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);

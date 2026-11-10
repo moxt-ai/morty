@@ -137,7 +137,6 @@ export function createChatWorkspace(options: {
     readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly endDeviceAccess?: ((deviceId: string, signal: AbortSignal) => Promise<void>) | undefined;
     readonly networkDiagnostics?: {
-        readonly measureBrowserRelay: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
     };
 }): ChatWorkspace {
@@ -281,12 +280,6 @@ export function createChatWorkspace(options: {
             },
         }),
         networkDiagnostic: createNetworkDiagnosticStore({
-            measureBrowserRelay: (origin, signal) => {
-                if (options.networkDiagnostics === undefined) {
-                    return Promise.reject(new Error("Network diagnostics are unavailable."));
-                }
-                return options.networkDiagnostics.measureBrowserRelay(origin, signal);
-            },
             measureBrowserMorty: (signal) => {
                 if (options.networkDiagnostics === undefined) {
                     return Promise.reject(new Error("Network diagnostics are unavailable."));

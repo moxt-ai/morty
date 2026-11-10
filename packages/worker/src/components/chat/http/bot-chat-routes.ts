@@ -9,6 +9,7 @@ import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
+import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { ComputerManagementError, relayIdentifier } from "../../management/entity/computer-management.ts";
@@ -79,8 +80,7 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
     };
 };
 
-async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeout = 45000) {
-    const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
+async function authorizeChat(context: Context<AuthorizedChatEnvironment>, signal: AbortSignal) {
     const computerId = v.parse(relayIdentifier, context.req.param("computerId"));
     const requester = {
         userId: context.get("session").userId,
@@ -112,7 +112,8 @@ const issuesSessionCredential = createMiddleware<AuthorizedChatEnvironment>(asyn
 
 function authorizedChat(timeout = 45000) {
     return createMiddleware<AuthorizedChatEnvironment>(async (context, next) => {
-        context.set("chatScope", await authorizeChat(context, timeout));
+        using deadline = new RequestDeadline(context.req.raw.signal, timeout);
+        context.set("chatScope", await authorizeChat(context, deadline.signal));
         await next();
     });
 }

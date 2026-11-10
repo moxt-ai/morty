@@ -103,7 +103,7 @@ export class ComputerIdentityService {
             }
             return {
                 kind: match.kind,
-                access: new RuntimeAccessContext(new ComputerScope(computerId), `daemon:${computerId}`),
+                access: new RuntimeAccessContext(new ComputerScope(computerId)),
             };
         } catch (cause) {
             signal.throwIfAborted();

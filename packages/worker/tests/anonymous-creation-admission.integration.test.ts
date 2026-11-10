@@ -69,24 +69,17 @@ test("Given unavailable abuse protection, When a visitor asks for a new identity
     });
 });
 
-test("Given a rejected Relay credential, When a user tries to pair their Machine, Then the HTTP error keeps its code without echoing the upstream message", async () => {
+test("Given an invalid user credential, When a visitor tries to pair a Machine, Then pairing is refused without exposing credential details", async () => {
     const identity = await fixture.createAnonymousUser();
-    const original = fixture.baseConfiguration.MORTY_SERVICE_SECRET;
-    try {
-        await fixture.changeRelayCredential(`${original.slice(0, -1)}${original.endsWith("A") ? "B" : "A"}`);
-        const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/pairing`, {
-                method: "POST",
-                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
-                body: JSON.stringify({ idempotencyKey: "security-error-sanitization" }),
-            }),
-            fixture.environment(),
-        );
-        expect(response.status).toBe(401);
-        expect(await response.json()).toMatchObject({
-            error: { message: "Morty could not complete Runtime setup." },
-        });
-    } finally {
-        await fixture.changeRelayCredential(original);
-    }
+    const token = `${identity.token.slice(0, -1)}${identity.token.endsWith("A") ? "B" : "A"}`;
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/pairing`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ idempotencyKey: "security-error-sanitization" }),
+        }),
+        fixture.environment(),
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
 });

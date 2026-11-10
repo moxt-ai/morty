@@ -6,8 +6,6 @@ import {
 import { ProjectAuthenticationError } from "@morty-build/relay-core/contracts";
 
 const SIGNING_SECRET_MINIMUM_LENGTH = 32;
-// HKDF binds each key to the protocol purpose and the authenticated AppCredential identity.
-const KEY_DERIVATION_LABEL = "morty.session-access.v2:";
 const MAXIMUM_LIFETIME_MILLISECONDS = 15 * 60 * 1_000;
 const MAXIMUM_ISSUANCE_CLOCK_SKEW_MILLISECONDS = 30_000;
 const HMAC_SHA_256 = { hash: "SHA-256", name: "HMAC" } as const;
@@ -28,9 +26,8 @@ function encodeBase64Url(value: Uint8Array): string {
 }
 
 /**
- * Signs and verifies Session credentials with keys only the Relay holds. Each AppCredential's key is derived from the
- * Relay's signing secret, a Worker secret that is never stored with Relay records, so reading the Relay database
- * does not allow forging a Session credential.
+ * The dedicated deployment signing key never enters storage or the browser. Reading account records cannot forge
+ * a Session credential; every credential binds its own purpose, target and deadline.
  */
 export class SessionAccessSigner {
     readonly #secret: string;
@@ -56,19 +53,15 @@ export class SessionAccessSigner {
             ),
         );
 
-    readonly issue = async (publicCredentialId: string, claims: SessionAccessClaims): Promise<string> => {
+    readonly issue = async (claims: SessionAccessClaims): Promise<string> => {
         const lifetimeMilliseconds = claims.expiresAtEpochMilliseconds - claims.issuedAtEpochMilliseconds;
         if (lifetimeMilliseconds <= 0 || lifetimeMilliseconds > MAXIMUM_LIFETIME_MILLISECONDS) {
             throw new ProtocolMessageError("The Session credential lifetime is invalid");
         }
         const payload = encodeBase64Url(new TextEncoder().encode(JSON.stringify(claims)));
-        const signedValue = `msession_${publicCredentialId}_${payload}`;
-        const signature = await crypto.subtle.sign(
-            "HMAC",
-            await this.#key(publicCredentialId),
-            new TextEncoder().encode(signedValue),
-        );
-        const credential = `${signedValue}_${encodeBase64Url(new Uint8Array(signature))}`;
+        const signedValue = `msession_${payload}`;
+        const signature = await crypto.subtle.sign("HMAC", await this.#key(), new TextEncoder().encode(signedValue));
+        const credential = `${signedValue}.${encodeBase64Url(new Uint8Array(signature))}`;
         // Issue only a credential that every reader decodes.
         decodeSessionAccessCredential(credential);
         return credential;
@@ -81,7 +74,7 @@ export class SessionAccessSigner {
         const decoded = decodeSessionAccessCredential(credential);
         const valid = await crypto.subtle.verify(
             "HMAC",
-            await this.#key(decoded.publicCredentialId),
+            await this.#key(),
             decoded.signature,
             new TextEncoder().encode(decoded.signedValue),
         );
@@ -106,22 +99,9 @@ export class SessionAccessSigner {
         return decoded.claims;
     };
 
-    /** RFC 5869 HKDF-SHA-256, with protocol salt and per-credential context, produces a 256-bit HMAC key. */
-    readonly #key = async (publicCredentialId: string): Promise<CryptoKey> => {
-        const secret = await crypto.subtle.importKey("raw", new TextEncoder().encode(this.#secret), "HKDF", false, [
-            "deriveKey",
+    readonly #key = async (): Promise<CryptoKey> =>
+        await crypto.subtle.importKey("raw", new TextEncoder().encode(this.#secret), HMAC_SHA_256, false, [
+            "sign",
+            "verify",
         ]);
-        return await crypto.subtle.deriveKey(
-            {
-                name: "HKDF",
-                hash: "SHA-256",
-                salt: new TextEncoder().encode(KEY_DERIVATION_LABEL),
-                info: new TextEncoder().encode(publicCredentialId),
-            },
-            secret,
-            { ...HMAC_SHA_256, length: 256 },
-            false,
-            ["sign", "verify"],
-        );
-    };
 }

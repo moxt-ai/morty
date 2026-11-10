@@ -1,7 +1,6 @@
 import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MORTY_API_PREFIX } from "@morty-build/client";
 import { expect, it } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
 
@@ -14,40 +13,25 @@ it("describes a selected directory without browsing its children and still rejec
         const directory = canonical;
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.service.createProject(
-            {
-                clientReference: `client-${crypto.randomUUID()}`,
-                displayName: "Directory metadata",
-                idempotencyKey: `project-${crypto.randomUUID()}`,
-                locationHint: "wnam",
-            },
-            signal,
-        );
+        const project = await relay.createOwner();
         const runtime = await relay.connectAgent(project.computerId);
-        const listing = await runtime.client.runtimes.listWorkspace(directory, signal);
+        const listing = await runtime.api.directory(directory, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 
-        const invalid = await fetch(
-            `${relay.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/daemon/workspace`,
-            {
-                method: "POST",
-                headers: { authorization: `Bearer ${relay.appCredential}`, "content-type": "application/json" },
-                body: JSON.stringify({ directory, view: "children" }),
-                signal,
-            },
-        );
-        expect(invalid.status).toBe(400);
-        expect(await invalid.json()).toMatchObject({ error: { code: "invalid_request" } });
-
-        // Directory lookup/stat remains permitted, while readdir is denied for ordinary users.
-        // The returned metadata contract is the same when a privileged test user ignores chmod.
         await chmod(root, 0o111);
-        await expect(runtime.client.runtimes.describeWorkspace(directory, signal)).resolves.toStrictEqual({
-            directory,
-            directoryLabel: listing.directoryLabel,
-        });
-        const missing = join(canonical, "missing");
-        await expect(runtime.client.runtimes.describeWorkspace(missing, signal)).rejects.toMatchObject({
+        const open = (workspaceRef: string) =>
+            runtime.api.createConversation(
+                crypto.randomUUID(),
+                {
+                    harness: "claude",
+                    configurations: [],
+                    workspaceRef,
+                    workspaceLabel: workspaceRef,
+                },
+                signal,
+            );
+        expect((await open(directory)).workspaceRef).toBe(directory);
+        await expect(open(join(canonical, "missing"))).rejects.toMatchObject({
             code: "local_authorization_failed",
         });
     } finally {

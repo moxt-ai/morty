@@ -7,8 +7,8 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
+import { createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const relayOrigin = "https://relay.test";
 
@@ -16,8 +16,6 @@ function bindings(): RelayRelayBindings {
     return {
         RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
-        R2_BUCKET_APAC: env.R2_BUCKET_APAC,
-        R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
 }
@@ -43,28 +41,15 @@ async function responseJson(response: Response, status: number): Promise<Readonl
 async function pairedRuntime(name: string) {
     const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
     const environment = bindings();
-    const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-    const appCredential = app.defaultCredential.credential;
-    const headers = new Headers({ authorization: `Bearer ${appCredential}`, "content-type": "application/json" });
-    const project = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                body: JSON.stringify({ displayName: name, idempotencyKey: name, locationHint: "apac" }),
-                headers,
-                method: "POST",
-            }),
-            environment,
-        ),
-        201,
-    );
+    const project = await createOwner();
+    const headers = new Headers({ authorization: `Bearer ${project.token}`, "content-type": "application/json" });
     const pairing = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${text(project, "computerId")}/pairing`, {
+        await ownerRequest(
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${project.computerId}/management/pairing`, {
                 body: JSON.stringify({ idempotencyKey: name }),
                 headers,
                 method: "POST",
             }),
-            environment,
         ),
         201,
     );

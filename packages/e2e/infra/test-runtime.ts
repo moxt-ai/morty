@@ -37,8 +37,7 @@ export async function createTestRuntime(
     const additionalRuntimes: ControlledSetupRuntime[] = [];
     const additionalFailure = Promise.withResolvers<never>();
     void additionalFailure.promise.catch(() => undefined);
-    const application = await stack.startRelay();
-    await stack.startChat(application);
+    await stack.start();
     const browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true });
     try {
         const context = await browser.newContext(contextOptions);

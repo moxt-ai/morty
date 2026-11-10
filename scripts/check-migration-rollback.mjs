@@ -90,6 +90,13 @@ if (production === null) {
     console.log("Nothing has been released yet; no Workers can be restored.");
     process.exit(0);
 }
+const target = (revision) => JSON.parse(git("show", `${revision}:deployment/targets.json`)).environments.production;
+if (target(production).d1_id !== target("HEAD").d1_id) {
+    console.log(
+        "The release provisions an independent directory; historical migrations do not change the previous database.",
+    );
+    process.exit(0);
+}
 const added = git("diff", "--diff-filter=A", "--name-only", production, "HEAD", "--", migrations)
     .split("\n")
     .filter((path) => path.endsWith(".sql"));

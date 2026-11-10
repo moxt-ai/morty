@@ -6,7 +6,7 @@
         "jsx": "react-jsx"
     },
     "include": [
-        "deployment/provision-service.ts",
+        "deployment/verify-session-access.ts",
         "scripts/**/*.ts",
         "*.config.ts",
         "drizzle/**/*.ts",

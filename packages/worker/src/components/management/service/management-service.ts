@@ -1,4 +1,3 @@
-import type { ComputerManagementGateway } from "../../../gateway/computer-management-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import type { BootstrapOrigin } from "../entity/computer-bootstrap.ts";
 import { type ComputerManagement, ComputerManagementError } from "../entity/computer-management.ts";
@@ -7,28 +6,31 @@ import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
+import { provisionAccount } from "./account-provisioning-service.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
+import type { LocalComputerService } from "./local-computer-service.ts";
 
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
     readonly #computerId: string | undefined;
-    readonly #relay: ComputerManagementGateway;
+    readonly #relay: LocalComputerService;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
+    readonly #bindings: CloudBindings;
 
     constructor(cx: {
         readonly config: { readonly bindings: CloudBindings };
-        readonly services: { readonly authentication: AuthenticationService };
+        readonly services: { readonly authentication: AuthenticationService; readonly computers: LocalComputerService };
         readonly storages: {
             readonly managedBots: ManagedBotStorage;
         };
-        readonly gateways: { readonly computerManagements: ComputerManagementGateway };
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID;
-        this.#relay = cx.gateways.computerManagements;
+        this.#relay = cx.services.computers;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
+        this.#bindings = cx.config.bindings;
     }
 
     /**
@@ -78,12 +80,12 @@ export class ManagementService {
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
         const reference = `${userId}.${previous.computerId}`;
-        const project = await this.#relay.create(
+        const project = await provisionAccount(
+            this.#bindings,
             userId,
-            "Morty",
-            signal,
-            projectRegion(previous.computerId),
             reference,
+            projectRegion(previous.computerId),
+            signal,
         );
         return project;
     };

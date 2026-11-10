@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
 
 import { afterEach, expect, it, vi } from "vitest";
-import { MortyClient, MortyConnectionError, StaticMortyCredentialProvider } from "../src/index.ts";
-import { type MortyWebSocketConnector, WsTransport } from "../src/relay.ts";
+import {
+    MortyClient,
+    MortyConnectionError,
+    type MortyWebSocketConnector,
+    StaticMortyCredentialProvider,
+    WsTransport,
+} from "../src/index.ts";
 
 // The transport routes by the claims it decodes; only the Relay verifies the signature.
 const sessionClaims = btoa(
@@ -18,12 +23,12 @@ const sessionClaims = btoa(
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
-const sessionCredential = `msession_${"a".repeat(22)}_${sessionClaims}_${"A".repeat(43)}`;
+const sessionCredential = `msession_${sessionClaims}.${"A".repeat(43)}`;
 
 function runtimeRequest(address: string, init?: RequestInit): Request {
     const url = new URL(address);
     if (!url.pathname.startsWith("/morty/api/v1/computers/")) {
-        url.pathname = `/morty/api/v1/computers/project-1/daemon${url.pathname}`;
+        url.pathname = `/morty/api/v1/computers/project-1/harnesses/claude/sessions/session-1${url.pathname}`;
     } else {
         url.pathname = url.pathname.replace("/computers/project/", "/computers/project-1/");
     }
@@ -171,7 +176,9 @@ it("Given a browser bound to one computer, When it opens another Session or addr
         expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/project-1/transport");
         await expect(
             transport.fetch(
-                runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-2/daemon/agents"),
+                runtimeRequest(
+                    "https://relay.example.test/morty/api/v1/computers/project-2/harnesses/claude/sessions/session-1/configuration",
+                ),
             ),
         ).rejects.toThrow("cannot connect to multiple computers");
         expect((await transport.fetch(runtimeRequest("https://relay.example.test/after-rejection"))).status).toBe(204);

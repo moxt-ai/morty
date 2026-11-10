@@ -1,6 +1,5 @@
 """Build a portable, checksummed release for the Morty account."""
 import argparse
-import copy
 import hashlib
 import json
 import os
@@ -56,7 +55,9 @@ def main():
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
-    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['relay_origin']}
+    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_ALLOWED_ORIGINS': json.dumps([spec['morty_origin']])}
+    morty['d1_databases'] = [{'binding': 'RELAY_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
+    morty['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_RELEASE_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
     env.update(MORTY_WORKER_CONFIG=str(generated / 'morty.json'), MORTY_APP_ORIGIN=spec['morty_origin'], MORTY_ASSET_ORIGIN=spec['asset_origin'])
@@ -95,40 +96,15 @@ def main():
         'organization': sentry['organization'], 'project': sentry['project'],
         'release': sentry_release, 'environment': environment,
     })
-    relay = overlay(ROOT / 'packages/relay/wrangler.jsonc', environment)
-    relay.update(name=spec['relay'], main=str(ROOT / 'deployment/relay-entry.mjs'))
-
-    # These production-only tags shipped immediately after the runtime browser transport.
-    insert_at = next(i for i, migration in enumerate(relay['migrations']) if migration['tag'] == 'platform-runtime-browser-transport') + 1
-    relay['migrations'][insert_at:insert_at] = [
-        {'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']},
-        {'tag': 'morty-retire-migration-control-20261106', 'deleted_classes': ['MigrationControl']},
-    ]
-    relay['compatibility_flags'] = list(dict.fromkeys(relay.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
-    relay['d1_databases'] = [{'binding': 'RELAY_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
-    relay['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['relay_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['relay_wnam']}]
-    relay['vars'] = {**morty['vars'], 'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
-    relay['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET', 'MORTY_SERVICE_SECRET']}
-    relay.pop('assets', None)
-    for label, config in [('relay', relay)]:
-        write(generated / (label + '.json'), config)
-        run(WRANGLER + ['deploy', '--dry-run', '--config', str(generated / (label + '.json')), '--outdir', str(release / label)], env=env)
-        entries = [p for p in (release / label).glob('*.js') if not p.name.endswith('.map')]
-        if len(entries) != 1:
-            raise ValueError('Expected one bundled Worker entrypoint')
-        portable = copy.deepcopy(config)
-        portable.update(main=entries[0].name, no_bundle=True, find_additional_modules=True, rules=[{'type': 'ESModule', 'globs': ['**/*.js'], 'fallthrough': True}])
-        if label == 'relay':
-            portable['d1_databases'][0]['migrations_dir'] = '../d1-migrations'
-        write(release / label / 'wrangler.json', portable)
     morty_dir = release / spec['morty'].replace('-', '_')
     built = read(morty_dir / 'wrangler.json')
-    allowed = ['name', 'main', 'account_id', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'r2_buckets', 'vars', 'assets', 'observability', 'ratelimits', 'services', 'workers_dev', 'preview_urls', 'secrets', 'placement', 'limits', 'rules', 'triggers']
+    allowed = ['name', 'main', 'account_id', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'd1_databases', 'r2_buckets', 'vars', 'assets', 'observability', 'ratelimits', 'workers_dev', 'preview_urls', 'secrets', 'placement', 'limits', 'rules', 'triggers']
     portable = {key: built[key] for key in allowed if key in built}
     portable.update(no_bundle=True, find_additional_modules=True)
+    portable['d1_databases'][0]['migrations_dir'] = '../d1-migrations'
     write(morty_dir / 'wrangler.json', portable)
     shutil.copytree(ROOT / 'packages/relay/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
-    configs = {'relay': 'relay/wrangler.json', 'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
+    configs = {'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
     for label, file in configs.items():
         config = read(release / file)
         assert config['account_id'] == ACCOUNT and config['name'] == spec[label] and not config.get('routes')
@@ -140,7 +116,7 @@ def main():
         if cli_release['revision'] != env['MORTY_RELEASE_REVISION'] or cli_release['version'] != read(ROOT / 'packages/cli/package.json')['version']:
             raise ValueError('Cloud and CLI release identities differ')
     files = {p.relative_to(release).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(release.rglob('*')) if p.is_file() and p.name != 'release.json'}
-    write(release / 'release.json', {'format': 'morty-cloud-release-v2', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'files': files})
+    write(release / 'release.json', {'format': 'morty-cloud-release-v3', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'activation': {'architecture': 'single-worker', 'authorization': 'maintainer-requested consolidation without backward compatibility', 'recovery': 'fresh installation and pairing; retired namespaces are archived outside the live deployment; restore only consolidated releases'}, 'files': files})
     print(json.dumps({'release': str(release), 'environment': environment, 'files': len(files)}))
 
 

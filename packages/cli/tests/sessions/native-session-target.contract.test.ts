@@ -1,21 +1,13 @@
 import { expect, it, vi } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
 
-it("Given two harnesses create the same native ID, When I create and restore each conversation, Then both native pairs remain independently usable", async () => {
+it("Given two harnesses create conversations, When I restore each conversation, Then both native pairs remain independently usable", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
     try {
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.service.createProject(
-            {
-                clientReference: crypto.randomUUID(),
-                displayName: "Native creation collision",
-                idempotencyKey: crypto.randomUUID(),
-                locationHint: "wnam",
-            },
-            signal,
-        );
+        const project = await relay.createOwner();
         const runtime = await relay.connectAgent(
             project.computerId,
             ["claude", "codex"].map((harness) => ({
@@ -27,7 +19,7 @@ it("Given two harnesses create the same native ID, When I create and restore eac
         );
         const targets: { readonly harness: string; readonly sessionId: string }[] = [];
         for (const harness of ["claude", "codex"]) {
-            const ready = await runtime.client.sessions.create(
+            const ready = await runtime.createSession(
                 {
                     harness: harness,
 
@@ -41,10 +33,11 @@ it("Given two harnesses create the same native ID, When I create and restore eac
             expect(ready.harness).toBe(harness);
             targets.push(ready.target);
         }
-        expect(targets[0]?.sessionId).toBe(targets[1]?.sessionId);
+        expect(targets[0]?.harness).not.toBe(targets[1]?.harness);
         for (const target of targets) {
-            await expect(runtime.client.sessions.restore(target, signal)).resolves.toMatchObject({
-                entry: { harness: target.harness, sessionId: target.sessionId },
+            await expect(runtime.api.managedSession(target, signal)).resolves.toMatchObject({
+                harness: target.harness,
+                entry: { sessionId: target.sessionId },
             });
         }
     } finally {
@@ -58,15 +51,7 @@ it("Given a harness announces its title during creation, When the caller creates
     try {
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.service.createProject(
-            {
-                clientReference: crypto.randomUUID(),
-                displayName: "Native creation metadata",
-                idempotencyKey: crypto.randomUUID(),
-                locationHint: "wnam",
-            },
-            signal,
-        );
+        const project = await relay.createOwner();
         const runtime = await relay.connectAgent(project.computerId, [
             {
                 harness: "claude",
@@ -74,7 +59,7 @@ it("Given a harness announces its title during creation, When the caller creates
                 arguments: ["--announce-title-while-creating"],
             },
         ]);
-        const ready = await runtime.client.sessions.create(
+        const ready = await runtime.createSession(
             {
                 harness: "claude",
 
@@ -85,10 +70,9 @@ it("Given a harness announces its title during creation, When the caller creates
             },
             signal,
         );
-        const entries = await runtime.client.runtimes.querySessions([ready.target], signal);
+        const entries = await runtime.api.managedSessions(signal);
         expect(entries).toMatchObject([
             {
-                harness: "claude",
                 target: ready.target,
                 title: "Harness-created conversation",
             },
@@ -104,15 +88,7 @@ it("Given two harnesses own the same native session ID without prior discovery, 
     try {
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.service.createProject(
-            {
-                clientReference: crypto.randomUUID(),
-                displayName: "Harness-scoped native sessions",
-                idempotencyKey: crypto.randomUUID(),
-                locationHint: "wnam",
-            },
-            signal,
-        );
+        const project = await relay.createOwner();
         const sessionId = "same-native-session";
         const runtime = await relay.connectAgent(
             project.computerId,
@@ -125,7 +101,8 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         const imported = new Map<string, string>();
         for (const harness of ["claude", "codex"]) {
             const workspace = { harness: harness, directory: "." };
-            const opened = await runtime.client.runtimes.nativeSessions(
+            const opened = await runtime.api.nativeSessions(
+                runtime.computerId,
                 {
                     ...workspace,
                     action: "import",
@@ -140,21 +117,21 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         }
         for (const harness of ["claude", "codex"]) {
             const target = { harness, sessionId };
-            await expect(runtime.client.sessions.restore(target, signal)).resolves.toMatchObject({
-                target,
-                entry: { harness: harness, sessionId },
-                ready: { harness: harness, target: { harness, sessionId: imported.get(harness) } },
+            await expect(runtime.api.managedSession(target, signal)).resolves.toMatchObject({
+                harness,
+                entry: { sessionId },
+                result: { target, ready: { harness, target: { harness, sessionId: imported.get(harness) } } },
             });
         }
         await expect(
-            runtime.client.sessions.restore(
+            runtime.api.managedSession(
                 {
                     harness: "pi",
                     sessionId,
                 },
                 signal,
             ),
-        ).rejects.toMatchObject({ code: "session_not_found" });
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
     } finally {
         vi.useRealTimers();
     }

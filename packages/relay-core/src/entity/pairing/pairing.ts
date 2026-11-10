@@ -53,20 +53,6 @@ export class VerifiedChannelAccess {
  * names the credential, and every message it sends re-reads whether the credential still grants
  * `PROJECT_HOST_PERMISSIONS` and the message's own permission in the Project.
  */
-export class ProjectCredentialHostAccess extends VerifiedChannelAccess {
-    readonly credentialId: string;
-
-    constructor(computerId: string, credentialId: string) {
-        super(computerId, []);
-        this.credentialId = credentialId;
-    }
-}
-
-/** The credential whose authority keeps a host connection open: the project credential that opened it. */
-export interface HostCredential {
-    readonly credentialId: string;
-}
-
 export class ChannelDescriptor {
     readonly agents: readonly AgentDescriptor[];
     readonly machineName: string;

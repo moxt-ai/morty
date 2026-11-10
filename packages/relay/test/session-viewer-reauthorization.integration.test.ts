@@ -1,12 +1,13 @@
-import { abortAllDurableObjects, runDurableObjectAlarm } from "cloudflare:test";
+import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import * as v from "valibot";
 import { afterAll, expect, it } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { revokeMortyCredential, seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
+import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
+import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
-import { endOwnerAccess, ownerAccessHolder, registerRuntimeFixture } from "./registered-runtime.ts";
+import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
+import { registerRuntimeFixture } from "./registered-runtime.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 
@@ -49,31 +50,10 @@ class Inbox {
     };
 }
 
-async function openSessionView(slug: string) {
+async function openSessionView(_slug: string) {
     const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
-    const { defaultCredential } = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-    const headers = {
-        authorization: `Bearer ${defaultCredential.credential}`,
-        "content-type": "application/json",
-    };
-    const dashboard = async (path: string, body?: object) =>
-        await worker.fetch(
-            new Request(`${origin}/dashboard/v1/${path}`, {
-                headers,
-                ...(body === undefined ? {} : { body: JSON.stringify(body), method: "POST" }),
-            }),
-            env,
-        );
-    const { computerId } = v.parse(
-        v.object({ computerId: v.string() }),
-        await (
-            await dashboard("machine-accounts", {
-                displayName: `Viewer check Project ${slug}`,
-                idempotencyKey: `viewer-check-project-${slug}`,
-                locationHint: "apac",
-            })
-        ).json(),
-    );
+    const owner = await createOwner();
+    const { computerId } = owner;
     const sessionId = "viewer-check-session";
     await registerRuntimeFixture(computerId);
     const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
@@ -89,17 +69,7 @@ async function openSessionView(slug: string) {
     daemon.accept();
     expect(await daemonInbox.next()).toEqual({ kind: "runtime.liveness.ready" });
 
-    const holder = await ownerAccessHolder(computerId);
-    const issued = await worker.fetch(
-        new Request(`${origin}/v1/computers/${computerId}/harnesses/claude/sessions/${sessionId}/access-credentials`, {
-            method: "POST",
-            headers: { authorization: `Bearer ${defaultCredential.credential}`, "content-type": "application/json" },
-            body: JSON.stringify({ expiresInSeconds: 900, holder }),
-        }),
-        env,
-    );
-    expect(issued.status).toBe(201);
-    const { credential: sessionCredential } = v.parse(v.object({ credential: v.string() }), await issued.json());
+    const { credential: sessionCredential } = await issueSession(computerId, { harness: "claude", sessionId });
 
     const opened = await worker.fetch(
         new Request(`${origin}/v1/computers/${computerId}/harnesses/claude/sessions/${sessionId}/events-v2`, {
@@ -115,7 +85,7 @@ async function openSessionView(slug: string) {
     const viewInbox = new Inbox(view);
     view.accept();
 
-    return { daemon, dashboard, defaultCredential, computerId, holder, sessionId, viewInbox };
+    return { daemon, owner, computerId, sessionId, viewInbox };
 }
 
 const liveEvent = (sessionId: string, eventId: string) => ({
@@ -128,25 +98,45 @@ const liveEvent = (sessionId: string, eventId: string) => ({
     payload: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "secret output" } },
 });
 
-it("Given a live Session view, When the AppCredential that issued its Session credential is revoked, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, defaultCredential, computerId, sessionId, viewInbox } = await openSessionView("app");
+it("Given a live Session view, When the owner revokes browser access, Then the live view closes", async () => {
+    const { daemon, owner, computerId, sessionId, viewInbox } = await openSessionView("app");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
-    await revokeMortyCredential(env.RELAY_DIRECTORY_DATABASE, defaultCredential.credentialId);
-    expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
+    const revoked = await ownerRequest(
+        new Request(`${origin}/computers/${computerId}/identity/revoke-all-access`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ successor: `morty_anon_v1_${"B".repeat(43)}` }),
+        }),
+    );
+    expect(revoked.status).toBe(200);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });
     daemon.close(1000, "done");
 });
 
-it("Given a live Session view whose holder's access ends without closing it, When the Relay next checks its connections, Then it closes the view", async () => {
-    const { daemon, computerId, holder, sessionId, viewInbox } = await openSessionView("ended");
-    daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-access-ended")] }));
-    expect(await viewInbox.next()).toMatchObject([{ eventId: "before-access-ended" }]);
+it("Given a live Session view the revocation push missed, When the Project's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
+    const { daemon, owner, computerId, sessionId, viewInbox } = await openSessionView("missed");
+    daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
+    expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
-    // The access ends in storage alone, so only the periodic connection check can notice it.
-    await endOwnerAccess(computerId, holder);
+    // The revocation commits, but its push never reaches the view (or reached it before the view opened).
+    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
+        const identities = new IdentityStorage(new DurableObjectDatabase(state.storage), computerId);
+        const signal = AbortSignal.timeout(10_000);
+        const credential = await identities.findCredential(owner.token, Date.now(), signal);
+        if (credential === null) {
+            throw new Error("Expected the owner credential");
+        }
+        expect(
+            await identities.revokeCredential(
+                { kind: "local", credentialId: credential.credentialId, userId: credential.userId },
+                Date.now(),
+                signal,
+            ),
+        ).toBe(true);
+    });
     expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });

@@ -12,29 +12,27 @@ await writeFile("packages/cli/package.json", `${JSON.stringify(metadata, null, 4
 await runE2E("accepted-release", async (harness) => {
     await buildLocalStack(harness);
     const stack = await LocalStack.create(harness);
-    const application = await stack.startRelay();
+    const application = await stack.start();
     // A release verifies production with this check after activation; run it on this
     // revision's relay first, so a route or contract change fails before merging.
     await harness.stage("verify-deployment-checks", () =>
         harness.run(
-            "python3",
+            "node",
             [
-                resolve("deployment/verify-session-access.py"),
-                "--relay-origin",
-                stack.relayOrigin,
+                resolve("deployment/verify-session-access.ts"),
+                "--origin",
+                stack.chatOrigin,
                 "--evidence",
                 join(harness.workDirectory, "session-access-evidence.json"),
             ],
             {
                 env: {
-                    MORTY_SERVICE_SECRET: application.appSecret,
                     MORTY_SESSION_SIGNING_SECRET: application.sessionSigningSecret,
                     EXPECTED_REVISION: release.revision,
                 },
             },
         ),
     );
-    await stack.startChat(application);
     await harness.run(process.execPath, [
         resolve("packages/e2e/release-acceptance.mjs"),
         stack.chatOrigin,

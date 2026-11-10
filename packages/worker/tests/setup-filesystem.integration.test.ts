@@ -521,7 +521,7 @@ for (const [failure, scenario] of starterFailures) {
             const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
-                const runtime = await fixture.connectAgent(identity.computerId);
+                const runtime = await fixture.connectAgent(identity.computerId, identity.token);
                 const request = async (path: string, body?: object) => {
                     const response = await fetch(`${fixture.origin}/morty/api/${path}`, {
                         method: body === undefined ? "GET" : "POST",

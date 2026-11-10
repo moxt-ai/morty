@@ -28,7 +28,6 @@ const hostPlatform = require("./platform/index.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
-const RELAY_CONFIG = "packages/e2e/fixtures/wrangler.relay.jsonc";
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const MORTY_ROOT = REPO_ROOT;
 const MORTY_LOCKFILE = path.join(MORTY_ROOT, "pnpm-lock.yaml");
@@ -81,10 +80,6 @@ function parseArguments(argv) {
         switch (token) {
             case "--state-dir":
                 options.stateDir = path.resolve(requireValue(index, token));
-                index += 1;
-                break;
-            case "--relay-port":
-                options.relayPort = Number.parseInt(requireValue(index, token), 10);
                 index += 1;
                 break;
             case "--chat-port":
@@ -423,14 +418,13 @@ async function prepare(options) {
     if (!validModes.has(options.mode)) {
         throw new Error(`Unknown mode ${options.mode}; use web-server or web-server-morty-cli`);
     }
-    const relayPort = options.relayPort ?? (await availablePort());
     const chatPort = options.chatPort ?? (await availablePort());
     const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-full-dev-"));
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 
     const existing = readStack(stateDir);
     if (existing !== null) {
-        if (options.force !== true && isAlive(existing.chatPid) && isAlive(existing.relayPid)) {
+        if (options.force !== true && isAlive(existing.chatPid)) {
             log(`reusing live stack at ${stateDir}`);
             process.stdout.write(`${JSON.stringify(existing)}\n`);
             return;
@@ -439,21 +433,16 @@ async function prepare(options) {
         await stopRecorded(existing);
     }
 
-    const relayPersist = path.join(stateDir, "relay");
     const chatPersist = path.join(stateDir, "chat");
     const chatLog = path.join(stateDir, "chat.log");
-    const relayLog = path.join(stateDir, "relay.log");
     const chatOrigin = `http://localhost:${chatPort}`;
-    const relayOrigin = `http://127.0.0.1:${relayPort}`;
+    const relayOrigin = chatOrigin;
     let stack = {
         mode: options.mode,
         chatLog,
         chatOrigin,
         chatPersist,
-        relayConfig: RELAY_CONFIG,
-        relayLog,
         relayOrigin,
-        relayPersist,
         ready: false,
         stateDir,
     };
@@ -469,54 +458,10 @@ async function prepare(options) {
             "RELAY_DIRECTORY_DATABASE",
             "--local",
             "--persist-to",
-            relayPersist,
+            chatPersist,
             "--config",
-            RELAY_CONFIG,
+            "wrangler.jsonc",
         ]);
-
-        log("provisioning local Morty service");
-        const { provisionLocalService } = await import("./provision-local-service.ts");
-        const { appId, appSecret } = await provisionLocalService(
-            path.resolve(REPO_ROOT, RELAY_CONFIG),
-            relayPersist,
-            AbortSignal.timeout(60_000),
-        );
-
-        log("starting Relay fixture");
-        const relayPid = await startProcess(
-            "relay",
-            [
-                "dev",
-                "--config",
-                RELAY_CONFIG,
-                "--var",
-                `APP_ORIGIN:${chatOrigin}`,
-                "--var",
-                `MORTY_RELAY_URL:${relayOrigin}`,
-                "--var",
-                `MORTY_SERVICE_SECRET:${appSecret}`,
-                "--var",
-                `MORTY_SESSION_SIGNING_SECRET:${LOCAL_SESSION_SIGNING_SECRET}`,
-                "--ip",
-                "127.0.0.1",
-                "--port",
-                String(relayPort),
-                "--inspector-port",
-                "0",
-                "--persist-to",
-                relayPersist,
-            ],
-            relayLog,
-        );
-        stack = { ...stack, relayPid };
-        writeStack(stack);
-        await waitForHttp(
-            `${relayOrigin}/morty/api/dashboard/health`,
-            (response) => response.ok,
-            90_000,
-            "Relay health",
-            { pid: relayPid, logPath: relayLog },
-        );
 
         if (options.build !== false) {
             log("building Chat Worker");
@@ -524,8 +469,7 @@ async function prepare(options) {
         }
         const variables = {
             APP_ORIGIN: chatOrigin,
-            MORTY_SERVICE_SECRET: appSecret,
-            MORTY_RELAY_URL: relayOrigin,
+            MORTY_SESSION_SIGNING_SECRET: LOCAL_SESSION_SIGNING_SECRET,
         };
         const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
 
@@ -548,7 +492,7 @@ async function prepare(options) {
             ],
             chatLog,
         );
-        stack = { ...stack, appId, chatPid };
+        stack = { ...stack, chatPid };
         writeStack(stack);
         await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "Chat Worker", {
             pid: chatPid,
@@ -567,7 +511,6 @@ async function prepare(options) {
 
         stack = {
             ...stack,
-            appId,
             mode: options.mode,
             cliCommand:
                 options.mode === "web-server-morty-cli" ? "pnpm --filter @morty-build/cli start agents" : undefined,
@@ -577,11 +520,7 @@ async function prepare(options) {
             chatOrigin,
             chatPersist,
             chatPid,
-            relayConfig: RELAY_CONFIG,
-            relayLog,
             relayOrigin,
-            relayPersist,
-            relayPid,
             ready: true,
             stateDir,
         };
@@ -838,31 +777,16 @@ async function status(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const chatAlive = isAlive(stack.chatPid);
-    const relayAlive = stack.relayPid === undefined ? false : isAlive(stack.relayPid);
     const runtimes = Array.isArray(stack.runtimes)
         ? stack.runtimes.map((runtime) => ({ ...runtime, alive: isAlive(runtime.runtimePid) }))
         : [];
     let chatHttp = false;
-    let relayHttp = false;
     try {
         chatHttp = (await fetch(stack.chatOrigin, { signal: AbortSignal.timeout(3_000) })).ok;
     } catch {
         chatHttp = false;
     }
-    if (stack.relayOrigin !== undefined) {
-        try {
-            relayHttp = (
-                await fetch(`${stack.relayOrigin}/morty/api/dashboard/health`, {
-                    signal: AbortSignal.timeout(3_000),
-                })
-            ).ok;
-        } catch {
-            relayHttp = false;
-        }
-    }
-    process.stdout.write(
-        `${JSON.stringify({ ...stack, chatAlive, chatHttp, relayAlive, relayHttp, runtimes }, null, 2)}\n`,
-    );
+    process.stdout.write(`${JSON.stringify({ ...stack, chatAlive, chatHttp, runtimes }, null, 2)}\n`);
 }
 
 function readLines(file, count) {
@@ -882,14 +806,10 @@ async function logs(options) {
     const uniqueRuntimeLogs = [...new Set(runtimeLogs.filter((file) => typeof file === "string"))];
     const files =
         worker === "all"
-            ? [stack.chatLog, stack.relayLog, ...uniqueRuntimeLogs].filter((file) => file !== undefined)
-            : worker === "relay"
-              ? stack.relayLog === undefined
-                  ? []
-                  : [stack.relayLog]
-              : worker === "runtime"
-                ? uniqueRuntimeLogs
-                : [stack.chatLog];
+            ? [stack.chatLog, ...uniqueRuntimeLogs].filter((file) => file !== undefined)
+            : worker === "runtime"
+              ? uniqueRuntimeLogs
+              : [stack.chatLog];
     const filter = options.filter === undefined ? null : new RegExp(options.filter, "u");
     const count = Number.isInteger(options.lines) ? options.lines : 200;
     const print = (file) => {
@@ -973,10 +893,6 @@ async function stopRecorded(stack) {
     if (stack.webPid !== undefined) {
         await stopProcess(stack.webPid);
     }
-    if (stack.relayPid !== undefined) {
-        log(`stopping Relay (pid ${stack.relayPid})`);
-        await stopProcess(stack.relayPid);
-    }
 }
 
 async function remove(options) {
@@ -1002,11 +918,11 @@ function usage(stream = process.stdout) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--relay-port N] [--chat-port N] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--chat-port N] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
-            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|relay|runtime|all] [--lines N] [--filter REGEX] [--follow]",
+            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
             "reload rebuilds web/Chat without restarting Relay or runtimes.",

@@ -6,6 +6,7 @@
     "keep_vars": false,
     "workers_dev": true,
     "preview_urls": false,
+    "compatibility_flags": ["enable_request_signal", "nodejs_compat_do_not_populate_process_env"],
     "ratelimits": [
         { "name": "ANONYMOUS_CREATION_LIMITER", "namespace_id": "103001", "simple": { "limit": 10, "period": 60 } }
     ],
@@ -22,12 +23,23 @@
         "run_worker_first": ["/morty/api/*", "/setup.md"]
     },
     "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-apac-attachments" }],
+    "d1_databases": [
+        {
+            "binding": "RELAY_DIRECTORY_DATABASE",
+            "database_name": "morty-local-e2e-directory",
+            "database_id": "00000000-0000-0000-0000-000000000102",
+            "migrations_dir": "packages/relay/migrations/d1"
+        }
+    ],
+    "vars": {
+        "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
+        "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret"
+    },
     "durable_objects": {
         "bindings": [
             {
                 "name": "COMPUTER_RELAY",
-                "class_name": "ComputerRelay",
-                "script_name": "morty-relay-local"
+                "class_name": "ComputerRelay"
             }
         ]
     },
@@ -36,7 +48,9 @@
         { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] },
         { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] },
         { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] },
-        { "tag": "v5", "deleted_classes": ["ChatWebSocketDurableObject"] }
+        { "tag": "v5", "deleted_classes": ["ChatWebSocketDurableObject"] },
+        { "tag": "v6-consolidated-computer-relay", "new_sqlite_classes": ["ComputerRelay"] },
+        { "tag": "v7-remove-archived-projects", "deleted_classes": ["ProjectDurableObject"] }
     ],
     "env": {
         "production": {
@@ -49,7 +63,7 @@
                 }
             ],
             "placement": { "mode": "off" },
-            "secrets": { "required": ["MORTY_SERVICE_SECRET"] },
+            "secrets": { "required": ["MORTY_SESSION_SIGNING_SECRET"] },
             "routes": [
                 {
                     "pattern": "morty.build",
@@ -61,8 +75,7 @@
                 "bindings": [
                     {
                         "name": "COMPUTER_RELAY",
-                        "class_name": "ComputerRelay",
-                        "script_name": "morty-platform-production"
+                        "class_name": "ComputerRelay"
                     }
                 ]
             },
