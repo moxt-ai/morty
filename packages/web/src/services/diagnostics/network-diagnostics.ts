@@ -1,12 +1,9 @@
 export interface BrowserNetworkOperations {
     readonly measureMortyLatency: (signal: AbortSignal) => Promise<number>;
-    readonly measureRelayLatency: (origin: string, signal: AbortSignal) => Promise<number>;
 }
 export interface ServerNetworkOperations {
     readonly readNetwork: (signal: AbortSignal) => Promise<{
-        readonly relayRuntimeLatencyMs: number;
-        readonly relayOrigin: string;
-        readonly mortyRelayLatencyMs: number;
+        readonly mortyRuntimeLatencyMs: number;
     }>;
 }
 export type NetworkMeasurement =
@@ -28,8 +25,6 @@ export interface NetworkDiagnostics {
         | { readonly kind: "unavailable"; readonly code: string };
     readonly measurements: {
         readonly browserMorty: NetworkMeasurement;
-        readonly browserRelay: NetworkMeasurement;
-        readonly mortyRelay: NetworkMeasurement;
-        readonly relayRuntime: NetworkMeasurement;
+        readonly mortyRuntime: NetworkMeasurement;
     };
 }

@@ -165,14 +165,8 @@ export class ChatService {
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
         const _runtime = await this.localRuntime(scope);
-        const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
-            this.#relay.measureRelayLatency(scope.computerId, scope.signal),
-            this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
-        ]);
         return {
-            relayOrigin: this.#relay.configuration().origin,
-            relayRuntimeLatencyMs,
-            mortyRelayLatencyMs,
+            mortyRuntimeLatencyMs: await this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
         };
     };
 

@@ -14,8 +14,6 @@ export class TestApiTransport {
     readonly disconnect = () => this.#current.dispose(new ApiConnectionError("Network disconnected."));
     readonly dispose = this.disconnect;
     readonly fetch: HttpApiTransport["fetch"] = (request) => this.#current.fetch(request);
-    readonly measureRelayLatency: HttpApiTransport["measureRelayLatency"] = (origin, signal) =>
-        this.#current.measureRelayLatency(origin, signal);
     readonly measureMortyLatency: HttpApiTransport["measureMortyLatency"] = (signal) =>
         this.#current.measureMortyLatency(signal);
     readonly waitForChange: HttpApiTransport["waitForChange"] = (request, ready) =>

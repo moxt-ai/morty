@@ -278,12 +278,13 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     };
     const first = await run();
     const before = await machineRuntime();
-    const revoked = await fixture.relayRequest(
-        new Request(`${fixture.origin}/morty/api/computers/${before.identity.computer_id}/management/pairing`, {
+    const revoked = await fixture
+        .environment()
+        .COMPUTER_RELAY.getByName(before.computerId)
+        .fetch(`https://computer.internal/revoke-runtime?computerId=${before.computerId}`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${before.identity.user_token}` },
-        }),
-    );
+        });
     expect(revoked.status).toBe(204);
 
     const again = await run();

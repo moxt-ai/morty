@@ -65,7 +65,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('environment', choices=['production'])
     parser.add_argument('--release', type=Path, required=True)
-    parser.add_argument('--cli-release', type=Path, help='Accepted CLI manifest and adjacent archive, including for legacy cloud releases')
+    parser.add_argument('--cli-release', type=Path, help='Accepted CLI manifest and adjacent archive')
     parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
     parser.add_argument('--preflight-only', action='store_true', help='Verify deployment credentials and resources before any write')
     args = parser.parse_args()
@@ -142,14 +142,16 @@ def main():
     # Check lifecycle history before uploading assets, applying D1 migrations,
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
+    previous_migrations = {}
     for component, config in [('morty', morty)]:
         current = cloud('/workers/services/' + expected[component])['default_environment']['script'].get('migration_tag')
+        previous_migrations[component] = current
         if current and current not in {item['tag'] for item in config.get('migrations', [])}:
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     secrets_by_component = {'morty': {'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}}
     if len(secrets_by_component['morty']['MORTY_SESSION_SIGNING_SECRET']) < 32:
         raise ValueError('The Session credential signing secret must be at least 32 characters')
-    # Check the retained directory without modifying historical credentials or the retired Relay deployment.
+    # Check the single Worker directory before activation.
     cloud('/d1/database/' + expected['d1_id'])
     if args.preflight_only:
         print(json.dumps({'preflightPassed': True, 'revision': manifest['revision'], 'deploymentAttempted': False}))
@@ -198,14 +200,11 @@ def main():
                 with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                     if hashlib.sha256(response.read()).hexdigest() != hashlib.sha256(Path(entry['file']).read_bytes()).hexdigest() or response.headers.get('Access-Control-Allow-Origin') != expected['morty_origin'] or 'immutable' not in response.headers.get('Cache-Control', ''):
                         raise ValueError('Asset content, CORS, or cache verification failed')
-            # Keep old secret bindings until a separately verified cleanup: restoring the previous
-            # app backend after a failed activation still needs its previous secret.
+            # Only the current signing authority belongs to the consolidated Worker.
             secrets_path = '/workers/scripts/' + expected['morty'] + '/secrets'
-            secret_names = {item['name'] for item in cloud(secrets_path)}
-            if 'MOBIUS_APP_SECRET' in secret_names:
-                cloud(secrets_path + '/MOBIUS_APP_SECRET', method='DELETE')
-            if 'MOBIUS_APP_SECRET' in {item['name'] for item in cloud(secrets_path)}:
-                raise ValueError('The retired service secret binding still exists')
+            for secret in cloud(secrets_path):
+                if secret['name'] not in secrets_by_component['morty']:
+                    cloud(secrets_path + '/' + secret['name'], method='DELETE')
             deployed = {}
             for component in configs:
                 deployment = cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0]
@@ -220,9 +219,15 @@ def main():
             run(['node', str(ROOT / 'deployment/verify-session-access.ts')], env)
         except Exception:
             (ROOT / 'deployment-evidence.json').write_text(json.dumps({'passed': False, 'environment': args.environment, 'revision': manifest['revision'], 'previous': previous, 'restored': False}, indent=2) + '\n')
-            restore_workers(expected, previous)
-            (ROOT / 'deployment-evidence.json').write_text(json.dumps({'passed': False, 'environment': args.environment, 'revision': manifest['revision'], 'previous': previous, 'restored': True}, indent=2) + '\n')
-            print(json.dumps({'passed': False, 'restored': True, 'revision': manifest['revision']}))
+            current_migrations = {component: cloud('/workers/services/' + expected[component])['default_environment']['script'].get('migration_tag') for component in configs}
+            if current_migrations != previous_migrations:
+                # Cloudflare cannot roll back across namespace creation/deletion.
+                # Keep the evidence for forward repair; never claim that old state can be restored.
+                print(json.dumps({'passed': False, 'restored': False, 'recovery': 'forward repair required after Durable Object lifecycle change', 'revision': manifest['revision']}))
+            else:
+                restore_workers(expected, previous)
+                (ROOT / 'deployment-evidence.json').write_text(json.dumps({'passed': False, 'environment': args.environment, 'revision': manifest['revision'], 'previous': previous, 'restored': True}, indent=2) + '\n')
+                print(json.dumps({'passed': False, 'restored': True, 'revision': manifest['revision']}))
             raise
     evidence = {'passed': True, 'environment': args.environment, 'revision': manifest['revision'], 'cliVersion': manifest['cliVersion'], 'cliIntegrity': accepted['integrity'], 'account': ACCOUNT, 'previous': previous, 'deployed': deployed, 'checks': checks, 'dnsChanged': False}
     (ROOT / 'deployment-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')

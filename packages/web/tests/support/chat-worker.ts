@@ -73,43 +73,50 @@ export async function createChatWorkerEnvironment(
                 continueReply: runtime.continueReply,
                 /** Closes a Session through the Relay, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
-                    await runtime.client.sessions.close(
-                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
-                        new AbortController().signal,
+                    const response = await cloud.dispatchFetch(
+                        `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
+                        { method: "POST" },
                     );
+                    if (response.status !== 200) {
+                        throw new Error(`Could not close the test Session: ${response.status}`);
+                    }
                 },
                 /** Applies another client's explicit model edit through the public Relay contract. */
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
-                    const snapshot = await runtime.client.sessions.readConfiguration(
-                        runtime.computerId,
-                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
-                        signal,
-                    );
-                    await runtime.client.sessions.updateConfiguration(
-                        runtime.computerId,
-                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
-                        {
-                            booleanValue: false,
-                            configId: "model",
-                            expectedConfigurationRevision: snapshot.configurationRevision,
-                            value,
-                            valueType: "select",
-                        },
-                        signal,
-                    );
+                    const target = { harness: agents[0]?.harness ?? "codex", sessionId };
+                    const client = await runtime.sessionClient(target, signal);
+                    try {
+                        const snapshot = await client.sessions.readConfiguration(target, signal);
+                        await client.sessions.updateConfiguration(
+                            target,
+                            {
+                                booleanValue: false,
+                                configId: "model",
+                                expectedConfigurationRevision: snapshot.configurationRevision,
+                                value,
+                                valueType: "select",
+                            },
+                            signal,
+                        );
+                    } finally {
+                        client.close();
+                    }
                 },
                 /** Starts a turn through the Relay, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
-                    await runtime.client.turns.submitToRuntime(
-                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
-                        {
-                            attachments: [],
-                            content,
-                            idempotencyKey: crypto.randomUUID(),
-                        },
-                        AbortSignal.timeout(30_000),
-                    );
+                    const signal = AbortSignal.timeout(30000);
+                    const target = { harness: agents[0]?.harness ?? "codex", sessionId };
+                    const client = await runtime.sessionClient(target, signal);
+                    try {
+                        await client.turns.submit(
+                            target,
+                            { attachments: [], content, idempotencyKey: crypto.randomUUID() },
+                            signal,
+                        );
+                    } finally {
+                        client.close();
+                    }
                 },
                 /** Restarts the Runtime offering these Agents, as when the user installs or removes one. */
                 replaceAgents: async (replacement: readonly ControlledAgent[]): Promise<void> => {
@@ -125,34 +132,34 @@ export async function createChatWorkerEnvironment(
                 },
                 /** Reads the current title through a separate client's production Runtime API. */
                 readSessionTitle: async (sessionId: string) => {
-                    const [session] = await runtime.client.runtimes.querySessions(
-                        [{ harness: agents[0]?.harness ?? "codex", sessionId }],
-                        AbortSignal.timeout(30_000),
+                    const session = await runtime.api.managedSession(
+                        { harness: agents[0]?.harness ?? "codex", sessionId },
+                        AbortSignal.timeout(30000),
                     );
-                    if (session === undefined) {
-                        throw new Error("Expected the Session on the Runtime");
-                    }
-                    return session.title;
+                    return session.entry.title;
                 },
                 /** Renames a Session through the Relay, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
-                    await runtime.client.sessions.rename(
-                        runtime.computerId,
-                        { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
-                        title,
-                        new AbortController().signal,
-                    );
+                    const signal = AbortSignal.timeout(30000);
+                    const target = { harness: agents[0]?.harness ?? "codex", sessionId };
+                    const client = await runtime.sessionClient(target, signal);
+                    try {
+                        await client.sessions.rename(target, title, signal);
+                    } finally {
+                        client.close();
+                    }
                 },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
                 /** Revokes the Runtime through the Relay, as the Relay does when its credential was reused. */
                 revoke: async (): Promise<void> => {
-                    const response = await cloud.relayRequest(
-                        new Request(`${origin}/morty/api/computers/${identity.computerId}/management/pairing`, {
+                    const response = await cloud
+                        .environment()
+                        .COMPUTER_RELAY.getByName(identity.computerId)
+                        .fetch(`https://computer.internal/revoke-runtime?computerId=${identity.computerId}`, {
                             method: "DELETE",
                             headers: { authorization: `Bearer ${identity.token}` },
-                        }),
-                    );
+                        });
                     if (response.status !== 204) {
                         throw new Error(`Could not revoke the test Runtime: ${response.status}`);
                     }

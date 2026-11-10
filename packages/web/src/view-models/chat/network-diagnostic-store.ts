@@ -5,21 +5,16 @@ type NetworkDiagnosticState =
     | { readonly kind: "closed" }
     | { readonly kind: "measuring" }
     | {
-          readonly browserRelayLatencyMs: number;
           readonly browserMortyLatencyMs: number;
           readonly kind: "ready";
-          readonly relayRuntimeLatencyMs: number;
-          readonly mortyRelayLatencyMs: number;
+          readonly mortyRuntimeLatencyMs: number;
       }
     | { readonly kind: "failed"; readonly message: string };
 
 interface NetworkDiagnosticOperations {
-    readonly measureBrowserRelay: (origin: string, signal: AbortSignal) => Promise<number>;
     readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
     readonly measureServerHops: (signal: AbortSignal) => Promise<{
-        readonly relayRuntimeLatencyMs: number;
-        readonly relayOrigin: string;
-        readonly mortyRelayLatencyMs: number;
+        readonly mortyRuntimeLatencyMs: number;
     }>;
 }
 
@@ -49,16 +44,13 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
                     operations.measureBrowserMorty(signal),
                     operations.measureServerHops(signal),
                 ]);
-                const browserRelayLatencyMs = await operations.measureBrowserRelay(relay.relayOrigin, signal);
                 signal.throwIfAborted();
                 if (active === controller) {
                     set({
                         state: {
-                            browserRelayLatencyMs,
                             browserMortyLatencyMs,
                             kind: "ready",
-                            relayRuntimeLatencyMs: relay.relayRuntimeLatencyMs,
-                            mortyRelayLatencyMs: relay.mortyRelayLatencyMs,
+                            mortyRuntimeLatencyMs: relay.mortyRuntimeLatencyMs,
                         },
                     });
                 }

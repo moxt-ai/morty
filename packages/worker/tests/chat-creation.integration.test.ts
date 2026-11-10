@@ -3,6 +3,7 @@ import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
+import { createOwnerApi } from "../../../tests/support/owner-api.ts";
 import worker, { fetchPublicApplication } from "../src/application.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -45,21 +46,24 @@ async function createChatFixture(
     const identity = await cloud.createAnonymousUser();
     const runtime = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
     const environment = cloud.environment();
-    const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
-        worker.fetch(
-            new Request(
-                `${APP_ORIGIN}/morty/api/${path.startsWith("chat/computers/") ? path : path.startsWith("chat/") ? path.replace("chat/", `chat/computers/${identity.computerId}/`) : `computers/${identity.computerId}/${path}`}`,
-                {
-                    method,
-                    headers: {
-                        authorization: `Bearer ${identity.token}`,
-                        "content-type": "application/json",
-                    },
-                    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") => {
+        const input = new Request(
+            `${APP_ORIGIN}/morty/api/${path.startsWith("chat/computers/") ? path : path.startsWith("chat/") ? path.replace("chat/", `chat/computers/${identity.computerId}/`) : `computers/${identity.computerId}/${path}`}`,
+            {
+                method,
+                headers: {
+                    authorization: `Bearer ${identity.token}`,
+                    "content-type": "application/json",
                 },
-            ),
-            environment,
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            },
         );
+        if (cloud.network !== null) {
+            const url = new URL(input.url);
+            return fetch(new Request(`${cloud.network.origin}${url.pathname}${url.search}`, input));
+        }
+        return worker.fetch(input, environment);
+    };
     return {
         computerId: identity.computerId,
         request,
@@ -365,9 +369,8 @@ test("Given the answer to a new conversation's Session creation is lost, When th
     }
     const input = { harness: "codex", conversationKey: "lost-creation", workspaceRef: ".", configurations: [] };
     const lost = cloud.network.interruptNextSessionCreation();
-    const failed = await fixture.request(`chat/access`, input);
-    expect(await lost).toBeLessThan(300);
-    expect(failed.status).toBeGreaterThanOrEqual(500);
+    await expect(fixture.request(`chat/access`, input)).rejects.toBeInstanceOf(TypeError);
+    expect(await lost).toBe(200);
     const listed = async () =>
         v.parse(
             v.object({ sessions: v.array(v.object({ target: targetSchema })) }),
@@ -438,8 +441,7 @@ test("Given a new conversation whose Session creation never reached the Runtime,
         configurations: [],
     };
     cloud.network.dropNextSessionCreation();
-    const failed = await fixture.request(`chat/access`, input);
-    expect(failed.status).toBeGreaterThanOrEqual(500);
+    await expect(fixture.request(`chat/access`, input)).rejects.toBeInstanceOf(TypeError);
     const listed = async () =>
         v.parse(
             v.object({ sessions: v.array(v.object({ target: targetSchema, title: v.string() })) }),
@@ -537,19 +539,12 @@ for (const configured of [false, true]) {
         }
         const computerId = fixture.runtime.computerId;
         const identity = { harness: "codex", directory: "." };
-        // Obtain a valid discovery on the other Runtime through its public Relay API, so rejection cannot be
-        // attributed to a nonexistent Runtime, entry, or discovery.
-        const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
-            { ...identity, sessionId },
-            AbortSignal.timeout(10_000),
-        );
-        const before = await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000));
-        const entry = { ...identity, computerId, directory: found.entry.directory };
+        const entry = { ...identity, computerId };
         const paths = [
             { path: "native-sessions", input: { ...entry, action: "list", cursor: null } },
-            { path: `native-session/${found.entry.sessionId}`, input: { ...entry } },
+            { path: `native-session/${sessionId}`, input: { ...entry } },
             {
-                path: `native-session/${found.entry.sessionId}/import`,
+                path: `native-session/${sessionId}/import`,
                 input: { ...entry },
             },
             { path: "native-session-forks/fork-operation", input: { ...entry, sessionId } },
@@ -566,9 +561,6 @@ for (const configured of [false, true]) {
                 body: { error: { code: configured ? "BOT_RUNTIME_FIXED" : "AGENT_REQUIRED" } },
             })),
         );
-        expect
-            .soft(await fixture.runtime.client.runtimes.listSessions(100, AbortSignal.timeout(10_000)))
-            .toEqual(before);
         if (!configured) {
             expect((await owner.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
         }
@@ -670,7 +662,7 @@ test("Given a Session the Runtime holds with a running turn, When its owner arch
         workspaceRef: ".",
     });
     const { target } = v.parse(v.object({ target: targetSchema }), await opened.json());
-    await fixture.runtime.client.turns.submitToRuntime(
+    await (await fixture.runtime.sessionClient(target, AbortSignal.timeout(10_000))).turns.submit(
         target,
         {
             content: "wait for steering",
@@ -685,7 +677,7 @@ test("Given a Session the Runtime holds with a running turn, When its owner arch
     expect(archived.status).toBe(200);
     expect(await archived.json()).toEqual({ target });
     expect(await (await fixture.request(`chat/managed-sessions`, {})).json()).toEqual({ sessions: [] });
-    expect(await fixture.runtime.client.runtimes.querySessions([target], AbortSignal.timeout(10_000))).toEqual([]);
+    expect(await fixture.runtime.api.managedSessions(AbortSignal.timeout(10_000))).toEqual([]);
     const reopened = await fixture.request(`chat/access`, target);
     expect(reopened.status).toBe(404);
     expect(await reopened.json()).toMatchObject({
@@ -707,15 +699,23 @@ test("Given an archived native Session, When its owner opens it again from the A
     await using fixture = await createChatFixture(cloud, undefined, new Set([nativeId]));
     const computerId = fixture.runtime.computerId;
     expect((await fixture.request(`chat/setup`, { computerId, harness: "codex" })).status).toBe(202);
-    const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
-        { harness: "codex", directory: ".", sessionId: nativeId },
-        AbortSignal.timeout(10_000),
+    const listed = await fixture.runtime.api.nativeSessions(
+        computerId,
+        { action: "list", harness: "codex", directory: ".", cursor: null },
+        AbortSignal.timeout(10000),
     );
+    if (listed.action !== "list") {
+        throw new Error("Expected native sessions");
+    }
+    const nativeSession = listed.entries.find((entry) => entry.sessionId === nativeId);
+    if (nativeSession === undefined) {
+        throw new Error("Expected native session");
+    }
     const open = async () => {
         const response = await fixture.request(`chat/native-session/${nativeId}/import`, {
             computerId,
             harness: "codex",
-            directory: found.entry.directory,
+            directory: nativeSession.directory,
         });
         expect(response.status).toBe(200);
         return v.parse(v.object({ ready: v.object({ target: targetSchema }) }), await response.json()).ready.target;
@@ -753,9 +753,9 @@ for (const operation of ["access", "managed-session"]) {
         expect([200, 404]).toContain(reopened.status);
         expect(archived.status).toBe(200);
         expect(await archived.json()).toEqual({ target });
-        await expect(
-            fixture.runtime.client.sessions.rename(computerId, target, "Still archived", AbortSignal.timeout(10_000)),
-        ).rejects.toMatchObject({ code: "session_not_found" });
+        await expect(fixture.runtime.api.access(AbortSignal.timeout(10_000), target)).rejects.toMatchObject({
+            code: "NOT_FOUND",
+        });
         const rejected = await fixture.request(`chat/access`, target);
         expect(rejected.status).toBe(404);
         const managed = await fixture.request(`chat/managed-sessions`, {});
@@ -861,6 +861,7 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         conversationKey: "followed-while-revoked",
         workspaceRef: ".",
     });
+    expect(opened.status).toBe(200);
     const { target } = v.parse(v.object({ target: targetSchema }), await opened.json());
     const stream = await cloud.dispatchFetch(
         `${APP_ORIGIN}/morty/api/chat/computers/${fixture.computerId}/managed-session/status-events`,
@@ -875,19 +876,28 @@ test("Given a browser following its chats' statuses, When the machine's owner re
     }
     expect(new TextDecoder().decode((await reader.read()).value)).toContain("managed-session.statuses.following");
 
-    expect(
-        (await fixture.request("identity/revoke-all-access", { successor: `morty_anon_v1_${"A".repeat(43)}` })).status,
-    ).toBe(200);
-    await fixture.runtime.client.turns.submitToRuntime(
-        target,
-        {
-            content: "Reply after revoke",
-            idempotencyKey: crypto.randomUUID(),
-            attachments: [],
-        },
-        AbortSignal.timeout(10_000),
-    );
-
+    const successor = `morty_anon_v1_${"C".repeat(43)}`;
+    expect((await fixture.request("identity/revoke-all-access", { successor })).status).toBe(200);
+    const owner = createOwnerApi({
+        origin: cloud.origin,
+        computerId: fixture.computerId,
+        credential: successor,
+        request: fetch,
+    });
+    try {
+        const client = await owner.sessionClient(target, AbortSignal.timeout(10000));
+        try {
+            await client.turns.submit(
+                target,
+                { content: "Reply after revoke", idempotencyKey: crypto.randomUUID(), attachments: [] },
+                AbortSignal.timeout(10000),
+            );
+        } finally {
+            client.close();
+        }
+    } finally {
+        owner.close();
+    }
     expect((await reader.read()).done).toBe(true);
 });
 

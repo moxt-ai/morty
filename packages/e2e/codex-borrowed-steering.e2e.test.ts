@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { MortyRuntimeEngine } from "@morty-build/cli/engine";
 import { expect, test } from "@playwright/test";
+import { chromium, firefox, webkit } from "playwright-core";
 import { CodexAppServerClient } from "../../packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
 import { stopProcessTree } from "../../packages/cli/src/engine/util/process/executable.ts";
 import { CodexFixture } from "../../packages/cli/tests/support/agents/codex.ts";
@@ -12,11 +13,12 @@ import { anonymousCreationKey, ChatApi, jsonRequest, object, text } from "./infr
 import { E2EHarness } from "./infra/harness.ts";
 import { LocalStack } from "./infra/local-stack.ts";
 
-test.use({ browserName: "webkit", isMobile: true, hasTouch: true });
+test.use({ browserName: "webkit", contextOptions: { isMobile: true, hasTouch: true } });
 
 // Both Codex processes and the daemon are real. Only model responses are controlled.
 test("Given desktop Codex owns a conversation, When I open it in Morty and queue follow-ups, Then steering is unavailable and the queued replies complete", async ({
-    page,
+    browserName,
+    contextOptions,
 }, testInfo) => {
     const harness = await E2EHarness.create("codex-borrowed-steering");
     const cancellation = new AbortController();
@@ -110,6 +112,19 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         await Promise.race([ready.promise, running]);
         const pairedAgent = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), "codex");
         await chat.bindAgent(pairedAgent.computerId, "codex");
+        // The harness owns the browser so a failure keeps its trace, page and browser events.
+        const browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true });
+        const page = await (async () => {
+            try {
+                const context = await browser.newContext(contextOptions);
+                const opened = await context.newPage();
+                await harness.attachBrowser(browser, context, opened);
+                return opened;
+            } catch (error) {
+                await browser.close();
+                throw error;
+            }
+        })();
         await page.addInitScript(
             ({ key, scope, token }) => {
                 localStorage.setItem(
@@ -165,7 +180,6 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         ).toBeVisible();
         success = true;
     } catch (cause) {
-        await page.screenshot({ path: testInfo.outputPath("failure.png"), fullPage: true });
         await harness.diagnose(cause);
         throw cause;
     } finally {

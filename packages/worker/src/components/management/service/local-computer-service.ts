@@ -64,6 +64,15 @@ function runtimeSetupMessage(code: string): string {
     }
 }
 
+function chatRuntime(runtime: Awaited<ReturnType<ComputerBackendService["agents"]>>) {
+    return {
+        computerId: runtime.computerId,
+        machineName: runtime.machineName,
+        online: runtime.online,
+        agents: runtime.agents.map(({ harness, label }) => ({ harness, label })),
+    };
+}
+
 /** Application use cases call the services in their own ComputerRelay, not an HTTP client or another Worker. */
 export class LocalComputerService {
     readonly bindings: CloudBindings;
@@ -118,7 +127,7 @@ export class LocalComputerService {
             if (isHttpError(cause)) {
                 const error = cause.toHttpJson();
                 throw new ComputerManagementError(
-                    error.body.error.code,
+                    error.body.error.code === "runtime_revoked" ? "RUNTIME_REVOKED" : error.body.error.code,
                     runtimeSetupMessage(error.body.error.code),
                     error.status,
                     { cause },
@@ -141,9 +150,9 @@ export class LocalComputerService {
     readonly revokeRuntime = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.revokeRuntime(signal), 15_000);
     readonly chatRuntimes = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000);
+        (await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000)).map(chatRuntime);
     readonly getChatRuntimeAgents = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(computerId, signal, (computer, signal) => computer.agents(signal), 15_000);
+        chatRuntime(await this.#run(computerId, signal, (computer, signal) => computer.agents(signal), 15_000));
     readonly readRuntimeDiagnostics = async (computerId: string, signal: AbortSignal) =>
         await this.#run(
             computerId,
@@ -154,17 +163,7 @@ export class LocalComputerService {
         );
     readonly measureRuntimeLatency = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.latency(signal), 15_000);
-    readonly measureRelayLatency = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(
-            computerId,
-            signal,
-            async (computer, signal) => {
-                const started = performance.now();
-                await computer.probe(signal);
-                return Math.max(0, Math.round(performance.now() - started));
-            },
-            15_000,
-        );
+
     readonly openChatRuntimeHost = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.openHost(signal), 20_000);
     readonly listChatDirectory = async (computerId: string, directory: string, signal: AbortSignal) =>

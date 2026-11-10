@@ -29,8 +29,8 @@ test("Given a creation operation still applying initial settings, When another c
             computerId: runtime.computerId,
             operationId,
         };
-        const refused = runtime.client.sessions
-            .create(
+        const refused = runtime
+            .createSession(
                 {
                     ...input,
                     configurations: [
@@ -46,21 +46,19 @@ test("Given a creation operation still applying initial settings, When another c
             );
         await applying.promise;
         try {
-            await expect(
-                runtime.client.sessions.create({ ...input, configurations: [] }, signal),
-            ).rejects.toMatchObject({
+            await expect(runtime.createSession({ ...input, configurations: [] }, signal)).rejects.toMatchObject({
                 code: "idempotency_conflict",
             });
         } finally {
             release.resolve();
         }
         expect(await refused).toMatchObject({ ok: false, cause: { code: "session_configuration_conflict" } });
-        await expect(runtime.client.sessions.readCreation(operationId, signal)).rejects.toMatchObject({
-            code: "session_creation_unavailable",
-        });
-        const successful = await runtime.client.sessions.create({ ...input, configurations: [] }, signal);
+        expect(await runtime.api.managedSessions(signal)).toEqual([]);
+        const successful = await runtime.createSession({ ...input, configurations: [] }, signal);
         expect(successful.target.sessionId).not.toBe(operationId);
-        expect(await runtime.client.runtimes.querySessions([successful.target], signal)).toHaveLength(1);
+        expect(await runtime.api.managedSession(successful.target, signal)).toMatchObject({
+            result: { target: successful.target },
+        });
     } finally {
         release.resolve();
         await cloud.close();

@@ -32,6 +32,8 @@ const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const MORTY_ROOT = REPO_ROOT;
 const MORTY_LOCKFILE = path.join(MORTY_ROOT, "pnpm-lock.yaml");
 const MORTY_INSTALLED_LOCKFILE = path.join(MORTY_ROOT, "node_modules", ".pnpm", "lock.yaml");
+/** Fixed non-production Session signing secret, matching the e2e local stack. */
+const _LOCAL_SESSION_SIGNING_SECRET = "local-development-only-session-signing-secret";
 /** An identifier the CLI and Relay accept for a harness or native session. */
 const HARNESS_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
 

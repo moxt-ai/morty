@@ -49,7 +49,8 @@
         { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] },
         { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] },
         { "tag": "v5", "deleted_classes": ["ChatWebSocketDurableObject"] },
-        { "tag": "v6-consolidated-computer-relay", "new_sqlite_classes": ["ComputerRelay"] }
+        { "tag": "v6-consolidated-computer-relay", "new_sqlite_classes": ["ComputerRelay"] },
+        { "tag": "v7-remove-archived-projects", "deleted_classes": ["ProjectDurableObject"] }
     ],
     "env": {
         "production": {

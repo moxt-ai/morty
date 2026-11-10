@@ -6,6 +6,7 @@ import { computerBootstrap } from "./components/management/entity/computer-boots
 import { createApplicationDependencies, logger } from "./composition/application-context.ts";
 import { createCloudRoutes } from "./composition/cloud-http.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
+import { RequestDeadline } from "./infra/request-deadline.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { errorHandler } from "./middleware/error-middleware.ts";
 
@@ -29,7 +30,8 @@ async function bootstrapProject(
     if (parsed.computer.computerId !== computerId) {
         throw new RequestError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
     }
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
+    using deadline = new RequestDeadline(request.signal, 45_000);
+    const signal = deadline.signal;
     const dependencies = createApplicationDependencies(bindings, computer);
     return new Response(
         JSON.stringify(

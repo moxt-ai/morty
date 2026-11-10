@@ -7,6 +7,7 @@ import { readProjectCredential } from "../components/management/entity/project-c
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
 import { computerBindings } from "../composition/computer-bindings.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
+import { RequestDeadline } from "../infra/request-deadline.ts";
 import { readJsonBody } from "./body-parser.ts";
 
 export const cloudComputerContext = (computer: ComputerBackendService) =>
@@ -15,7 +16,8 @@ export const cloudComputerContext = (computer: ComputerBackendService) =>
         readonly Variables: { readonly dependencies: ApplicationContext };
     }>(async (context, next) => {
         const request = context.req.raw;
-        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
+        using deadline = new RequestDeadline(request.signal, 20000);
+        const signal = deadline.signal;
         const requestedId = context.req.param("computerId");
         if (requestedId !== undefined && requestedId !== computer.computerId) {
             throw new ManagementError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);

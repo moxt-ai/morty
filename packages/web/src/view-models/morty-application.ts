@@ -182,7 +182,6 @@ export function createMortyApplication(options: {
             endOtherBrowserAccess: access.endOtherBrowserAccess,
             endDeviceAccess: access.endDeviceAccess,
             networkDiagnostics: {
-                measureBrowserRelay: transport.measureRelayLatency,
                 measureBrowserMorty: transport.measureMortyLatency,
             },
         });

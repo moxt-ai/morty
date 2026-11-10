@@ -33,7 +33,7 @@
         "check:static": "pnpm typecheck && pnpm build && pnpm lint && pnpm knip",
         "ci:check": "pnpm check:static && pnpm test:client && pnpm test:coverage",
         "postinstall": "pnpm db:codegen && simple-git-hooks",
-        "typegen": "wrangler types worker-configuration.d.ts",
+        "typegen": "wrangler types worker-configuration.d.ts --include-env false",
         "preview": "vite preview",
         "build:production": "python3 deployment/build.py production",
         "typecheck:tooling": "tsc --project tsconfig.tooling.json",

@@ -1,8 +1,9 @@
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Duplex } from "node:stream";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
@@ -112,7 +113,42 @@ test("Given setup and a lost creation response, When setup retries across tempor
             outgoing.destroy();
         });
     });
+    // The consolidated origin carries Runtime WebSockets as well as setup HTTP requests.
+    const sockets = new Set<Duplex>();
+    server.on("upgrade", (incoming, socket, head) => {
+        sockets.add(socket);
+        const upstream = httpRequest(new URL(incoming.url ?? "/", fixture.origin), { headers: incoming.headers });
+        upstream.on("upgrade", (response, remote, remoteHead) => {
+            sockets.add(remote);
+            socket.write(
+                `HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n${response.rawHeaders.reduce((lines, value, index) => lines + value + (index % 2 === 0 ? ": " : "\r\n"), "")}\r\n`,
+            );
+            if (head.length > 0) {
+                remote.write(head);
+            }
+            if (remoteHead.length > 0) {
+                socket.write(remoteHead);
+            }
+            remote.pipe(socket).pipe(remote);
+            remote.on("error", () => socket.destroy());
+            socket.on("error", () => remote.destroy());
+            remote.on("close", () => {
+                sockets.delete(remote);
+                socket.destroy();
+            });
+            socket.on("close", () => {
+                sockets.delete(socket);
+                remote.destroy();
+            });
+        });
+        upstream.on("error", () => socket.destroy());
+        socket.on("error", () => upstream.destroy());
+        upstream.end();
+    });
     cleanup.defer(async () => {
+        for (const socket of sockets) {
+            socket.destroy();
+        }
         server.closeAllConnections();
         if (server.listening) {
             await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

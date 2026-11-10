@@ -11,8 +11,7 @@
         "./app": "./src/app.ts",
         "./cloudflare": "./src/cloudflare.ts",
         "./response-loss-proxy": "./src/response-loss-proxy.ts",
-        "./websocket": "./src/websocket.ts",
-        "./service-fixture": "./src/service-fixture.ts"
+        "./websocket": "./src/websocket.ts"
     },
     "dependencies": {
         "@cloudflare/vitest-plugin": "^1.4.9",

@@ -1,23 +1,13 @@
 import {
-    type AgentSettingsDiscoveredEvent,
     CONTENT_WRITE_MAX_BYTES,
-    decodeAgentSettingsDiscoveredEvent,
     decodeKnownNativeSessionEvents,
     decodeKnownSessionEventLogPage,
     decodeKnownSessionLiveEventBatch,
     decodeNativeSessionResult,
     decodePromptAttachment,
-    decodeRuntimeDiagnosticsResult,
-    decodeSessionArchivedEvent,
-    decodeSessionClosedEvent,
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
-    decodeSessionReadyEvent,
     decodeSessionRenamedEvent,
-    decodeSessionRestoredEvent,
-    decodeSessionsListedEvent,
-    decodeSessionsQueriedEvent,
-    decodeWorkspaceEntriesEvent,
     type ExternalAudioContentBlock,
     type ExternalImageContentBlock,
     type ExternalResourceContentBlock,
@@ -25,16 +15,13 @@ import {
     MORTY_API_PREFIX,
     type NativeEventPageRequest,
     type NativeSessionEvents,
-    type NativeSessionRequest,
     type NativeSessionResult,
     type NativeSessionTarget,
     type PromptAttachment,
-    type RuntimeDiagnosticsResult,
     type SessionConfigureCommand,
     type SessionEventLogPage,
     type SessionLiveEventBatch,
     SessionPromptDisposition,
-    type WorkspaceEntriesEvent,
 } from "@morty-build/client/protocol";
 import {
     MortyApiError,
@@ -48,23 +35,9 @@ import {
 import { sameNativeSession } from "./native-session.ts";
 import { nativeSessionTargetSchema } from "./protocol/session/shared/native-session-target.ts";
 import {
-    type CreateMortySessionRequest,
-    decodeMortyRuntimeList,
-    decodeMortyRuntimePairing,
-    decodeMortyRuntimePairingStatus,
     decodeMortyTurn,
-    decodeRuntimeDescriptor,
     type MortyInteractionResponseRequest,
     type MortyPageRequest,
-    MortyPairedRuntimePairingStatus,
-    type MortyRuntimeDescriptor,
-    type MortyRuntimePairing,
-    MortyRuntimePairingLifecycle,
-    type MortyRuntimePairingRequest,
-    type MortyRuntimePairingStatus,
-    type MortyRuntimePairingWaitOptions,
-    MortySessionAccess,
-    MortySessionAccessRevocation,
     type MortyTurn,
     type MortyTurnCancellation,
     type SubmitMortyTurnRequest,
@@ -718,223 +691,6 @@ export async function readExactResponseBytes(
     return bytes;
 }
 
-export class MortyRuntimeResources {
-    readonly #executor: MortyRequestExecutor;
-    readonly #computerId: string;
-
-    constructor(executor: MortyRequestExecutor, computerId: string) {
-        this.#executor = executor;
-        this.#computerId = computerId;
-    }
-
-    readonly list = async (signal: AbortSignal): Promise<readonly MortyRuntimeDescriptor[]> =>
-        decodeMortyRuntimeList(await this.#executor.get(projectPath(this.#computerId, "runtimes"), signal));
-
-    readonly getAgents = async (signal: AbortSignal) =>
-        decodeRuntimeDescriptor(await this.#executor.get(projectPath(this.#computerId, `daemon/agents`), signal))
-            .agents;
-
-    /**
-     * Read the Runtime's own bounded local diagnostic log through the Relay, for a
-     * bug report filed without shell access to the machine. Entries carry
-     * correlation identifiers and failure codes only; free text and local paths
-     * stay on that machine. Requires the Runtime to be online: an offline Runtime
-     * has no log reader to answer, so this reports `runtime_unavailable`.
-     */
-    readonly readDiagnostics = async (signal: AbortSignal): Promise<RuntimeDiagnosticsResult> => {
-        return decodeRuntimeDiagnosticsResult(
-            JSON.stringify(await this.#executor.get(projectPath(this.#computerId, `daemon/diagnostics`), signal)),
-        );
-    };
-
-    readonly listWorkspace = async (directory: string, signal: AbortSignal): Promise<WorkspaceEntriesEvent> =>
-        decodeWorkspaceEntriesEvent(
-            JSON.stringify(
-                await this.#executor.post(projectPath(this.#computerId, `daemon/workspace`), { directory }, signal),
-            ),
-        );
-
-    readonly describeWorkspace = async (
-        directory: string,
-        signal: AbortSignal,
-    ): Promise<Pick<WorkspaceEntriesEvent, "directory" | "directoryLabel">> => {
-        const listing = decodeWorkspaceEntriesEvent(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/workspace`),
-                    { directory, view: "metadata" },
-                    signal,
-                ),
-            ),
-        );
-        return { directory: listing.directory, directoryLabel: listing.directoryLabel };
-    };
-
-    readonly discoverAgentSettings = async (
-        harness: string,
-        request: DiscoverMortyAgentSettingsRequest,
-        signal: AbortSignal,
-    ): Promise<AgentSettingsDiscoveredEvent> =>
-        decodeAgentSettingsDiscoveredEvent(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/agents/${encodeURIComponent(harness)}/settings`),
-                    request,
-                    signal,
-                ),
-            ),
-        );
-
-    readonly nativeSessions = async (
-        request:
-            | (Omit<Extract<NativeSessionRequest, { readonly action: "list" }>, "kind" | "requestId"> & {})
-            | (Omit<
-                  Extract<NativeSessionRequest, { readonly action: "import" | "fork" }>,
-                  "kind" | "requestId" | "action"
-              > & { readonly action: "import" }),
-        signal: AbortSignal,
-    ) =>
-        decodeNativeSessionResult(
-            JSON.stringify(
-                await this.#executor.post(projectPath(this.#computerId, `daemon/native-sessions`), request, signal),
-            ),
-        );
-
-    /**
-     * Forks the native session in the directory its entry names. The Runtime keeps the fork's receipt under
-     * `operationId`: reuse the operationId and its inputs after an ambiguous failure, and the retry answers with the
-     * original fork instead of creating another Session.
-     */
-    readonly forkNativeSession = async (
-        operationId: string,
-        request: ForkMortyNativeSessionRequest,
-        signal: AbortSignal,
-    ) => {
-        const result = decodeNativeSessionResult(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/native-session-forks/${encodeURIComponent(operationId)}`),
-                    request,
-                    signal,
-                ),
-            ),
-        );
-        if (
-            result.action !== "fork" ||
-            !sameNativeSession(result.ready.target, result.target) ||
-            result.target.harness !== request.harness ||
-            result.target.sessionId === request.sessionId
-        ) {
-            throw new MortyProtocolError("The service returned an invalid native Fork");
-        }
-        return result;
-    };
-
-    readonly querySessions = async (targets: readonly NativeSessionTarget[], signal: AbortSignal) =>
-        decodeSessionsQueriedEvent(
-            JSON.stringify(
-                await this.#executor.post(projectPath(this.#computerId, `daemon/sessions/query`), { targets }, signal),
-            ),
-        ).entries;
-
-    readonly listSessions = async (limit: number, signal: AbortSignal) => {
-        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
-            throw new MortyValidationError("The Runtime Session list limit is invalid");
-        }
-        const path = requestUrl(new URL("https://morty.invalid/"), projectPath(this.#computerId, `daemon/sessions`));
-        path.searchParams.set("limit", limit.toString());
-        return decodeSessionsListedEvent(
-            JSON.stringify(await this.#executor.get(`${path.pathname.slice(1)}${path.search}`, signal)),
-        ).entries;
-    };
-
-    readonly findNativeSessionBySessionId = async (
-        request: Omit<Extract<NativeSessionRequest, { readonly action: "find" }>, "kind" | "requestId" | "action">,
-        signal: AbortSignal,
-    ) => {
-        const result = decodeNativeSessionResult(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/native-sessions`),
-                    { ...request, action: "find" },
-                    signal,
-                ),
-            ),
-        );
-        if (result.action !== "find") {
-            throw new MortyProtocolError("The service returned an invalid native Session lookup");
-        }
-        return result;
-    };
-
-    readonly revoke = async (signal: AbortSignal): Promise<void> => {
-        await this.#executor.deleteEmpty(projectPath(this.#computerId, "pairing"), signal);
-    };
-}
-
-export class MortyRuntimePairingResources {
-    readonly #executor: MortyRequestExecutor;
-    readonly #computerId: string;
-
-    constructor(executor: MortyRequestExecutor, computerId: string) {
-        this.#executor = executor;
-        this.#computerId = computerId;
-    }
-
-    readonly create = async (request: MortyRuntimePairingRequest, signal: AbortSignal): Promise<MortyRuntimePairing> =>
-        decodeMortyRuntimePairing(await this.#executor.post(projectPath(this.#computerId, "pairing"), request, signal));
-
-    readonly read = async (signal: AbortSignal): Promise<MortyRuntimePairingStatus> => {
-        return decodeMortyRuntimePairingStatus(
-            await this.#executor.get(projectPath(this.#computerId, "pairing"), signal),
-        );
-    };
-
-    readonly waitUntilPaired = async (
-        options: MortyRuntimePairingWaitOptions,
-        signal: AbortSignal,
-    ): Promise<MortyPairedRuntimePairingStatus> => {
-        const deadline = Date.now() + options.timeoutMilliseconds;
-        while (true) {
-            if (signal.aborted) {
-                throw new MortyCancellationError({ cause: signal.reason });
-            }
-            const status = await this.read(signal);
-            if (status instanceof MortyPairedRuntimePairingStatus) {
-                return status;
-            }
-            if (status.status === MortyRuntimePairingLifecycle.Expired) {
-                throw new MortyApiError("runtime_pairing_expired", "The Runtime pairing expired", 410);
-            }
-            if (status.status === MortyRuntimePairingLifecycle.Revoked) {
-                throw new MortyApiError("runtime_pairing_revoked", "The Runtime pairing was revoked", 410);
-            }
-            const remaining = deadline - Date.now();
-            if (remaining <= 0) {
-                throw new MortyTimeoutError();
-            }
-            await waitForPairingPoll(Math.min(options.pollIntervalMilliseconds, remaining), signal);
-        }
-    };
-}
-
-function waitForPairingPoll(milliseconds: number, signal: AbortSignal): Promise<void> {
-    if (signal.aborted) {
-        return Promise.reject(new MortyCancellationError({ cause: signal.reason }));
-    }
-    return new Promise((resolve, reject) => {
-        const timeout = globalThis.setTimeout(() => {
-            signal.removeEventListener("abort", cancel);
-            resolve();
-        }, milliseconds);
-        const cancel = (): void => {
-            globalThis.clearTimeout(timeout);
-            reject(new MortyCancellationError({ cause: signal.reason }));
-        };
-        signal.addEventListener("abort", cancel, { once: true });
-    });
-}
-
 export class MortySessionResources {
     readonly #executor: MortyRequestExecutor;
     readonly #computerId: string;
@@ -944,178 +700,28 @@ export class MortySessionResources {
         this.#computerId = computerId;
     }
 
-    readonly create = async (request: CreateMortySessionRequest, signal: AbortSignal) =>
-        decodeSessionReadyEvent(
-            JSON.stringify(
-                await this.#executor.post(projectPath(this.#computerId, `daemon/sessions`), request, signal),
-            ),
-        );
-
-    readonly readCreation = async (operationId: string, signal: AbortSignal) =>
-        decodeSessionReadyEvent(
-            JSON.stringify(
-                await this.#executor.get(
-                    projectPath(this.#computerId, `daemon/session-creations/${encodeURIComponent(operationId)}`),
-                    signal,
-                ),
-            ),
-        );
-
-    /**
-     * Has the Relay issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
-     * revocation, it is never covered by that revocation.
-     */
-    readonly createAccess = async (sessionTarget: NativeSessionTarget, expiresInSeconds: number, signal: AbortSignal) =>
-        new MortySessionAccess(
-            await this.#executor.post(
-                sessionPath(this.#computerId, sessionTarget, "access-credentials"),
-                { expiresInSeconds },
-                signal,
-            ),
-        );
-
-    /**
-     * Revokes every Session credential issued for the Project until now and closes the live views opened with them.
-     * Retrying is safe: a later revocation never undoes an earlier one.
-     */
-    readonly revokeAccess = async (signal: AbortSignal) =>
-        new MortySessionAccessRevocation(
-            await this.#executor.post(projectPath(this.#computerId, "session-access/revocations"), {}, signal),
-        );
-
-    /** Opens a Session the Runtime holds, with the Agent and directory it holds the Session with. */
-    readonly load = async (sessionTarget: NativeSessionTarget, signal: AbortSignal) =>
-        decodeSessionReadyEvent(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/load`),
-                    {},
-                    signal,
-                ),
-            ),
-        );
-
-    readonly restore = async (target: NativeSessionTarget, signal: AbortSignal) => {
-        const parsed = nativeSessionTargetSchema.safeParse(target);
-        if (!parsed.success) {
-            throw new MortyValidationError("The harness and native Session identity are invalid", {
-                cause: parsed.error,
-            });
-        }
-        const restored = decodeSessionRestoredEvent(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(
-                        this.#computerId,
-                        `daemon/harnesses/${encodeURIComponent(parsed.data.harness)}/sessions/${encodeURIComponent(parsed.data.sessionId)}/restore`,
-                    ),
-                    {},
-                    signal,
-                ),
-            ),
-        );
-        if (
-            restored.target.harness !== parsed.data.harness ||
-            restored.target.sessionId !== parsed.data.sessionId ||
-            restored.entry.harness !== parsed.data.harness ||
-            restored.entry.sessionId !== parsed.data.sessionId ||
-            restored.ready.harness !== parsed.data.harness ||
-            !sameNativeSession(restored.entry.target, restored.ready.target)
-        ) {
-            throw new MortyProtocolError("The Runtime restored a different harness or native Session");
-        }
-        return restored;
-    };
-
-    readonly close = async (sessionTarget: NativeSessionTarget, signal: AbortSignal) =>
-        decodeSessionClosedEvent(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/close`),
-                    {},
-                    signal,
-                ),
-            ),
-        );
-
-    /**
-     * Removes the Session from the Sessions the Runtime holds, closing it first if it is open. The Agent's own history
-     * stays. Archiving a Session the Runtime does not hold succeeds, so a retry after an ambiguous failure is safe.
-     */
-    readonly archive = async (sessionTarget: NativeSessionTarget, signal: AbortSignal) =>
-        decodeSessionArchivedEvent(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/archive`),
-                    {},
-                    signal,
-                ),
-            ),
-        );
-
     readonly updateConfiguration = async (
-        ...operation:
-            | readonly [
-                  computerId: string,
-                  sessionTarget: NativeSessionTarget,
-                  request: UpdateMortySessionConfigurationRequest,
-                  signal: AbortSignal,
-              ]
-            | readonly [
-                  sessionTarget: NativeSessionTarget,
-                  request: UpdateMortySessionConfigurationRequest,
-                  signal: AbortSignal,
-              ]
-    ) => {
-        const result =
-            operation.length === 3
-                ? await this.#executor.post(
-                      sessionPath(this.#computerId, operation[0], "configuration"),
-                      operation[1],
-                      operation[2],
-                  )
-                : await this.#executor.post(
-                      projectPath(this.#computerId, `daemon/${nativeSessionRoute(operation[1])}/configuration`),
-                      operation[2],
-                      operation[3],
-                  );
-        return decodeSessionConfigUpdatedEvent(JSON.stringify(result));
-    };
+        target: NativeSessionTarget,
+        request: UpdateMortySessionConfigurationRequest,
+        signal: AbortSignal,
+    ) =>
+        decodeSessionConfigUpdatedEvent(
+            JSON.stringify(
+                await this.#executor.post(sessionPath(this.#computerId, target, "configuration"), request, signal),
+            ),
+        );
 
-    readonly readConfiguration = async (
-        ...operation:
-            | readonly [sessionTarget: NativeSessionTarget, signal: AbortSignal]
-            | readonly [computerId: string, sessionTarget: NativeSessionTarget, signal: AbortSignal]
-    ) => {
-        const result =
-            operation.length === 2
-                ? await this.#executor.get(sessionPath(this.#computerId, operation[0], "configuration"), operation[1])
-                : await this.#executor.get(
-                      projectPath(this.#computerId, `daemon/${nativeSessionRoute(operation[1])}/configuration`),
-                      operation[2],
-                  );
-        return decodeSessionConfigReadResult(JSON.stringify(result));
-    };
+    readonly readConfiguration = async (target: NativeSessionTarget, signal: AbortSignal) =>
+        decodeSessionConfigReadResult(
+            JSON.stringify(await this.#executor.get(sessionPath(this.#computerId, target, "configuration"), signal)),
+        );
 
-    readonly rename = async (
-        ...operation:
-            | readonly [computerId: string, sessionTarget: NativeSessionTarget, title: string, signal: AbortSignal]
-            | readonly [sessionTarget: NativeSessionTarget, title: string, signal: AbortSignal]
-    ) => {
-        const result =
-            operation.length === 3
-                ? await this.#executor.post(
-                      sessionPath(this.#computerId, operation[0], "rename"),
-                      { title: operation[1] },
-                      operation[2],
-                  )
-                : await this.#executor.post(
-                      projectPath(this.#computerId, `daemon/${nativeSessionRoute(operation[1])}/rename`),
-                      { title: operation[2] },
-                      operation[3],
-                  );
-        return decodeSessionRenamedEvent(JSON.stringify(result));
-    };
+    readonly rename = async (target: NativeSessionTarget, title: string, signal: AbortSignal) =>
+        decodeSessionRenamedEvent(
+            JSON.stringify(
+                await this.#executor.post(sessionPath(this.#computerId, target, "rename"), { title }, signal),
+            ),
+        );
 
     readonly uploadContent = async (
         sessionTarget: NativeSessionTarget,
@@ -1180,25 +786,6 @@ export class MortySessionResources {
         await this.readFile(sessionTarget, externalContentPath(content), signal, maximumBytes);
 
     /** Reads a page of the Agent's own history of a native session in `directory`, which the caller browses. */
-    readonly previewRuntimeNativeEvents = async (
-        sessionTarget: NativeSessionTarget,
-        directory: string,
-        page: NativeEventPageRequest,
-        signal: AbortSignal,
-    ): Promise<NativeSessionEvents> => {
-        const result = await this.#executor.post(
-            projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/native-events-preview`),
-            {
-                cursor: page.cursor,
-                directory,
-                eventLimit: page.eventLimit,
-            },
-            signal,
-        );
-        return decodeKnownNativeSessionEvents(result);
-    };
-
-    /** Reads a page of the Agent's own history of a native session in `directory`, which the caller browses. */
     readonly previewSessionNativeEvents = async (
         sessionTarget: NativeSessionTarget,
         directory: string,
@@ -1257,25 +844,6 @@ export class MortySessionResources {
             executionPosition: result.executionPosition,
         };
     };
-
-    readonly readRuntimeSessionExecution = async (
-        sessionTarget: NativeSessionTarget,
-        signal: AbortSignal,
-    ): Promise<Pick<Extract<NativeSessionResult, { readonly action: "active-turn" }>, "turn" | "queued">> => {
-        const result = decodeNativeSessionResult(
-            JSON.stringify(
-                await this.#executor.post(
-                    projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/active-turn`),
-                    {},
-                    signal,
-                ),
-            ),
-        );
-        if (result.action !== "active-turn" || !sameNativeSession(result.target, sessionTarget)) {
-            throw new MortyProtocolError("The service returned an invalid active Turn");
-        }
-        return { turn: result.turn, queued: result.queued };
-    };
 }
 
 export class MortyTurnResources {
@@ -1299,30 +867,6 @@ export class MortyTurnResources {
             throw new MortyProtocolError("The service returned an invalid Turn");
         }
         return turn;
-    };
-
-    readonly submitToRuntime = async (
-        sessionTarget: NativeSessionTarget,
-        request: SubmitMortyTurnRequest,
-        signal: AbortSignal,
-    ): Promise<{ readonly turnId: string }> => {
-        const result = await this.#executor.post(
-            projectPath(this.#computerId, `daemon/${nativeSessionRoute(sessionTarget)}/turns`),
-            {
-                ...request,
-                disposition: request.disposition ?? SessionPromptDisposition.Append,
-                sessionConfigurations: request.sessionConfigurations ?? [],
-            },
-            signal,
-        );
-        if (typeof result !== "object" || result === null || !("turnId" in result)) {
-            throw new MortyProtocolError("The service returned an invalid Turn");
-        }
-        const turnId = Reflect.get(result, "turnId");
-        if (typeof turnId !== "string") {
-            throw new MortyProtocolError("The service returned an invalid Turn");
-        }
-        return { turnId };
     };
 
     readonly cancel = async (
@@ -1614,8 +1158,6 @@ export class MortyEventResources {
 export class MortyClient {
     readonly events: MortyEventResources;
     readonly interactions: MortyInteractionResources;
-    readonly runtimePairings: MortyRuntimePairingResources;
-    readonly runtimes: MortyRuntimeResources;
     readonly sessions: MortySessionResources;
     readonly turns: MortyTurnResources;
 
@@ -1627,8 +1169,6 @@ export class MortyClient {
         }
         this.events = new MortyEventResources(executor, options.computerId, reconnectAttempts);
         this.interactions = new MortyInteractionResources(executor, options.computerId);
-        this.runtimePairings = new MortyRuntimePairingResources(executor, options.computerId);
-        this.runtimes = new MortyRuntimeResources(executor, options.computerId);
         this.sessions = new MortySessionResources(executor, options.computerId);
         this.turns = new MortyTurnResources(executor, options.computerId);
     }

@@ -51,15 +51,21 @@ async function startIdentityFixture(
         options.relayAllowedOrigins === undefined ? {} : { allowedOrigins: options.relayAllowedOrigins },
         createBindings,
     );
-    const chatNetwork = options.listenOnLoopback === true ? await createResponseLossProxy(relay.baseUrl) : null;
-    const network = options.loseTurnResponses === true ? await createResponseLossProxy(relay.baseUrl) : null;
     const executionNetwork =
         options.delayExecutionReads === true ? await createSessionExecutionProxy(relay.baseUrl) : null;
+    const network =
+        options.loseTurnResponses === true
+            ? await createResponseLossProxy(executionNetwork?.origin ?? relay.baseUrl)
+            : null;
+    const chatNetwork =
+        options.listenOnLoopback === true
+            ? await createResponseLossProxy(network?.origin ?? executionNetwork?.origin ?? relay.baseUrl)
+            : null;
     try {
         const cloudflare = relay.cloudflare;
-        const ready = new URL(chatNetwork?.origin ?? relay.baseUrl);
+        const ready = new URL(chatNetwork?.origin ?? network?.origin ?? executionNetwork?.origin ?? relay.baseUrl);
         const baseConfiguration = {
-            APP_ORIGIN: options.listenOnLoopback === true ? ready.origin : APP_ORIGIN,
+            APP_ORIGIN: ready.origin,
         };
         await relay.configure(baseConfiguration);
         let cloudBindings = await cloudflare.getBindings();
@@ -90,7 +96,7 @@ async function startIdentityFixture(
                 };
             },
         };
-        const environment = (appOrigin = APP_ORIGIN) => ({
+        const environment = (appOrigin = baseConfiguration.APP_ORIGIN) => ({
             ...cloudBindings,
             ...baseConfiguration,
             APP_ORIGIN: appOrigin,

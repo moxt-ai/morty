@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
+import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import {
     credentialRevocationPaths,
@@ -110,7 +111,8 @@ export function createAuthenticationRoutes() {
             },
         )
         .post("/identity/recovery-token", async (context) => {
-            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
+            using deadline = new RequestDeadline(context.req.raw.signal, 15000);
+            const signal = deadline.signal;
             const result = await context.env.services.authentication.createRecoveryToken(
                 context.get("bearerToken"),
                 signal,

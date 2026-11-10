@@ -257,14 +257,17 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const eventLimit = v.parse(
+            const eventLimit = decodeSessionRequest(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
                 Number(context.req.query("eventLimit") ?? "50"),
             );
             const control = authorizedSessionControl(context, access, sessionTarget);
-            const directory = v.parse(v.custom<string>(isDirectoryPath), context.req.query("directory"));
+            const directory = decodeSessionRequest(v.custom<string>(isDirectoryPath), context.req.query("directory"));
             const events = await control.previewEvents(directory, {
-                cursor: context.req.query("cursor") ?? null,
+                cursor: decodeSessionRequest(
+                    v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
+                    context.req.query("cursor") ?? null,
+                ),
                 eventLimit,
             });
             context.header("Cache-Control", "no-store");
@@ -306,7 +309,7 @@ export function createRelayApplication(
             const commandId = context.req.query("commandId");
             const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.activeTurn(
-                commandId === undefined ? undefined : v.parse(sessionIdentifier, commandId),
+                commandId === undefined ? undefined : decodeSessionRequest(sessionIdentifier, commandId),
             );
             context.header("Cache-Control", "no-store");
             return context.json(result);
@@ -357,7 +360,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
+            const turnId = decodeSessionRequest(sessionIdentifier, context.req.param("turnId"));
             decodeSessionRequest(turnSteerRequest, await context.req.json());
             const control = authorizedSessionControl(context, access, sessionTarget);
             await control.steerTurn(turnId);
@@ -378,8 +381,11 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const path = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(4096)), context.req.query("path"));
-            const maxBytes = v.parse(
+            const path = decodeSessionRequest(
+                v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
+                context.req.query("path"),
+            );
+            const maxBytes = decodeSessionRequest(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(128 * 1024 * 1024)),
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
@@ -403,20 +409,26 @@ export function createRelayApplication(
                 return authorized;
             }
             const { access, target, contentKey } = authorized;
-            const byteLength = v.parse(
+            const byteLength = decodeSessionRequest(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(CONTENT_WRITE_MAX_BYTES)),
                 Number(context.req.header("x-morty-byte-length") ?? ""),
             );
-            const contentKind = v.parse(v.picklist(["image", "resource"]), context.req.header("x-morty-content-kind"));
-            const mediaType = v.parse(
+            const contentKind = decodeSessionRequest(
+                v.picklist(["image", "resource"]),
+                context.req.header("x-morty-content-kind"),
+            );
+            const mediaType = decodeSessionRequest(
                 v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
                 context.req.header("content-type"),
             );
-            const encodedName = v.parse(
+            const encodedName = decodeSessionRequest(
                 v.pipe(v.string(), v.minLength(1), v.maxLength(1_500)),
                 context.req.header("x-morty-file-name"),
             );
-            const uri = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)), context.req.query("uri"));
+            const uri = decodeSessionRequest(
+                v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)),
+                context.req.query("uri"),
+            );
             const body = context.req.raw.body;
             if (body === null) {
                 throw new PairingDirectoryError("invalid_request", "The content body is required");
@@ -427,7 +439,7 @@ export function createRelayApplication(
             } catch (cause) {
                 throw new PairingDirectoryError("invalid_request", "The content name is invalid", { cause });
             }
-            name = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
+            name = decodeSessionRequest(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
             const available = await sessionOperations(context).writeProjectSessionContent(
                 new ComputerScope(access.computerId),
                 decodeContentWriteCommand(
@@ -509,7 +521,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
+            const turnId = decodeSessionRequest(sessionIdentifier, context.req.param("turnId"));
             const control = authorizedSessionControl(context, access, sessionTarget);
             await control.withdrawTurn(turnId);
             context.header("Cache-Control", "no-store");
@@ -529,7 +541,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
+            const turnId = decodeSessionRequest(sessionIdentifier, context.req.param("turnId"));
             const control = authorizedSessionControl(context, access, sessionTarget);
             const { stopReason } = await control.cancelTurn(turnId);
             context.header("Cache-Control", "no-store");
@@ -549,7 +561,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const interactionId = v.parse(sessionIdentifier, context.req.param("interactionId"));
+            const interactionId = decodeSessionRequest(sessionIdentifier, context.req.param("interactionId"));
             const body = decodeSessionRequest(interactionResponseRequest, await context.req.json());
             const control = authorizedSessionControl(context, access, sessionTarget);
             await control.respond(interactionId, body);
@@ -571,8 +583,11 @@ export function createRelayApplication(
             );
             if (context.req.header("upgrade")?.toLowerCase() !== "websocket") {
                 const events = await authorizedSessionControl(context, target, nativeTarget(context.req)).liveEvents({
-                    cursor: context.req.query("cursor") ?? null,
-                    eventLimit: v.parse(
+                    cursor: decodeSessionRequest(
+                        v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
+                        context.req.query("cursor") ?? null,
+                    ),
+                    eventLimit: decodeSessionRequest(
                         v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
                         Number(context.req.query("limit") ?? "50"),
                     ),

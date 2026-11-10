@@ -76,7 +76,7 @@ export class ComputerBackendService {
         const access = await this.context.services.runtimePairings.authorizePairedHost(this.computerId, signal);
         const response = await this.context.gateways.channelGateway.acceptHost(
             access,
-            new Request("https://computer.internal/host", { headers: { upgrade: "websocket" }, signal }),
+            new Request("https://runtime.internal/host", { headers: { upgrade: "websocket" }, signal }),
             signal,
         );
         if (response.status !== 101 || response.webSocket === null) {

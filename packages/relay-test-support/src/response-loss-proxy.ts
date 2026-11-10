@@ -1,7 +1,16 @@
 import { createServer, request } from "node:http";
 import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
+import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
+
+function jsonFrame(value: string): unknown {
+    try {
+        return JSON.parse(value);
+    } catch {
+        return undefined;
+    }
+}
 
 /** The text of a response body as the service encoded it on the wire. */
 function decoded(encoding: string | undefined, chunks: readonly Buffer[]): string {
@@ -99,7 +108,8 @@ export async function createResponseLossProxy(upstream: string) {
     let reconnectsBlocked = false;
     const submissions: string[] = [];
     webSockets.on("connection", (client, incoming) => {
-        if (reconnectsBlocked) {
+        const runtime = new URL(incoming.url ?? "/", upstream).pathname.endsWith("/runtimes/connect");
+        if (reconnectsBlocked && !runtime) {
             client.terminate();
             return;
         }
@@ -110,6 +120,11 @@ export async function createResponseLossProxy(upstream: string) {
             ...(incoming.headers.origin === undefined ? {} : { origin: incoming.headers.origin }),
             // Keep the browser's authority and Origin together across this transparent proxy.
             headers: {
+                ...(incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === undefined
+                    ? {}
+                    : {
+                          [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER],
+                      }),
                 ...(incoming.headers.host === undefined ? {} : { host: incoming.headers.host }),
                 ...(incoming.headers.authorization === undefined
                     ? {}
@@ -127,7 +142,7 @@ export async function createResponseLossProxy(upstream: string) {
                   ? Buffer.concat(data)
                   : Buffer.from(new Uint8Array(data));
             if (!binary) {
-                const frame: unknown = JSON.parse(bytes.toString());
+                const frame = jsonFrame(bytes.toString());
                 if (
                     holdConfiguration !== null &&
                     typeof frame === "object" &&
@@ -193,7 +208,7 @@ export async function createResponseLossProxy(upstream: string) {
         });
         remote.on("message", (data, binary) => {
             if (configurationResponse !== null && !binary) {
-                const frame: unknown = JSON.parse(data.toString());
+                const frame = jsonFrame(data.toString());
                 if (
                     typeof frame === "object" &&
                     frame !== null &&
@@ -210,7 +225,7 @@ export async function createResponseLossProxy(upstream: string) {
             }
 
             if (lostRequestId !== null) {
-                const frame: unknown = binary ? null : JSON.parse(data.toString());
+                const frame = binary ? null : jsonFrame(data.toString());
                 if (
                     typeof frame === "object" &&
                     frame !== null &&
@@ -281,10 +296,10 @@ export async function createResponseLossProxy(upstream: string) {
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
         /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
         dropNextSessionCreation: () => {
-            droppedRequest = /\/daemon\/sessions(?:\?|$)/u;
+            droppedRequest = /\/access(?:\?|$)/u;
         },
         /** Loses the answer to the next Session creation; resolves with the status the service returned. */
-        interruptNextSessionCreation: () => loseNextResponse(/\/daemon\/sessions(?:\?|$)/u),
+        interruptNextSessionCreation: () => loseNextResponse(/\/access(?:\?|$)/u),
         interruptNextTurn: (delivery: "before-acceptance" | "after-acceptance") => {
             armed = delivery;
         },

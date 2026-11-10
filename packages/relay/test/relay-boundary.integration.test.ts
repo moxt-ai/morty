@@ -1,5 +1,6 @@
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
+import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import {
     decodeContentChunkFrame,
     decodeDaemonToServiceMessage,
@@ -36,19 +37,22 @@ import {
     runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase, RelaySockets } from "@morty-build/relay-core";
+import {
+    DurableObjectDatabaseAdapter,
+    DurableObjectSqlDatabase,
+    RelaySockets,
+    SessionControl,
+} from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import {
-    retireMortyService,
-    seedMortyCredential,
-    seedMortyService,
-} from "../../relay-test-support/src/service-fixture.ts";
+import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
+import { managedBot } from "../../worker/src/schema/project-do/managed-bot.ts";
 import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
 import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
 import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
+import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -127,50 +131,22 @@ function bindings(): RelayRelayBindings {
     return {
         RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
-        R2_BUCKET_APAC: env.R2_BUCKET_APAC,
-        R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
 }
 
-/** Derives the HMAC key a Session credential of `publicCredentialId` is signed with. */
-type CredentialSigner = (publicCredentialId: string, appCredential: string) => Promise<CryptoKey>;
-
-/** The key anyone who reads an App credential's stored digest from the Relay database can derive. */
-const storedDigestSigner: CredentialSigner = async (_publicCredentialId, appCredential) => {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(appCredential));
-    const secretDigest = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return await crypto.subtle.importKey(
+type CredentialSigner = () => Promise<CryptoKey>;
+async function relaySigningKey(signingSecret: string): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
         "raw",
-        new TextEncoder().encode(secretDigest),
-        { hash: "SHA-256", name: "HMAC" },
+        new TextEncoder().encode(signingSecret),
+        { name: "HMAC", hash: "SHA-256" },
         false,
         ["sign"],
     );
-};
-
-/** RFC 5869 extract/expand written independently of the Relay's Web Crypto HKDF implementation. */
-async function relaySigningKey(publicCredentialId: string, signingSecret: string): Promise<CryptoKey> {
-    const hmac = { hash: "SHA-256", name: "HMAC" } as const;
-    const salt = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode("morty.session-access.v1:"),
-        hmac,
-        false,
-        ["sign"],
-    );
-    const extracted = await crypto.subtle.sign("HMAC", salt, new TextEncoder().encode(signingSecret));
-    const expansionKey = await crypto.subtle.importKey("raw", extracted, hmac, false, ["sign"]);
-    const derived = await crypto.subtle.sign(
-        "HMAC",
-        expansionKey,
-        new Uint8Array([...new TextEncoder().encode(publicCredentialId), 1]),
-    );
-    return await crypto.subtle.importKey("raw", derived, hmac, false, ["sign"]);
 }
-
-const relaySigner: CredentialSigner = async (publicCredentialId) =>
-    await relaySigningKey(publicCredentialId, env.MORTY_SESSION_SIGNING_SECRET);
+const relaySigner: CredentialSigner = () => relaySigningKey(env.MORTY_SESSION_SIGNING_SECRET);
+const storedDigestSigner: CredentialSigner = () => relaySigningKey("unrelated-credential-digest");
 
 function credentialHeaders(credential: string): Headers {
     return new Headers({ authorization: `Bearer ${credential}`, "content-type": "application/json" });
@@ -288,60 +264,21 @@ describe.sequential("Relay Session-only boundary", () => {
         expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
     });
 
-    it("Given a created Project, When its creation is retried from another location, Then the retry returns the same Project and a different request still conflicts", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
-        const environment = bindings();
-        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-        const create = (displayName: string, locationHint: string) =>
-            worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                    body: JSON.stringify({ displayName, idempotencyKey: "retried-project", locationHint }),
-                    headers: credentialHeaders(app.defaultCredential.credential),
-                    method: "POST",
-                }),
-                environment,
-            );
-
-        const created = await responseJson(await create("Retried Project", "apac"), 201);
-        const retried = await responseJson(await create("Retried Project", "wnam"), 201);
-
-        expect(text(retried, "computerId")).toBe(text(created, "computerId"));
-        expect(await responseJson(await create("Another Project", "apac"), 409)).toMatchObject({
-            error: { code: "idempotency_conflict" },
-        });
-    });
-
-    // Graceful eviction drains in-flight Runtime events before hibernating the sockets.
     it("Given a linked Codex Runtime with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
         vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
-        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-        const appCredential = text(record(app["defaultCredential"]), "credential");
-        const project = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                    body: JSON.stringify({
-                        displayName: "Private reconnect Project",
-                        idempotencyKey: "private-reconnect-project",
-                        locationHint: "apac",
-                    }),
-                    headers: credentialHeaders(app.defaultCredential.credential),
-                    method: "POST",
-                }),
-                environment,
-            ),
-            201,
-        );
-        const computerId = text(project, "computerId");
+        const owner = await createOwner();
+        const { computerId } = owner;
+        const appCredential = owner.token;
+        const backend = computerBackend(computerId);
         const pairing = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+            await ownerRequest(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "private-reconnect-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
-                environment,
             ),
             201,
         );
@@ -363,36 +300,19 @@ describe.sequential("Relay Session-only boundary", () => {
             200,
         );
         expect(claimed).not.toHaveProperty("appId");
-        expect(
-            await responseJson(
-                await worker.fetch(
-                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
-                        headers: credentialHeaders(appCredential),
-                    }),
-                    environment,
-                ),
-                200,
-            ),
-        ).toMatchObject({ agents: [{ harness: "codex", label: "Codex" }], computerId });
+        expect(await backend.agents(AbortSignal.timeout(10000))).toMatchObject({
+            agents: [{ harness: "codex", label: "Codex" }],
+            computerId,
+        });
         const sessionId = "local-codex-session";
         const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
-        const hostResponse = await worker.fetch(
-            new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/host?nativeRequestId=viewer-must-stay-live`,
-                {
-                    headers: { authorization: `Bearer ${appCredential}`, Upgrade: "websocket" },
-                },
-            ),
-            environment,
-        );
         expect(daemonResponse.status).toBe(101);
-        expect(hostResponse.status).toBe(101);
-        if (daemonResponse.webSocket === null || hostResponse.webSocket === null) {
-            throw new Error("Expected both channel sockets");
+        if (daemonResponse.webSocket === null) {
+            throw new Error("Expected a daemon socket");
         }
         const daemon = daemonResponse.webSocket;
-        const host = hostResponse.webSocket;
+        const host = await backend.openHost(new AbortController().signal);
         const daemonMessages = new SocketMessages(daemon);
         const hostMessages = new SocketMessages(host);
         daemon.accept();
@@ -414,16 +334,11 @@ describe.sequential("Relay Session-only boundary", () => {
             };
             daemon.send(JSON.stringify(rollback));
             expect(JSON.parse(await hostMessages.next())).toEqual(rollback);
-            const closeResponse = worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/session-to-close/close`,
-                    {
-                        body: "{}",
-                        headers: credentialHeaders(appCredential),
-                        method: "POST",
-                    },
-                ),
-                environment,
+            const closeResponse = requestTestRuntimeControl(
+                env,
+                computerId,
+                { kind: "session.close", requestId: crypto.randomUUID(), target: nativeTarget("session-to-close") },
+                AbortSignal.timeout(10000),
             );
             const closeCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
             expect(closeCommand).toMatchObject({
@@ -446,21 +361,16 @@ describe.sequential("Relay Session-only boundary", () => {
                 requestId: closeCommand.requestId,
                 target: nativeTarget("session-to-close"),
             });
-            expect(await responseJson(await closeResponse, 200)).toEqual({
+            expect(await closeResponse).toEqual({
                 kind: "session.closed",
                 requestId: closeCommand.requestId,
                 target: nativeTarget("session-to-close"),
             });
-            const archiveResponse = worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/session-to-close/archive`,
-                    {
-                        body: "{}",
-                        headers: credentialHeaders(appCredential),
-                        method: "POST",
-                    },
-                ),
-                environment,
+            const archiveResponse = requestTestRuntimeControl(
+                env,
+                computerId,
+                { kind: "session.archive", requestId: crypto.randomUUID(), target: nativeTarget("session-to-close") },
+                AbortSignal.timeout(10000),
             );
             const archiveCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
             if (archiveCommand.kind !== "session.archive") {
@@ -475,20 +385,13 @@ describe.sequential("Relay Session-only boundary", () => {
             } as const;
             daemon.send(encodeSessionArchivedEvent(archived));
             expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual(archived);
-            expect(await responseJson(await archiveResponse, 200)).toEqual(archived);
+            expect(await archiveResponse).toEqual(archived);
             // Native HTTP probes use request-reply connections, while this viewer keeps its live subscription.
             for (const outcome of ["idle", "busy"] as const) {
-                const activeTurnResponse = worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/active-turn`,
-                        {
-                            body: JSON.stringify({}),
-                            headers: credentialHeaders(appCredential),
-                            method: "POST",
-                        },
-                    ),
-                    environment,
-                );
+                const activeTurnResponse = new SessionControl(
+                    (command) => requestTestRuntimeControl(env, computerId, command, AbortSignal.timeout(10000)),
+                    nativeTarget(sessionId),
+                ).activeTurn();
                 const query = decodeServiceToDaemonMessage(await daemonMessages.next());
                 if (query.kind !== "native.session.request" || query.action !== "active-turn") {
                     throw new Error("Expected the HTTP active Turn query to reach the daemon");
@@ -516,11 +419,11 @@ describe.sequential("Relay Session-only boundary", () => {
                           });
                 daemon.send(reply);
                 expect(JSON.parse(await hostMessages.next())).toMatchObject({ requestId: query.requestId });
-                expect(await responseJson(await activeTurnResponse, outcome === "idle" ? 200 : 503)).toMatchObject(
-                    outcome === "idle"
-                        ? { action: "active-turn", turn: null, queued: [] }
-                        : { error: { code: "native_session_busy" } },
-                );
+                if (outcome === "idle") {
+                    expect(await activeTurnResponse).toMatchObject({ action: "active-turn", turn: null, queued: [] });
+                } else {
+                    await expect(activeTurnResponse).rejects.toMatchObject({ code: "native_session_busy" });
+                }
             }
             // A Host can multiplex discovery, but routing must remain bounded and reject overload explicitly.
             const discoveryRequests = Array.from({ length: 4 }, (_, index) => ({
@@ -766,20 +669,7 @@ describe.sequential("Relay Session-only boundary", () => {
                 ),
             ).toContain("local answer");
 
-            const browserAccess = await responseJson(
-                await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
-                        {
-                            body: JSON.stringify({ expiresInSeconds: 900 }),
-                            headers: credentialHeaders(appCredential),
-                            method: "POST",
-                        },
-                    ),
-                    environment,
-                ),
-                201,
-            );
+            const browserAccess = await issueSession(computerId, nativeTarget(sessionId));
             const v2Response = await worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
@@ -1077,7 +967,7 @@ describe.sequential("Relay Session-only boundary", () => {
             expect(JSON.parse(await transportMessages.next())).toMatchObject({
                 kind: "http.response",
                 requestId: "runtime-agents",
-                status: 200,
+                status: 404,
             });
             daemon.send(answer);
             expect(
@@ -1172,20 +1062,10 @@ describe.sequential("Relay Session-only boundary", () => {
                 ];
                 expect(sessionTables).toEqual([]);
             });
-            const sessionAccess = await responseJson(
-                await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
-                        {
-                            body: JSON.stringify({ expiresInSeconds: 900 }),
-                            headers: credentialHeaders(appCredential),
-                            method: "POST",
-                        },
-                    ),
-                    environment,
-                ),
-                201,
-            );
+            await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
+                new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
+            });
+            const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
             const liveTarget = await responseJson(
                 await worker.fetch(
                     new Request(
@@ -1212,34 +1092,17 @@ describe.sequential("Relay Session-only boundary", () => {
     it("Given a machine with no discovered local Agent, When it redeems a Runtime pairing and publishes its catalog, Then pairing succeeds and the Runtime advertises an empty Agent directory", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
-        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-        const appCredential = text(record(app["defaultCredential"]), "credential");
-        const computerId = text(
-            await responseJson(
-                await worker.fetch(
-                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                        body: JSON.stringify({
-                            displayName: "Unattended Project",
-                            idempotencyKey: "unattended-project",
-                            locationHint: "apac",
-                        }),
-                        headers: credentialHeaders(app.defaultCredential.credential),
-                        method: "POST",
-                    }),
-                    environment,
-                ),
-                201,
-            ),
-            "computerId",
-        );
+        const owner = await createOwner();
+        const { computerId } = owner;
+        const appCredential = owner.token;
+        const backend = computerBackend(computerId);
         const pairing = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+            await ownerRequest(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "unattended-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
-                environment,
             ),
             201,
         );
@@ -1262,17 +1125,7 @@ describe.sequential("Relay Session-only boundary", () => {
         );
         const runtimeCredential = text(claimed, "runtimeCredential");
 
-        expect(
-            await responseJson(
-                await worker.fetch(
-                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
-                        headers: credentialHeaders(appCredential),
-                    }),
-                    environment,
-                ),
-                200,
-            ),
-        ).toMatchObject({ agents: [], computerId });
+        expect(await backend.agents(AbortSignal.timeout(10000))).toMatchObject({ agents: [], computerId });
 
         const catalogUpdate = await worker.fetch(
             new Request(`${relayOrigin}${MORTY_API_PREFIX}/channels/${text(claimed, "computerId")}/catalog`, {
@@ -1283,17 +1136,7 @@ describe.sequential("Relay Session-only boundary", () => {
             environment,
         );
         expect(catalogUpdate.status).toBe(204);
-        expect(
-            await responseJson(
-                await worker.fetch(
-                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
-                        headers: credentialHeaders(appCredential),
-                    }),
-                    environment,
-                ),
-                200,
-            ),
-        ).toMatchObject({ agents: [], computerId });
+        expect(await backend.agents(AbortSignal.timeout(10000))).toMatchObject({ agents: [], computerId });
     });
 });
 
@@ -1307,32 +1150,17 @@ describe.sequential("Relay Session-only boundary", () => {
 async function connectRuntimeDaemon(slug: string, options: { readonly anchorClockToHeartbeat?: boolean } = {}) {
     const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
     const environment = bindings();
-    const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-    const appCredential = text(record(app["defaultCredential"]), "credential");
-    const project = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                body: JSON.stringify({
-                    displayName: `${slug} Project`,
-                    idempotencyKey: `${slug}-project`,
-                    locationHint: "apac",
-                }),
-                headers: credentialHeaders(app.defaultCredential.credential),
-                method: "POST",
-            }),
-            environment,
-        ),
-        201,
-    );
-    const computerId = text(project, "computerId");
+    const owner = await createOwner();
+    const { computerId } = owner;
+    const appCredential = owner.token;
+    const backend = computerBackend(computerId);
     const pairing = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+        await ownerRequest(
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
                 body: JSON.stringify({ idempotencyKey: `${slug}-runtime` }),
                 headers: credentialHeaders(appCredential),
                 method: "POST",
             }),
-            environment,
         ),
         201,
     );
@@ -1381,20 +1209,10 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     if (options.anchorClockToHeartbeat === true) {
         vi.setSystemTime(await heartbeat());
     }
-    const sessionAccess = await responseJson(
-        await worker.fetch(
-            new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
-                {
-                    body: JSON.stringify({ expiresInSeconds: 900 }),
-                    headers: credentialHeaders(appCredential),
-                    method: "POST",
-                },
-            ),
-            environment,
-        ),
-        201,
-    );
+    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
+        new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
+    });
+    const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
     return {
         credential: text(sessionAccess, "credential"),
         transport: () =>
@@ -1406,24 +1224,11 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             ),
         computerId,
         sessionTarget: nativeTarget(sessionId),
-        deleteApp: () => retireMortyService(env.RELAY_DIRECTORY_DATABASE, app.appId),
-        revokeSessionAccess: () =>
-            worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/session-access/revocations`, {
-                    method: "POST",
-                    headers: credentialHeaders(appCredential),
-                    body: JSON.stringify({}),
-                }),
-                environment,
-            ),
-        revoke: () =>
-            worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
-                    method: "DELETE",
-                    headers: credentialHeaders(appCredential),
-                }),
-                environment,
-            ),
+        revokeSessionAccess: async () => Response.json(await backend.revokeSessionAccess(AbortSignal.timeout(10000))),
+        revoke: async () => {
+            await backend.revokeRuntime(AbortSignal.timeout(10000));
+            return new Response(null, { status: 204 });
+        },
         reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
         subscribe: () =>
             worker.fetch(
@@ -1435,17 +1240,16 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 ),
                 environment,
             ),
-        forkNative: (operationId: string, input: object) =>
-            worker.fetch(
+        forkNative: (operationId: string, input: ForkMortyNativeSessionRequest) =>
+            ownerRequest(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/native-session-forks/${operationId}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/chat/computers/${computerId}/native-session-forks/${operationId}`,
                     {
                         method: "POST",
                         headers: credentialHeaders(appCredential),
-                        body: JSON.stringify(input),
+                        body: JSON.stringify({ ...input, computerId }),
                     },
                 ),
-                environment,
             ),
         appSessionRequest: async (
             path: string,
@@ -1458,10 +1262,10 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         ) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${init.computerId ?? computerId}/daemon/harnesses/codex/sessions/${sessionId}${path}`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${init.computerId ?? computerId}/harnesses/codex/sessions/${sessionId}${path}`,
                     {
                         method: init.method,
-                        headers: credentialHeaders(init.credential ?? appCredential),
+                        headers: credentialHeaders(init.credential ?? sessionAccess.credential),
                         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
                     },
                 ),
@@ -1506,8 +1310,6 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 ),
                 environment,
             ),
-        issueAppCredential: async (permissions: readonly string[]) =>
-            (await seedMortyCredential(env.RELAY_DIRECTORY_DATABASE, app.appId, permissions, [computerId])).credential,
         /** Signs the issued claims again, optionally with another lifetime, under the key `signer` derives. */
         resignCredential: async (signer: CredentialSigner, lifetimeMilliseconds?: number) => {
             // Sign adversarial claims outside the Relay issuer, which refuses invalid lifetimes.
@@ -1525,27 +1327,16 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                     .replaceAll("/", "_")
                     .replace(/=+$/u, "");
             const payload = encode(new TextEncoder().encode(JSON.stringify(claims)));
-            const signedValue = `msession_${decoded.publicCredentialId}_${payload}`;
-            const key = await signer(decoded.publicCredentialId, appCredential);
+            const signedValue = `msession_${payload}`;
+            const key = await signer();
             const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedValue));
-            return `${signedValue}_${encode(new Uint8Array(signature))}`;
+            return `${signedValue}.${encode(new Uint8Array(signature))}`;
         },
         daemon,
         daemonClosed,
         daemonMessages,
         heartbeat,
-        readOnline: async () =>
-            (
-                await responseJson(
-                    await worker.fetch(
-                        new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
-                            headers: credentialHeaders(appCredential),
-                        }),
-                        environment,
-                    ),
-                    200,
-                )
-            )["online"],
+        readOnline: async () => (await backend.agents(AbortSignal.timeout(10000)))["online"],
         /** Starts the submitted Turn: the Runtime records its start and answers the submission as running. */
         startTurn: (commandId: string, position: string) => {
             daemon.send(
@@ -1578,33 +1369,16 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 }),
             );
         },
-        issueRuntimeCredential: async (_targetComputerId: string, issuer = appCredential) =>
-            text(
-                await responseJson(
-                    await worker.fetch(
-                        new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
-                            {
-                                method: "POST",
-                                headers: credentialHeaders(issuer),
-                                body: JSON.stringify({ expiresInSeconds: 900 }),
-                            },
-                        ),
-                        environment,
-                    ),
-                    201,
-                ),
-                "credential",
-            ),
+        issueRuntimeCredential: async (_targetComputerId: string) =>
+            (await issueSession(computerId, nativeTarget(sessionId))).credential,
         queryActiveTurn: async (signal: AbortSignal) =>
             worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/active-turn`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/active-turn`,
                     {
-                        method: "POST",
-                        headers: credentialHeaders(appCredential),
+                        method: "GET",
+                        headers: credentialHeaders(sessionAccess.credential),
                         signal,
-                        body: JSON.stringify({}),
                     },
                 ),
                 environment,
@@ -1720,9 +1494,7 @@ it.each(["text", "binary"])(
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
-                expect(await responseJson(await runtime.revoke(), 503)).toMatchObject({
-                    error: { code: "runtime_disconnect_failed" },
-                });
+                await expect(runtime.revoke()).rejects.toMatchObject({ code: "runtime_disconnect_failed" });
             } finally {
                 await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
                     state.storage.sql.exec("DROP TRIGGER reject_runtime_disconnect");
@@ -1847,27 +1619,16 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
 });
 
 describe.sequential("Relay Turn submission", () => {
-    it.each(["app", "session", "write-only session"] as const)(
+    it.each(["session"] as const)(
         "Given %s access cancels a Turn, When the Runtime reports cancellation or prior completion, Then the response reports the Turn's actual stop reason",
         async (access) => {
             const runtime = await connectRuntimeDaemon(`legacy-queue-cancel-${access.replace(" ", "-")}`);
             try {
-                // Cancelling changes the Session, so a Session credential needs only its issuer's write permission.
-                const sessionCredential =
-                    access === "write-only session"
-                        ? await runtime.issueRuntimeCredential(
-                              runtime.computerId,
-                              await runtime.issueAppCredential(["session:write"]),
-                          )
-                        : undefined;
                 for (const stopReason of ["cancelled", "end_turn"] as const) {
                     const turnId = `legacy-${stopReason}`;
                     const body = {};
                     const path = `/turns/${turnId}/cancel`;
-                    const response =
-                        access === "app"
-                            ? runtime.appSessionRequest(path, { method: "POST", body })
-                            : runtime.sessionControlRequest(path, body, sessionCredential);
+                    const response = runtime.sessionControlRequest(path, body);
                     const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
                     expect(cancellation).toEqual({
                         commandId: turnId,
@@ -1895,17 +1656,14 @@ describe.sequential("Relay Turn submission", () => {
         },
     );
 
-    it.each(["app", "session"] as const)(
+    it.each(["session"] as const)(
         "Given %s access withdraws a queued message, When the Runtime refuses because it already started, Then the conditional endpoint rejects the edit",
         async (access) => {
             const runtime = await connectRuntimeDaemon(`conditional-queue-cancel-${access}`);
             try {
                 const body = {};
                 const path = "/turns/queued-command/cancel-before-start";
-                const response =
-                    access === "app"
-                        ? runtime.appSessionRequest(path, { method: "POST", body })
-                        : runtime.sessionControlRequest(path, body);
+                const response = runtime.sessionControlRequest(path, body);
                 const withdrawal = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
                 expect(withdrawal).toEqual({
                     commandId: "queued-command",
@@ -1991,7 +1749,7 @@ describe.sequential("Relay Turn submission", () => {
             reply: { interactionId: "app-interaction", kind: "session.interaction.answered" },
             expected: { accepted: true },
         },
-    ] as const)("App access $label", async (operation) => {
+    ] as const)("Session access $label", async (operation) => {
         const runtime = await connectRuntimeDaemon(`app-control-${operation.command.kind.replaceAll(".", "-")}`);
         try {
             const response = runtime.appSessionRequest(operation.path, operation);
@@ -2015,10 +1773,10 @@ describe.sequential("Relay Turn submission", () => {
     });
 
     // @no-uc: Technical regression; a read-only App credential must load a Runtime event page through its cursor.
-    it("App access restores a Runtime event page with read permission", async () => {
+    it("Session access restores a Runtime event page with read permission", async () => {
         const runtime = await connectRuntimeDaemon("app-history");
         try {
-            const readOnly = await runtime.issueAppCredential(["session:read"]);
+            const readOnly = await runtime.issueRuntimeCredential(runtime.computerId);
             const response = runtime.appSessionRequest("/events-v2?limit=2&cursor=previous-event", {
                 method: "GET",
                 credential: readOnly,
@@ -2064,7 +1822,7 @@ describe.sequential("Relay Turn submission", () => {
     it("Given Runtime read permission, When an App reads Session configuration, Then the matching Runtime settings are returned without write permission", async () => {
         const runtime = await connectRuntimeDaemon("app-configuration-read");
         try {
-            const readOnly = await runtime.issueAppCredential(["runtime:read"]);
+            const readOnly = await runtime.issueRuntimeCredential(runtime.computerId);
             const response = runtime.appSessionRequest("/configuration", { method: "GET", credential: readOnly });
             const first = await Promise.race([
                 runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
@@ -2090,184 +1848,6 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
 
-    it("Given an AppCredential that reads and changes Sessions without Runtime read access, When it submits a Turn and another credential that only reads Sessions reads the active Turn, Then both reach the Runtime naming only the Session and succeed", async () => {
-        const runtime = await connectRuntimeDaemon("app-operation-permissions");
-        try {
-            const sessionWriter = await runtime.issueAppCredential(["session:read", "session:write"]);
-            const submitted = runtime.appSessionRequest("/turns", {
-                method: "POST",
-                credential: sessionWriter,
-                body: {
-                    attachments: [],
-                    content: "Continue in the Session's own directory.",
-                    disposition: "append",
-                    idempotencyKey: "target-only-turn",
-                    sessionConfigurations: [],
-                },
-            });
-            const prompting = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
-                submitted.then((response) => ({ kind: "response" as const, response })),
-            ]);
-            if (prompting.kind === "response") {
-                throw new Error(`Expected the prompt, received ${prompting.response.status}`);
-            }
-            // The Relay sends the Session's target alone; the Runtime resolves the rest from the Session it holds.
-            const prompt: unknown = JSON.parse(prompting.message);
-            expect(prompt).toMatchObject({
-                commandId: "target-only-turn",
-                kind: "session.prompt",
-                target: runtime.sessionTarget,
-            });
-            expect(prompt).not.toHaveProperty("harness");
-            expect(prompt).not.toHaveProperty("directory");
-            runtime.startTurn("target-only-turn", "1");
-            expect(await responseJson(await submitted, 200)).toMatchObject({ turnId: "target-only-turn" });
-
-            const sessionReader = await runtime.issueAppCredential(["session:read"]);
-            const read = runtime.appSessionRequest("/active-turn", {
-                method: "POST",
-                credential: sessionReader,
-                body: {},
-            });
-            const reading = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
-                read.then((response) => ({ kind: "response" as const, response })),
-            ]);
-            if (reading.kind === "response") {
-                throw new Error(`Expected the active Turn read, received ${reading.response.status}`);
-            }
-            expect(JSON.parse(reading.message)).not.toHaveProperty("harness");
-            const activeTurn = decodeServiceToDaemonMessage(reading.message);
-            if (activeTurn.kind !== "native.session.request" || activeTurn.action !== "active-turn") {
-                throw new Error("Expected the active Turn read to reach the daemon");
-            }
-            runtime.daemon.send(
-                encodeNativeSessionResult({
-                    kind: "native.session.result",
-                    action: "active-turn",
-                    requestId: activeTurn.requestId,
-                    target: runtime.sessionTarget,
-                    turn: null,
-                    queued: [],
-                    queuedCancellation: "before-start",
-                    executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
-                    interactionState: null,
-                }),
-            );
-            expect(await responseJson(await read, 200)).toMatchObject({ action: "active-turn", turn: null });
-        } finally {
-            runtime.daemon.close(1000, "Test complete");
-        }
-    });
-
-    // @no-uc: Technical regression; explicit Runtime targets must preserve credential permissions and project isolation.
-    it("App access rejects unavailable permissions and targets before dispatch", async () => {
-        const runtime = await connectRuntimeDaemon("app-permissions");
-        const other = await connectRuntimeDaemon("app-permissions-other");
-        try {
-            const readOnly = await runtime.issueAppCredential(["session:read"]);
-            for (const operation of [
-                { path: "/turns/app-command/cancel", method: "POST", body: {} },
-                { path: "/turns/app-command/disposition", method: "PUT", body: { disposition: "steer" } },
-                {
-                    path: "/interactions/app-interaction/responses",
-                    method: "POST",
-                    body: { kind: "permission", responderId: "member-1", outcome: "cancelled", optionId: "" },
-                },
-            ]) {
-                expect(
-                    await responseJson(
-                        await runtime.appSessionRequest(operation.path, { ...operation, credential: readOnly }),
-                        403,
-                    ),
-                ).toMatchObject({ error: { code: "project_permission_denied" } });
-            }
-            const writeOnly = await runtime.issueAppCredential(["session:write"]);
-            expect(
-                await responseJson(
-                    await runtime.appSessionRequest("/events-v2", { method: "GET", credential: writeOnly }),
-                    403,
-                ),
-            ).toMatchObject({ error: { code: "project_permission_denied" } });
-            expect(
-                await responseJson(
-                    await runtime.appSessionRequest("/events-v2", { method: "GET", computerId: other.computerId }),
-                    403,
-                ),
-            ).toMatchObject({ error: { code: "project_access_denied" } });
-        } finally {
-            runtime.daemon.close(1000, "Test complete");
-            other.daemon.close(1000, "Test complete");
-        }
-    });
-
-    // @no-uc: Security regression; a Runtime host connection must not exceed the permissions of its AppCredential.
-    it("Given an AppCredential that reads but cannot change Sessions, When it uses a Runtime host connection, Then it cannot open one without Session read access, can still read the Runtime, and cannot send a prompt", async () => {
-        const runtime = await connectRuntimeDaemon("app-host-permissions");
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
-        const environment = bindings();
-        const openHost = async (credential: string) =>
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/daemon/host`, {
-                    headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" },
-                }),
-                environment,
-            );
-        let host: WebSocket | null = null;
-        try {
-            // The connection receives every Session's traffic, which Runtime read access alone does not allow.
-            expect(
-                await responseJson(await openHost(await runtime.issueAppCredential(["runtime:read"])), 403),
-            ).toMatchObject({ error: { code: "project_permission_denied" } });
-
-            const opened = await openHost(await runtime.issueAppCredential(["runtime:read", "session:read"]));
-            expect(opened.status).toBe(101);
-            host = opened.webSocket;
-            if (host === null) {
-                throw new Error("Expected the host socket");
-            }
-            const closed = Promise.withResolvers<{ readonly code: number; readonly reason: string }>();
-            host.addEventListener("close", (event) => closed.resolve({ code: event.code, reason: event.reason }), {
-                once: true,
-            });
-            host.accept();
-            // Measuring the Runtime needs only Runtime read access, as over HTTP.
-            host.send(JSON.stringify({ kind: "runtime.ping", requestId: "reader-ping" }));
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
-                kind: "runtime.ping",
-                requestId: "reader-ping",
-            });
-            host.send(
-                encodeSessionPromptCommand(
-                    decodeSessionPromptCommand(
-                        JSON.stringify({
-                            attachments: [],
-                            commandId: "read-only-prompt",
-                            disposition: "append",
-                            kind: "session.prompt",
-                            prompt: "Sent without Session write access",
-                            sessionConfigurations: [],
-                            target: runtime.sessionTarget,
-                        }),
-                    ),
-                ),
-            );
-
-            // Like the same request over HTTP, the prompt needs Session write access; the Runtime never receives it.
-            expect(
-                await Promise.race([
-                    closed.promise.then((close) => ({ kind: "closed", ...close })),
-                    runtime.daemonMessages.next().then((message) => ({ kind: "forwarded", message })),
-                ]),
-            ).toEqual({ kind: "closed", code: 1008, reason: "project_permission_denied" });
-        } finally {
-            host?.close(1000, "Test complete");
-            runtime.daemon.close(1000, "Test complete");
-        }
-    });
-
-    // @no-uc: Compatibility; malformed control requests must be distinguishable from retryable server failures.
     it.each([
         {
             label: "unsupported append disposition",
@@ -2289,7 +1869,7 @@ describe.sequential("Relay Turn submission", () => {
         },
         { label: "empty event page", path: "/events-v2?limit=0", method: "GET" },
         { label: "empty event cursor", path: "/events-v2?cursor=", method: "GET" },
-    ])("App access reports $label as an invalid request", async (operation) => {
+    ])("Session access reports $label as an invalid request", async (operation) => {
         const runtime = await connectRuntimeDaemon("app-invalid-request");
         try {
             expect(await responseJson(await runtime.appSessionRequest(operation.path, operation), 400)).toMatchObject({
@@ -2300,7 +1880,7 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
 
-    it("App access uploads raw attachment chunks before submitting a reference-only Turn", async () => {
+    it("Session access uploads raw attachment chunks before submitting a reference-only Turn", async () => {
         const runtime = await connectRuntimeDaemon("app-binary-attachment");
         try {
             const bytes = new Uint8Array(400 * 1024).map((_value, index) => index % 251);
@@ -2582,7 +2162,7 @@ describe.sequential("Relay Turn submission", () => {
             runtime.daemon.close(1000, "Test complete");
         }
     });
-    it("Given an App credential's digest read from the Relay database, When a Session credential is signed with it, Then direct Runtime HTTP rejects it before execution", async () => {
+    it("Given an unrelated credential digest, When a Session credential is signed with it, Then direct Runtime HTTP rejects it before execution", async () => {
         const runtime = await connectRuntimeDaemon("stored-digest-forgery");
         try {
             const forged = await runtime.resignCredential(storedDigestSigner);
@@ -2604,9 +2184,7 @@ describe.sequential("Relay Turn submission", () => {
         view.accept();
         try {
             const signingSecret = "rotated-test-only-session-signing-secret";
-            const reissued = await runtime.resignCredential(
-                async (publicCredentialId) => await relaySigningKey(publicCredentialId, signingSecret),
-            );
+            const reissued = await runtime.resignCredential(async () => await relaySigningKey(signingSecret));
             const statuses = await runInDurableObject(
                 env.COMPUTER_RELAY.getByName(runtime.computerId),
                 async (_instance, state) => {
@@ -2694,32 +2272,17 @@ describe.sequential("Relay Turn submission", () => {
     it("Given a linked Runtime, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Runtime and the invalid Turn is rejected as a client error", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
-        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-        const appCredential = text(record(app["defaultCredential"]), "credential");
-        const project = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                    body: JSON.stringify({
-                        displayName: "Long prompt Project",
-                        idempotencyKey: "long-prompt-project",
-                        locationHint: "apac",
-                    }),
-                    headers: credentialHeaders(app.defaultCredential.credential),
-                    method: "POST",
-                }),
-                environment,
-            ),
-            201,
-        );
-        const computerId = text(project, "computerId");
+        const owner = await createOwner();
+        const { computerId } = owner;
+        const appCredential = owner.token;
+        const _backend = computerBackend(computerId);
         const pairing = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+            await ownerRequest(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "long-prompt-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
-                environment,
             ),
             201,
         );
@@ -2750,20 +2313,10 @@ describe.sequential("Relay Turn submission", () => {
         daemon.accept();
         try {
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
-            const sessionAccess = await responseJson(
-                await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
-                        {
-                            body: JSON.stringify({ expiresInSeconds: 900 }),
-                            headers: credentialHeaders(appCredential),
-                            method: "POST",
-                        },
-                    ),
-                    environment,
-                ),
-                201,
-            );
+            await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
+                new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
+            });
+            const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
             const submitTurn = (idempotencyKey: string, content: string, attachments: readonly unknown[]) =>
                 worker.fetch(
                     new Request(
@@ -2904,7 +2457,7 @@ describe.sequential("Relay Turn submission", () => {
                 await responseJson(
                     await worker.fetch(
                         new Request(
-                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/turns`,
+                            `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                             {
                                 body: JSON.stringify({
                                     content: "describe this",
@@ -2913,7 +2466,7 @@ describe.sequential("Relay Turn submission", () => {
                                     attachments: [{ kind: "image" }],
                                     sessionConfigurations: [],
                                 }),
-                                headers: credentialHeaders(appCredential),
+                                headers: credentialHeaders(sessionAccess.credential),
                                 method: "POST",
                             },
                         ),
@@ -2951,32 +2504,17 @@ describe.sequential("Relay Turn submission", () => {
         }
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
-        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-        const appCredential = text(record(app["defaultCredential"]), "credential");
-        const project = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                    body: JSON.stringify({
-                        displayName: "Capability-gated commands Project",
-                        idempotencyKey: "capability-gated-commands-project",
-                        locationHint: "apac",
-                    }),
-                    headers: credentialHeaders(app.defaultCredential.credential),
-                    method: "POST",
-                }),
-                environment,
-            ),
-            201,
-        );
-        const computerId = text(project, "computerId");
+        const owner = await createOwner();
+        const { computerId } = owner;
+        const appCredential = owner.token;
+        const backend = computerBackend(computerId);
         const pairing = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+            await ownerRequest(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "capability-gated-commands-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
-                environment,
             ),
             201,
         );
@@ -3008,34 +2546,17 @@ describe.sequential("Relay Turn submission", () => {
             200,
         );
         const sessionId = "capability-gated-session";
-        const sessionAccess = await responseJson(
-            await worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
-                    {
-                        body: JSON.stringify({ expiresInSeconds: 900 }),
-                        headers: credentialHeaders(appCredential),
-                        method: "POST",
-                    },
-                ),
-                environment,
-            ),
-            201,
-        );
+        await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
+            new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
+        });
+        const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
         const sessionCredential = text(sessionAccess, "credential");
 
         // Pairing succeeded, so the Agent remains listed with its capabilities.
-        expect(
-            await responseJson(
-                await worker.fetch(
-                    new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`, {
-                        headers: credentialHeaders(appCredential),
-                    }),
-                    environment,
-                ),
-                200,
-            ),
-        ).toMatchObject({ agents: [{ harness: "codex", label: "Codex" }], computerId });
+        expect(await backend.agents(AbortSignal.timeout(10000))).toMatchObject({
+            agents: [{ harness: "codex", label: "Codex" }],
+            computerId,
+        });
 
         // The Relay no longer decides from the catalog. It forwards the steer
         // to the Runtime, whose own rejection answers with the same
@@ -3117,32 +2638,17 @@ describe.sequential("Relay Turn submission", () => {
     it("Given an Agent advertisement carrying fields and capability values the Relay cannot interpret, When it pairs, Then pairing rejects the invalid capabilities", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
-        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
-        const appCredential = text(record(app["defaultCredential"]), "credential");
-        const project = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
-                    body: JSON.stringify({
-                        displayName: "Malformed capabilities Project",
-                        idempotencyKey: "malformed-capabilities-project",
-                        locationHint: "apac",
-                    }),
-                    headers: credentialHeaders(app.defaultCredential.credential),
-                    method: "POST",
-                }),
-                environment,
-            ),
-            201,
-        );
-        const computerId = text(project, "computerId");
+        const owner = await createOwner();
+        const { computerId } = owner;
+        const appCredential = owner.token;
+        const _backend = computerBackend(computerId);
         const pairing = await responseJson(
-            await worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
+            await ownerRequest(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: "malformed-capabilities-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
-                environment,
             ),
             201,
         );
@@ -3330,17 +2836,20 @@ it("Given a Fork in flight, When it is requested again concurrently and after Re
         expect(fork).toMatchObject({
             kind: "native.session.request",
             action: "fork",
-            requestId: operationId,
+            requestId: expect.any(String),
             sessionId: "native-source",
             directory: ".",
         });
         expect(fork).not.toHaveProperty("targetSessionId");
         const concurrent = runtime.forkNative(operationId, input);
-        const conflicting = await runtime.forkNative(operationId, { ...input, sessionId: "another-source" });
-        expect(await responseJson(conflicting, 409)).toMatchObject({ error: { code: "idempotency_conflict" } });
+        expect(
+            await responseJson(await runtime.forkNative(operationId, { ...input, sessionId: "another-source" }), 409),
+        ).toMatchObject({ error: { code: "idempotency_conflict" } });
         const forkTarget = nativeTarget("harness-fork-destination");
-        runtime.daemon.send(JSON.stringify(forkResult(operationId, forkTarget)));
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+
         const original = await responseJson(await first, 200);
+
         expect(original).toMatchObject({ action: "fork", target: forkTarget });
         expect(await responseJson(await concurrent, 200)).toEqual(original);
 
@@ -3348,7 +2857,7 @@ it("Given a Fork in flight, When it is requested again concurrently and after Re
         const replayed = runtime.forkNative(operationId, input);
         // The Runtime answers the retry from the receipt it keeps under the same operation identity.
         expect(record(JSON.parse(await runtime.daemonMessages.next()))).toEqual(fork);
-        runtime.daemon.send(JSON.stringify(forkResult(operationId, forkTarget)));
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         expect(await responseJson(await replayed, 200)).toEqual(original);
     } finally {
         runtime.daemon.close(1000, "Fork recovery scenario completed");
@@ -3379,9 +2888,7 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
                 requestId: text(rejected, "requestId"),
             }),
         );
-        expect(await responseJson(await first, 503)).toEqual({
-            error: { code: "native_session_unsupported", message: "This Agent does not support session forking" },
-        });
+        expect(await responseJson(await first, 503)).toMatchObject({ error: { code: "native_session_unsupported" } });
 
         const retried = runtime.forkNative(operationId, input);
         const fork = await forkCommand();

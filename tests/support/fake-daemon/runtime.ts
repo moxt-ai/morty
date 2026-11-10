@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import {
     createFakeDaemon,
     type FakeAgentHarnessOptions,
@@ -15,6 +14,7 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/
 import type { RuntimeCredentials } from "../../../packages/cli/src/engine/runtime/connection/runtime-credentials.ts";
 import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
 import { memoryRuntimeCredentials } from "../../../packages/cli/tests/support/runtime-credentials.ts";
+import { createOwnerApi } from "../owner-api.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
@@ -340,15 +340,21 @@ export async function createControlledAgentRuntime(options: {
         },
         signal: options.signal,
     });
-    const client = new MortyClient({
-        credentialProvider: new StaticMortyCredentialProvider(options.credential),
-        endpoint: options.origin,
+    const owner = createOwnerApi({
+        credential: options.credential,
+        origin: options.origin,
         computerId: pairing.computerId,
-        transport: { fetch: async (request: Request) => await options.server.request(request) },
+        request: async (request) => await options.server.request(request),
     });
     return {
         ...connected,
-        client,
+        api: owner.api,
+        createSession: owner.createSession,
+        sessionClient: owner.sessionClient,
+        [Symbol.asyncDispose]: async () => {
+            owner.close();
+            await connected[Symbol.asyncDispose]();
+        },
         computerId: claim.computerId,
     };
 }

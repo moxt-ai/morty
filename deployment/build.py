@@ -116,7 +116,7 @@ def main():
         if cli_release['revision'] != env['MORTY_RELEASE_REVISION'] or cli_release['version'] != read(ROOT / 'packages/cli/package.json')['version']:
             raise ValueError('Cloud and CLI release identities differ')
     files = {p.relative_to(release).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(release.rglob('*')) if p.is_file() and p.name != 'release.json'}
-    write(release / 'release.json', {'format': 'morty-cloud-release-v3', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'activation': {'architecture': 'single-worker', 'authorization': 'maintainer-requested consolidation without backward compatibility', 'recovery': 'fresh installation and pairing; old Relay namespaces and records remain untouched'}, 'files': files})
+    write(release / 'release.json', {'format': 'morty-cloud-release-v3', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'activation': {'architecture': 'single-worker', 'authorization': 'maintainer-requested consolidation without backward compatibility', 'recovery': 'fresh installation and pairing; retired namespaces are archived outside the live deployment; restore only consolidated releases'}, 'files': files})
     print(json.dumps({'release': str(release), 'environment': environment, 'files': len(files)}))
 
 

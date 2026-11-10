@@ -3,6 +3,7 @@ import * as v from "valibot";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
 import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { readJsonBody } from "../../../middleware/body-parser.ts";
 import { anonymousCreationKey } from "../entity/computer-bootstrap.ts";
 import { provisionAccount } from "../service/account-provisioning-service.ts";
@@ -31,7 +32,8 @@ export const anonymousUserRoutes = new Hono<{ readonly Bindings: CloudBindings }
     "/identity/anonymous-users",
     async (context) => {
         const request = context.req.raw;
-        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]);
+        using deadline = new RequestDeadline(request.signal, 45_000);
+        const signal = deadline.signal;
         const input = v.parse(inputSchema, await readJsonBody(request));
         signal.throwIfAborted();
         await admitAnonymousCreation(request, context.env);

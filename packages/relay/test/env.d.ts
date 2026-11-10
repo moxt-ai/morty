@@ -3,7 +3,7 @@ import type { RelayRelayBindings } from "../src/worker.ts";
 
 interface RelayTestBindings extends RelayRelayBindings {
     readonly MORTY_ALLOWED_ORIGINS: string;
-    readonly R2_BUCKET_WNAM: R2Bucket;
+    readonly ANONYMOUS_CREATION_LIMITER: RateLimit;
     readonly TEST_UNINITIALIZED_SHARD: D1Database;
     readonly TEST_RELAY_MIGRATIONS: D1Migration[];
 }
