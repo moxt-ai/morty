@@ -1,12 +1,12 @@
 import {
-    anonymousCredentialsEntry,
+    browserAccessEntry,
     type ComputerDestination,
     centralLocalStorage,
+    computerPreferenceEntry,
     MAX_REMEMBERED_COMPUTERS,
     type RememberedComputer,
     readableComputer,
     readableCredential,
-    rememberedComputersEntry,
 } from "../local-storage/central-local-storage.ts";
 import { encodeIdentityScope, type IdentityScope } from "./identity-scope-url.ts";
 
@@ -19,7 +19,7 @@ export const computerKey = (scope: IdentityScope): string => encodeIdentityScope
  * token is kept while a remembered computer needs it.
  */
 export function rememberedComputers(): readonly RememberedComputer[] {
-    return openable(readStoredAccess());
+    return openable(readStoredAccess()).toSorted((a, b) => b.lastUsedAt - a.lastUsedAt);
 }
 
 /** The token this browser holds for a user, if any of its computers may still be opened. */
@@ -34,29 +34,39 @@ export function storedTokenForProject(computerId: string): string | null {
 }
 
 /** Keeps a newly issued access: its token, and its computer behind those already visited. */
-export function saveAccess(scope: IdentityScope, token: string): void {
+function saveAccessWhileLocked(scope: IdentityScope, token: string): void {
     updateComputers(withComputer(rememberedComputers(), scope), { added: { userId: scope.userId, token } });
 }
 
-/** Keeps a computer whose stored access was just confirmed. */
-export function rememberComputer(scope: IdentityScope): void {
-    const saved = rememberedComputers();
-    if (!saved.some((computer) => computerKey(computer.scope) === computerKey(scope))) {
-        updateComputers(withComputer(saved, scope));
-    }
+class BrowserAccessStorageError extends Error {
+    readonly code = "browser_access_storage_unavailable";
 }
 
-/** Drops access that no longer opens this computer, listed or not, with its token unless another computer needs it. */
+export interface StoredAccessWriter {
+    readonly save: (scope: IdentityScope, token: string) => void;
+    readonly forget: (scope: IdentityScope) => void;
+    readonly forgetRejected: (scope: IdentityScope, token: string) => boolean;
+}
+
+export async function saveAccess(scope: IdentityScope, token: string, signal: AbortSignal): Promise<void> {
+    await withStoredAccessLock(signal, async (access) => access.save(scope, token));
+}
+
 /**
  * Runs a change to the access this browser stores while no other tab of the browser changes it: opening a link reads
- * the access it replaces and saves the new one, and ending access reads the access it ends. Browsers without the Web
- * Locks API run the change directly.
+ * the access it replaces and saves the new one, and ending access reads the access it ends.
  */
-export async function withStoredAccessLock<T>(signal: AbortSignal, change: () => Promise<T>): Promise<T> {
+export async function withStoredAccessLock<T>(
+    signal: AbortSignal,
+    change: (access: StoredAccessWriter) => Promise<T>,
+): Promise<T> {
+    const perform = () =>
+        change({ save: saveAccessWhileLocked, forget: forgetComputer, forgetRejected: forgetComputerAccess });
     const locks: LockManager | null | undefined = typeof navigator === "undefined" ? undefined : navigator.locks;
+    signal.throwIfAborted();
     return locks === null || locks === undefined
-        ? await change()
-        : await locks.request("morty-stored-access", { signal }, change);
+        ? await perform()
+        : await locks.request("morty-stored-access", { signal }, perform);
 }
 
 /** The access that replaced `rejected` for a user, once the tab replacing it has saved it, or null when none did. */
@@ -71,7 +81,7 @@ export async function replacedToken(userId: string, rejected: string, signal: Ab
  * Forgets a computer whose access was found to be gone, unless another tab replaced that access meanwhile: then the
  * replacement is current and false says to check it instead.
  */
-export function forgetComputerAccess(scope: IdentityScope, token: string): boolean {
+function forgetComputerAccess(scope: IdentityScope, token: string): boolean {
     if (storedToken(scope.userId) !== token) {
         return false;
     }
@@ -79,7 +89,7 @@ export function forgetComputerAccess(scope: IdentityScope, token: string): boole
     return true;
 }
 
-export function forgetComputer(scope: IdentityScope): void {
+function forgetComputer(scope: IdentityScope): void {
     updateComputers(rememberedComputers().filter((computer) => computerKey(computer.scope) !== computerKey(scope)));
 }
 
@@ -94,26 +104,20 @@ export function rememberComputerVisit(
     if (current === undefined) {
         return;
     }
-    updateComputers([
-        {
-            ...current,
-            destination: destination ?? current.destination,
-            directory: directory?.slice(0, 4096) ?? current.directory,
-            lastUsedAt: now,
-        },
-        ...saved.filter((computer) => computerKey(computer.scope) !== computerKey(scope)),
-    ]);
+    centralLocalStorage.write(computerPreferenceEntry(scope), {
+        ...current,
+        destination: destination ?? current.destination,
+        directory: directory?.slice(0, 4096) ?? current.directory,
+        lastUsedAt: now,
+    });
 }
 
-/** Background metadata changes must not change which computer was last used. */
+/** Background metadata changes cannot change access or which computer was last used. */
 export function rememberComputerName(scope: IdentityScope, name: string): void {
-    updateComputers(
-        rememberedComputers().map((computer) =>
-            computerKey(computer.scope) === computerKey(scope)
-                ? { ...computer, name: name.trim().slice(0, 256) }
-                : computer,
-        ),
-    );
+    const current = rememberedComputers().find((computer) => computerKey(computer.scope) === computerKey(scope));
+    if (current !== undefined) {
+        centralLocalStorage.write(computerPreferenceEntry(scope), { ...current, name: name.trim().slice(0, 256) });
+    }
 }
 
 export function computerAddress(scope: IdentityScope, destination: ComputerDestination): string {
@@ -179,9 +183,10 @@ function recordedUser(record: unknown): string | null {
 }
 
 function readStoredAccess(): StoredAccess {
+    const snapshot = centralLocalStorage.read(browserAccessEntry);
     const credentials = new Map<string, string>();
     const unreadableCredentials: Record<string, unknown> = {};
-    for (const [userId, token] of Object.entries(centralLocalStorage.read(anonymousCredentialsEntry) ?? {})) {
+    for (const [userId, token] of Object.entries(snapshot?.credentials ?? {})) {
         const readable = readableCredential(userId, token);
         if (readable === null) {
             unreadableCredentials[userId] = token;
@@ -191,12 +196,12 @@ function readStoredAccess(): StoredAccess {
     }
     const computers: RememberedComputer[] = [];
     const unreadableComputers: unknown[] = [];
-    for (const record of centralLocalStorage.read(rememberedComputersEntry) ?? []) {
+    for (const record of snapshot?.computers ?? []) {
         const readable = readableComputer(record);
         if (readable === null) {
             unreadableComputers.push(record);
         } else {
-            computers.push(readable);
+            computers.push({ ...readable, ...centralLocalStorage.read(computerPreferenceEntry(readable.scope)) });
         }
     }
     const unreadableComputerUsers = new Set(
@@ -251,10 +256,17 @@ function updateComputers(
             !computers.some((listed) => computerKey(listed.scope) === computerKey(computer.scope)),
     );
     const allCredentials = { ...unreadable, ...Object.fromEntries(kept) };
-    if (Object.keys(allCredentials).length === 0) {
-        centralLocalStorage.remove(anonymousCredentialsEntry);
-    } else {
-        centralLocalStorage.write(anonymousCredentialsEntry, allCredentials);
+    const saved = centralLocalStorage.write(browserAccessEntry, {
+        credentials: allCredentials,
+        computers: [
+            ...computers.map(({ scope }) => ({ scope })),
+            ...theirs.map(({ scope }) => ({ scope })),
+            ...stored.unreadableComputers,
+        ],
+    });
+    if (!saved) {
+        throw new BrowserAccessStorageError(
+            "The browser could not save access. Allow browser storage and retry the link.",
+        );
     }
-    centralLocalStorage.write(rememberedComputersEntry, [...computers, ...theirs, ...stored.unreadableComputers]);
 }

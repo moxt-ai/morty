@@ -8,7 +8,7 @@ import { createForkLossProxy } from "./fixtures/fork-loss-proxy.ts";
 afterEach(() => vi.useRealTimers());
 
 test.each(["request", "result"] as const)(
-    "Given the Runtime Fork %s is lost, When the operation is retried after reconnect, Then one Fork exists and every retry answers with it",
+    "Given the Runtime Fork %s is lost, When the operation is retried after reconnect, Then one Fork exists and a completed Fork remains recoverable without its source",
     async (loss) => {
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
         await using relay = await startTestRelay();
@@ -72,6 +72,9 @@ test.each(["request", "result"] as const)(
         await disconnected.promise;
         await vi.advanceTimersByTimeAsync(500);
         await reconnected.promise;
+        if (loss === "result") {
+            await runtime.removeNativeSession("native-fork-source");
+        }
         // The Runtime answers a retry from the receipt it keeps under the operation, or forks once if the Fork never
         // reached it.
         const [first, concurrent] = await Promise.all([fork(), fork()]);
