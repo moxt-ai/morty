@@ -7,7 +7,6 @@ import {
     type Credential,
     type CredentialOperation,
     type DeviceAccessDuration,
-    deviceAccess,
     issuedLinkTerms,
     mayPerform,
     type PermittedCredential,
@@ -17,7 +16,12 @@ import type { Session } from "../entity/authentication/session.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { sharingOperationCredential } from "../entity/project-credential.ts";
-import type { IdentityStorage, IdentityTransfer, JoiningDevice } from "../storage/identity-storage.ts";
+import type {
+    IdentityStorage,
+    IdentityTransfer,
+    JoiningDevice,
+    StoredCredential,
+} from "../storage/identity-storage.ts";
 import { type AnonymousIdentity, digest } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
@@ -82,68 +86,34 @@ function deviceSharer(kind: Credential["kind"] | null, label: string | null): De
     }
 }
 
-type StoredCredential = NonNullable<Awaited<ReturnType<IdentityStorage["findCredential"]>>>;
-
-/**
- * What a stored credential grants now, read directly from the states it and its device store. A row whose facts
- * contradict its kind authorizes nothing.
- */
-function classifyCredential(stored: StoredCredential, now: number): CredentialLookup {
-    const kind = stored.kind;
-    switch (kind) {
-        case "browser":
-            return classifyBrowserCredential({ ...stored, kind }, now);
+/** What a stored credential grants now, read from what storage reports of it and its device. */
+function classifyCredential(stored: StoredCredential): CredentialLookup {
+    switch (stored.kind) {
         case "local":
         case "recovery":
-            if (
-                stored.transferId !== null ||
-                stored.deviceId !== null ||
-                stored.recordedDeviceId !== null ||
-                stored.replacedAt !== null
-            ) {
-                return { kind: "unknown" };
-            }
-            return stored.revokedAt === null
-                ? { kind: "active", credential: { kind, credentialId: stored.credentialId, userId: stored.userId } }
+            return stored.held
+                ? {
+                      kind: "active",
+                      credential: { kind: stored.kind, credentialId: stored.credentialId, userId: stored.userId },
+                  }
                 : { kind: "ended" };
-        default:
-            return { kind: "unknown" };
-    }
-}
-
-/** A browser credential grants its device's access until a newer credential of that device replaces it. */
-function classifyBrowserCredential(
-    stored: StoredCredential & { readonly kind: "browser" },
-    now: number,
-): CredentialLookup {
-    if (
-        stored.transferId === null ||
-        stored.deviceId === null ||
-        stored.recordedDeviceId !== stored.deviceId ||
-        stored.revokedAt !== null
-    ) {
-        return { kind: "unknown" };
-    }
-    if (stored.replacedAt !== null) {
-        return { kind: "replaced" };
-    }
-    const access = deviceAccess({ endedAt: stored.deviceEndedAt, accessExpiresAt: stored.accessExpiresAt }, now);
-    switch (access.kind) {
-        case "holding":
-            return {
-                kind: "active",
-                credential: {
-                    kind: stored.kind,
-                    credentialId: stored.credentialId,
-                    userId: stored.userId,
-                    transferId: stored.transferId,
-                    deviceId: stored.deviceId,
-                    accessExpiresAt: access.expiresAt,
-                },
-            };
-        case "ended":
-        case "expired":
-            return { kind: "ended" };
+        case "browser":
+            if (stored.replaced) {
+                return { kind: "replaced" };
+            }
+            return stored.accessHeldUntil === null
+                ? { kind: "ended" }
+                : {
+                      kind: "active",
+                      credential: {
+                          kind: stored.kind,
+                          credentialId: stored.credentialId,
+                          userId: stored.userId,
+                          transferId: stored.transferId,
+                          deviceId: stored.deviceId,
+                          accessExpiresAt: stored.accessHeldUntil,
+                      },
+                  };
     }
 }
 
@@ -152,24 +122,11 @@ function classifyBrowserCredential(
  * device's until its term unless it was ended, a local or recovery credential's until it was revoked.
  */
 export async function holdsAccess(
-    identities: Pick<IdentityStorage, "findCredentialById" | "findDevice">,
+    identities: Pick<IdentityStorage, "holdsAccess">,
     holder: SessionAccessHolder,
     signal: AbortSignal,
 ): Promise<boolean> {
-    switch (holder.kind) {
-        case "device": {
-            const device = await identities.findDevice(holder.deviceId, signal);
-            return device !== null && deviceAccess(device, Date.now()).kind === "holding";
-        }
-        case "credential": {
-            const stored = await identities.findCredentialById(holder.credentialId, signal);
-            if (stored === null) {
-                return false;
-            }
-            const found = classifyCredential(stored, Date.now());
-            return found.kind === "active" && found.credential.kind !== "browser";
-        }
-    }
+    return await identities.holdsAccess(holder, Date.now(), signal);
 }
 
 /** Outside the session check, revoked access answers like unknown access, so a retry after a lost reply stays safe. */
@@ -196,11 +153,8 @@ export class AuthenticationService {
         if (!parsed.success) {
             return { kind: "unknown" };
         }
-        const stored = await this.identities.findCredential(parsed.output, signal);
-        if (stored === null) {
-            return { kind: "unknown" };
-        }
-        return classifyCredential(stored, Date.now());
+        const stored = await this.identities.findCredential(parsed.output, Date.now(), signal);
+        return stored === null ? { kind: "unknown" } : classifyCredential(stored);
     };
 
     readonly session = async (token: string | undefined, signal: AbortSignal): Promise<SessionResult> => {
@@ -350,12 +304,11 @@ export class AuthenticationService {
         switch (access.kind) {
             case "authorized": {
                 const own = access.credential.kind === "browser" ? access.credential.deviceId : null;
-                const now = Date.now();
-                const stored = await this.identities.linkedDevices(access.credential.userId, signal);
+                const stored = await this.identities.linkedDevices(access.credential.userId, Date.now(), signal);
                 const devices = stored.flatMap((device) => {
-                    const held = deviceAccess(device, now);
+                    const heldUntil = device.accessHeldUntil;
                     // Only a device that holds access now is listed, with the term it holds it until.
-                    return device.deviceId === own || held.kind !== "holding"
+                    return device.deviceId === own || heldUntil === null
                         ? []
                         : [
                               {
@@ -367,7 +320,7 @@ export class AuthenticationService {
                                           ? null
                                           : { city: device.joinedCity, country: device.joinedCountry },
                                   addedBy: deviceSharer(device.sharerKind, device.sharerLabel),
-                                  accessExpiresAt: held.expiresAt,
+                                  accessExpiresAt: heldUntil,
                               },
                           ];
                 });

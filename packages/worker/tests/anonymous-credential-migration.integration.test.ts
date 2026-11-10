@@ -128,68 +128,24 @@ test("Given browsers that joined before devices had their own record, When the s
         },
     ]);
     expect(
-        database
-            .prepare(
-                "SELECT id, kind, revoked_at, replaced_at, remote_transfer_id, device_id FROM anonymous_credential ORDER BY id",
-            )
-            .all(),
+        database.prepare("SELECT id, replaced_at, transfer_id, device_id FROM browser_credential ORDER BY id").all(),
     ).toEqual([
-        {
-            id: "cred_again",
-            kind: "browser",
-            revoked_at: null,
-            replaced_at: null,
-            remote_transfer_id: "transfer_again",
-            device_id: "cred_first",
-        },
+        { id: "cred_again", replaced_at: null, transfer_id: "transfer_again", device_id: "cred_first" },
         // Its access ended with its device.
-        {
-            id: "cred_ended",
-            kind: "browser",
-            revoked_at: null,
-            replaced_at: null,
-            remote_transfer_id: "transfer_ended",
-            device_id: "cred_ended",
-        },
-        {
-            id: "cred_first",
-            kind: "browser",
-            // A newer credential of the same device replaced it; its access did not end.
-            revoked_at: null,
-            replaced_at: 2,
-            remote_transfer_id: "transfer_first",
-            device_id: "cred_first",
-        },
-        {
-            id: "cred_legacy",
-            kind: "browser",
-            revoked_at: null,
-            replaced_at: null,
-            remote_transfer_id: "transfer_legacy",
-            device_id: "cred_legacy",
-        },
-        {
-            id: "cred_local",
-            kind: "local",
-            revoked_at: null,
-            replaced_at: null,
-            remote_transfer_id: null,
-            device_id: null,
-        },
-        {
-            id: "cred_recovery",
-            kind: "recovery",
-            revoked_at: 4,
-            replaced_at: null,
-            remote_transfer_id: null,
-            device_id: null,
-        },
+        { id: "cred_ended", replaced_at: null, transfer_id: "transfer_ended", device_id: "cred_ended" },
+        // A newer credential of the same device replaced it; its access did not end.
+        { id: "cred_first", replaced_at: 2, transfer_id: "transfer_first", device_id: "cred_first" },
+        { id: "cred_legacy", replaced_at: null, transfer_id: "transfer_legacy", device_id: "cred_legacy" },
+    ]);
+    expect(database.prepare("SELECT id, kind, revoked_at FROM owner_credential ORDER BY id").all()).toEqual([
+        { id: "cred_local", kind: "local", revoked_at: null },
+        { id: "cred_recovery", kind: "recovery", revoked_at: 4 },
     ]);
     expect(database.prepare("SELECT id, access_expires_at FROM identity_transfer ORDER BY id").all()).toHaveLength(5);
     expect(() =>
         database
             .prepare(
-                "INSERT INTO anonymous_credential (id, user_id, token_hash, kind, created_at) VALUES ('cred_orphan', 'usr_owner', 'orphan-hash', 'browser', 3)",
+                "INSERT INTO browser_credential (id, user_id, token_hash, created_at) VALUES ('cred_orphan', 'usr_owner', 'orphan-hash', 3)",
             )
             .run(),
     ).toThrow();

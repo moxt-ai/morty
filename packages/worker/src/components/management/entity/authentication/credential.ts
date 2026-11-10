@@ -40,30 +40,6 @@ export function accessHolder(credential: Credential): SessionAccessHolder {
     }
 }
 
-/** A browser device's access: it holds until its term unless it was ended first, and ended access never resumes. */
-export type DeviceAccess =
-    | { readonly kind: "holding"; readonly expiresAt: number }
-    | { readonly kind: "ended" }
-    | { readonly kind: "expired" };
-
-/**
- * The one rule for a browser device's access, read from what the device stores: when it was ended, if it was, and its
- * term, the latest among the links it opened (null when it opened none). Revoking a link only stops it from adding a
- * device; it never ends a device's access.
- */
-export function deviceAccess(
-    device: { readonly endedAt: number | null; readonly accessExpiresAt: number | null },
-    now: number,
-): DeviceAccess {
-    if (device.endedAt !== null) {
-        return { kind: "ended" };
-    }
-    if (device.accessExpiresAt === null || device.accessExpiresAt <= now) {
-        return { kind: "expired" };
-    }
-    return { kind: "holding", expiresAt: device.accessExpiresAt };
-}
-
 const linkLifetime = 10 * 60 * 1000;
 const hour = 60 * 60 * 1000;
 

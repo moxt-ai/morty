@@ -39,7 +39,7 @@ export async function ownerAccessHolder(computerId: string): Promise<SessionAcce
         await new ManagedBotStorage(database).claimMachine(userId, { displayName: "My Machine" }, Date.now(), signal);
         const identities = new IdentityStorage(database, computerId);
         await identities.createAnonymous(userId, computerId, Date.now(), signal, token);
-        const credential = await identities.findCredential(token, signal);
+        const credential = await identities.findCredential(token, Date.now(), signal);
         if (credential === null) {
             throw new Error("Missing owner credential");
         }
