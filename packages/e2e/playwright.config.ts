@@ -19,7 +19,9 @@ export default defineConfig({
     workers: 1,
     // A journey fails on its first failure: a retry would turn an intermittent defect into a green run.
     retries: 0,
-    timeout: Number(process.env["MORTY_E2E_TIMEOUT_MS"] ?? 600000),
+    // A journey takes under a minute (p99 40 s, longest 59 s across 1,272 recent CI runs): three minutes fails a hung
+    // one instead of holding its shard for ten.
+    timeout: Number(process.env["MORTY_E2E_TIMEOUT_MS"] ?? 180_000),
     expect: { timeout: 30000 },
     // An action whose target never becomes actionable fails as an assertion does, instead of holding the shard until
     // the journey's timeout.
