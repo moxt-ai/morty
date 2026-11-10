@@ -1,50 +1,17 @@
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
-    AGENT_CATALOG_DISCOVER_KIND,
     AGENT_CATALOG_DISCOVERED_KIND,
     AGENT_CATALOG_DISCOVERY_FAILED_KIND,
     AGENT_SETTINGS_DISCOVER_KIND,
     AGENT_SETTINGS_DISCOVERED_KIND,
     AGENT_SETTINGS_DISCOVERY_FAILED_KIND,
+    type AgentSettingsDiscoverCommand,
     CONTENT_AVAILABLE_KIND,
-    CONTENT_COMMIT_KIND,
     CONTENT_READY_KIND,
-    CONTENT_WRITE_KIND,
     type DaemonToRelayMessage,
     type DaemonToServiceMessage,
-    decodeAgentCatalogDiscoverCommand,
-    decodeAgentSettingsDiscoverCommand,
     decodeContentChunkFrame,
-    decodeContentCommitCommand,
-    decodeContentWriteCommand,
-    decodeFileReadCommand,
     decodeKnownServiceToDaemonMessage,
-    decodeMessageKind,
-    decodeNativeSessionCancel,
-    decodeNativeSessionCommand,
-    decodeNativeSessionRequest,
-    decodeRuntimeDiagnosticsRequest,
-    decodeRuntimePingCommand,
-    decodeSessionArchiveCommand,
-    decodeSessionCancelBeforeStartCommand,
-    decodeSessionCancelCommand,
-    decodeSessionCloseCommand,
-    decodeSessionConfigReadCommand,
-    decodeSessionConfigureCommand,
-    decodeSessionCreateCommand,
-    decodeSessionCreationReadCommand,
-    decodeSessionElicitationRespondCommand,
-    decodeSessionHistoryPageLoad,
-    decodeSessionListCommand,
-    decodeSessionPermissionRespondCommand,
-    decodeSessionPrepareCommand,
-    decodeSessionPreviewHistoryPageLoad,
-    decodeSessionPromptCommand,
-    decodeSessionPromptDispositionCommand,
-    decodeSessionQueryCommand,
-    decodeSessionRenameCommand,
-    decodeSessionRestoreCommand,
-    decodeWorkspaceListCommand,
     encodeAgentSettingsDiscoveryFailedEvent,
     encodeRuntimeStatusEvent,
     encodeServiceToDaemonMessage,
@@ -52,57 +19,39 @@ import {
     FILE_BEGIN_KIND,
     FILE_END_KIND,
     FILE_FAILED_KIND,
-    FILE_READ_KIND,
-    NATIVE_SESSION_CANCEL_KIND,
-    NATIVE_SESSION_REQUEST_KIND,
     NATIVE_SESSION_RESULT_KIND,
-    type NativeSessionCommand,
     type NativeSessionTarget,
     ProtocolMessageError,
-    RUNTIME_PING_KIND,
+    RUNTIME_HEARTBEAT_ACK_KIND,
+    RUNTIME_LIVENESS_READY_KIND,
     RUNTIME_PONG_KIND,
     RUNTIME_STATUS_KIND,
     readNativeSessionTarget,
-    SESSION_ARCHIVE_KIND,
+    requestReplyAddress,
     SESSION_ARCHIVED_KIND,
-    SESSION_CANCEL_BEFORE_START_KIND,
-    SESSION_CANCEL_KIND,
-    SESSION_CLOSE_KIND,
     SESSION_CLOSE_NOTICE_KIND,
     SESSION_CLOSED_KIND,
-    SESSION_CONFIG_READ_KIND,
     SESSION_CONFIG_READ_RESULT_KIND,
     SESSION_CONFIG_UPDATED_KIND,
-    SESSION_CONFIGURE_KIND,
-    SESSION_CREATE_KIND,
-    SESSION_CREATION_READ_KIND,
-    SESSION_ELICITATION_RESPOND_KIND,
     SESSION_EVENT_KIND,
     SESSION_HISTORY_PAGE_LOAD_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
     SESSION_INFO_UPDATED_KIND,
-    SESSION_LIST_KIND,
     SESSION_LISTED_KIND,
     SESSION_OPERATION_FAILED_KIND,
-    SESSION_PERMISSION_RESPOND_KIND,
-    SESSION_PREPARE_KIND,
     SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
     SESSION_PREVIEW_HISTORY_PAGE_LOADED_KIND,
     SESSION_PROMPT_ACCEPTED_KIND,
-    SESSION_PROMPT_DISPOSITION_KIND,
     SESSION_PROMPT_KIND,
     SESSION_QUERIED_KIND,
-    SESSION_QUERY_KIND,
     SESSION_READY_KIND,
-    SESSION_RENAME_KIND,
     SESSION_RENAMED_KIND,
-    SESSION_RESTORE_KIND,
     SESSION_RESTORED_KIND,
     SESSION_STATUS_CHANGED_KIND,
     type ServiceToDaemonMessage,
+    type ServiceToDaemonRequest,
     type SessionPromptCommand,
     WORKSPACE_ENTRIES_KIND,
-    WORKSPACE_LIST_KIND,
 } from "@morty-build/client/protocol";
 import { SessionRuntimeError } from "../../entity/do/session.ts";
 import { logger } from "../../infra/logger.ts";
@@ -356,12 +305,11 @@ export class ChannelActor {
                 return;
             }
             this.validateDaemonControl(message);
-            if ("requestId" in message || "interactionId" in message) {
-                const id = "requestId" in message ? message.requestId : message.interactionId;
+            if ("requestId" in message) {
                 this.broadcast(
                     this.#peers
                         .operations()
-                        .filter((route) => route.requestId === id)
+                        .filter((route) => route.requestId === message.requestId)
                         .map(({ socket }) => socket),
                     wire,
                 );
@@ -429,78 +377,38 @@ export class ChannelActor {
             return;
         }
         try {
-            if (decodeKnownServiceToDaemonMessage(message) === null) {
+            const command = decodeKnownServiceToDaemonMessage(message);
+            if (command === null) {
                 this.recordSkipped("unsupported_host_message");
                 return;
             }
-            const kind = decodeMessageKind(message);
-            if (kind === SESSION_PROMPT_KIND) {
-                const command = decodeSessionPromptCommand(message);
-                this.forwardPrompt(socket, command, message);
-                return;
+            switch (command.kind) {
+                case SESSION_PROMPT_KIND:
+                    this.forwardPrompt(socket, command, message);
+                    return;
+                case AGENT_SETTINGS_DISCOVER_KIND:
+                    this.forwardAgentSettingsDiscovery(socket, command, message);
+                    return;
+                case SESSION_HISTORY_PAGE_LOAD_KIND:
+                    if (!socket.permitsSessionHistory()) {
+                        throw new ProtocolMessageError("Live Session history requires an internal connection");
+                    }
+                    this.forwardHistoryPage(socket, "live", command, message);
+                    return;
+                case SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND:
+                    if (!socket.permitsSessionHistory()) {
+                        throw new ProtocolMessageError("Session preview history requires an internal connection");
+                    }
+                    this.forwardHistoryPage(socket, "preview", command, message);
+                    return;
+                case RUNTIME_HEARTBEAT_ACK_KIND:
+                case RUNTIME_LIVENESS_READY_KIND:
+                    // Liveness belongs to the daemon's own connection; a host has none to signal.
+                    return;
+                default:
+                    this.forwardControl(socket, command, message);
+                    return;
             }
-            if (kind === SESSION_PREPARE_KIND) {
-                const command = decodeSessionPrepareCommand(message);
-                this.forwardControl(socket, command, command.requestId, command.target, command, message);
-                return;
-            }
-            if (kind === SESSION_CREATE_KIND) {
-                const command = decodeSessionCreateCommand(message);
-                this.forwardControl(socket, command, command.requestId, undefined, command, message);
-                return;
-            }
-            if (kind === SESSION_CREATION_READ_KIND) {
-                const command = decodeSessionCreationReadCommand(message);
-                this.forwardControl(socket, command, command.requestId, undefined, command, message);
-                return;
-            }
-            if (kind === AGENT_SETTINGS_DISCOVER_KIND) {
-                const command = decodeAgentSettingsDiscoverCommand(message);
-                this.forwardAgentSettingsDiscovery(socket, command, command.requestId, command.harness, message);
-                return;
-            }
-            if (kind === NATIVE_SESSION_REQUEST_KIND) {
-                const request = decodeNativeSessionRequest(message);
-                const command: NativeSessionCommand = decodeNativeSessionCommand(message);
-                this.forwardControl(
-                    socket,
-                    command,
-                    request.requestId,
-                    request.action === "active-turn" ? request.target : undefined,
-                    request,
-                    message,
-                );
-                return;
-            }
-            if (kind === SESSION_HISTORY_PAGE_LOAD_KIND) {
-                if (!socket.permitsSessionHistory()) {
-                    throw new ProtocolMessageError("Live Session history requires an internal connection");
-                }
-                this.forwardHistoryPage(socket, "live", decodeSessionHistoryPageLoad(message), message);
-                return;
-            }
-            if (kind === SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND) {
-                if (!socket.permitsSessionHistory()) {
-                    throw new ProtocolMessageError("Session preview history requires an internal connection");
-                }
-                this.forwardHistoryPage(socket, "preview", decodeSessionPreviewHistoryPageLoad(message), message);
-                return;
-            }
-            if (kind === SESSION_PERMISSION_RESPOND_KIND) {
-                const command = decodeSessionPermissionRespondCommand(message);
-                this.forwardControl(socket, command, command.interactionId, command.target, command, message);
-                return;
-            }
-            if (kind === SESSION_ELICITATION_RESPOND_KIND) {
-                const command = decodeSessionElicitationRespondCommand(message);
-                this.forwardControl(socket, command, command.interactionId, command.target, command, message);
-                return;
-            }
-            const control = this.validateHostControl(kind, message);
-            if (control === null) {
-                return;
-            }
-            this.forwardControl(socket, control.message, control.requestId, control.target, control.message, message);
         } catch (error) {
             if (signal.aborted) {
                 throw error;
@@ -570,159 +478,46 @@ export class ChannelActor {
         }
     };
 
-    private readonly validateHostControl = (
-        kind: string,
-        message: string,
-    ): {
-        readonly message: ServiceToDaemonMessage;
-        readonly requestId: string;
-        readonly target: NativeSessionTarget | undefined;
-    } | null => {
-        switch (kind) {
-            case NATIVE_SESSION_REQUEST_KIND: {
-                // Native session requests are fully handled before this validator runs;
-                // reaching it means the request skipped Relay-side retention authorization.
-                throw new ProtocolMessageError("Native session requests require retention authorization");
-            }
-            case NATIVE_SESSION_CANCEL_KIND: {
-                const command = decodeNativeSessionCancel(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            case SESSION_CANCEL_BEFORE_START_KIND: {
-                const command = decodeSessionCancelBeforeStartCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_CANCEL_KIND: {
-                const command = decodeSessionCancelCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_PROMPT_DISPOSITION_KIND: {
-                const command = decodeSessionPromptDispositionCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case WORKSPACE_LIST_KIND: {
-                const command = decodeWorkspaceListCommand(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            case AGENT_CATALOG_DISCOVER_KIND: {
-                const command = decodeAgentCatalogDiscoverCommand(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            case SESSION_QUERY_KIND: {
-                const command = decodeSessionQueryCommand(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            case SESSION_RESTORE_KIND: {
-                const command = decodeSessionRestoreCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_CLOSE_KIND: {
-                const command = decodeSessionCloseCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_ARCHIVE_KIND: {
-                const command = decodeSessionArchiveCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_LIST_KIND: {
-                const command = decodeSessionListCommand(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            case SESSION_CONFIGURE_KIND: {
-                const command = decodeSessionConfigureCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_CONFIG_READ_KIND: {
-                const command = decodeSessionConfigReadCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_RENAME_KIND: {
-                const command = decodeSessionRenameCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_PERMISSION_RESPOND_KIND: {
-                const command = decodeSessionPermissionRespondCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case SESSION_ELICITATION_RESPOND_KIND: {
-                const command = decodeSessionElicitationRespondCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case FILE_READ_KIND: {
-                const command = decodeFileReadCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case CONTENT_WRITE_KIND: {
-                const command = decodeContentWriteCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case CONTENT_COMMIT_KIND: {
-                const command = decodeContentCommitCommand(message);
-                return { message: command, requestId: command.requestId, target: command.target };
-            }
-            case "runtime.diagnostics.read": {
-                const command = decodeRuntimeDiagnosticsRequest(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            case RUNTIME_PING_KIND: {
-                const command = decodeRuntimePingCommand(message);
-                return { message: command, requestId: command.requestId, target: undefined };
-            }
-            default:
-                return null;
-        }
-    };
-
+    /** Sends a request to the daemon and lets the hosts watching its Session observe it. */
     private readonly forwardControl = (
         socket: ChannelSocket,
-        message: ServiceToDaemonMessage,
-        requestId: string,
-        target: NativeSessionTarget | undefined,
-        broadcastMessage: ServiceToDaemonMessage = message,
-        encoded?: string,
+        command: ServiceToDaemonRequest,
+        encoded: string,
     ): void => {
-        if (!this.sendToDaemon(message, encoded)) {
-            socket.send(
-                encodeSessionOperationFailedEvent({
-                    code: "runtime_offline",
-                    kind: SESSION_OPERATION_FAILED_KIND,
-                    message: "The local runtime is offline",
-                    requestId,
-                    ...(target === undefined ? {} : { target }),
-                }),
-            );
+        if (!this.sendToDaemon(command, encoded)) {
+            this.refuseOffline(socket, command);
             return;
         }
-        this.broadcast(
-            this.#peers.hosts(),
-            broadcastMessage === message && encoded !== undefined
-                ? encoded
-                : encodeServiceToDaemonMessage(broadcastMessage),
-            target,
-        );
+        this.broadcast(this.#peers.hosts(), encoded, "target" in command ? command.target : undefined);
     };
 
     private readonly forwardPrompt = (socket: ChannelSocket, command: SessionPromptCommand, encoded: string): void => {
         if (!this.sendToDaemon(command, encoded)) {
-            socket.send(
-                encodeSessionOperationFailedEvent({
-                    code: "runtime_offline",
-                    kind: SESSION_OPERATION_FAILED_KIND,
-                    message: "The local runtime is offline",
-                    requestId: command.commandId,
-                    target: command.target,
-                }),
-            );
+            this.refuseOffline(socket, command);
         }
+    };
+
+    /** Answers a request the daemon cannot receive at the address every answer to that request carries. */
+    private readonly refuseOffline = (socket: ChannelSocket, command: ServiceToDaemonRequest): void => {
+        const target = "target" in command ? command.target : undefined;
+        socket.send(
+            encodeSessionOperationFailedEvent({
+                code: "runtime_offline",
+                kind: SESSION_OPERATION_FAILED_KIND,
+                message: "The local runtime is offline",
+                requestId: requestReplyAddress(command),
+                ...(target === undefined ? {} : { target }),
+            }),
+        );
     };
 
     private readonly forwardAgentSettingsDiscovery = (
         socket: ChannelSocket,
-        message: ServiceToDaemonMessage,
-        requestId: string,
-        harness: string,
-        encoded?: string,
+        command: AgentSettingsDiscoverCommand,
+        encoded: string,
     ): void => {
+        const { harness } = command;
+        const requestId = requestReplyAddress(command);
         const route = socket.trackAgentSettingsDiscovery(requestId, harness);
         if (route === "duplicate") {
             return;
@@ -738,7 +533,7 @@ export class ChannelActor {
             );
             return;
         }
-        if (!this.sendToDaemon(message, encoded)) {
+        if (!this.sendToDaemon(command, encoded)) {
             socket.consumeAgentSettingsDiscoveryFailure(requestId);
             socket.send(
                 encodeAgentSettingsDiscoveryFailedEvent({
@@ -804,7 +599,7 @@ export class ChannelActor {
         encoded: string,
     ): void => {
         // Internal history connections belong to one operation; only its reply address survives hibernation.
-        socket.bindHistoryRequest(kind, command.requestId);
+        socket.bindHistoryRequest(kind, requestReplyAddress(command));
         if (!this.sendToDaemon(command, encoded)) {
             socket.close(1013, "Runtime offline");
         }
