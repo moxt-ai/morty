@@ -243,7 +243,6 @@ interface Context extends StateLocation {
 type RuntimeSelection =
     | {
           readonly kind: "existing";
-          readonly connectionId: string;
           readonly computerId: string;
           /** Whether the Worker binds the Machine to this Runtime. The Worker's binding is the only record of it. */
           readonly bound: boolean;
@@ -256,7 +255,6 @@ type RuntimeSelection =
       };
 
 interface ManagedConnection {
-    readonly connectionId: string;
     readonly computerId: string;
 }
 
@@ -363,7 +361,7 @@ class RuntimeStartError extends Error {
     readonly termination: RuntimeTermination;
     readonly logPath: string;
     readonly nextStep =
-        "Inspect the Runtime log, then run morty start --connection <connectionId> for the managed connection and rerun setup. Check morty --version when diagnosing startup; setup does not stop an existing daemon.";
+        "Inspect the Runtime log, then run morty start and rerun setup. Check morty --version when diagnosing startup; setup does not stop an existing daemon.";
 
     constructor(termination: RuntimeTermination, logPath: string, cause?: unknown) {
         let reason: string;
@@ -1233,7 +1231,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return value.map((item) => {
                 const connection = object(item);
                 return {
-                    connectionId: identifier(connection["connection_id"]),
                     computerId: identifier(connection["computer_id"]),
                 };
             });
@@ -1331,7 +1328,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 emit({
                     status: "runtime_reused",
                     computerId: existing.computerId,
-                    connectionId: existing.connectionId,
                 });
             }
             return { existing, managedConnectionCount: connections.length };
@@ -1400,7 +1396,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         cwd: string,
     ): { readonly args: readonly string[]; readonly input?: string } {
         if (runtime.kind === "existing") {
-            return { args: ["start", "--connection", runtime.connectionId] };
+            return { args: ["start"] };
         }
         // The pairing code goes through standard input: a command line is visible to every user of this computer,
         // who could redeem the code while it is valid and take over this Runtime's pairing.

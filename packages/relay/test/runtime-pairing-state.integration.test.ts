@@ -420,7 +420,7 @@ it.each(["", "morty-pairing-v1\0"])(
     },
 );
 
-it("migrates the registered computer, live connection and independent audit IDs together", async () => {
+it("migrates the registered computer and independent audit IDs together", async () => {
     const app = await project();
     await app.storage(async (storage) => {
         await storage.deleteAll();
@@ -434,23 +434,19 @@ it("migrates the registered computer, live connection and independent audit IDs 
             INSERT INTO runtimes (computer_id, created_at) VALUES ('machine', 10);
             INSERT INTO runtime_registrations (computer_id, claimed_at, machine_name, workspace_name, agents_json)
                 VALUES ('machine', 11, 'laptop', 'work', '[]');
-            INSERT INTO runtime_connection_state (singleton, computer_id, connection_epoch, connection_id, state, connected_at)
-                VALUES (1, 'machine', 7, 'current', 'online', 12);
             INSERT INTO runtime_pairing_audit_events (audit_id,computer_id,actor_kind,actor_id,action,details_json,recorded_at)
                 VALUES ('same','machine','runtime','machine','runtime_pairing.claimed','{}',11);
             INSERT INTO platform_audit_events (audit_id,project_id,app_id,actor_kind,actor_id,actor_ref,action,subject_id,outcome,details_json,recorded_at)
                 VALUES ('same','machine','service','application','owner','owner','project.created','machine','succeeded','{}',10);
         `);
         applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
-        expect(storage.sql.exec("SELECT * FROM computer").one()).toMatchObject({
+        const migrated = storage.sql.exec("SELECT * FROM computer").one();
+        expect(migrated).toMatchObject({
             computer_id: "machine",
             claimed_at: 11,
             machine_name: "laptop",
             workspace_name: "work",
             agents_json: "[]",
-            connection_epoch: 7,
-            state: "online",
-            connected_at: 12,
         });
         expect(
             storage.sql.exec("SELECT category FROM audit_events WHERE audit_id='same' ORDER BY category").toArray(),

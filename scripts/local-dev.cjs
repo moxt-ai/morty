@@ -17,7 +17,6 @@
 // human-readable progress goes to stderr so stdout stays machine-parseable.
 
 const { spawn } = require("node:child_process");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -718,7 +717,6 @@ async function setup(options) {
     const deadline = Date.now() + SETUP_READY_TIMEOUT_MILLISECONDS;
     let ready = null;
     let computerId = null;
-    let reusedConnectionId = null;
     for (;;) {
         const records = fs
             .readFileSync(setupLog, "utf8")
@@ -733,9 +731,6 @@ async function setup(options) {
         const reused = records.findLast((record) => record !== null && record.status === "runtime_reused");
         if (reused !== undefined && reused !== null && typeof reused.computerId === "string") {
             computerId = reused.computerId;
-            if (typeof reused.connectionId === "string") {
-                reusedConnectionId = reused.connectionId;
-            }
         }
         const paired = records.findLast((record) => record !== null && record.status === "runtime_paired");
         if (paired !== undefined && paired !== null && typeof paired.computerId === "string") {
@@ -765,44 +760,9 @@ async function setup(options) {
         fail("the setup runtime did not return a handoff URL");
     }
 
-    let connectionId = reusedConnectionId;
-    if (connectionId === null) {
-        const pairList = path.join(stack.stateDir, `.pair-list-${crypto.randomUUID()}.json`);
-        fs.writeFileSync(pairList, "", { mode: 0o600, flag: "wx" });
-        try {
-            await run(
-                process.execPath,
-                [
-                    path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"),
-                    "pair",
-                    "list",
-                    `--output-json=${pairList}`,
-                ],
-                { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
-            );
-            const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
-            if (!Array.isArray(listed)) {
-                fail("Morty returned an invalid connection list");
-            }
-            const connection = listed.find(
-                (item) => item !== null && typeof item === "object" && item.computer_id === computerId,
-            );
-            if (
-                connection === undefined ||
-                typeof connection.connection_id !== "string" ||
-                !/^mcn_[a-f0-9]{32}$/u.test(connection.connection_id)
-            ) {
-                fail("Morty did not report the setup connection");
-            }
-            connectionId = connection.connection_id;
-        } finally {
-            fs.rmSync(pairList, { force: true });
-        }
-    }
-
     const record = {
         chatOrigin: stack.chatOrigin,
-        connectionId,
+        computerId,
         handoffUrl,
         mortyStateDirectory,
         harness,
@@ -975,21 +935,15 @@ async function logs(options) {
 async function stopRecorded(stack) {
     const runtimeStateDirectory = path.join(stack.stateDir, "morty");
     for (const runtime of Array.isArray(stack.runtimes) ? stack.runtimes : []) {
-        if (typeof runtime.connectionId === "string" && /^mcn_[a-f0-9]{32}$/u.test(runtime.connectionId)) {
-            log(`stopping paired connection ${runtime.connectionId}`);
+        if (typeof runtime.computerId === "string") {
+            log(`stopping the current pairing for ${runtime.computerId}`);
             try {
                 if (runtime.runtimeStateDirectory !== runtimeStateDirectory) {
                     throw new Error("The recorded Runtime does not belong to this local stack");
                 }
                 await run(
                     process.execPath,
-                    [
-                        path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"),
-                        "pair",
-                        "stop",
-                        "--connection",
-                        runtime.connectionId,
-                    ],
+                    [path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"), "pair", "stop"],
                     { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
                 );
             } catch (cause) {

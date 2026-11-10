@@ -16,14 +16,14 @@ test("Given a rotated connection, When replacement pairing is cancelled, Then th
             runtimeCredential: "a".repeat(43),
         };
         const connection = await installation.saveConnection(input, signal);
-        const credentials = installation.runtimeCredentials(connection.connectionId);
+        const credentials = installation.runtimeCredentials(connection.pairingGeneration);
         const rotation = await credentials.prepare(signal);
         await credentials.complete(rotation, signal);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
         await expect(installation.saveConnection(input, AbortSignal.abort())).rejects.toMatchObject({
             name: "AbortError",
         });
-        expect((await installation.currentConnection(signal))?.connectionId).toBe(connection.connectionId);
+        expect((await installation.currentConnection(signal))?.pairingGeneration).toBe(connection.pairingGeneration);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
     } finally {
         await rm(root, { recursive: true, force: true });
@@ -42,7 +42,7 @@ test("Given a running credential rotation, When the pairing is replaced concurre
             runtimeCredential: "a".repeat(43),
         };
         const old = await installation.saveConnection(input, signal);
-        const credentials = installation.runtimeCredentials(old.connectionId);
+        const credentials = installation.runtimeCredentials(old.pairingGeneration);
         const rotated = await credentials.prepare(signal);
         await credentials.complete(rotated, signal);
         const replacementHost = await RuntimeInstallationStore.open(root, signal);
@@ -59,7 +59,18 @@ test("Given a running credential rotation, When the pairing is replaced concurre
             pairing.status === "fulfilled"
                 ? pairing.value
                 : await replacementHost.saveConnection(replacementInput, signal);
-        const current = installation.runtimeCredentials(replacement.connectionId);
+        const current = installation.runtimeCredentials(replacement.pairingGeneration);
+        expect(replacement.computerId).toBe(old.computerId);
+        expect(replacement.pairingGeneration).not.toBe(old.pairingGeneration);
+        await expect(credentials.held(signal)).rejects.toMatchObject({ code: "connection_not_found" });
+        await expect(credentials.prepare(signal)).rejects.toMatchObject({ code: "connection_not_found" });
+        await expect(
+            installation.setConnectionActivation(old.pairingGeneration, "stopped", signal),
+        ).rejects.toMatchObject({ code: "connection_not_found" });
+        await expect(installation.removeConnection(old.pairingGeneration, signal)).rejects.toMatchObject({
+            code: "connection_not_found",
+        });
+        expect(await installation.currentConnection(signal)).toEqual(replacement);
         expect((await current.held(signal)).current === replacementInput.runtimeCredential).toBe(true);
         if (rotation.status === "fulfilled") {
             await expect(credentials.complete(rotation.value, signal)).rejects.toMatchObject({
@@ -69,12 +80,12 @@ test("Given a running credential rotation, When the pairing is replaced concurre
             expect(rotation.reason).toMatchObject({ code: "pairing_busy" });
         }
         const next = await current.prepare(signal);
-        await installation.setConnectionActivation(replacement.connectionId, "stopped", signal);
+        await installation.setConnectionActivation(replacement.pairingGeneration, "stopped", signal);
         await current.complete(next, signal);
-        await installation.setConnectionActivation(replacement.connectionId, "active", signal);
+        await installation.setConnectionActivation(replacement.pairingGeneration, "active", signal);
         const reopened = await RuntimeInstallationStore.open(root, signal);
         expect(
-            (await reopened.runtimeCredentials(replacement.connectionId).held(signal)).current === next.successor,
+            (await reopened.runtimeCredentials(replacement.pairingGeneration).held(signal)).current === next.successor,
         ).toBe(true);
     } finally {
         await rm(root, { recursive: true, force: true });

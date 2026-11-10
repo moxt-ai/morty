@@ -74,7 +74,7 @@ export async function runRelayProbeWorker(
         await start.promise;
         if (!stopped.aborted) {
             await engine.runLoop({
-                connection: { kind: "saved", connectionId: connection.connectionId },
+                connection: { kind: "saved", pairingGeneration: connection.pairingGeneration },
                 signal: stopped,
                 onConnectionStatus: (status) => notify({ kind: "status", status, timestamp: new Date().toISOString() }),
             });

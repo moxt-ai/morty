@@ -103,7 +103,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
             );
             const connection: RunLoopParams["connection"] =
                 kind === "saved"
-                    ? { kind, connectionId: saved.connectionId }
+                    ? { kind, pairingGeneration: saved.pairingGeneration }
                     : {
                           kind,
                           connection: {

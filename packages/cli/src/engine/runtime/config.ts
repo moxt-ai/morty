@@ -31,19 +31,8 @@ export function withRuntimeEnvironment(agent: CatalogAgent, environment: Readonl
     return agent.withEnvironment({ ...launchEnvironment, ...agent.environment });
 }
 
-export abstract class RuntimeReconnectTarget {
-    abstract readonly commandArgument: string;
-}
-
-export class OpaqueRuntimeReconnectTarget extends RuntimeReconnectTarget {
-    readonly connectionId: string;
-    readonly commandArgument: string;
-
-    constructor(connectionId: string) {
-        super();
-        this.connectionId = connectionId;
-        this.commandArgument = `--connection ${connectionId}`;
-    }
+export interface RuntimeReconnectTarget {
+    readonly kind: "managed";
 }
 
 export interface RuntimeConfig {

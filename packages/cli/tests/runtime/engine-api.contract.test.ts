@@ -34,11 +34,11 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
             signal,
         );
         const reopened = new MortyRuntimeEngine(params).getConnectionManager();
-        expect(await reopened.read(connection.connectionId, signal)).toEqual(connection);
+        expect(await reopened.read(connection.pairingGeneration, signal)).toEqual(connection);
         expect(await reopened.list(signal)).toEqual([connection]);
-        await reopened.setActivation(connection.connectionId, "stopped", signal);
-        expect(await store.read(connection.connectionId, signal)).toMatchObject({ activation: "stopped" });
-        await reopened.remove(connection.connectionId, signal);
+        await reopened.setActivation(connection.pairingGeneration, "stopped", signal);
+        expect(await store.read(connection.pairingGeneration, signal)).toMatchObject({ activation: "stopped" });
+        await reopened.remove(connection.pairingGeneration, signal);
         expect(await store.list(signal)).toEqual([]);
     } finally {
         await rm(directory, { recursive: true, force: true });
@@ -113,7 +113,8 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
         expect(saved).toHaveLength(1);
         expect(
             results.some(
-                (result) => result.status === "fulfilled" && result.value.connectionId === saved[0]?.connectionId,
+                (result) =>
+                    result.status === "fulfilled" && result.value.pairingGeneration === saved[0]?.pairingGeneration,
             ),
         ).toBe(true);
         for (const result of results) {
@@ -206,7 +207,7 @@ it("Given saved and provided connections with opaque credentials, When a host se
             deadline,
         );
         const connections = [
-            { kind: "saved", connectionId: saved.connectionId },
+            { kind: "saved", pairingGeneration: saved.pairingGeneration },
             {
                 kind: "provided",
                 connection: {

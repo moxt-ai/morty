@@ -140,7 +140,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     );
     const connection: RunLoopParams["connection"] =
         options.connection === "saved"
-            ? { kind: "saved", connectionId: saved.connectionId }
+            ? { kind: "saved", pairingGeneration: saved.pairingGeneration }
             : {
                   kind: "provided",
                   connection: {

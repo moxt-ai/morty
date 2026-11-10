@@ -131,7 +131,18 @@ describe("Morty daemon lifecycle", () => {
 });
 
 describe("Morty pairing lifecycle", () => {
-    it("Given a paired machine, When its connection is stopped and removed, Then the daemon releases its pairing", async () => {
+    it.each(["stop", "remove"])(
+        "Given an unpaired installation, When the user runs pair %s, Then the CLI explains how to pair without requiring an identifier",
+        async (operation) => {
+            const stateRoot = await mkdtemp(join(tmpdir(), "morty-unpaired-lifecycle-"));
+            temporaryDirectories.push(stateRoot);
+            const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
+            const result = await runCli(["pair", operation], environment, AbortSignal.timeout(30_000));
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain("No machine is paired. Run Morty setup first.");
+        },
+    );
+    it("Given a paired machine, When the user stops, restarts and removes its current pairing without an identifier, Then the CLI shows each state without exposing an internal generation", async () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-pairing-lifecycle-"));
         temporaryDirectories.push(stateRoot);
         const executableDirectory = join(stateRoot, "empty-path");
@@ -161,9 +172,9 @@ describe("Morty pairing lifecycle", () => {
             expect(started.code, started.stderr).toBe(0);
             const initiallyListed = await runCli(["pair", "list"], environment, deadline);
             expect(initiallyListed.code).toBe(0);
-            expect(initiallyListed.stdout).toContain("| connection_id");
             expect(initiallyListed.stdout).toContain("computer_id");
-            expect(initiallyListed.stdout).toContain(connection.connectionId);
+            expect(initiallyListed.stdout).toContain(connection.computerId);
+            expect(initiallyListed.stdout).not.toContain(connection.pairingGeneration);
 
             const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
             const outputPath = join(stateRoot, "pairings.json");
@@ -172,7 +183,6 @@ describe("Morty pairing lifecycle", () => {
             expect(listedAsJson).toEqual({ code: 0, stderr: "", stdout: "" });
             expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual([
                 {
-                    connection_id: connection.connectionId,
                     computer_id: "computer_test",
                     status: "active",
                     workspace,
@@ -187,38 +197,31 @@ describe("Morty pairing lifecycle", () => {
             expect(missingOutput.code).toBe(1);
             expect(missingOutput.stderr).toContain("The JSON output file does not exist");
 
-            const stopped = await runCli(
-                ["pair", "stop", "--connection", connection.connectionId],
-                environment,
-                deadline,
-            );
+            const stopped = await runCli(["pair", "stop"], environment, deadline);
             expect(stopped.code).toBe(0);
-            expect(stopped.stdout).toContain(`Pairing stopped: ${connection.connectionId}\n`);
+            expect(stopped.stdout).toBe("Pairing stopped.\n");
 
             expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).toBe(daemonPid);
             const listedStopped = await runCli(["pair", "list"], environment, deadline);
-            expect(listedStopped.stdout).toContain(connection.connectionId);
+            expect(listedStopped.stdout).toContain(connection.computerId);
             expect(listedStopped.stdout).toContain("stopped");
 
             const quit = await runCli(["quit"], environment, deadline);
             expect(quit.code).toBe(0);
             const listedAfterRestart = await runCli(["pair", "list"], environment, deadline);
-            expect(listedAfterRestart.stdout).toContain(connection.connectionId);
+            expect(listedAfterRestart.stdout).toContain(connection.computerId);
             expect(listedAfterRestart.stdout).toContain("stopped");
 
-            const removed = await runCli(
-                ["pair", "remove", "--connection", connection.connectionId],
-                environment,
-                deadline,
-            );
+            const resumed = await runCli(["start"], environment, deadline);
+            expect(resumed.code, resumed.stderr).toBe(0);
+            const listedActive = await runCli(["pair", "list"], environment, deadline);
+            expect(listedActive.stdout).toContain("active");
+            const removed = await runCli(["pair", "remove"], environment, deadline);
             expect(removed.code).toBe(0);
-            expect(removed.stdout).toContain(`Pairing removed: ${connection.connectionId}\n`);
+            expect(removed.stdout).toBe("Pairing removed.\n");
 
             const listedRemoved = await runCli(["pair", "list"], environment, deadline);
-            expect(listedRemoved.stdout).not.toContain(connection.connectionId);
-            await expect(readFile(join(control.stateDirectory, "manager.lock"))).rejects.toMatchObject({
-                code: "ENOENT",
-            });
+            expect(listedRemoved.stdout).not.toContain(connection.computerId);
         } finally {
             await runCli(["quit"], environment, AbortSignal.timeout(10_000)).catch(() => undefined);
             await relay.close();

@@ -11,12 +11,7 @@ import { isRecord } from "../util/value-utils.ts";
 import { discoverRuntimeAgentInventory } from "./catalog/discover-agent-catalog.ts";
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
-import {
-    createRuntimeConfig,
-    OpaqueRuntimeReconnectTarget,
-    type RuntimeConfig,
-    RuntimeLocalContext,
-} from "./config.ts";
+import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
 import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
 import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
@@ -222,7 +217,7 @@ function buildSavedRuntimeConfig(
         },
         new RuntimeAgentDependencies(inventory.readyAgents()),
         localContext,
-        new OpaqueRuntimeReconnectTarget(connection.connectionId),
+        { kind: "managed" },
         createCatalogAgentResolver(
             (refreshSignal) =>
                 discoverRuntimeAgentInventory(
@@ -317,7 +312,7 @@ export async function prepareRuntimeConnection(
     );
     return buildSavedRuntimeConfig(
         connection,
-        installation.runtimeCredentials(connection.connectionId),
+        installation.runtimeCredentials(connection.pairingGeneration),
         defaultWorkspace,
         inventory,
         localContext,

@@ -182,7 +182,8 @@ describe("daemon environment proxy", () => {
                 AbortSignal.timeout(2_000),
             );
             expect(
-                (await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(2_000))).computerId,
+                (await engine.getConnectionManager().read(paired.pairingGeneration, AbortSignal.timeout(2_000)))
+                    .computerId,
             ).toBe("proxy-computer");
 
             const relayPort = port(relayServer);

@@ -160,7 +160,7 @@ describe("pairing a machine without a local Agent", () => {
             );
 
             expect(
-                await engine.getConnectionManager().read(paired.connectionId, AbortSignal.timeout(5_000)),
+                await engine.getConnectionManager().read(paired.pairingGeneration, AbortSignal.timeout(5_000)),
             ).toMatchObject({
                 computerId: "unattended-computer",
             });
@@ -201,9 +201,9 @@ describe("pairing a machine without a local Agent", () => {
                 agentLaunchEnvironment: environment,
             })
                 .getConnectionManager()
-                .read(paired.connectionId, AbortSignal.timeout(20_000));
+                .read(paired.pairingGeneration, AbortSignal.timeout(20_000));
 
-            expect(resumed.connectionId).toBe(paired.connectionId);
+            expect(resumed.pairingGeneration).toBe(paired.pairingGeneration);
             expect(resumed).toEqual(paired);
             expect(relay.claims).toHaveLength(1);
         } finally {

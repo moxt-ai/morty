@@ -99,7 +99,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         );
         const ready = Promise.withResolvers<void>();
         running = engine.runLoop({
-            connection: { kind: "saved", connectionId: paired.connectionId },
+            connection: { kind: "saved", pairingGeneration: paired.pairingGeneration },
             signal,
             onConnectionStatus: (status) => {
                 if (status === "online") {
