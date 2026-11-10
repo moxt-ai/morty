@@ -1027,48 +1027,14 @@ export function ConversationSidebar({
                                                                     )}
                                                                 >
                                                                     <dt>
-                                                                        <NetworkHopLabel from="Browser" to="Relay" />
+                                                                        <NetworkHopLabel from="Morty" to="Runtime" />
                                                                     </dt>
                                                                     <dd
-                                                                        aria-label="Browser to relay latency"
+                                                                        aria-label="Morty to Runtime latency"
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
-                                                                        {diagnostic.state.browserRelayLatencyMs} ms
-                                                                    </dd>
-                                                                </div>
-                                                                <div
-                                                                    className={cn(
-                                                                        networkLatencyRowClassName,
-                                                                        networkLatencyDividerClassName,
-                                                                    )}
-                                                                >
-                                                                    <dt>
-                                                                        <NetworkHopLabel from="Morty" to="Relay" />
-                                                                    </dt>
-                                                                    <dd
-                                                                        aria-label="Morty to relay latency"
-                                                                        className="font-mono font-medium"
-                                                                        role="status"
-                                                                    >
-                                                                        {diagnostic.state.mortyRelayLatencyMs} ms
-                                                                    </dd>
-                                                                </div>
-                                                                <div
-                                                                    className={cn(
-                                                                        networkLatencyRowClassName,
-                                                                        networkLatencyDividerClassName,
-                                                                    )}
-                                                                >
-                                                                    <dt>
-                                                                        <NetworkHopLabel from="Relay" to="Daemon" />
-                                                                    </dt>
-                                                                    <dd
-                                                                        aria-label="Relay to daemon latency"
-                                                                        className="font-mono font-medium"
-                                                                        role="status"
-                                                                    >
-                                                                        {diagnostic.state.relayRuntimeLatencyMs} ms
+                                                                        {diagnostic.state.runtimeLatencyMs} ms
                                                                     </dd>
                                                                 </div>
                                                             </dl>

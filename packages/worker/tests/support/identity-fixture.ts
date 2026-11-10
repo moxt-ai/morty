@@ -90,7 +90,7 @@ async function startIdentityFixture(
                 };
             },
         };
-        const environment = (appOrigin = APP_ORIGIN) => ({
+        const environment = (appOrigin = baseConfiguration.APP_ORIGIN) => ({
             ...cloudBindings,
             ...baseConfiguration,
             APP_ORIGIN: appOrigin,

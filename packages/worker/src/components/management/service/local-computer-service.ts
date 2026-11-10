@@ -155,17 +155,6 @@ export class LocalComputerService {
         );
     readonly measureRuntimeLatency = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.latency(signal), 15_000);
-    readonly measureRelayLatency = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(
-            computerId,
-            signal,
-            async (computer, signal) => {
-                const started = performance.now();
-                await computer.probe(signal);
-                return Math.max(0, Math.round(performance.now() - started));
-            },
-            15_000,
-        );
     readonly openChatRuntimeHost = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.openHost(signal), 20_000);
     readonly listChatDirectory = async (computerId: string, directory: string, signal: AbortSignal) =>

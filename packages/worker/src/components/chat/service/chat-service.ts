@@ -172,20 +172,22 @@ export class ChatService {
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
         const _runtime = await this.localRuntime(scope);
-        const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
-            this.#relay.measureRelayLatency(scope.computerId, scope.signal),
-            this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
-        ]);
         return {
-            relayOrigin: this.#relay.configuration().origin,
-            relayRuntimeLatencyMs,
-            mortyRelayLatencyMs,
+            runtimeLatencyMs: await this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
         };
     };
 
     readonly setupRuntimes = async (scope: ChatScope) => {
         await this.#bot(scope);
-        return { runtimes: await this.#relay.chatRuntimes(scope.computerId, scope.signal) };
+        const runtimes = await this.#relay.chatRuntimes(scope.computerId, scope.signal);
+        return {
+            runtimes: runtimes.map(({ computerId, machineName, online, agents }) => ({
+                computerId,
+                machineName,
+                online,
+                agents: agents.map(({ harness, label }) => ({ harness, label })),
+            })),
+        };
     };
 
     readonly listDirectory = async (scope: ChatScope, directory: string) => {

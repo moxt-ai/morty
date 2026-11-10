@@ -82,10 +82,6 @@ function parseArguments(argv) {
                 options.stateDir = path.resolve(requireValue(index, token));
                 index += 1;
                 break;
-            case "--relay-port":
-                options.relayPort = Number.parseInt(requireValue(index, token), 10);
-                index += 1;
-                break;
             case "--chat-port":
                 options.chatPort = Number.parseInt(requireValue(index, token), 10);
                 index += 1;
@@ -922,11 +918,11 @@ function usage(stream = process.stdout) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--relay-port N] [--chat-port N] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--chat-port N] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
-            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|relay|runtime|all] [--lines N] [--filter REGEX] [--follow]",
+            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
             "reload rebuilds web/Chat without restarting Relay or runtimes.",

@@ -1,5 +1,6 @@
 import { createServer, request } from "node:http";
 import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
+import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
 
@@ -114,6 +115,9 @@ export async function createResponseLossProxy(upstream: string) {
                 ...(incoming.headers.authorization === undefined
                     ? {}
                     : { authorization: incoming.headers.authorization }),
+                ...(incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === undefined
+                    ? {}
+                    : { [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] }),
             },
         });
         sockets.add(remote);

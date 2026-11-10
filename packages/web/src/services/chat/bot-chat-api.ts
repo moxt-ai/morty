@@ -85,9 +85,7 @@ const chatRuntimeSchema = v.object({
 export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
 const runtimeConfigurationSchema = v.object({ runtime: chatRuntimeSchema });
 const networkDiagnosticSchema = v.strictObject({
-    relayRuntimeLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
-    relayOrigin: v.pipe(v.string(), v.url()),
-    mortyRelayLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    runtimeLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
 export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
 export type ChatAgentSelection = {

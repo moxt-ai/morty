@@ -39,7 +39,7 @@ test("Given a Project mapping saved under an old origin and service setting, Whe
     });
 });
 
-test("Given a machine owner and a deployment service credential, When the owner opens management, Then they can pair a Runtime for their account", async () => {
+test("Given a machine owner, When the owner opens management, Then they can pair a Runtime for their account", async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
@@ -66,8 +66,7 @@ test("Given a machine owner and a deployment service credential, When the owner 
     }
 });
 
-test("Given an existing Project and Machine, When the same Relay moves to another origin, Then the user keeps their Project and can pair and replace it", {
-    // This scenario builds and starts both real Workers, then reloads Chat at the new origin.
+test("Given an existing Project and Machine, When Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
     timeout: 30_000,
 }, async () => {
     const fixture = await createIdentityFixture();
@@ -89,9 +88,9 @@ test("Given an existing Project and Machine, When the same Relay moves to anothe
         const bot = await originalBot.json();
 
         // A second listener forwards to the same real Relay and its existing storage.
-        const relocated = await createResponseLossProxy(fixture.baseConfiguration.MORTY_RELAY_URL);
+        const relocated = await createResponseLossProxy(fixture.origin);
         try {
-            await fixture.changeRelayOrigin(relocated.origin);
+            await fixture.changeAppOrigin(relocated.origin);
             const environment = fixture.environment();
             const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);
