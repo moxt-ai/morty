@@ -1,5 +1,8 @@
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
-import { type ProjectLocationHint, RELAY_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
+import {
+    type ProjectLocationHint,
+    RELAY_APP_PROJECT_PERMISSIONS,
+    type SessionAccessGrant,
+} from "@morty-build/client/protocol";
 import {
     createRandomToken,
     type decodeProjectCredential,
@@ -19,6 +22,7 @@ import {
     type RelayPrincipal,
 } from "../entity/computer-management.ts";
 import type { CredentialRow, ProjectRow } from "../entity/relay-records.ts";
+import type { ComputerSessionAccessDirectory } from "../infra/computer-session-access.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
 import { AppCredentialProjectAccess } from "./app-credential-project-access.ts";
@@ -59,11 +63,12 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         storage: ComputerManagementStorage,
         placements: ComputerManagementPlacementRegistry,
         appAuthentication: AppCredentialAuthenticationService,
+        sessionAccess: ComputerSessionAccessDirectory,
     ) {
         this.#storage = storage;
         this.#placements = placements;
         this.#appAuthentication = appAuthentication;
-        this.#projectAccess = new AppCredentialProjectAccess(storage);
+        this.#projectAccess = new AppCredentialProjectAccess(storage, sessionAccess);
     }
     readonly #storage: ComputerManagementStorage;
     readonly #placements: ComputerManagementPlacementRegistry;
@@ -242,23 +247,16 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         computerId: string,
         credential: CredentialRow,
         requiredPermission: ProjectPermission,
-        holder: SessionAccessHolder,
+        grant: SessionAccessGrant,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> =>
         await this.#projectAccess.authorizeSessionCredential(
             credential,
             validateIdentifier(computerId, "computer_id"),
             [requiredPermission],
-            holder,
+            grant,
             signal,
         );
-    /** Whether `holder`'s access to the computer holds now; a Session credential is issued for it only while it does. */
-    readonly holdsAccess = async (
-        computerId: string,
-        holder: SessionAccessHolder,
-        signal: AbortSignal,
-    ): Promise<boolean> =>
-        await this.#storage.holdsAccess(validateIdentifier(computerId, "computer_id"), holder, signal);
     readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (computerId, signal) => {
         const project = await this.#storage.readActiveComputerScope(
             validateIdentifier(computerId, "computer_id"),

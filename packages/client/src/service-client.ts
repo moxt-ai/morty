@@ -962,8 +962,9 @@ export class MortySessionResources {
         );
 
     /**
-     * Has the Relay issue a Session credential, signed with a key only the Relay holds, that carries `holder`'s access.
-     * The Relay honors it only while that access holds and the Runtime pairing current at issue is still current.
+     * Has the Relay issue a Session credential, signed with a key only the Relay holds, that carries `holder`'s access
+     * under the computer's active Runtime pairing. The Relay honors it only while that access holds and that pairing is
+     * still active, so revoking the Runtime ends it; issuing is refused as `credential_revoked` when either has ended.
      */
     readonly createAccess = async (
         sessionTarget: NativeSessionTarget,

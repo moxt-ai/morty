@@ -17,7 +17,7 @@ import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
 import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
-import { computerManagementStore } from "./registered-runtime.ts";
+import { composedComputer } from "./registered-runtime.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
@@ -70,6 +70,7 @@ async function project(_name = "Runtime pairing") {
     const stub = env.COMPUTER_RELAY.getByName(computerId);
     const request = async (path: string, method = "GET", body?: object, token = defaultCredential.credential) => {
         const result = await runInDurableObject(stub, async (_instance, state) => {
+            const computer = composedComputer(computerId, state.storage);
             const response = await worker.fetch(
                 new Request(`${origin}${path}`, {
                     method,
@@ -78,7 +79,8 @@ async function project(_name = "Runtime pairing") {
                 }),
                 {
                     ...env,
-                    MORTY_COMPUTER_STORE: computerManagementStore(computerId, state.storage),
+                    MORTY_COMPUTER_STORE: computer.store,
+                    MORTY_COMPUTER_SESSION_ACCESS: computer.sessionAccess,
                     MORTY_COMPUTER_ID: computerId,
                 },
             );

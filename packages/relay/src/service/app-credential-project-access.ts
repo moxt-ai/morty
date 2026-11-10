@@ -1,4 +1,4 @@
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
+import type { SessionAccessGrant } from "@morty-build/client/protocol";
 import {
     AuditActor,
     ComputerScope,
@@ -10,6 +10,7 @@ import {
 } from "@morty-build/relay-core";
 import { RelayAuditActorKind } from "../entity/computer-management.ts";
 import type { CredentialRow } from "../entity/relay-records.ts";
+import type { ComputerSessionAccessDirectory } from "../infra/computer-session-access.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { appCredentialActive, credentialPermissions } from "./app-credential-authentication-service.ts";
 
@@ -20,16 +21,16 @@ import { appCredentialActive, credentialPermissions } from "./app-credential-aut
 export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     readonly #storage: Pick<
         ComputerManagementStorage,
-        "holdsAccess" | "readActiveComputerScope" | "readCredentialById" | "scopedProjects"
+        "readActiveComputerScope" | "readCredentialById" | "scopedProjects"
     >;
+    readonly #sessionAccess: ComputerSessionAccessDirectory;
 
     constructor(
-        storage: Pick<
-            ComputerManagementStorage,
-            "holdsAccess" | "readActiveComputerScope" | "readCredentialById" | "scopedProjects"
-        >,
+        storage: Pick<ComputerManagementStorage, "readActiveComputerScope" | "readCredentialById" | "scopedProjects">,
+        sessionAccess: ComputerSessionAccessDirectory,
     ) {
         this.#storage = storage;
+        this.#sessionAccess = sessionAccess;
     }
 
     readonly authorize = async (
@@ -73,21 +74,21 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     };
 
     /**
-     * Authorizes a Session credential the AppCredential issued for `holder`: the AppCredential's own access, while the
-     * holder's access to the computer still holds.
+     * Authorizes a Session credential the AppCredential issued with `grant`: the AppCredential's own access, while the
+     * holder's access to the computer still holds under the Runtime pairing generation the credential was issued in.
      */
     readonly authorizeSessionCredential = async (
         row: CredentialRow,
         computerId: string,
         requiredPermissions: readonly ProjectPermission[],
-        holder: SessionAccessHolder,
+        grant: SessionAccessGrant,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => {
-        const [access, holds] = await Promise.all([
+        const [access, generation] = await Promise.all([
             this.authorize(row, computerId, requiredPermissions, signal),
-            this.#storage.holdsAccess(computerId, holder, signal),
+            this.#sessionAccess.forComputer(computerId).currentGeneration(grant.holder, signal),
         ]);
-        if (!holds) {
+        if (generation !== grant.generation) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session credential has been revoked");
         }
         return access;
@@ -108,13 +109,13 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     readonly grantsSessionCredential: ProjectCredentialAuthority["grantsSessionCredential"] = async (
         computerId,
         credentialId,
-        holder,
+        grant,
         requiredPermissions,
         signal,
     ) =>
         await this.#grantsThrough(
             credentialId,
-            async (row) => await this.authorizeSessionCredential(row, computerId, requiredPermissions, holder, signal),
+            async (row) => await this.authorizeSessionCredential(row, computerId, requiredPermissions, grant, signal),
             signal,
         );
 

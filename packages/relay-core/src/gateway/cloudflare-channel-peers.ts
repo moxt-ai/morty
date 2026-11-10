@@ -1,5 +1,5 @@
 import {
-    decodeSessionAccessHolder,
+    decodeSessionAccessGrant,
     isIdentifier,
     type NativeSessionTarget,
     ProtocolMessageError,
@@ -42,7 +42,7 @@ const attachmentSchema = v.union([
         credential: v.object({
             credentialId: v.string(),
             signingKeyId: v.string(),
-            holder: v.pipe(v.unknown(), v.transform(decodeSessionAccessHolder)),
+            grant: v.pipe(v.unknown(), v.transform(decodeSessionAccessGrant)),
         }),
         computerId: v.string(),
         sessionFilter: targetSchema,

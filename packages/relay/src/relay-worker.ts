@@ -47,7 +47,10 @@ import {
     type ComputerWorkerRoutingBindings,
     routeComputerDurableObject,
 } from "./gateway/computer-durable-object-routing.ts";
-import { ComputerDurableObjectStores } from "./gateway/computer-durable-object-store.ts";
+import {
+    ComputerDurableObjectSessionAccessDirectory,
+    ComputerDurableObjectStores,
+} from "./gateway/computer-durable-object-store.ts";
 import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
 import { createProjectApplication } from "./http/project-routes.ts";
 import { createRelayControlApplication } from "./http/relay-routes.ts";
@@ -180,14 +183,27 @@ function optionalExecutionContext(context: Pick<Context, "executionCtx">): Conte
 export function createRelayAccessServices(environment: RelayApplicationBindings) {
     const execution =
         "MORTY_COMPUTER_STORE" in environment
-            ? { computerId: environment.MORTY_COMPUTER_ID, store: environment.MORTY_COMPUTER_STORE }
+            ? {
+                  computerId: environment.MORTY_COMPUTER_ID,
+                  store: environment.MORTY_COMPUTER_STORE,
+                  access: environment.MORTY_COMPUTER_SESSION_ACCESS,
+              }
             : null;
     const stores = new ComputerDurableObjectStores(environment.COMPUTER_RELAY, execution);
+    const computerSessionAccess = new ComputerDurableObjectSessionAccessDirectory(
+        environment.COMPUTER_RELAY,
+        execution,
+    );
     const identityStores = execution === null ? [] : [execution.store];
     const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
     const storageRegistry = new RelayStorageRegistry(environment);
     const appAuthentication = new AppCredentialAuthenticationService(controlStorage);
-    const control = new ComputerManagementService(controlStorage, storageRegistry, appAuthentication);
+    const control = new ComputerManagementService(
+        controlStorage,
+        storageRegistry,
+        appAuthentication,
+        computerSessionAccess,
+    );
     return {
         stores,
         identityStores,
@@ -196,6 +212,7 @@ export function createRelayAccessServices(environment: RelayApplicationBindings)
         sessionAccess: new SessionAccessService(
             appAuthentication,
             control,
+            computerSessionAccess,
             new SessionAccessSigner(environment.MORTY_SESSION_SIGNING_SECRET),
         ),
         projects: new ComputerManagementStorageDirectory(storageRegistry, controlStorage),
@@ -650,7 +667,7 @@ export function createRelayApplication(
                 {
                     credentialId: target.credentialId,
                     signingKeyId: target.signingKeyId,
-                    holder: target.holder,
+                    grant: target.grant,
                     expiresAt: target.expiresAtEpochMilliseconds,
                 },
                 context.req.raw.signal,

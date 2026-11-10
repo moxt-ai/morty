@@ -4,10 +4,12 @@ import {
     decodeSessionAccessCredential,
     type NativeSessionTarget,
     ProtocolMessageError,
+    type SessionAccessGrant,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
+import type { ComputerSessionAccessDirectory } from "../infra/computer-session-access.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
 import type { ComputerManagementService } from "./computer-management-service.ts";
 
@@ -21,8 +23,8 @@ export interface SessionAccess {
     /** The AppCredential that issued the Session credential. */
     readonly credentialId: string;
     readonly issuedAtEpochMilliseconds: number;
-    /** Whose access the credential carries. */
-    readonly holder: SessionAccessHolder;
+    /** The access the credential carries. */
+    readonly grant: SessionAccessGrant;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
     readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
@@ -40,21 +42,25 @@ function sessionScopedPermission(permission: ProjectPermission): ProjectPermissi
 export class SessionAccessService {
     readonly #applications: AppCredentialAuthenticationService;
     readonly #control: ComputerManagementService;
+    readonly #sessionAccess: ComputerSessionAccessDirectory;
     readonly #signer: SessionAccessSigner;
 
     constructor(
         applications: AppCredentialAuthenticationService,
         control: ComputerManagementService,
+        sessionAccess: ComputerSessionAccessDirectory,
         signer: SessionAccessSigner,
     ) {
         this.#applications = applications;
         this.#control = control;
+        this.#sessionAccess = sessionAccess;
         this.#signer = signer;
     }
 
     /**
-     * Issues a Session credential carrying `holder`'s access. It is refused when that access has already ended, as the
-     * credential would be refused from its first use.
+     * Issues a Session credential carrying `holder`'s access under the computer's active Runtime pairing generation. It
+     * is refused when that access has already ended or no Runtime is paired, as the credential would be refused from
+     * its first use.
      */
     readonly issue = async (
         target: SessionAccessTarget,
@@ -83,7 +89,8 @@ export class SessionAccessService {
             "",
             signal,
         );
-        if (!(await this.#control.holdsAccess(target.computerId, holder, signal))) {
+        const generation = await this.#sessionAccess.forComputer(target.computerId).currentGeneration(holder, signal);
+        if (generation === null) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
         }
         const issuedAtEpochMilliseconds = Date.now();
@@ -93,7 +100,7 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
             purpose: "session-access",
-            holder,
+            grant: { holder, generation },
             target: nativeTarget,
         });
         return {
@@ -178,7 +185,7 @@ export class SessionAccessService {
             signingKeyId: await this.#signer.keyId(),
             credentialId: application.credential_id,
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
-            holder: claims.holder,
+            grant: claims.grant,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
             authorize: async (permission, authorizationSignal) => {
@@ -186,7 +193,7 @@ export class SessionAccessService {
                     computerId,
                     application,
                     sessionScopedPermission(permission),
-                    claims.holder,
+                    claims.grant,
                     authorizationSignal,
                 );
             },

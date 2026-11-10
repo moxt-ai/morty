@@ -20,17 +20,30 @@ export function isSessionAccessHolder(value: unknown): value is SessionAccessHol
     return sessionAccessHolderSchema.safeParse(value).success;
 }
 
+/**
+ * The access a Session credential carries: whose access, under which of the computer's Runtime pairing generations.
+ * The credential is honored only while that holder's access holds and that generation is still the computer's active
+ * one, so ending either ends the credential without any record of its own.
+ */
+const sessionAccessGrantSchema = z
+    .strictObject({
+        holder: sessionAccessHolderSchema,
+        generation: z.number().int().positive(),
+    })
+    .readonly();
+
+export type SessionAccessGrant = z.infer<typeof sessionAccessGrantSchema>;
+
+export const decodeSessionAccessGrant = (value: unknown): SessionAccessGrant =>
+    decodeZodValue(value, sessionAccessGrantSchema);
+
 const claimsSchema = z
     .object({
         expiresAtEpochMilliseconds: z.number().int().nonnegative(),
         issuedAtEpochMilliseconds: z.number().int().nonnegative(),
         computerId: identifierStringSchema,
         purpose: z.literal("session-access"),
-        /**
-         * Whose access the credential carries. It is honored only while that access holds, so ending the access ends
-         * the credential without any record of its own.
-         */
-        holder: sessionAccessHolderSchema,
+        grant: sessionAccessGrantSchema,
         target: nativeSessionTargetSchema,
     })
     .readonly();

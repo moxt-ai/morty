@@ -1,6 +1,7 @@
 import { createDurableObjectContext, type DurableObjectSqlDatabase } from "@morty-build/relay-core";
 import { ComputerManagementStorageDirectory } from "../infra/computer-management-storage-directory.ts";
 import type { ComputerManagementStore, ComputerManagementStores } from "../infra/computer-management-store.ts";
+import type { ComputerSessionAccess } from "../infra/computer-session-access.ts";
 import { AppCredentialProjectAccess } from "../service/app-credential-project-access.ts";
 import { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { type RelayStorageBindings, RelayStorageRegistry } from "../storage/relay-storage-registry.ts";
@@ -17,6 +18,7 @@ export function createRelayDurableObjectContext(
     storage: {
         readonly database: DurableObjectSqlDatabase;
         readonly storeFor: (computerId: string) => ComputerManagementStore;
+        readonly sessionAccessFor: (computerId: string) => ComputerSessionAccess;
     },
 ) {
     const stores: ComputerManagementStores = {
@@ -34,7 +36,7 @@ export function createRelayDurableObjectContext(
     return createDurableObjectContext(state, {
         stores,
         projects,
-        projectCredentials: new AppCredentialProjectAccess(controlStorage),
+        projectCredentials: new AppCredentialProjectAccess(controlStorage, { forComputer: storage.sessionAccessFor }),
         doDatabase: storage.database,
     });
 }

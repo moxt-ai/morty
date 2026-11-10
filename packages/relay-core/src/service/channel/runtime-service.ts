@@ -10,7 +10,7 @@ import {
     RUNTIME_STATUS_KIND,
     type RuntimeLivenessReadyEvent,
     SESSION_EVENT_KIND,
-    type SessionAccessHolder,
+    type SessionAccessGrant,
 } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import type { RuntimeConnectionIdentity } from "../../entity/channel/runtime-connection.ts";
@@ -39,11 +39,11 @@ export type RuntimeSocketIdentity =
     | {
           readonly role: "viewer";
           readonly expiresAt: number;
-          /** The verified Session credential's authority, signing generation and whose access it carries. */
+          /** The verified Session credential's authority, signing generation and the access it carries. */
           readonly credential: {
               readonly credentialId: string;
               readonly signingKeyId: string;
-              readonly holder: SessionAccessHolder;
+              readonly grant: SessionAccessGrant;
           };
           readonly computerId: string;
 

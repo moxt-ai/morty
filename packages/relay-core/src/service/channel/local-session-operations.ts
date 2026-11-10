@@ -3,7 +3,7 @@ import type {
     AgentSettingsDiscoverCommand,
     AgentSettingsDiscoveredEvent,
     NativeSessionTarget,
-    SessionAccessHolder,
+    SessionAccessGrant,
     WorkspaceEntriesEvent,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
@@ -45,7 +45,7 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
         credential: {
             readonly credentialId: string;
             readonly signingKeyId: string;
-            readonly holder: SessionAccessHolder;
+            readonly grant: SessionAccessGrant;
             readonly expiresAt: number;
         },
         signal: AbortSignal,
@@ -139,7 +139,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
                 credential: {
                     credentialId: credential.credentialId,
                     signingKeyId: credential.signingKeyId,
-                    holder: credential.holder,
+                    grant: credential.grant,
                 },
             }).response;
         },

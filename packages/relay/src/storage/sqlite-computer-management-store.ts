@@ -1,4 +1,3 @@
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { relayDrizzle, type SqlDatabase } from "@morty-build/relay-core/database";
 import { SqliteProjectStore } from "@morty-build/relay-core/project-store";
 import { auditEvent } from "@morty-build/relay-core/schema/project-do";
@@ -15,19 +14,11 @@ export class SqliteComputerManagementStore extends SqliteProjectStore implements
     readonly #computerId: string;
     readonly #database: SqlDatabase;
 
-    /** `holdsAccess` answers, from the computer's identities, whether a holder's access to the computer still holds. */
-    constructor(
-        computerId: string,
-        database: SqlDatabase,
-        holdsAccess: (holder: SessionAccessHolder, signal: AbortSignal) => Promise<boolean>,
-    ) {
+    constructor(computerId: string, database: SqlDatabase) {
         super(computerId, database);
         this.#computerId = computerId;
         this.#database = database;
-        this.holdsAccess = holdsAccess;
     }
-
-    readonly holdsAccess: ComputerManagementStore["holdsAccess"];
 
     readonly recordAudit: ComputerManagementStore["recordAudit"] = async (audit, signal) => {
         await relayDrizzle(this.#database, signal)

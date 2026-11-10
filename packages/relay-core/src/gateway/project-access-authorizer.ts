@@ -1,4 +1,4 @@
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
+import type { SessionAccessGrant } from "@morty-build/client/protocol";
 import type { ProjectAccessContext, ProjectPermission } from "../entity/authentication/project-authentication.ts";
 
 /** The host authenticates an opaque credential and authorizes a resolved Project. */
@@ -24,14 +24,14 @@ export interface ProjectCredentialAuthority {
         signal: AbortSignal,
     ) => Promise<boolean>;
     /**
-     * The host's current answer for a Session credential the project credential issued for `holder`, which opened a
-     * live Session view: the same rule its requests apply, so revoking the project credential or ending the holder's
-     * access ends the view.
+     * The host's current answer for a Session credential the project credential issued with `grant`, which opened a
+     * live Session view: the same rule its requests apply, so revoking the project credential, ending the holder's
+     * access or revoking the Runtime pairing it was issued under ends the view.
      */
     readonly grantsSessionCredential: (
         computerId: string,
         credentialId: string,
-        holder: SessionAccessHolder,
+        grant: SessionAccessGrant,
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,
     ) => Promise<boolean>;

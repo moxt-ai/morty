@@ -5,16 +5,17 @@ import { logger } from "@morty-build/relay-core/logging";
 import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { ComputerManagementStore, ComputerManagementStores } from "../infra/computer-management-store.ts";
+import type { ComputerSessionAccess, ComputerSessionAccessDirectory } from "../infra/computer-session-access.ts";
 
 const OPERATION_TIMEOUT_MILLISECONDS = 15_000;
 
 type ProjectStub = DurableObjectStub<ComputerRelay>;
 
 /**
- * A Project's store reached through its Account Durable Object. Every operation executes there as one unit;
- * cancelling or timing out here stops waiting for the result but cannot undo an operation already delivered.
+ * Calls a computer's ComputerRelay. Every operation executes there as one unit; cancelling or timing out here stops
+ * waiting for the result but cannot undo an operation already delivered.
  */
-class ComputerDurableObjectStore implements ComputerManagementStore {
+abstract class ComputerDurableObjectCalls {
     readonly #namespace: DurableObjectNamespace<ComputerRelay>;
     readonly #computerId: string;
     readonly #locationHint: ProjectLocationHint;
@@ -30,7 +31,7 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
         this.#locationHint = locationHint;
     }
 
-    private readonly call = async <Value>(
+    protected readonly call = async <Value>(
         operation: string,
         invoke: (stub: ProjectStub, computerId: string) => Promise<Value>,
         signal: AbortSignal,
@@ -79,7 +80,10 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
             deadline.removeEventListener("abort", abort);
         }
     };
+}
 
+/** A Project's store reached through its Account Durable Object. */
+class ComputerDurableObjectStore extends ComputerDurableObjectCalls implements ComputerManagementStore {
     readonly updateAgentCatalog: ComputerManagementStore["updateAgentCatalog"] = (
         computerId,
         tokenHash,
@@ -130,9 +134,6 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
             signal,
         );
 
-    readonly holdsAccess: ComputerManagementStore["holdsAccess"] = (holder, signal) =>
-        this.call("holdsAccess", (stub, computerId) => stub.holdsAccess(computerId, holder), signal);
-
     readonly recordAudit: ComputerManagementStore["recordAudit"] = (audit, signal) =>
         this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);
 
@@ -140,26 +141,36 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
         this.call("listAuditEvents", (stub, computerId) => stub.listAuditEvents(computerId, limit), signal);
 }
 
+/** A computer's Session access reached through its ComputerRelay, which owns both of its halves. */
+class ComputerDurableObjectSessionAccess extends ComputerDurableObjectCalls implements ComputerSessionAccess {
+    readonly currentGeneration: ComputerSessionAccess["currentGeneration"] = (holder, signal) =>
+        this.call(
+            "currentSessionGeneration",
+            (stub, computerId) => stub.currentSessionGeneration(computerId, holder),
+            signal,
+        );
+}
+
 /**
- * Locates Project stores. Inside a Account Durable Object its own Project resolves to the local store; every other
- * Project resolves to its own Durable Object.
+ * Locates one kind of computer service. Inside a ComputerRelay its own computer resolves to the local service; every
+ * other computer resolves to its own ComputerRelay.
  */
-export class ComputerDurableObjectStores implements ComputerManagementStores {
-    readonly #namespace: DurableObjectNamespace<ComputerRelay>;
-    readonly #local: { readonly computerId: string; readonly store: ComputerManagementStore } | null;
-    readonly #remote = new Map<string, ComputerManagementStore>();
+class ComputerDurableObjectLocator<Service> {
+    readonly #local: { readonly computerId: string; readonly service: Service } | null;
+    readonly #remote = new Map<string, Service>();
+    readonly #connect: (computerId: string, locationHint: ProjectLocationHint) => Service;
 
     constructor(
-        namespace: DurableObjectNamespace<ComputerRelay>,
-        local: { readonly computerId: string; readonly store: ComputerManagementStore } | null = null,
+        local: { readonly computerId: string; readonly service: Service } | null,
+        connect: (computerId: string, locationHint: ProjectLocationHint) => Service,
     ) {
-        this.#namespace = namespace;
         this.#local = local;
+        this.#connect = connect;
     }
 
-    readonly forProject: ComputerManagementStores["forProject"] = (computerId) => {
+    readonly locate = (computerId: string): Service => {
         if (this.#local?.computerId === computerId) {
-            return this.#local.store;
+            return this.#local.service;
         }
         const existing = this.#remote.get(computerId);
         if (existing !== undefined) {
@@ -169,10 +180,27 @@ export class ComputerDurableObjectStores implements ComputerManagementStores {
         if (placement === null) {
             throw new PairingDirectoryError("directory_unavailable", "Project storage is unavailable");
         }
-        const store = new ComputerDurableObjectStore(this.#namespace, computerId, placement.locationHint);
-        this.#remote.set(computerId, store);
-        return store;
+        const service = this.#connect(computerId, placement.locationHint);
+        this.#remote.set(computerId, service);
+        return service;
     };
+}
+
+/** Locates Project stores. */
+export class ComputerDurableObjectStores implements ComputerManagementStores {
+    readonly #stores: ComputerDurableObjectLocator<ComputerManagementStore>;
+
+    constructor(
+        namespace: DurableObjectNamespace<ComputerRelay>,
+        local: { readonly computerId: string; readonly store: ComputerManagementStore } | null = null,
+    ) {
+        this.#stores = new ComputerDurableObjectLocator(
+            local === null ? null : { computerId: local.computerId, service: local.store },
+            (computerId, locationHint) => new ComputerDurableObjectStore(namespace, computerId, locationHint),
+        );
+    }
+
+    readonly forProject: ComputerManagementStores["forProject"] = (computerId) => this.#stores.locate(computerId);
 
     readonly resolve: ComputerManagementStores["resolve"] = (placement) => {
         if (!placement.hasShard) {
@@ -180,4 +208,22 @@ export class ComputerDurableObjectStores implements ComputerManagementStores {
         }
         return this.forProject(placement.shard.d1ShardId);
     };
+}
+
+/** Locates each computer's Session access. */
+export class ComputerDurableObjectSessionAccessDirectory implements ComputerSessionAccessDirectory {
+    readonly #access: ComputerDurableObjectLocator<ComputerSessionAccess>;
+
+    constructor(
+        namespace: DurableObjectNamespace<ComputerRelay>,
+        local: { readonly computerId: string; readonly access: ComputerSessionAccess } | null = null,
+    ) {
+        this.#access = new ComputerDurableObjectLocator(
+            local === null ? null : { computerId: local.computerId, service: local.access },
+            (computerId, locationHint) => new ComputerDurableObjectSessionAccess(namespace, computerId, locationHint),
+        );
+    }
+
+    readonly forComputer: ComputerSessionAccessDirectory["forComputer"] = (computerId) =>
+        this.#access.locate(computerId);
 }

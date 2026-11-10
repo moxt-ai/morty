@@ -7,7 +7,7 @@ import { ProjectAuthenticationError } from "@morty-build/relay-core/contracts";
 
 const SIGNING_SECRET_MINIMUM_LENGTH = 32;
 // HKDF binds each key to the protocol purpose and the authenticated AppCredential identity.
-const KEY_DERIVATION_LABEL = "morty.session-access.v2:";
+const KEY_DERIVATION_LABEL = "morty.session-access.v3:";
 const MAXIMUM_LIFETIME_MILLISECONDS = 15 * 60 * 1_000;
 const MAXIMUM_ISSUANCE_CLOCK_SKEW_MILLISECONDS = 30_000;
 const HMAC_SHA_256 = { hash: "SHA-256", name: "HMAC" } as const;

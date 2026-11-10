@@ -68,9 +68,10 @@ def verify(origin, app_credential, root_key, revision):
     })
     if status != 401 or refused.get('error', {}).get('code') != 'credential_revoked':
         fail('Production Session issuance refusal', status, refused)
-    # Sign a credential for that holder exactly as the Relay does, with RFC 5869 extract/expand of the configured
-    # deployment secret. The Runtime authenticates its signature and refuses it only for the holder's access, so a
-    # refusal as revoked rather than invalid verifies the configured signing secret.
+    # Sign a credential for that holder, under a pairing generation the Project never had, exactly as the Relay does,
+    # with RFC 5869 extract/expand of the configured deployment secret. The Runtime authenticates its signature and
+    # refuses it only for the access it carries, so a refusal as revoked rather than invalid verifies the configured
+    # signing secret.
     match = re.fullmatch(r'mapp_([A-Za-z0-9_-]{22})_[A-Za-z0-9_-]{43}', app_credential)
     if match is None:
         raise ValueError('The deployment AppCredential is invalid')
@@ -78,10 +79,10 @@ def verify(origin, app_credential, root_key, revision):
     now = int(time.time() * 1000)
     claims = {
         'expiresAtEpochMilliseconds': now + 60_000, 'issuedAtEpochMilliseconds': now, 'computerId': computer_id,
-        'purpose': 'session-access', 'holder': holder, 'target': target,
+        'purpose': 'session-access', 'grant': {'holder': holder, 'generation': 1}, 'target': target,
     }
     signed = ('msession_' + public_id + '_' + encode(json.dumps(claims, separators=(',', ':')).encode())).encode()
-    extracted = hmac.digest(b'morty.session-access.v2:', root_key, 'sha256')
+    extracted = hmac.digest(b'morty.session-access.v3:', root_key, 'sha256')
     key = hmac.digest(extracted, public_id.encode() + b'\x01', 'sha256')
     credential = signed.decode() + '_' + encode(hmac.digest(key, signed, 'sha256'))
     # The Session credential selects ComputerRelay; the Runtime verifies it before answering this public route.

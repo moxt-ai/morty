@@ -1,4 +1,3 @@
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import {
     type CredentialRow,
@@ -88,13 +87,6 @@ export class ComputerManagementStorage {
         );
         return decodeOptionalStorageRecord(RelayComputerScopeRowSchema, rows[0] ?? null);
     };
-
-    /** Whether `holder`'s access to the computer holds now. */
-    readonly holdsAccess = async (
-        computerId: string,
-        holder: SessionAccessHolder,
-        signal: AbortSignal,
-    ): Promise<boolean> => await this.#projects.forProject(computerId).holdsAccess(holder, signal);
 
     /** The authoritative grant list is owned by the credential in D1. */
     readonly scopedProjects = async (
