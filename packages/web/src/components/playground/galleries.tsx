@@ -29,6 +29,7 @@ import {
     type PermissionInteraction,
     SessionInteractionCards,
 } from "../chat/session-interactions.tsx";
+import { SessionWelcome } from "../chat/session-welcome.tsx";
 import { ToolCallDisclosure } from "../chat/tools/tool-call-status.tsx";
 import type { ToolCallState } from "../chat/tools/tool-renderer.ts";
 import { UserMessageShell } from "../chat/user-message-shell.tsx";
@@ -1062,6 +1063,30 @@ function AlertGallery() {
     );
 }
 
+function SessionWelcomeGallery() {
+    const [visible, setVisible] = useState(true);
+    return (
+        <div className="max-w-[800px]">
+            <Specimen layout="stack" title="First session handoff">
+                {visible ? (
+                    <SessionWelcome
+                        canSuggestProgress
+                        onDismiss={() => setVisible(false)}
+                        onSuggestProgress={() => setVisible(false)}
+                    />
+                ) : (
+                    <p className="text-13 text-muted-foreground">The tip is hidden in this preview.</p>
+                )}
+                <div>
+                    <Button onClick={() => setVisible(true)} size="sm" variant="outline">
+                        Show card again
+                    </Button>
+                </div>
+            </Specimen>
+        </div>
+    );
+}
+
 /**
  * Every composer notice state on one page, built from the production
  * components. Unified rules: failures use the error tone, informational
@@ -1977,6 +2002,7 @@ const galleries = {
     popover: PopoverGallery,
     radius: RadiusGallery,
     "session-agent-tabs": SessionAgentTabsGallery,
+    "session-welcome": SessionWelcomeGallery,
     "session-interactions": SessionInteractionsGallery,
     spinner: SpinnerGallery,
     textarea: TextareaGallery,
