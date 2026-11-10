@@ -1,125 +1,435 @@
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
+import { decodeAgentPromptResponse, type SessionConfigOption } from "@morty-build/client/protocol";
 import { runCleanup } from "../../../util/run-cleanup.ts";
+import { truncate } from "../../../util/value-utils.ts";
+import { AcpConfigurationValueUnavailableError, AcpExecutionError } from "../../acp-error.ts";
 import type { AcpAgentDefinition } from "../../agent/agent-definition.ts";
-import type { Adapter, AdapterDependencies, NativeSessionQuery } from "../../native-history/preview-contract.ts";
-import { sessionIdSchema } from "../../protocol/native-session.ts";
-import { AcpExecutionConnections } from "../execution-connections.ts";
-import {
-    createdSessionId,
-    normalizeOpenedSession,
-    sessionCreationResponse,
-    sessionWorkspace,
-} from "../lifecycle-output.ts";
+import { buildPromptContent } from "../../client/prompt-content.ts";
+import { agentOperationError, waitForAgentOperation } from "../../connection/agent-operation.ts";
+import type { PiAcpAgent } from "../../harness/pi/upstream/dist/acp/agent.js";
+import type {
+    Adapter,
+    AdapterDependencies,
+    AdapterSessionCreateParams,
+    AdapterSessionOpened,
+    AdapterSessionOpenParams,
+    AdapterSessionTarget,
+} from "../../native-history/preview-contract.ts";
+import { NativeHistoryPreviewSnapshots } from "../../native-history/preview-snapshots.ts";
+import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
+import { normalizeAcpCapabilities } from "../../protocol/session-capabilities.ts";
+import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
+import { sessionCreationResponse } from "../lifecycle-output.ts";
 import { findNativeSession } from "../native-session-lookup.ts";
-import { AgentQueryProcesses } from "../query-processes.ts";
-import { AcpSessionConnector } from "../session-events.ts";
+import { nativeSessionPreviewKey, nativeSessionQueryKey } from "../query-scope.ts";
+import { piClientCallbacks, piPreviewCallbacks, piSessionCallbacks } from "./client-callbacks.ts";
+import { createPiCatalogClient, createPiClient, type PiClientRuntime, piRuntime } from "./create-client.ts";
+import { PiSession, type PiWorkspace } from "./pi-session.ts";
 
-/**
- * Pi replays its stored session messages as live ACP session updates during
- * `session/load`, so previews resume the saved session over ACP.
- */
-export class PiAdapter implements Adapter {
-    readonly #queryProcesses: AgentQueryProcesses;
-    readonly #connector: AcpSessionConnector;
-    readonly #executionConnections: AcpExecutionConnections;
+const START_TIMEOUT_MILLISECONDS = 60_000;
+const configurationProtocol = sessionConfigProtocolForAgent("pi");
 
-    constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
-        this.#connector = new AcpSessionConnector(dependencies.contentExternalizer);
-        this.#executionConnections = new AcpExecutionConnections(dependencies.contentExternalizer);
-        this.#queryProcesses = new AgentQueryProcesses(agent, dependencies.processes, this.#connector);
-    }
-
-    readonly refreshAgent: Adapter["refreshAgent"] = (agent) => this.#queryProcesses.refreshAgent(agent);
-    readonly getCapabilities = async (query: NativeSessionQuery) => await this.#queryProcesses.capabilities(query);
-    readonly createSession: Adapter["createSession"] = (params) =>
-        this.#executionConnections.withConnection(params, async (execution, signal) => {
-            const { connection } = execution;
-            const response: unknown = await sessionCreationResponse(
-                connection.race(
-                    connection.connection.agent.request(methods.agent.session.new, sessionWorkspace(params.scope), {
-                        cancellationSignal: signal,
-                    }),
-                    "ACP agent exited while starting a session",
-                    signal,
-                ),
-                signal,
-            );
-            const sessionId = createdSessionId(response);
-            this.#executionConnections.bind(execution, sessionId);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
-        });
-    readonly forkSession: Adapter["forkSession"] = (params) =>
-        this.#executionConnections.withConnection(params, async (execution, signal) => {
-            const { connection } = execution;
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(
-                    methods.agent.session.fork,
-                    {
-                        ...sessionWorkspace(params.scope),
-                        sessionId: sessionIdSchema.parse(params.sourceSessionId),
-                    },
-                    { cancellationSignal: signal },
-                ),
-                "ACP agent exited while forking a session",
-                signal,
-            );
-            const sessionId = createdSessionId(response);
-            this.#executionConnections.bind(execution, sessionId);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
-        });
-    readonly openSession: Adapter["openSession"] = (params) =>
-        this.#executionConnections.withConnection(params, async (execution, signal) => {
-            const { connection } = execution;
-            const sessionId = sessionIdSchema.parse(params.sessionId);
-            this.#executionConnections.bind(execution, sessionId);
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(
-                    methods.agent.session.resume,
-                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
-                    { cancellationSignal: signal },
-                ),
-                "ACP agent exited while resuming a session",
-                signal,
-            );
-            return normalizeOpenedSession(execution, sessionId, response, signal);
-        });
-    readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) =>
-        this.#executionConnections.withConnection(params, async (execution, signal) => {
-            const { connection } = execution;
-            const sessionId = sessionIdSchema.parse(params.sessionId);
-            this.#executionConnections.bind(execution, sessionId);
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(
-                    methods.agent.session.load,
-                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
-                    { cancellationSignal: signal },
-                ),
-                "ACP agent exited while loading a session",
-                signal,
-            );
-            await connection.race(connection.events.drained(), "ACP agent exited while loading a session", signal);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
-        });
-    readonly cancel: Adapter["cancel"] = (...args) => this.#executionConnections.cancel(...args);
-    readonly closeSession: Adapter["closeSession"] = (...args) => this.#executionConnections.closeSession(...args);
-    readonly releaseSession: Adapter["releaseSession"] = (params) => this.#executionConnections.releaseSession(params);
-    readonly readNativeHistoryRevision: Adapter["readNativeHistoryRevision"] = (params) =>
-        this.#executionConnections.readNativeHistoryRevision(params);
-    readonly prompt: Adapter["prompt"] = (...args) => this.#executionConnections.prompt(...args);
-    readonly steer: Adapter["steer"] = (...args) => this.#executionConnections.steer(...args);
-    readonly renameSession: Adapter["renameSession"] = (...args) => this.#executionConnections.renameSession(...args);
-    readonly configureSession: Adapter["configureSession"] = (...args) =>
-        this.#executionConnections.configureSession(...args);
-    readonly listSessions: Adapter["listSessions"] = async ({ query, cursor }) =>
-        await this.#queryProcesses.listNativeSessions(query, cursor);
-    readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
-        findNativeSession(this.listSessions, query, sessionId, budget);
-    readonly readSessionHistory: Adapter["readSessionHistory"] = async ({ query, request }) =>
-        await this.#queryProcesses.previewSessionEvents(query, request);
-    readonly close = async (): Promise<void> =>
-        await runCleanup(
-            () => this.#queryProcesses.close(),
-            () => this.#executionConnections.close(),
-        );
+/** The fields of Pi's new/fork/resume/load responses that describe the opened session. */
+interface PiSessionResponse {
+    readonly configOptions?: unknown;
+    readonly modes?: unknown;
 }
 
-import { methods } from "@agentclientprotocol/sdk/unstable";
+function workspaceOf(target: { readonly cwd: string }): PiWorkspace {
+    return { cwd: target.cwd };
+}
+
+/** Live Pi operations call the Pi harness directly; each native session owns one Pi client. */
+export class PiAdapter implements Adapter {
+    readonly #dependencies: AdapterDependencies;
+    readonly #sessions = new Map<SessionId, PiSession>();
+    readonly #lifetime = new AbortController();
+    readonly #previews = new NativeHistoryPreviewSnapshots();
+    #agent: AcpAgentDefinition;
+    #runtime: PiClientRuntime;
+
+    constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
+        this.#agent = agent;
+        this.#runtime = piRuntime(agent);
+        this.#dependencies = dependencies;
+    }
+
+    readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
+        this.#agent = agent;
+        this.#runtime = piRuntime(agent);
+    };
+
+    /** Pi answers `initialize` from its configuration without launching a process. */
+    readonly getCapabilities: Adapter["getCapabilities"] = async (query) => {
+        query.signal.throwIfAborted();
+        return await this.#capabilities(this.#catalog());
+    };
+
+    readonly createSession: Adapter["createSession"] = (params) =>
+        this.#start(params, async (agent) => {
+            const response = agent.newSession({ cwd: params.scope.cwd, mcpServers: [] });
+            await sessionCreationResponse(response, params.signal);
+            return await response;
+        });
+
+    readonly forkSession: Adapter["forkSession"] = (params) => {
+        const source = sessionIdSchema.parse(params.sourceSessionId);
+        return this.#start(params, async (agent) => {
+            const response = await agent.forkSession({ cwd: params.scope.cwd, sessionId: source, mcpServers: [] });
+            if (response.sessionId === source) {
+                throw new AcpExecutionError(
+                    "Pi did not create an independent fork",
+                    {},
+                    "invalid_native_session_response",
+                );
+            }
+            return response;
+        });
+    };
+
+    readonly openSession: Adapter["openSession"] = (params) => this.#open(params, "resume");
+
+    readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) => this.#open(params, "replay");
+
+    readonly #open = async (params: AdapterSessionOpenParams, mode: "resume" | "replay") => {
+        const sessionId = sessionIdSchema.parse(params.sessionId);
+        const request = { cwd: params.scope.cwd, sessionId: sessionId, mcpServers: [] };
+        const existing = this.#sessions.get(sessionId);
+        existing?.assertWorkspace(workspaceOf(params.scope));
+        if (existing?.available === true && mode === "resume") {
+            try {
+                const response = await waitForAgentOperation(existing.agent.resumeSession(request), params.signal);
+                return await this.#opened(existing, params, response);
+            } catch (cause) {
+                await this.#release(sessionId);
+                params.signal.throwIfAborted();
+                throw agentOperationError(cause);
+            }
+        }
+        // Pi replays history by restarting its process, so replay (or an unavailable client) starts a new one.
+        await this.#release(sessionId);
+        return await this.#start(params, async (agent) => ({
+            ...(mode === "resume" ? await agent.resumeSession(request) : await agent.loadSession(request)),
+            sessionId: sessionId,
+        }));
+    };
+
+    readonly #start = async (
+        params: AdapterSessionCreateParams,
+        start: (agent: PiAcpAgent) => Promise<PiSessionResponse & { readonly sessionId: string }>,
+    ): Promise<AdapterSessionOpened> => {
+        const { session, response } = await PiSession.start(
+            {
+                runtime: this.#runtime,
+                workspace: workspaceOf(params.scope),
+                callbacks: piSessionCallbacks(params, params.scope.externalizeUpdate),
+                externalizer: this.#dependencies.contentExternalizer,
+                signal: AbortSignal.any([
+                    params.signal,
+                    this.#lifetime.signal,
+                    AbortSignal.timeout(START_TIMEOUT_MILLISECONDS),
+                ]),
+            },
+            start,
+        );
+        if (this.#lifetime.signal.aborted || this.#sessions.has(session.sessionId)) {
+            await session.dispose();
+            this.#lifetime.signal.throwIfAborted();
+            throw new AcpExecutionError("Another writer is using this native session", {}, "session_busy");
+        }
+        this.#sessions.set(session.sessionId, session);
+        try {
+            return await this.#opened(session, params, response);
+        } catch (cause) {
+            await this.#release(session.sessionId);
+            throw cause;
+        }
+    };
+
+    readonly #opened = async (
+        session: PiSession,
+        params: AdapterSessionCreateParams,
+        response: PiSessionResponse,
+    ): Promise<AdapterSessionOpened> => {
+        const initialized = await session.agent.initialize({ protocolVersion: PROTOCOL_VERSION });
+        return {
+            sessionId: session.sessionId,
+            capabilities: normalizeAcpCapabilities(initialized),
+            configOptions: configurationProtocol.normalizeLifecycle(response),
+            agentName: truncate(initialized.agentInfo?.title ?? initialized.agentInfo?.name ?? "pi", 255),
+            agentVersion: params.scope.agent.agentVersion,
+            agentSettingsModelEffort: null,
+        };
+    };
+
+    readonly #session = (target: AdapterSessionTarget): PiSession => {
+        this.#lifetime.signal.throwIfAborted();
+        const session = this.#sessions.get(sessionIdSchema.parse(target.sessionId));
+        if (session === undefined) {
+            throw new AcpExecutionError("The native session is not active", {}, "invalid_agent_session");
+        }
+        session.assertWorkspace(workspaceOf(target));
+        if (!session.available) {
+            throw new AcpExecutionError("The Pi session is unavailable", {}, "session_busy");
+        }
+        return session;
+    };
+
+    readonly prompt: Adapter["prompt"] = async (params) => {
+        const session = this.#session(params);
+        const capabilities = await this.#capabilities(session.agent);
+        const response = await session.prompt(
+            { prompt: buildPromptContent(params.content, capabilities) },
+            params.signal,
+        );
+        const decoded = decodeAgentPromptResponse(response);
+        return {
+            stopReason: decoded.stopReason,
+            ...(decoded.usage === undefined ? {} : { usage: decoded.usage }),
+            ...(decoded._meta === undefined ? {} : { _meta: decoded._meta }),
+        };
+    };
+
+    readonly steer: Adapter["steer"] = async (params) => {
+        const session = this.#session(params);
+        const capabilities = await this.#capabilities(session.agent);
+        const response = await session.agent
+            .steer(
+                {
+                    sessionId: session.sessionId,
+                    prompt: buildPromptContent(params.content, capabilities),
+                    _meta: { steering: { idleBehavior: "promptRequired" } },
+                },
+                params.signal,
+            )
+            .catch((cause: unknown) => {
+                params.signal.throwIfAborted();
+                throw agentOperationError(cause);
+            });
+        if (response.outcome === "promptRequired") {
+            throw new AcpExecutionError(
+                "The target turn finished before steering could be injected",
+                {},
+                "steering_target_unavailable",
+            );
+        }
+        return response;
+    };
+
+    readonly cancel: Adapter["cancel"] = async (params) => {
+        params.signal.throwIfAborted();
+        const session = this.#session(params);
+        const outcome = await session.cancel(params.signal);
+        if (outcome === "closed") {
+            await this.#release(session.sessionId);
+        }
+        return outcome;
+    };
+
+    readonly releaseSession: Adapter["releaseSession"] = async (params) => {
+        const sessionId = sessionIdSchema.parse(params.sessionId);
+        const session = this.#sessions.get(sessionId);
+        session?.assertWorkspace(workspaceOf(params));
+        await this.#release(sessionId);
+        params.signal.throwIfAborted();
+    };
+
+    readonly closeSession: Adapter["closeSession"] = this.releaseSession;
+
+    /** Pi records its native history in a session file, so the revision is read without its process. */
+    readonly readNativeHistoryRevision: Adapter["readNativeHistoryRevision"] = async (params) => {
+        const session = this.#session(params);
+        const revision = await waitForAgentOperation(
+            session.agent.readSessionRevision({ sessionId: session.sessionId }),
+            AbortSignal.any([params.signal, AbortSignal.timeout(30_000)]),
+        );
+        if (revision.latestEntryId.length > 256) {
+            throw new AcpExecutionError(
+                "Pi returned an invalid native history revision",
+                {},
+                "invalid_native_session_response",
+            );
+        }
+        return { kind: "tracked", latestEntryId: revision.latestEntryId };
+    };
+
+    readonly #release = async (sessionId: SessionId): Promise<void> => {
+        const session = this.#sessions.get(sessionId);
+        if (session !== undefined) {
+            this.#sessions.delete(sessionId);
+            await session.dispose();
+        }
+    };
+
+    readonly renameSession: Adapter["renameSession"] = async (params) => {
+        this.#session(params);
+        if (truncate(params.title, 500).length === 0) {
+            throw new AcpExecutionError("The Session title cannot be empty", {}, "invalid_session_title");
+        }
+        return { nativeRenameApplied: false };
+    };
+
+    /** A cancelled caller stops waiting; the session and its native configuration stay intact. */
+    readonly configureSession: Adapter["configureSession"] = async (params) => {
+        const session = this.#session(params);
+        const { sessionId, agent } = session;
+        const selection = params.selection;
+        const configure = async (): Promise<readonly SessionConfigOption[]> => {
+            const configuration = await agent.sessionConfiguration(sessionId);
+            const option = configurationProtocol
+                .normalizeLifecycle(configuration)
+                .find((option) => option.id === selection.configId);
+            if (
+                option === undefined ||
+                option.type !== "select" ||
+                selection.type !== "select" ||
+                option.values.length < 2
+            ) {
+                throw new AcpExecutionError(
+                    "The requested configuration option is unavailable",
+                    {},
+                    "invalid_session_configuration",
+                );
+            }
+            if (!option.values.some((entry) => entry.value === selection.value)) {
+                throw new AcpConfigurationValueUnavailableError(
+                    selection.configId,
+                    selection.value,
+                    option.values.map((entry) => entry.value),
+                );
+            }
+            if (option.category === "mode") {
+                await agent.setSessionMode({ sessionId: sessionId, modeId: selection.value });
+            } else {
+                await agent.setSessionConfigOption({
+                    sessionId: sessionId,
+                    configId: selection.configId,
+                    value: selection.value,
+                });
+            }
+            const applied = await agent.sessionConfiguration(sessionId);
+            const configOptions = configurationProtocol.normalizeLifecycle(applied);
+            if (
+                !configOptions.some(
+                    (option) => option.id === selection.configId && option.currentValue === selection.value,
+                )
+            ) {
+                throw new AcpExecutionError(
+                    "Pi did not apply the requested configuration",
+                    {},
+                    "invalid_session_configuration",
+                );
+            }
+            return configOptions;
+        };
+        return await waitForAgentOperation(configure(), params.signal);
+    };
+
+    /** Pi lists sessions from its session files without launching a process. */
+    readonly listSessions: Adapter["listSessions"] = async ({ query, cursor }) => {
+        query.signal.throwIfAborted();
+        const result = await this.#catalog().listSessions({ ...(cursor === null ? {} : { cursor }) });
+        query.signal.throwIfAborted();
+        const decoded = nativeSessionPageSchema.safeParse(result);
+        if (!decoded.success) {
+            throw new AcpExecutionError(
+                "Pi returned an invalid native session list",
+                { cause: decoded.error },
+                "invalid_native_session_response",
+            );
+        }
+        return decoded.data;
+    };
+
+    readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
+        findNativeSession(this.listSessions, query, sessionId, budget);
+
+    /** Pi replays a saved session only by loading it, so previews run one transient Pi client. */
+    readonly readSessionHistory: Adapter["readSessionHistory"] = async ({ query, request }) => {
+        const scoped = {
+            ...query,
+            agent: this.#agent,
+            signal: AbortSignal.any([
+                query.signal,
+                this.#lifetime.signal,
+                AbortSignal.timeout(START_TIMEOUT_MILLISECONDS),
+            ]),
+        };
+        scoped.signal.throwIfAborted();
+        const sessionId = sessionIdSchema.parse(request.sessionId);
+        const target = { harness: this.#agent.harness, sessionId };
+        const key = nativeSessionPreviewKey(nativeSessionQueryKey(scoped), sessionId);
+        if (request.cursor !== null) {
+            return this.#previews.get(key).page(target, request.eventLimit, request.cursor);
+        }
+        const store = this.#previews.replace(key);
+        const runtime = this.#runtime;
+        try {
+            return await this.#dependencies.processes.runTransient(
+                scoped.signal,
+                async () => {
+                    const lifetime = new AbortController();
+                    const callbacks = piPreviewCallbacks(scoped, async (receivedSessionId, event) => {
+                        if (receivedSessionId !== sessionId) {
+                            throw new AcpExecutionError(
+                                "Pi replayed another native session",
+                                {},
+                                "invalid_agent_session",
+                            );
+                        }
+                        store.append(target, { type: "acp", payload: event.payload });
+                    });
+                    const client = await createPiClient(
+                        runtime,
+                        piClientCallbacks(callbacks, this.#dependencies.contentExternalizer, {
+                            signal: lifetime.signal,
+                            fail: (cause) => lifetime.abort(cause),
+                        }),
+                        scoped.signal,
+                    );
+                    return {
+                        client,
+                        lifetime,
+                        closeProcess: async () => {
+                            lifetime.abort();
+                            await client.dispose();
+                        },
+                    };
+                },
+                async ({ client, lifetime }) => {
+                    await waitForAgentOperation(
+                        client.loadSession({ cwd: scoped.cwd, sessionId: sessionId, mcpServers: [] }),
+                        scoped.signal,
+                    );
+                    lifetime.signal.throwIfAborted();
+                    return store.page(target, request.eventLimit, null);
+                },
+                (runtime) => runtime.closeProcess(),
+            );
+        } catch (cause) {
+            this.#previews.discard(key, store);
+            throw agentOperationError(cause);
+        }
+    };
+
+    readonly close = async (): Promise<void> => {
+        this.#lifetime.abort(new DOMException("The Pi adapter closed", "AbortError"));
+        const sessions = [...this.#sessions.keys()];
+        await runCleanup(...sessions.map((sessionId) => () => this.#release(sessionId)), () => this.#previews.close());
+    };
+
+    readonly #catalog = (): PiAcpAgent =>
+        createPiCatalogClient(this.#runtime, {
+            sessionUpdate: async () => undefined,
+            startUserMessage: () => undefined,
+            requestPermission: rejectCatalogInteraction,
+            requestElicitation: rejectCatalogInteraction,
+        });
+
+    readonly #capabilities = async (agent: PiAcpAgent) =>
+        normalizeAcpCapabilities(await agent.initialize({ protocolVersion: PROTOCOL_VERSION }));
+}
+
+async function rejectCatalogInteraction(): Promise<never> {
+    throw new AcpExecutionError("Pi catalog queries cannot request user interaction", {}, "invalid_agent_session");
+}

@@ -33,8 +33,11 @@ export interface CloudBindings {
     readonly DATABASE?: unknown;
     readonly CHAT_COMPUTER_ID?: string;
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
-    /** Ends at once the live connections whose access to the computer an identity change has just ended. */
-    readonly CHAT_ACCESS_ENDED?: () => Promise<void>;
+    /**
+     * Commits an identity change that may end access to the computer; `change` reports whether it changed anything.
+     * The computer closes the live connections the committed change ended; that never undoes or fails the change.
+     */
+    readonly CHAT_END_ACCESS?: (change: () => Promise<boolean>) => Promise<boolean>;
     /** The Project object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
     readonly RELAY_DIRECTORY_DATABASE?: unknown;

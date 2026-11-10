@@ -198,9 +198,7 @@ test("Given the Morty access was redeemed and opening the original session faile
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("The native session was not found");
-    expect(getByRole(document.body, "heading", { name: "Morty could not complete Runtime setup" })).toBeInstanceOf(
-        HTMLElement,
-    );
+    expect(getByRole(document.body, "heading", { name: "Couldn't open this session" })).toBeInstanceOf(HTMLElement);
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
     expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
 
