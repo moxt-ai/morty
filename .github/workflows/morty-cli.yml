@@ -112,6 +112,8 @@ jobs:
         with:
           name: morty-release
           path: .release
+      - name: Compile source Runtime adapters used by deployment verification
+        run: pnpm --dir packages/cli prebuild
       - name: Upload accepted browser source maps before activating the release
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
