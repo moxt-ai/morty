@@ -28,10 +28,10 @@ production HTTP, WebSocket, and storage boundaries. Browser E2E covers happy-pat
 conversation and setup journeys.
 
 Morty Web, Worker, and browser suites run the production daemon through the real
-Platform WebSocket endpoint. Tests inject a stateful controlled ACP harness through
-the daemon's Agent dependency argument; Chat, Platform, SDKs, daemon behavior, and
-transports remain real. Each fixture owns pairing and cleanup of the resources it
-creates.
+Morty WebSocket endpoint. Tests inject a stateful controlled ACP harness through
+the daemon's Agent dependency argument; the single Worker, SDKs, daemon behavior,
+and transports remain real. Each fixture owns pairing and cleanup of the
+resources it creates.
 
 Follow [AGENTS.md](../AGENTS.md) for scenario and fake-provider rules. Exercise visible
 controls in Web tests and production HTTP/WebSocket boundaries in Worker tests.
