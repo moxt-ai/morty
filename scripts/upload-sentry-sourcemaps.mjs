@@ -45,18 +45,16 @@ if (!process.env.SENTRY_AUTH_TOKEN) {
     throw new Error("SENTRY_AUTH_TOKEN is required before activating a monitored release");
 }
 function sentryCli(args) {
-    execFileSync(
-        process.execPath,
-        [
-            resolve("node_modules/@sentry/cli/bin/sentry-cli"),
-            "--org",
-            target.organization,
-            "--project",
-            target.project,
-            ...args,
-        ],
-        { stdio: "inherit", timeout: 180_000, env: { ...process.env, SENTRY_LOG_LEVEL: "warn" } },
-    );
+    execFileSync(process.execPath, [resolve("node_modules/@sentry/cli/bin/sentry-cli"), ...args], {
+        stdio: "inherit",
+        timeout: 180_000,
+        env: {
+            ...process.env,
+            SENTRY_ORG: target.organization,
+            SENTRY_PROJECT: target.project,
+            SENTRY_LOG_LEVEL: "warn",
+        },
+    });
 }
 sentryCli(["releases", "new", sentry.release]);
 sentryCli([

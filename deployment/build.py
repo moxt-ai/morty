@@ -67,6 +67,8 @@ def main():
     env.pop('CLOUDFLARE_API_TOKEN', None)
     run(['pnpm', 'build:setup'], env=env)
     run(['pnpm', 'exec', 'vite', 'build', '--outDir', str(release)], env=env)
+    if (release / 'sourcemaps').exists():
+        shutil.rmtree(release / 'sourcemaps')
     maps = sorted((release / 'client').rglob('*.js.map'))
     if not maps:
         raise ValueError('The production browser build must include source maps')
