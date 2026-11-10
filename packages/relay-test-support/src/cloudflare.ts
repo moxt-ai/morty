@@ -2,15 +2,13 @@ import { fileURLToPath, URL as NodeURL } from "node:url";
 import { readD1Migrations } from "@cloudflare/vitest-plugin";
 import type { D1Database } from "@cloudflare/workers-types";
 import { build } from "esbuild";
-import { convertV4MiniflareOptions, Miniflare, WebSocketPair, Response as WorkerResponse } from "miniflare";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 type TestRelayBindings = {
     readonly RELAY_DIRECTORY_DATABASE: D1Database;
 };
 
 import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
-
-export { convertV4MiniflareOptions, Miniflare, miniflareDurableObjects, WebSocketPair, WorkerResponse };
 
 /** Prepare once per suite run; only immutable code is shared, never a runtime or its storage. */
 export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {

@@ -8,7 +8,6 @@ import type { HttpError } from "../http-error.ts";
 
 export const PAIRING_LIFETIME_MILLISECONDS = 10 * 60 * 1_000;
 
-const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 export interface AgentDescriptor {
@@ -71,7 +70,7 @@ export class ChannelDescriptor {
     }
 }
 
-export const PairingLifecycle = Object.freeze({
+const PairingLifecycle = Object.freeze({
     Expired: "expired",
     Paired: "paired",
     Pending: "pending",
@@ -185,16 +184,6 @@ export function createRandomToken(byteLength: number): string {
         binary += String.fromCharCode(byte);
     }
     return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
-export function createRandomPairingCode(): string {
-    const bytes = new Uint8Array(20);
-    crypto.getRandomValues(bytes);
-    let code = "";
-    for (const byte of bytes) {
-        code += PAIRING_CODE_ALPHABET[byte % PAIRING_CODE_ALPHABET.length];
-    }
-    return code.match(/.{1,4}/g)?.join("-") ?? code;
 }
 
 export function normalizePairingCode(code: string): string {

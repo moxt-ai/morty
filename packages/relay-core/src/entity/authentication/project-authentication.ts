@@ -52,10 +52,6 @@ export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.fre
     ProjectPermission.SessionRead,
 ]);
 
-export const PROJECT_PERMISSIONS: readonly ProjectPermission[] = Object.freeze(
-    PROJECT_PERMISSION_NAMES.map(ProjectPermission.named),
-);
-
 export class AuditActorKind {
     static readonly BrowserAccess = new AuditActorKind("browser_access");
 
@@ -86,16 +82,6 @@ export abstract class ProjectAccessLifetime {
 export class PerpetualProjectAccessLifetime extends ProjectAccessLifetime {
     readonly expiresAtEpochMilliseconds = Number.MAX_SAFE_INTEGER;
     readonly isExpiring = false;
-}
-
-export class ExpiringProjectAccessLifetime extends ProjectAccessLifetime {
-    readonly expiresAtEpochMilliseconds: number;
-    readonly isExpiring = true;
-
-    constructor(expiresAtEpochMilliseconds: number) {
-        super();
-        this.expiresAtEpochMilliseconds = expiresAtEpochMilliseconds;
-    }
 }
 
 export class ProjectAccessContext {
