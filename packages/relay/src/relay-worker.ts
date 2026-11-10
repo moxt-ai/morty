@@ -2,12 +2,13 @@ import {
     CONTENT_WRITE_MAX_BYTES,
     decodeContentWriteCommand,
     decodeFileReadCommand,
-    decodeSessionAccessHolder,
     type Identifier,
     isDirectoryPath,
     isIdentifier,
+    isSessionAccessHolder,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
+    type SessionAccessHolder,
     type TurnState,
 } from "@morty-build/client/protocol";
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
@@ -260,13 +261,12 @@ export function createRelayApplication(
                     401,
                 );
             }
-            const body: unknown = await context.req.json();
-            const input = v.parse(
+            const input = decodeSessionRequest(
                 v.strictObject({
                     expiresInSeconds: v.pipe(v.number(), v.safeInteger(), v.minValue(60), v.maxValue(900)),
-                    holder: v.pipe(v.unknown(), v.transform(decodeSessionAccessHolder)),
+                    holder: v.custom<SessionAccessHolder>(isSessionAccessHolder),
                 }),
-                body,
+                await context.req.json(),
             );
             const access = await context.var.sessionAccess.issue(
                 context.var.sessionAccessTarget,

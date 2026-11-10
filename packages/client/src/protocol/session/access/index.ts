@@ -16,6 +16,10 @@ export type SessionAccessHolder = z.infer<typeof sessionAccessHolderSchema>;
 export const decodeSessionAccessHolder = (value: unknown): SessionAccessHolder =>
     decodeZodValue(value, sessionAccessHolderSchema);
 
+export function isSessionAccessHolder(value: unknown): value is SessionAccessHolder {
+    return sessionAccessHolderSchema.safeParse(value).success;
+}
+
 const claimsSchema = z
     .object({
         expiresAtEpochMilliseconds: z.number().int().nonnegative(),

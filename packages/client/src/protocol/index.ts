@@ -83,6 +83,7 @@ export type {
 export {
     decodeSessionAccessCredential,
     decodeSessionAccessHolder,
+    isSessionAccessHolder,
 } from "./session/access/index.ts";
 
 export type {
