@@ -5,7 +5,6 @@ import { logger } from "../infra/logger.ts";
 import { RuntimeStatus } from "../service/channel/channel.ts";
 import type { ChannelGateway } from "./channel-gateway.ts";
 
-
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
 

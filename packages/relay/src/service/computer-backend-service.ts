@@ -65,8 +65,18 @@ export class ComputerBackendService {
                 ),
             target,
         );
-    readonly issueSessionAccess = async (target: NativeSessionTarget, lifetime: number, holder: SessionAccessHolder, signal: AbortSignal) =>
-        await this.sessionAccess.issue({ kind: "session", computerId: this.computerId, target }, lifetime, holder, signal);
+    readonly issueSessionAccess = async (
+        target: NativeSessionTarget,
+        lifetime: number,
+        holder: SessionAccessHolder,
+        signal: AbortSignal,
+    ) =>
+        await this.sessionAccess.issue(
+            { kind: "session", computerId: this.computerId, target },
+            lifetime,
+            holder,
+            signal,
+        );
     readonly openHost = async (signal: AbortSignal): Promise<WebSocket> => {
         const access = await this.context.services.runtimePairings.authorizePairedHost(this.computerId, signal);
         const response = await this.context.gateways.channelGateway.acceptHost(

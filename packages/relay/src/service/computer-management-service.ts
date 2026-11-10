@@ -3,7 +3,7 @@ import {
     createRandomToken,
     type MachineAccountDirectory,
     type ProjectAccessAuthorizer,
-    ProjectPermission,
+    type ProjectPermission,
     validateIdentifier,
 } from "@morty-build/relay-core";
 import { encodeRelayComputerId } from "../entity/computer-id.ts";

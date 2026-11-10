@@ -1,3 +1,4 @@
+import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
@@ -166,7 +167,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
 /** The owner's computer with a connected Runtime, and the requests a browser or the owner make against it. */
 async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFixture>>) {
     const owner = await cloud.createAnonymousUser();
-    const runtime = await cloud.connectAgent(owner.computerId);
+    const runtime = await cloud.connectAgent(owner.computerId, owner.token);
     const request = (path: string, token: string, body?: object, method = body === undefined ? "GET" : "POST") =>
         worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/${path}`, {
@@ -218,6 +219,7 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
                 endpoint: window.endpoint,
                 computerId: window.computerId,
                 credentialProvider: { credential: async () => window.credential },
+                transport: { fetch: cloud.relayRequest },
             }).events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
         await readConversation();
         return { deviceId: device.id, token, readConversation };

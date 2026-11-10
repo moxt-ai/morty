@@ -19,8 +19,8 @@ import {
     type NativeEventPageRequest,
     type NativeSessionRequest,
     type NativeSessionTarget,
-    type SessionReadyEvent,
     type SessionAccessHolder,
+    type SessionReadyEvent,
 } from "@morty-build/client/protocol";
 import { isHttpError } from "@morty-build/relay-core";
 import * as v from "valibot";
