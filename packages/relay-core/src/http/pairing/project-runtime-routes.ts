@@ -97,7 +97,7 @@ export function createProjectRuntimeRoutes() {
         .route("/", createProjectRuntimeSessionControlRoutes())
         .get("/computers/:computerId/latency", async (context) => {
             await context.env.services.runtimePairings.probeProject(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
@@ -106,7 +106,7 @@ export function createProjectRuntimeRoutes() {
         })
         .get("/computers/:computerId/runtimes", async (context) => {
             const runtimes = await context.env.services.runtimePairings.listProjectRuntimes(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
@@ -115,7 +115,7 @@ export function createProjectRuntimeRoutes() {
         })
         .get("/computers/:computerId/daemon/agents", async (context) => {
             const runtime = await context.env.services.runtimePairings.getRuntimeAgents(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
@@ -124,7 +124,7 @@ export function createProjectRuntimeRoutes() {
         })
         .get("/computers/:computerId/daemon/diagnostics", async (context) => {
             const result = await context.env.services.runtimePairings.readRuntimeDiagnostics(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
@@ -133,7 +133,7 @@ export function createProjectRuntimeRoutes() {
         })
         .get("/computers/:computerId/daemon/latency", async (context) => {
             const latencyMs = await context.env.services.runtimePairings.measureRuntimeLatency(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 context.req.raw.signal,
             );
@@ -150,7 +150,7 @@ export function createProjectRuntimeRoutes() {
                 }),
             );
             const result = await context.env.services.runtimePairings.requestControl(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
                 command,
                 context.req.raw.signal,
@@ -160,7 +160,7 @@ export function createProjectRuntimeRoutes() {
         })
         .get("/computers/:computerId/daemon/session-creations/:operationId", async (context) => {
             const result = await context.env.services.runtimePairings.requestControl(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
 
                 bearerToken(context.req.raw),
                 decodeSessionCreationReadCommand(
@@ -185,7 +185,7 @@ export function createProjectRuntimeRoutes() {
                 }),
             );
             const result = await context.env.services.runtimePairings.requestControl(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
 
                 bearerToken(context.req.raw),
                 command,
@@ -207,7 +207,7 @@ export function createProjectRuntimeRoutes() {
                 }),
             );
             const result = await context.env.services.runtimePairings.requestControl(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
 
                 bearerToken(context.req.raw),
                 command,
@@ -230,7 +230,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -255,7 +255,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -277,7 +277,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -299,7 +299,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.requestControl(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -390,7 +390,7 @@ export function createProjectRuntimeRoutes() {
                     }),
                 );
                 const result = await context.env.services.runtimePairings.discoverAgentSettings(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     command,
                     context.req.raw.signal,
@@ -404,7 +404,7 @@ export function createProjectRuntimeRoutes() {
             bodyParser<RelayHttpEnvironment>(),
             async (context) => {
                 const result = await context.env.services.runtimePairings.forkNativeSession(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(context.req.raw),
                     validateIdentifier(context.req.param("operationId"), "operation_id"),
                     validated(nativeForkSchema, context.req.valid("json")),
@@ -435,7 +435,7 @@ export function createProjectRuntimeRoutes() {
                 }),
             );
             const result = await context.env.services.runtimePairings.requestControl(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
 
                 bearerToken(context.req.raw),
                 command,
@@ -460,7 +460,7 @@ export function createProjectRuntimeRoutes() {
                 }),
             );
             const result = await context.env.services.runtimePairings.listWorkspace(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
 
                 bearerToken(context.req.raw),
                 command,

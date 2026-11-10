@@ -13,7 +13,7 @@ export const AuditRowSchema = v.object({
     audit_id: v.string(),
     details_json: v.string(),
     outcome: v.picklist(["succeeded", "denied"]),
-    project_id: v.string(),
+    computer_id: v.string(),
     recorded_at: nonNegativeInteger,
     subject_id: v.string(),
 });
@@ -53,7 +53,7 @@ export interface RelayAuditRecord {
 export const RelayComputerScopeRowSchema = v.object({
     app_id: v.string(),
     lifecycle,
-    project_id: v.string(),
+    computer_id: v.string(),
 });
 export type RelayComputerScopeRow = Readonly<v.InferOutput<typeof RelayComputerScopeRowSchema>>;
 
@@ -66,7 +66,7 @@ export const ProjectRowSchema = v.object({
     idempotency_key: v.string(),
     lifecycle,
     location_hint: v.picklist(PROJECT_LOCATION_HINTS),
-    project_id: v.string(),
+    computer_id: v.string(),
     updated_at: nonNegativeInteger,
 });
 export type ProjectRow = Readonly<v.InferOutput<typeof ProjectRowSchema>>;

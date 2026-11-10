@@ -133,7 +133,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             const placement = computerPath === null ? null : decodeComputerPlacement(computerPath.computerId);
             if (computerPath === null || placement === null) {
                 return Response.json(
-                    { error: { code: "project_id_invalid", message: "The Project identifier is invalid" } },
+                    { error: { code: "computer_id_invalid", message: "The Computer identifier is invalid" } },
                     { status: 400 },
                 );
             }
@@ -141,7 +141,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             const store = this.#computerStore(computerId);
             if (store === null) {
                 return Response.json(
-                    { error: { code: "project_id_mismatch", message: "The computer is unavailable" } },
+                    { error: { code: "computer_id_mismatch", message: "The computer is unavailable" } },
                     { status: 421 },
                 );
             }

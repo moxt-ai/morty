@@ -62,7 +62,7 @@ test.runIf(process.platform !== "win32")(
         expect(setup.stdout).toContain('"status":"identity_ready"');
         expect(setup.stdout).toContain('"code":"CANCELLED"');
         const configuration = v.parse(
-            v.object({ base_url: v.string(), identity: v.object({ user_token: v.string(), project_id: v.string() }) }),
+            v.object({ base_url: v.string(), identity: v.object({ user_token: v.string(), computer_id: v.string() }) }),
             JSON.parse(await readFile(join(state, "config.json"), "utf8")),
         );
         expect(configuration.base_url).toBe(fixture.origin);
@@ -74,7 +74,7 @@ test.runIf(process.platform !== "win32")(
         expect(revoked.stdout).not.toContain(configuration.identity.user_token);
         expect(JSON.parse(await readFile(join(state, "config.json"), "utf8"))).toMatchObject({
             identity: {
-                project_id: configuration.identity.project_id,
+                computer_id: configuration.identity.computer_id,
                 user_token: expect.not.stringMatching(configuration.identity.user_token),
             },
         });

@@ -63,7 +63,7 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
             );
         }
         return new ProjectAccessContext(
-            new ComputerScope(project.project_id),
+            new ComputerScope(project.computer_id),
             granted,
             new AuditActor(RelayAuditActorKind.Application, row.app_id),
             row.credential_id,

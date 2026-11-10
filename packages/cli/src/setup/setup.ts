@@ -184,10 +184,10 @@ function encodeReplacement(replacement: ReplacementState) {
                     replacement.previous.kind === "pending"
                         ? {
                               kind: "pending",
-                              project_id: replacement.previous.computerId,
+                              computer_id: replacement.previous.computerId,
                               user_token: replacement.previous.token,
                           }
-                        : { kind: "retired", project_id: replacement.previous.computerId },
+                        : { kind: "retired", computer_id: replacement.previous.computerId },
             };
         default: {
             const exhaustive: never = replacement;
@@ -213,7 +213,7 @@ function encodeSavedState(state: SavedState) {
                     kind: "ready",
                     user_id: identity.userId,
                     user_token: identity.userToken,
-                    project_id: identity.computerId,
+                    computer_id: identity.computerId,
                     pairing: identity.pairing,
                     replacement: encodeReplacement(identity.replacement),
                     // Present only while a rotation is requested; a state without one keeps its representation.
@@ -731,21 +731,21 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     const previous = exactly(input, ["kind", "previous"])["previous"];
                     switch (fieldsOf(previous)["kind"]) {
                         case "pending": {
-                            const fields = exactly(previous, ["kind", "project_id", "user_token"]);
+                            const fields = exactly(previous, ["kind", "computer_id", "user_token"]);
                             return {
                                 kind: "revoked",
                                 previous: {
                                     kind: "pending",
-                                    computerId: savedIdentifier(fields["project_id"]),
+                                    computerId: savedIdentifier(fields["computer_id"]),
                                     token: savedCredential(fields["user_token"]),
                                 },
                             };
                         }
                         case "retired": {
-                            const fields = exactly(previous, ["kind", "project_id"]);
+                            const fields = exactly(previous, ["kind", "computer_id"]);
                             return {
                                 kind: "revoked",
-                                previous: { kind: "retired", computerId: savedIdentifier(fields["project_id"]) },
+                                previous: { kind: "retired", computerId: savedIdentifier(fields["computer_id"]) },
                             };
                         }
                         default:
@@ -784,7 +784,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return { base, identity: { kind: "creating", creationKey } };
             }
             case "ready": {
-                const keys = ["kind", "user_id", "user_token", "project_id", "pairing", "replacement"];
+                const keys = ["kind", "user_id", "user_token", "computer_id", "pairing", "replacement"];
                 const rotating = "credential_rotation" in fieldsOf(saved["identity"]);
                 const ready = exactly(saved["identity"], rotating ? [...keys, "credential_rotation"] : keys);
                 return {
@@ -793,7 +793,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         kind: "ready",
                         userId: savedIdentifier(ready["user_id"]),
                         userToken: savedCredential(ready["user_token"]),
-                        computerId: savedIdentifier(ready["project_id"]),
+                        computerId: savedIdentifier(ready["computer_id"]),
                         pairing: pairingIntent(ready["pairing"]),
                         replacement: replacement(ready["replacement"]),
                         rotation: rotating

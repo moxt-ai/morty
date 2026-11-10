@@ -8,7 +8,7 @@ export const runtimePairingRequest = sqliteTable(
         pollTokenHash: text("poll_token_hash").notNull(),
         expiresAt: integer("expires_at").notNull(),
         // Each Project has its own database. Its idempotency namespace is the
-        // database boundary, not a second copy of the Runtime's project_id.
+        // database boundary, not a second copy of the Runtime's computer_id.
         creationIdempotencyKey: text("creation_idempotency_key").unique(),
         createdByOwnerCredentialId: text("created_by_owner_credential_id"),
     },

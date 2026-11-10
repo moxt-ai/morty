@@ -17,7 +17,7 @@ import { projectServed } from "./relay-lifecycle.ts";
 
 // Row selections keep the SQL column names that the entity schemas decode.
 const projectRow = {
-    project_id: machineAccount.computerId,
+    computer_id: machineAccount.computerId,
     app_id: machineAccount.appId,
     display_name: machineAccount.displayName,
     client_reference: machineAccount.clientReference,
@@ -77,7 +77,7 @@ export class ComputerManagementStorage {
                 computerDirectoryDrizzle(this.#database)
                     .select({
                         app_id: machineAccount.appId,
-                        project_id: machineAccount.computerId,
+                        computer_id: machineAccount.computerId,
                         lifecycle: machineAccount.lifecycle,
                     })
                     .from(machineAccount)
@@ -170,7 +170,7 @@ export class ComputerManagementStorage {
             .select(
                 database
                     .select({
-                        computerId: sql<string>`${project.project_id}`.as("computerId"),
+                        computerId: sql<string>`${project.computer_id}`.as("computerId"),
                         appId: serviceCredential.appId,
                         displayName: sql<string>`${project.display_name}`.as("displayName"),
                         clientReference: sql<string>`${project.client_reference}`.as("clientReference"),

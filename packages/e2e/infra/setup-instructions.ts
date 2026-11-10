@@ -58,7 +58,7 @@ export async function followSetupInstructions(options: {
         events,
         ready,
         identity: {
-            computerId: text(configuration["project_id"], "saved project"),
+            computerId: text(configuration["computer_id"], "saved computer"),
             userId: text(configuration["user_id"], "saved user"),
         },
     };

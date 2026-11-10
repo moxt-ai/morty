@@ -65,7 +65,7 @@ export function createProjectRuntimePairingRoutes() {
                 const body = context.req.valid("json");
                 return context.json(
                     await context.env.services.runtimePairings.createProjectRuntimePairing(
-                        validateIdentifier(context.req.param("computerId"), "project_id"),
+                        validateIdentifier(context.req.param("computerId"), "computer_id"),
                         bearerToken(request),
                         validateIdentifier(readString(body, "idempotencyKey"), "idempotency_key"),
                         context.var.signal,
@@ -78,7 +78,7 @@ export function createProjectRuntimePairingRoutes() {
             const request = context.req.raw;
             return context.json(
                 await context.env.services.runtimePairings.readProjectRuntimePairing(
-                    validateIdentifier(context.req.param("computerId"), "project_id"),
+                    validateIdentifier(context.req.param("computerId"), "computer_id"),
                     bearerToken(request),
                     context.var.signal,
                 ),
@@ -87,7 +87,7 @@ export function createProjectRuntimePairingRoutes() {
         .get("/computers/:computerId/daemon/host", async (context) => {
             const request = context.req.raw;
             const access = await context.env.services.runtimePairings.authorizePairedHost(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(request),
                 request.signal,
             );
@@ -96,7 +96,7 @@ export function createProjectRuntimePairingRoutes() {
         .delete("/computers/:computerId/pairing", async (context) => {
             const request = context.req.raw;
             await context.env.services.runtimePairings.revokeProjectRuntime(
-                validateIdentifier(context.req.param("computerId"), "project_id"),
+                validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(request),
                 context.var.signal,
             );

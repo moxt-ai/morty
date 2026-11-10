@@ -86,8 +86,8 @@ type SavedReplacement =
     | {
           readonly kind: "revoked";
           readonly previous:
-              | { readonly kind: "pending"; readonly project_id: string; readonly user_token: string }
-              | { readonly kind: "retired"; readonly project_id: string };
+              | { readonly kind: "pending"; readonly computer_id: string; readonly user_token: string }
+              | { readonly kind: "retired"; readonly computer_id: string };
       };
 
 /** The saved setup state of a ready identity, in the representation setup writes. */
@@ -103,7 +103,7 @@ function savedSetupState(
             kind: "ready",
             user_id: identity.userId,
             user_token: identity.token,
-            project_id: identity.computerId,
+            computer_id: identity.computerId,
             pairing: { kind: "none" },
             replacement,
         },
@@ -116,7 +116,7 @@ async function savedIdentity(state: string) {
         v.object({
             identity: v.object({
                 kind: v.literal("ready"),
-                project_id: v.string(),
+                computer_id: v.string(),
                 user_token: v.string(),
                 replacement: v.unknown(),
             }),
@@ -163,7 +163,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                         current,
                         replacementState === "unknown"
                             ? { kind: "unknown" }
-                            : { kind: "revoked", previous: { kind: "retired", project_id: previous.computerId } },
+                            : { kind: "revoked", previous: { kind: "retired", computer_id: previous.computerId } },
                     ),
                     { mode: 0o600 },
                 );
@@ -997,7 +997,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect(redeemed.status).toBe(200);
         const browser = v.parse(v.object({ token: v.string() }), await redeemed.json());
         const session = async () =>
-            await fetch(`${paths.origin}/morty/api/computers/${config.project_id}/session`, {
+            await fetch(`${paths.origin}/morty/api/computers/${config.computer_id}/session`, {
                 headers: { authorization: `Bearer ${browser.token}` },
                 signal: AbortSignal.timeout(10000),
             });
@@ -1011,20 +1011,20 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect(blocked.events.at(-1)).toMatchObject({
                 error: {
                     code: "PROJECT_REPLACEMENT_REQUIRED",
-                    replacement: { computerId: config.project_id, reason: "managed_runtime_missing" },
+                    replacement: { computerId: config.computer_id, reason: "managed_runtime_missing" },
                 },
             });
             expect((await session()).status).toBe(200);
             expect(await readFile(join(paths.state, "config.json"), "utf8")).toBe(saved);
         }
 
-        const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+        const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
         expect(approved.code, JSON.stringify(approved.events)).toBe(0);
         expect(approved.events).toContainEqual(
-            expect.objectContaining({ status: "replacement_access_revoked", previousComputerId: config.project_id }),
+            expect.objectContaining({ status: "replacement_access_revoked", previousComputerId: config.computer_id }),
         );
         expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
-        const retired = await fetch(`${paths.origin}/morty/api/computers/${config.project_id}/session`, {
+        const retired = await fetch(`${paths.origin}/morty/api/computers/${config.computer_id}/session`, {
             headers: { authorization: `Bearer ${config.user_token}` },
             signal: AbortSignal.timeout(10000),
         });
@@ -1032,17 +1032,17 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect((await session()).status).toBe(401);
         expect((await redeem()).status).toBe(410);
         const current = await savedIdentity(paths.state);
-        expect(current.project_id).not.toBe(config.project_id);
+        expect(current.computer_id).not.toBe(config.computer_id);
         const diagnostics = approved.events.filter((event) => event["status"] !== "ready");
         expect(JSON.stringify(diagnostics)).not.toContain(config.user_token);
         expect(JSON.stringify(diagnostics)).not.toContain(browser.token);
         expect(JSON.stringify(diagnostics)).not.toContain(url);
 
         await runtime.forgetConnections();
-        const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+        const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
         expect(stale.code).toBe(1);
         expect(stale.events.at(-1)).toMatchObject({
-            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { computerId: current.project_id } },
+            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { computerId: current.computer_id } },
         });
     });
 });
@@ -1056,21 +1056,21 @@ test("Given an approved replacement request times out, When setup is retried wit
         const config = await savedIdentity(paths.state);
         await runtime.forgetConnections();
         const uncertain = await setupMachine(runtime, paths, undefined, {
-            replaceProject: config.project_id,
+            replaceProject: config.computer_id,
             stallFromStage: "replacement",
         });
         expect(uncertain.code).toBe(1);
         expect(uncertain.events.at(-1)).toMatchObject({
-            error: { replacementAccess: { kind: "unknown", previousComputerId: config.project_id } },
+            error: { replacementAccess: { kind: "unknown", previousComputerId: config.computer_id } },
         });
         const retry = await setupMachine(runtime, paths);
         expect(retry.events.at(-1)).toMatchObject({
             error: {
                 code: "PROJECT_REPLACEMENT_REQUIRED",
-                replacementAccess: { kind: "unknown", previousComputerId: config.project_id },
+                replacementAccess: { kind: "unknown", previousComputerId: config.computer_id },
             },
         });
-        const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+        const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
     });
 });
@@ -1085,7 +1085,7 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
             v.looseObject({ identity: v.record(v.string(), v.unknown()) }),
             JSON.parse(await readFile(configPath, "utf8")),
         );
-        const computerId = v.parse(v.string(), config.identity["project_id"]);
+        const computerId = v.parse(v.string(), config.identity["computer_id"]);
         // A previous run recorded its intent, but was interrupted before it could record the response.
         await writeFile(
             configPath,
@@ -1119,29 +1119,29 @@ test.each(["replacement_access_revoked", "project_replaced"])(
             await runtime.forgetConnections();
 
             const stopped = await setupMachine(runtime, paths, undefined, {
-                replaceProject: config.project_id,
+                replaceProject: config.computer_id,
                 interruptAt,
             });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
             expect(stopped.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
             expect(stopped.events.at(-1)).toMatchObject({
                 error: {
-                    replacementAccess: { kind: "revoked", previousComputerId: config.project_id, setupReady: false },
+                    replacementAccess: { kind: "revoked", previousComputerId: config.computer_id, setupReady: false },
                 },
             });
 
             const saved = await savedIdentity(paths.state);
             if (interruptAt === "replacement_access_revoked") {
-                expect(saved).toMatchObject({ project_id: config.project_id, replacement: { kind: "unknown" } });
+                expect(saved).toMatchObject({ computer_id: config.computer_id, replacement: { kind: "unknown" } });
             } else {
-                expect(saved.project_id).not.toBe(config.project_id);
+                expect(saved.computer_id).not.toBe(config.computer_id);
                 expect(saved.replacement).toEqual({
                     kind: "revoked",
-                    previous: { kind: "pending", project_id: config.project_id, user_token: config.user_token },
+                    previous: { kind: "pending", computer_id: config.computer_id, user_token: config.user_token },
                 });
             }
 
-            const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+            const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
             expect(finished.code, JSON.stringify(finished.events)).toBe(0);
             expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
 
@@ -1319,7 +1319,7 @@ test("Given setup replaced the Project but stopped before ending the previous id
             join(configurationDirectory, "config.json"),
             savedSetupState(fixture.origin, current, {
                 kind: "revoked",
-                previous: { kind: "pending", project_id: previous.computerId, user_token: previous.token },
+                previous: { kind: "pending", computer_id: previous.computerId, user_token: previous.token },
             }),
             { mode: 0o600 },
         );
@@ -1353,7 +1353,7 @@ test("Given setup replaced the Project but stopped before ending the previous id
                     { ...current, token: successor },
                     {
                         kind: "revoked",
-                        previous: { kind: "retired", project_id: previous.computerId },
+                        previous: { kind: "retired", computer_id: previous.computerId },
                     },
                 ),
             ),

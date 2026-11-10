@@ -17,7 +17,7 @@ export const relayDashboardAuditEvent = sqliteTable(
         recordedAt: integer("recorded_at").notNull(),
     },
     (table) => [
-        check("service_audit_events_project_id_check", sql`${table.computerId} = ''`),
+        check("service_audit_events_computer_id_check", sql`${table.computerId} = ''`),
         check("service_audit_events_outcome_check", sql`${table.outcome} in ('succeeded', 'denied')`),
         index("service_audit_events_service").on(table.appId, table.recordedAt, table.auditId),
     ],
