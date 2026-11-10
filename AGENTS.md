@@ -45,7 +45,7 @@ destruction of production business data, or changes to Agent-owned history.
 Morty and Moxt must have independent package publication, installation, state,
 credentials, process control, and update lifecycles. Verify non-interference with
 a real released Moxt/Mobius installation. Production uses Morty-owned resources
-and service credentials. Local development must work without production secrets
+and credentials. Local development must work without production secrets
 or remote test environments, and must never fall back to Moxt services.
 
 Publish the new Morty npm package only after the complete acceptance gates in
