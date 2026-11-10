@@ -1,10 +1,64 @@
-import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { harnessAdapters } from "../../src/engine/acp/adapter/registry.ts";
 import { codexFixture } from "../support/agents/codex-native.ts";
 import { previewCodexHistory } from "../support/codex-history-preview.ts";
 import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
+
+it("Given saved Codex side chats and ordinary sessions, When the native session directory is listed, Then side chats are hidden and ordinary sessions remain visible", async () => {
+    const f = await codexFixture();
+    try {
+        const home = f.agent.environment["CODEX_HOME"];
+        if (home === undefined) {
+            throw new Error("Missing isolated Codex home");
+        }
+        const directory = join(home, "sessions", "2026", "11", "10");
+        await mkdir(directory, { recursive: true });
+        const expected: string[] = [];
+        for (const source of ["tui_side_chat", "user", null, undefined]) {
+            const id = randomUUID();
+            if (source !== "tui_side_chat") {
+                expected.push(id);
+            }
+            const timestamp = "2026-11-10T00:00:00.000Z";
+            // Native persisted input is read and indexed by the real Codex app-server.
+            const records = [
+                {
+                    type: "session_meta",
+                    payload: {
+                        id,
+                        timestamp,
+                        cwd: f.workspace,
+                        originator: "codex_cli_rs",
+                        cli_version: "0.162.1",
+                        source: "cli",
+                        thread_source: source,
+                        model_provider: "morty",
+                    },
+                },
+                {
+                    type: "event_msg",
+                    payload: {
+                        type: "user_message",
+                        message: "Saved conversation",
+                        images: [],
+                        local_images: [],
+                        text_elements: [],
+                    },
+                },
+            ];
+            await writeFile(
+                join(directory, `rollout-2026-11-10T00-00-00-${id}.jsonl`),
+                `${records.map((record) => JSON.stringify({ timestamp, ...record })).join("\n")}\n`,
+            );
+        }
+        expect((await f.list()).entries.map((entry) => entry.sessionId).sort()).toEqual(expected.sort());
+    } finally {
+        await f.close();
+    }
+});
 
 it("Given a saved Codex conversation with an active writer, When it is previewed, Then history keeps the harness message identities and the writer can continue", async () => {
     const f = await codexFixture("PREVIEW_REPLY", {}, harnessAdapters);

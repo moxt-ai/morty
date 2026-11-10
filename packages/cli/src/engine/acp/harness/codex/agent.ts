@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import {
     type AgentApp,
     type AgentConnection,
@@ -27,6 +29,7 @@ import type { CodexSessionAgent } from "./session-agent.ts";
 import type { CodexEndpointOptions, CodexSessionNotification, CodexSessionUpdate } from "./session-update.ts";
 import { promptResultWithMessageId } from "./session-update.ts";
 import { CodexSettings } from "./settings.ts";
+import { readCodexThreadSource } from "./thread-source.ts";
 
 const APPROVAL_TIMEOUT_MILLISECONDS = 3_600_000;
 const CODEX_AGENT_VERSION = "0.154.0";
@@ -231,6 +234,10 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 async (context) => await this.#sessionAgent.steer(context.params, context.signal),
             )
             .onRequest(methods.agent.session.list, async (context) => {
+                const signal = AbortSignal.any([
+                    context.signal,
+                    AbortSignal.timeout(SESSION_LIST_TIMEOUT_MILLISECONDS),
+                ]);
                 const decoded = threadListResponseSchema.parse(
                     await this.#appServer.request(
                         "thread/list",
@@ -239,17 +246,31 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                             // Codex defaults to interactive sources and otherwise hides exec handoffs.
                             sourceKinds: ["cli", "vscode", "exec", "appServer"],
                         },
-                        AbortSignal.any([context.signal, AbortSignal.timeout(SESSION_LIST_TIMEOUT_MILLISECONDS)]),
+                        signal,
                     ),
                 );
-                return {
-                    nextCursor: decoded.nextCursor ?? null,
-                    sessions: decoded.data.map((thread) => ({
+                const sessions = [];
+                const home =
+                    options.environment["CODEX_HOME"] ?? process.env["CODEX_HOME"] ?? resolve(homedir(), ".codex");
+                for (const thread of decoded.data) {
+                    const source =
+                        thread.threadSource ??
+                        (thread.path == null
+                            ? null
+                            : await readCodexThreadSource(home, thread.path, thread.id, signal));
+                    if (source === "tui_side_chat") {
+                        continue;
+                    }
+                    sessions.push({
                         cwd: thread.cwd,
                         sessionId: thread.id,
                         title: thread.name ?? thread.preview ?? null,
                         updatedAt: new Date(thread.updatedAt * 1_000).toISOString(),
-                    })),
+                    });
+                }
+                return {
+                    nextCursor: decoded.nextCursor ?? null,
+                    sessions,
                 };
             })
             .onRequest(methods.agent.session.close, async () => {
