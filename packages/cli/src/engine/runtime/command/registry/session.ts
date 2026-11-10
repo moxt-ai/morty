@@ -350,17 +350,16 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
     );
     const signal = AbortSignal.any([context.signal, timeout.signal]);
     try {
-        const resolved = await resolveSessionDirectory(context.directories, command.directory, signal);
-        const agent = await context.resolveAgent(command.harness, signal);
-        const ready = await context.sessionCreations.run(
-            command.operationId,
-            {
-                harness: command.harness,
-                cwd: resolved.cwd,
-                configurations: command.configurations,
-            },
-            signal,
-            async () => {
+        const input = {
+            action: "create",
+            harness: command.harness,
+            directory: command.directory,
+            configurations: command.configurations,
+        };
+        const create = async () => {
+            const resolved = await resolveSessionDirectory(context.directories, command.directory, signal);
+            const agent = await context.resolveAgent(command.harness, signal);
+            return await context.sessionCreations.run(command.operationId, input, signal, async () => {
                 const target = await context.sessions.createNativeSession({
                     ...agent,
                     cwd: resolved.cwd,
@@ -392,8 +391,9 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                     }
                     throw cause;
                 }
-            },
-        );
+            });
+        };
+        const ready = await (context.sessionCreations.recover(command.operationId, input, signal) ?? create());
         signal.throwIfAborted();
         context.diagnostics.daemonDiagnostic("session_creation_resolved", command.requestId, {
             harness: command.harness,

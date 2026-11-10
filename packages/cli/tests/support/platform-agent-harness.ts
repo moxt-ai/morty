@@ -155,6 +155,10 @@ export async function createFakeAgentHarnessRuntime(options: {
         let disposed = false;
         return {
             client,
+            /** The controlled Agent's native history can be removed independently of Morty's receipts. */
+            removeNativeSession: async (sessionId: string): Promise<void> => {
+                await rm(join(harnessState, `${encodeURIComponent(sessionId)}.json`));
+            },
             failure,
             computerId: pairing.computerId,
             [Symbol.asyncDispose]: async () => {

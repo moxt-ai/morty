@@ -61,19 +61,26 @@ export async function createTestRuntime(
             const url = new URL(stack.chatOrigin);
             url.searchParams.set("identity", encodeIdentityScope({ computerId, userId }));
             await page.addInitScript(
-                ({ key, raw }) => {
+                ({ key, scope, token }) => {
                     if (window === window.top) {
-                        const stored = window.localStorage.getItem(key);
+                        const raw = window.localStorage.getItem(key);
+                        const stored = raw === null ? { credentials: {}, computers: [] } : JSON.parse(raw);
                         window.localStorage.setItem(
                             key,
-                            JSON.stringify({ ...(stored === null ? {} : JSON.parse(stored)), ...JSON.parse(raw) }),
+                            JSON.stringify({
+                                credentials: { ...stored.credentials, [scope.userId]: token },
+                                computers: [
+                                    ...stored.computers.filter(
+                                        (computer: { scope: { userId: string } }) =>
+                                            computer.scope.userId !== scope.userId,
+                                    ),
+                                    { scope },
+                                ],
+                            }),
                         );
                     }
                 },
-                {
-                    key: ANONYMOUS_CREDENTIAL_KEY_NAME,
-                    raw: JSON.stringify({ [userId]: token }),
-                },
+                { key: ANONYMOUS_CREDENTIAL_KEY_NAME, scope: { computerId, userId }, token },
             );
             await page.goto(url.href);
             const user = await chat.useBrowserIdentity({ computerId, token });

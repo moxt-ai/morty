@@ -623,9 +623,13 @@ test("Given a computer I keep using, When ten more computers are saved in this b
 const FUTURE_USER_ID = "usr_saved-by-a-newer-version";
 const FUTURE_TOKEN = `morty_anon_v3_${"f".repeat(43)}`;
 
-function addStoredValue(key: string, add: (stored: unknown) => unknown): void {
-    const raw = window.localStorage.getItem(key);
-    window.localStorage.setItem(key, JSON.stringify(add(raw === null ? null : JSON.parse(raw))));
+function addStoredValue(field: "credentials" | "computers", add: (stored: unknown) => unknown): void {
+    const raw = window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY_NAME);
+    const snapshot = raw === null ? { credentials: {}, computers: [] } : JSON.parse(raw);
+    window.localStorage.setItem(
+        ANONYMOUS_CREDENTIAL_KEY_NAME,
+        JSON.stringify({ ...snapshot, [field]: add(snapshot[field]) }),
+    );
 }
 
 test("Given a remembered computer and a credential this version cannot read, When I return through the plain address, Then my computer opens and the other credential is kept", {
@@ -633,7 +637,7 @@ test("Given a remembered computer and a credential this version cannot read, Whe
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const sessionId = await startConversation(app, "Keep my computer");
-    addStoredValue("morty.anonymous-credentials.v1", (stored) => ({
+    addStoredValue("credentials", (stored) => ({
         ...(typeof stored === "object" && stored !== null ? stored : {}),
         [FUTURE_USER_ID]: FUTURE_TOKEN,
     }));
@@ -643,7 +647,7 @@ test("Given a remembered computer and a credential this version cannot read, Whe
     await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
     // Opening the computer saved its visit; the credential this version cannot read is still there for the other.
-    expect(JSON.parse(window.localStorage.getItem("morty.anonymous-credentials.v1") ?? "{}")).toMatchObject({
+    expect(JSON.parse(window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY_NAME) ?? "{}").credentials).toMatchObject({
         [FUTURE_USER_ID]: FUTURE_TOKEN,
     });
 });
@@ -654,36 +658,40 @@ test("Given a remembered computer and a computer record this version cannot read
     const app = await createTestApp({ connectAgent: true });
     const sessionId = await startConversation(app, "Keep my computer list");
     const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
-    addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
+    addStoredValue("computers", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
 
     window.location.href = `${app.origin}/`;
     const returned = await app.reload();
     await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
-    expect(JSON.parse(window.localStorage.getItem("morty:remembered-computers:v1") ?? "[]")).toContainEqual(future);
+    expect(JSON.parse(window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY_NAME) ?? "{}").computers).toContainEqual(
+        future,
+    );
 });
 
-test("Given a computer record this version cannot read whose token it can read, When saving a visit, Then that computer keeps its token and a token no computer needs is dropped", {
+test("Given a computer record this version cannot read whose token it can read, When saving a visit, Then visiting changes no access credentials", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const sessionId = await startConversation(app, "Keep the other version's computer");
     const theirToken = `morty_anon_v1_${"t".repeat(43)}`;
     const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
-    addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
-    addStoredValue("morty.anonymous-credentials.v1", (stored) => ({
+    addStoredValue("computers", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
+    addStoredValue("credentials", (stored) => ({
         ...(typeof stored === "object" && stored !== null ? stored : {}),
         [FUTURE_USER_ID]: theirToken,
         "usr_unclaimed-0": `morty_anon_v1_${"0".repeat(43)}`,
     }));
 
+    const savedAccess = window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY_NAME);
     window.location.href = `${app.origin}/`;
     const returned = await app.reload();
     await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
-    const credentials = JSON.parse(window.localStorage.getItem("morty.anonymous-credentials.v1") ?? "{}");
+    const credentials = JSON.parse(window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY_NAME) ?? "{}").credentials;
     expect(credentials).toMatchObject({ [FUTURE_USER_ID]: theirToken });
-    expect(credentials).not.toHaveProperty("usr_unclaimed-0");
+    expect(credentials).toHaveProperty("usr_unclaimed-0");
+    expect(window.localStorage.getItem(ANONYMOUS_CREDENTIAL_KEY_NAME)).toBe(savedAccess);
 });
 
 test("Given a computer whose remembered conversation was closed elsewhere, When I switch to it from another computer, Then it opens at its chat home", {

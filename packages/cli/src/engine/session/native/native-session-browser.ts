@@ -63,6 +63,11 @@ function nextForkTitle(sourceTitle: string, sessions: readonly StoredSession[]):
     return `${sourceTitle.slice(0, MAXIMUM_SESSION_TITLE_LENGTH - suffix.length)}${suffix}`;
 }
 
+/** Only client intent identifies a Fork; native metadata is mutable execution input. */
+function forkIntent(command: Extract<NativeSessionCommand, { readonly action: "fork" | "import" }>) {
+    return { action: "fork", harness: command.harness, sessionId: command.sessionId, directory: command.directory };
+}
+
 export class NativeSessionService {
     readonly #operations = new RuntimeOperations();
     readonly #cursors = new Map<string, ListedCursor>();
@@ -114,6 +119,26 @@ export class NativeSessionService {
         );
 
     readonly #execute = async (command: NativeSessionCommand, signal: AbortSignal): Promise<NativeSessionResult> => {
+        if (command.action !== "fork") {
+            return await this.#executeNew(command, signal);
+        }
+        // The receipt answers the original intent before consulting the Agent or its mutable native directory.
+        const recovered = this.#creations.recover(command.requestId, forkIntent(command), signal);
+        if (recovered === null) {
+            return await this.#executeNew(command, signal);
+        }
+        const ready = await recovered;
+        return {
+            kind: "native.session.result",
+            requestId: command.requestId,
+            action: "fork",
+            ready,
+            target: ready.target,
+            title: this.#sessions.findSessions([ready.target])[0]?.title ?? "Untitled session",
+        };
+    };
+
+    readonly #executeNew = async (command: NativeSessionCommand, signal: AbortSignal): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
         if (command.action === "active-turn") {
             return {
@@ -267,17 +292,7 @@ export class NativeSessionService {
         };
         const ready =
             action === "fork"
-                ? await this.#creations.run(
-                      command.requestId,
-                      {
-                          action,
-                          harness: command.harness,
-                          sessionId: target.info.sessionId,
-                          cwd: target.cwd,
-                      },
-                      signal,
-                      open,
-                  )
+                ? await this.#creations.run(command.requestId, forkIntent(command), signal, open)
                 : await open();
         return {
             ...envelope,

@@ -77,16 +77,13 @@ export const centralLocalStorage = {
         } catch {}
     },
     /** Encodes and stores; a failed encode or unavailable storage skips the write. */
-    write: <T>(entry: LocalStorageEntry<T>, value: T): void => {
-        let raw: string;
+    write: <T>(entry: LocalStorageEntry<T>, value: T): boolean => {
         try {
-            raw = entry.encode(value);
+            window.localStorage.setItem(entry.key, entry.encode(value));
+            return true;
         } catch {
-            return;
+            return false;
         }
-        try {
-            window.localStorage.setItem(entry.key, raw);
-        } catch {}
     },
 };
 
@@ -201,13 +198,16 @@ export const MAX_REMEMBERED_COMPUTERS = 10;
 
 const credentialUserIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 
-/**
- * Maps a user identifier to their anonymous access token. Each token is read on its own: another Morty version may
- * store tokens this one cannot read, and those stay stored. The remembered computers decide which tokens are kept.
- */
-export const anonymousCredentialsEntry = jsonLocalStorageEntry({
-    key: "morty.anonymous-credentials.v1",
-    schema: v.pipe(v.record(v.string(), v.unknown()), v.readonly()),
+/** Access membership and credentials commit together; presentation never writes this entry. */
+export const browserAccessEntry = jsonLocalStorageEntry({
+    key: "morty:browser-access:v1",
+    schema: v.pipe(
+        v.object({
+            credentials: v.record(v.string(), v.unknown()),
+            computers: v.array(v.unknown()),
+        }),
+        v.readonly(),
+    ),
 });
 
 /** A stored token this version can use, or null. */
@@ -227,9 +227,8 @@ const computerDestinationSchema = v.pipe(
     v.readonly(),
 );
 
-const rememberedComputerSchema = v.pipe(
+const computerPreferenceSchema = v.pipe(
     v.object({
-        scope: identityScopeSchema,
         destination: computerDestinationSchema,
         name: v.pipe(v.string(), v.maxLength(256)),
         directory: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
@@ -239,21 +238,30 @@ const rememberedComputerSchema = v.pipe(
 );
 
 export type ComputerDestination = v.InferOutput<typeof computerDestinationSchema>;
-export type RememberedComputer = v.InferOutput<typeof rememberedComputerSchema>;
+export type RememberedComputer = v.InferOutput<typeof computerPreferenceSchema> & {
+    readonly scope: v.InferOutput<typeof identityScopeSchema>;
+};
 
-/**
- * The computers this browser can open, most recently used first. Their tokens are stored by user. Each record is read
- * on its own, so a record another Morty version stored stays stored even when this version cannot read it.
- */
-export const rememberedComputersEntry = jsonLocalStorageEntry({
-    key: "morty:remembered-computers:v1",
-    schema: v.pipe(v.array(v.unknown()), v.readonly()),
-});
+/** Preferences have no authority to add, replace or remove access. Each computer writes only its own preferences. */
+export const computerPreferenceEntry = (scope: { readonly computerId: string; readonly userId: string }) =>
+    jsonLocalStorageEntry({
+        key: scopedKey("morty:computer-preference:v1:", scope.computerId, scope.userId),
+        schema: computerPreferenceSchema,
+    });
 
-/** A stored computer record this version can read, or null. */
+/** An access record names only its scope. Everything displayed about it is a preference. */
 export function readableComputer(value: unknown): RememberedComputer | null {
-    const parsed = v.safeParse(rememberedComputerSchema, value);
-    return parsed.success ? parsed.output : null;
+    const parsed = v.safeParse(v.object({ scope: identityScopeSchema }), value);
+    if (!parsed.success) {
+        return null;
+    }
+    return {
+        scope: parsed.output.scope,
+        destination: { kind: "home" },
+        name: "",
+        directory: null,
+        lastUsedAt: 0,
+    };
 }
 
 // ---------------------------------------------------------------------------
