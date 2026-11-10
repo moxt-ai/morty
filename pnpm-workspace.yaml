@@ -33,7 +33,7 @@ catalog:
   "@vitest/coverage-istanbul": 4.1.12
   clsx: ^2.1.1
   dependency-cruiser: 18.7.2
-  drizzle-kit: 0.31.8
+  drizzle-kit: 1.0.0-rc.5-5935859
   drizzle-orm: ^0.45.2
   esbuild: 0.28.2
   happy-dom: 21.0.4
