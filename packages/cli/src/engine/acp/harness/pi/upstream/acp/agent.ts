@@ -30,7 +30,7 @@ import {
     type SetSessionModeRequest,
     type SetSessionModeResponse,
     type StopReason,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { PiRpcProcess } from "../pi-rpc/process.js";
 import { getAuthMethods } from "./auth.js";

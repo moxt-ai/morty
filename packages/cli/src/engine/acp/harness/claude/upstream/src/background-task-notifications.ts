@@ -1,7 +1,7 @@
 // Modified and maintained by Moxt for Morty.
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
-import type { ToolCallStatus } from "@agentclientprotocol/sdk";
+import type { ToolCallStatus } from "@agentclientprotocol/sdk/unstable";
 import type { ClaudeSessionNotification as SessionNotification } from "./session-update.js";
 
 export type BackgroundTaskStatus = "running" | "completed" | "failed" | "stopped" | "unknown";

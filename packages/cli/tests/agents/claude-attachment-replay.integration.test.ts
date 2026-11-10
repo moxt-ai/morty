@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ContentBlock, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { type ContentBlock, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import {
     decodeMessageKind,
     decodeSessionPreviewHistoryPageLoaded,

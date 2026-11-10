@@ -5,7 +5,7 @@ import {
     type ClientConnection,
     type InitializeResponse,
     methods,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { PiAgentConnection } from "../../../acp/adapter/pi/agent-connection.ts";
 import type { AgentConnectionFactory } from "../../../acp/connection/agent-connection.ts";
 import type { ResolvedExecutable } from "../../../util/process/executable.ts";

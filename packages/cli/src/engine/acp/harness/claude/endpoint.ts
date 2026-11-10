@@ -1,4 +1,4 @@
-import type { AgentApp, AgentConnection } from "@agentclientprotocol/sdk";
+import type { AgentApp, AgentConnection } from "@agentclientprotocol/sdk/unstable";
 import type {
     AcpEndpointTermination,
     InProcessAcpEndpoint,

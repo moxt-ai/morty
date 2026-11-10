@@ -1,4 +1,4 @@
-import { methods, PROTOCOL_VERSION, type SessionUpdate } from "@agentclientprotocol/sdk";
+import { methods, PROTOCOL_VERSION, type SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";
 import { CodexAcpAgent } from "../../src/engine/acp/harness/codex/agent.ts";

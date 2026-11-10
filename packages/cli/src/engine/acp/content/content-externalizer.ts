@@ -1,4 +1,4 @@
-import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { z } from "zod";
 
@@ -331,7 +331,8 @@ export class AcpContentExternalizer {
             case "agent_thought_chunk":
             case "user_message_chunk":
             case "agent_message_chunk":
-            case "compaction_summary_chunk": {
+            case "compaction_summary_chunk":
+            case "session_message_chunk": {
                 const content = await this.#content(sessionTarget, update.content, signal);
                 return {
                     agent: { ...update, content: content.agent },
@@ -360,6 +361,18 @@ export class AcpContentExternalizer {
                     events: [{ ...update, summary: content.map((item) => item.event) }],
                 };
             }
+            case "session_message": {
+                if (update.content === undefined || update.content === null) {
+                    return { agent: update, events: [update] };
+                }
+                const content = await Promise.all(
+                    update.content.map(async (item) => await this.#content(sessionTarget, item, signal)),
+                );
+                return {
+                    agent: { ...update, content: content.map((item) => item.agent) },
+                    events: [{ ...update, content: content.map((item) => item.event) }],
+                };
+            }
             case "plan":
             case "plan_update":
             case "plan_removed":
@@ -368,6 +381,8 @@ export class AcpContentExternalizer {
             case "config_option_update":
             case "session_info_update":
             case "usage_update":
+            case "notice":
+            case "subagent_update":
                 return { agent: update, events: [update] };
         }
     };

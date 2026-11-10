@@ -1,7 +1,7 @@
 // Modified and maintained by Moxt for Morty.
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type { SDKActiveGoalMessage } from "@anthropic-ai/claude-agent-sdk";
 
 export const GOAL_EXTENSION_VERSION = 1 as const;

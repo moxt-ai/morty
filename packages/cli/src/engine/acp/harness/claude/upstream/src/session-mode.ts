@@ -8,7 +8,7 @@ import {
     type SessionModeState,
     type SetSessionModeRequest,
     type SetSessionModeResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { ModelInfo, PermissionMode, PermissionResult, Query } from "@anthropic-ai/claude-agent-sdk";
 import { ALLOW_BYPASS } from "./permissions/modes.js";
 import type { ClaudeSessionNotification as SessionNotification } from "./session-update.js";

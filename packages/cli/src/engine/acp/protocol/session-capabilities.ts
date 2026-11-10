@@ -1,4 +1,4 @@
-import type { InitializeResponse } from "@agentclientprotocol/sdk";
+import type { InitializeResponse } from "@agentclientprotocol/sdk/unstable";
 import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { isRecord } from "../../util/value-utils.ts";
 

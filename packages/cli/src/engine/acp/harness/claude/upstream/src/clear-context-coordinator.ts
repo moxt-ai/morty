@@ -1,7 +1,7 @@
 // Modified and maintained by Moxt for Morty.
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
-import type { NewSessionRequest, SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { NewSessionRequest, SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import type { EffortLevel, Options, PermissionMode, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { DEFAULT_AGENT_ID, DEFAULT_MODEL_ID, EFFORT_CONFIG_ID } from "./session-config-ids.js";
 

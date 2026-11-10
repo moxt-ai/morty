@@ -3,7 +3,7 @@
 
 import os from "node:os";
 import path from "node:path";
-import type { PermissionOption } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import type { DurablePermissionChangeSet } from "../normalization.js";
 import { type PermissionOptionContext, plainString, withOptionalUpdate } from "./shared.js";
 

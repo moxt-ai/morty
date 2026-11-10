@@ -1,4 +1,4 @@
-import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";
 import { CodexAcpAgent } from "../../src/engine/acp/harness/codex/agent.ts";
@@ -43,7 +43,7 @@ test("Given an embedded image prompt, When Codex emits its user item, Then the i
         const resource = {
             type: "resource",
             resource: { uri: "morty://bot/instructions", mimeType: "text/plain", text: "Private bot instructions" },
-        } satisfies import("@agentclientprotocol/sdk").ContentBlock;
+        } satisfies import("@agentclientprotocol/sdk/unstable").ContentBlock;
         await connection.agent.request(
             methods.agent.session.prompt,
             { sessionId: session.sessionId, prompt: [{ type: "image", data, mimeType: "image/png" }, resource] },

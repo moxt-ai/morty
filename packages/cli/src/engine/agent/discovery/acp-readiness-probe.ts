@@ -7,7 +7,7 @@ import {
     type RequestPermissionRequest,
     type RequestPermissionResponse,
     type SessionNotification,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";

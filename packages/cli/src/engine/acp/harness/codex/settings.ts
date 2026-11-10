@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { AGENT_MODEL_EFFORT_RESOLUTION_COMPLETE, type AgentModelEffort } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp-error.ts";
 import type { CodexAppServerClient } from "./app-server-client.ts";

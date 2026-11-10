@@ -7,7 +7,7 @@ import {
     methods,
     type RequestPermissionRequest,
     type RequestPermissionResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { IdentifiedSessionNotification } from "./session-notification.ts";
 
 export interface AcpClientHandler {
