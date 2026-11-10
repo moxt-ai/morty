@@ -2,13 +2,11 @@ import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { provisionLocalService } from "../../../scripts/provision-local-service.ts";
 import type { E2EHarness } from "./harness.ts";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const mortyRepository = repository;
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
-const relayConfiguration = join(fixtureDirectory, "wrangler.relay.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
 const wranglerExecutable = join(repository, "node_modules", ".bin", "wrangler");
 
@@ -62,90 +60,44 @@ const sessionSigningSecret = "local-development-only-session-signing-secret";
 
 export class LocalStack {
     readonly harness: E2EHarness;
-    readonly directories: Readonly<Record<"relay" | "chat" | "workspace", string>>;
+    readonly directories: Readonly<Record<"chat" | "workspace", string>>;
     readonly relayOrigin: string;
     readonly chatOrigin: string;
-    readonly relayPort: number;
     readonly chatPort: number;
 
     static async create(harness: E2EHarness) {
-        const relayPort = await freePort();
-        const chatPort = await freePort(new Set([relayPort]));
+        const chatPort = await freePort();
         const directories = {
-            relay: join(harness.workDirectory, "relay"),
             chat: join(harness.workDirectory, "chat"),
             workspace: join(harness.workDirectory, "workspace"),
         };
         await Promise.all(Object.values(directories).map((path) => mkdir(path, { recursive: true })));
-        return new LocalStack(harness, directories, relayPort, chatPort);
+        return new LocalStack(harness, directories, chatPort);
     }
 
-    constructor(
-        harness: E2EHarness,
-        directories: Readonly<Record<"relay" | "chat" | "workspace", string>>,
-        relayPort: number,
-        chatPort: number,
-    ) {
+    constructor(harness: E2EHarness, directories: Readonly<Record<"chat" | "workspace", string>>, chatPort: number) {
         this.harness = harness;
         this.directories = directories;
-        this.relayOrigin = `http://127.0.0.1:${relayPort}`;
         this.chatOrigin = `http://127.0.0.1:${chatPort}`;
-        this.relayPort = relayPort;
+        this.relayOrigin = this.chatOrigin;
         this.chatPort = chatPort;
     }
 
-    async startRelay() {
+    async start() {
         const revision = (await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: mortyRepository })).stdout.trim();
         this.harness.record("mortyRevision", revision);
-        await this.harness.stage("migrate-relay", async () => {
+        await this.harness.stage("migrate-morty", async () => {
             await migrate(
                 this.harness,
-                relayConfiguration,
+                chatConfiguration,
                 "RELAY_DIRECTORY_DATABASE",
-                this.directories.relay,
+                this.directories.chat,
                 mortyRepository,
             );
         });
-        const application = await this.harness.stage("provision-morty-service", () =>
-            provisionLocalService(relayConfiguration, this.directories.relay, this.harness.signal),
-        );
-        await this.harness.stage("start-relay", async () => {
-            await this.harness.startWorker(
-                "morty-relay",
-                wranglerExecutable,
-                [
-                    "dev",
-                    "--config",
-                    relayConfiguration,
-                    "--var",
-                    `APP_ORIGIN:${this.chatOrigin}`,
-                    "--var",
-                    `MORTY_RELAY_URL:${this.relayOrigin}`,
-                    "--var",
-                    `MORTY_SERVICE_SECRET:${application.appSecret}`,
-                    "--var",
-                    `MORTY_SESSION_SIGNING_SECRET:${sessionSigningSecret}`,
-                    "--ip",
-                    "127.0.0.1",
-                    "--port",
-                    String(this.relayPort),
-                    "--inspector-port",
-                    "0",
-                    "--persist-to",
-                    this.directories.relay,
-                ],
-                { cwd: mortyRepository },
-            );
-            await this.harness.checkHttp(`${this.relayOrigin}/morty/api/dashboard/health`, "morty-relay health");
-        });
-        return { ...application, sessionSigningSecret };
-    }
-
-    async startChat(application: { readonly appId: string; readonly appSecret: string }) {
         const variables = {
             APP_ORIGIN: this.chatOrigin,
-            MORTY_SERVICE_SECRET: application.appSecret,
-            MORTY_RELAY_URL: this.relayOrigin,
+            MORTY_SESSION_SIGNING_SECRET: sessionSigningSecret,
         };
         await this.harness.stage("start-chat", async () => {
             const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
@@ -165,5 +117,6 @@ export class LocalStack {
             ]);
             await this.harness.checkHttp(this.chatOrigin, "morty", (response) => response.status === 200);
         });
+        return { sessionSigningSecret };
     }
 }

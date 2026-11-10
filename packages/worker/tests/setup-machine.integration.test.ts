@@ -279,9 +279,9 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const first = await run();
     const before = await machineRuntime();
     const revoked = await fixture.relayRequest(
-        new Request(`https://relay.test/morty/api/v1/computers/${before.identity.computer_id}/pairing`, {
+        new Request(`${fixture.origin}/morty/api/computers/${before.identity.computer_id}/management/pairing`, {
             method: "DELETE",
-            headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
+            headers: { authorization: `Bearer ${before.identity.user_token}` },
         }),
     );
     expect(revoked.status).toBe(204);

@@ -10,8 +10,8 @@ import {
     type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
-import type { ComputerManagementGateway } from "../../../gateway/computer-management-gateway.ts";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
+import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
@@ -121,12 +121,12 @@ function notInRecentSessions(): never {
 export class ChatService {
     readonly #identities: IdentityStorage;
     readonly #managedBots: ManagedBotStorage;
-    readonly #relay: ComputerManagementGateway;
+    readonly #relay: LocalComputerService;
     readonly #sessionOperations: ManagedSessionOperations | undefined;
 
     constructor(cx: {
         readonly sessionOperations: ManagedSessionOperations | undefined;
-        readonly gateways: { readonly computerManagements: ComputerManagementGateway };
+        readonly services: { readonly computers: LocalComputerService };
         readonly storages: {
             readonly identities: IdentityStorage;
             readonly managedBots: ManagedBotStorage;
@@ -134,7 +134,7 @@ export class ChatService {
     }) {
         this.#identities = cx.storages.identities;
         this.#managedBots = cx.storages.managedBots;
-        this.#relay = cx.gateways.computerManagements;
+        this.#relay = cx.services.computers;
         this.#sessionOperations = cx.sessionOperations;
     }
 

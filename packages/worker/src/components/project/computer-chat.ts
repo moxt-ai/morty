@@ -1,5 +1,6 @@
 import * as v from "valibot";
-import { computerApplication as application } from "../../computer-application.ts";
+import type { ComputerBackendService } from "../../../../relay/src/service/computer-backend-service.ts";
+import { createComputerApplication } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
@@ -20,14 +21,17 @@ export class ComputerChat {
         change: () => Promise<boolean>,
         signal: AbortSignal,
     ) => Promise<boolean>;
+    readonly #runtime: (computerId: string) => ComputerBackendService;
     constructor(
         storage: DurableObjectStorage,
         owns: (id: string) => boolean,
         revokeAccess: (computerId: string, change: () => Promise<boolean>, signal: AbortSignal) => Promise<boolean>,
+        runtime: (computerId: string) => ComputerBackendService,
     ) {
         this.#storage = storage;
         this.#owns = owns;
         this.#revokeAccess = revokeAccess;
+        this.#runtime = runtime;
     }
 
     #database: DurableObjectDatabase | undefined;
@@ -50,14 +54,17 @@ export class ComputerChat {
         if (!this.#owns(validatedComputerId) || bound !== validatedComputerId) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await application.fetch(request, this.#bindings(validatedComputerId, env));
+        return await createComputerApplication(this.#runtime(validatedComputerId)).fetch(
+            request,
+            this.#bindings(validatedComputerId, env),
+        );
     }
 
     readonly #bootstrap = async (request: Request, env: CloudBindings): Promise<Response> => {
         const input: unknown = await request.json();
         const parsed = v.parse(computerBootstrap, input);
         await this.#bindComputer(parsed.computer.computerId);
-        return await application.fetch(
+        return await createComputerApplication(this.#runtime(parsed.computer.computerId)).fetch(
             new Request(request.url, {
                 body: JSON.stringify(parsed),
                 headers: { "content-type": "application/json" },

@@ -1,31 +1,18 @@
-import { type ProjectLocationHint, RELAY_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
+import type { ProjectLocationHint } from "@morty-build/client/protocol";
 import {
     createRandomToken,
-    type decodeProjectCredential,
     type MachineAccountDirectory,
     type ProjectAccessAuthorizer,
-    type ProjectAccessContext,
-    ProjectAuthenticationError,
     ProjectPermission,
     validateIdentifier,
 } from "@morty-build/relay-core";
-import { decodeComputerPlacement, encodeRelayComputerId, projectBucketLocation } from "../entity/computer-id.ts";
-import {
-    ComputerManagementError,
-    type ComputerManagementPlacementRegistry,
-    hasControlCharacters,
-    RelayAppCredentialAccess,
-    type RelayPrincipal,
-} from "../entity/computer-management.ts";
-import type { CredentialRow, ProjectRow } from "../entity/relay-records.ts";
+import { encodeRelayComputerId } from "../entity/computer-id.ts";
+import { ComputerManagementError, hasControlCharacters } from "../entity/computer-management.ts";
+import type { ProjectRow } from "../entity/relay-records.ts";
 import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
-import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
-import { AppCredentialProjectAccess } from "./app-credential-project-access.ts";
+import { BackendProjectAccess } from "./backend-project-access.ts";
 
-const RELAY_SERVER_PROJECT_PERMISSIONS: readonly ProjectPermission[] = Object.freeze(
-    RELAY_APP_PROJECT_PERMISSIONS.map(ProjectPermission.named),
-);
 function displayName(value: string): string {
     const normalized = value.trim();
     if (normalized.length === 0 || normalized.length > 120 || hasControlCharacters(normalized)) {
@@ -33,116 +20,56 @@ function displayName(value: string): string {
     }
     return normalized;
 }
-function actorReference(value: string): string {
-    const normalized = value.replace(/\s+/g, " ").trim();
-    if (normalized.length > 200 || hasControlCharacters(normalized)) {
-        throw new ComputerManagementError("invalid_request", "The actor reference is invalid", 400);
-    }
-    return normalized;
-}
-function iso(value: number): string {
-    return new Date(value).toISOString();
-}
 function projectResource(row: ProjectRow): object {
     return {
         clientReference: row.client_reference,
-        createdAt: iso(row.created_at),
-        deletedAt: typeof row.deleted_at === "number" ? iso(row.deleted_at) : "",
+        createdAt: new Date(row.created_at).toISOString(),
+        deletedAt: typeof row.deleted_at === "number" ? new Date(row.deleted_at).toISOString() : "",
         displayName: row.display_name,
         lifecycle: row.lifecycle,
         computerId: row.computer_id,
-        updatedAt: iso(row.updated_at),
+        updatedAt: new Date(row.updated_at).toISOString(),
     };
 }
+
 export class ComputerManagementService implements ProjectAccessAuthorizer {
-    constructor(
-        storage: ComputerManagementStorage,
-        placements: ComputerManagementPlacementRegistry,
-        appAuthentication: AppCredentialAuthenticationService,
-    ) {
-        this.#storage = storage;
-        this.#placements = placements;
-        this.#appAuthentication = appAuthentication;
-        this.#projectAccess = new AppCredentialProjectAccess(storage);
+    readonly #projectAccess: BackendProjectAccess;
+    readonly storage: ComputerManagementStorage;
+    constructor(storage: ComputerManagementStorage) {
+        this.#projectAccess = new BackendProjectAccess(storage);
+        this.storage = storage;
     }
-    readonly #storage: ComputerManagementStorage;
-    readonly #placements: ComputerManagementPlacementRegistry;
-    readonly #appAuthentication: AppCredentialAuthenticationService;
-    readonly #projectAccess: AppCredentialProjectAccess;
-    readonly resolveProjectPlacement = (computerId: string, signal: AbortSignal): { readonly location: string } => {
-        signal.throwIfAborted();
-        const placement = decodeComputerPlacement(computerId);
-        if (placement === null) {
-            throw new ComputerManagementError("invalid_request", "The Project identifier is invalid", 400);
-        }
-        if (!this.#placements.supports(placement)) {
-            throw new ComputerManagementError(
-                "storage_location_unavailable",
-                "The requested storage location is unavailable",
-                400,
-            );
-        }
-        return { location: projectBucketLocation(placement.locationHint) };
-    };
+
     readonly provisionMachineAccount = async (
-        principal: RelayPrincipal,
+        userId: string,
         requestedDisplayName: string,
         idempotencyKey: string,
         requestedClientReference: string,
-        requestedLocationHint: ProjectLocationHint,
+        locationHint: ProjectLocationHint,
         signal: AbortSignal,
     ): Promise<object> => {
-        if (
-            principal.scope !== "all-projects" ||
-            !RELAY_SERVER_PROJECT_PERMISSIONS.every((permission) => principal.permissions.has(permission))
-        ) {
-            throw new ComputerManagementError(
-                "app_provisioning_denied",
-                "An App-wide server credential is required",
-                403,
-            );
-        }
         const normalizedIdempotencyKey = validateIdentifier(idempotencyKey, "idempotency_key");
         const clientReference = validateIdentifier(
-            requestedClientReference.length > 0 ? requestedClientReference : normalizedIdempotencyKey,
+            requestedClientReference || normalizedIdempotencyKey,
             "client_reference",
         );
         const normalizedDisplayName = displayName(requestedDisplayName);
-        validateIdentifier(requestedLocationHint, "location_hint");
-        const locationHint = requestedLocationHint;
-        signal.throwIfAborted();
-        // A retry names the same request when it asks for the same Project. The location hint only chooses where a
-        // new Project is placed, and the Project records where it was placed, so a retry from elsewhere still matches.
         const sameRequest = (project: ProjectRow): boolean =>
             project.display_name === normalizedDisplayName && project.client_reference === clientReference;
-        const existing = await this.#storage.readProjectByIdempotencyKey(
-            principal.appId,
-            normalizedIdempotencyKey,
-            signal,
-        );
+        const user = validateIdentifier(userId, "user_id");
+        const existing = await this.storage.readProjectByIdempotencyKey(user, normalizedIdempotencyKey, signal);
         if (existing !== null) {
             if (!sameRequest(existing)) {
-                throw new ComputerManagementError(
-                    "idempotency_conflict",
-                    "The Project idempotency key was used with another request",
-                    409,
-                );
+                throw new ComputerManagementError("idempotency_conflict", "The key was used with another request", 409);
             }
-            await this.recordAccountCreation(existing, principal, signal);
+            await this.#recordAccountCreation(existing, signal);
             return projectResource(existing);
         }
-        const placement = this.#placements.resolveLocationHint(locationHint);
-        if (placement === null || !this.#placements.supports(placement)) {
-            throw new ComputerManagementError(
-                "storage_location_unavailable",
-                "The requested storage location is unavailable",
-                400,
-            );
-        }
+        const placement = { locationHint };
+        signal.throwIfAborted();
         const now = Date.now();
-        const computerId = encodeRelayComputerId(placement, createRandomToken(18));
         const project: ProjectRow = {
-            app_id: principal.appId,
+            user_id: user,
             client_reference: clientReference,
             created_at: now,
             deleted_at: null,
@@ -150,41 +77,32 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
             idempotency_key: normalizedIdempotencyKey,
             lifecycle: "active",
             location_hint: placement.locationHint,
-            computer_id: computerId,
+            computer_id: encodeRelayComputerId(placement, createRandomToken(18)),
             updated_at: now,
         };
-        if (!(await this.#storage.registerMachineAccount(project, principal.credentialId, signal))) {
-            const duplicate = await this.#storage.readProjectByIdempotencyKey(
-                principal.appId,
-                normalizedIdempotencyKey,
-                signal,
-            );
+        if (!(await this.storage.registerMachineAccount(project, signal))) {
+            const duplicate = await this.storage.readProjectByIdempotencyKey(user, normalizedIdempotencyKey, signal);
             if (duplicate !== null && sameRequest(duplicate)) {
-                await this.recordAccountCreation(duplicate, principal, signal);
+                await this.#recordAccountCreation(duplicate, signal);
                 return projectResource(duplicate);
             }
-            await this.#appAuthentication.readActiveCredentialByPublicId(principal.publicCredentialId, signal);
             throw new ComputerManagementError(
                 "idempotency_conflict",
                 "The machine account reference is already in use",
                 409,
             );
         }
-        await this.recordAccountCreation(project, principal, signal);
+        await this.#recordAccountCreation(project, signal);
         return projectResource(project);
     };
-    private readonly recordAccountCreation = async (
-        project: ProjectRow,
-        principal: RelayPrincipal,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        await this.#storage.recordAudit(
+
+    readonly #recordAccountCreation = async (project: ProjectRow, signal: AbortSignal): Promise<void> =>
+        await this.storage.recordAudit(
             {
                 action: "project.created",
-                actorId: principal.appId,
-                actorKind: principal.kind,
-                actorRef: principal.credentialId,
-                appId: principal.appId,
+                actorId: project.user_id,
+                actorKind: "application",
+                actorRef: project.user_id,
                 auditId: `pae_created_${project.computer_id}`,
                 detailsJson: "{}",
                 outcome: "succeeded",
@@ -194,131 +112,39 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
             },
             signal,
         );
-    };
-    readonly authorize = async (
-        credential: ReturnType<typeof decodeProjectCredential>,
-        requiredPermission: ProjectPermission,
-        actorRef: string,
-        signal: AbortSignal,
-    ): Promise<ProjectAccessContext> => {
-        signal.throwIfAborted();
-        const row = await this.authenticatedCredential(credential.value, signal);
-        const projects = await this.allowedProjects(row, signal);
-        if (projects.length !== 1) {
-            throw new ProjectAuthenticationError(
-                "project_target_required",
-                "This AppCredential requires an explicit Project target",
-            );
-        }
-        const computerId = projects[0];
-        if (computerId === undefined) {
-            throw new ProjectAuthenticationError("project_access_denied", "The AppCredential has no Project access");
-        }
-        return await this.authorizeCredentialForProject(row, computerId, requiredPermission, actorRef, signal);
-    };
-    readonly authenticate = async (
-        credential: ReturnType<typeof decodeProjectCredential>,
-        requiredPermission: ProjectPermission,
-        signal: AbortSignal,
-    ): Promise<ProjectAccessContext> => await this.authorize(credential, requiredPermission, "", signal);
-    readonly authorizeProject = async (
-        computerId: string,
-        credentialValue: string,
-        requiredPermission: ProjectPermission,
-        actorRef: string,
-        signal: AbortSignal,
-    ): Promise<ProjectAccessContext> => {
-        signal.throwIfAborted();
-        const row = await this.authenticatedCredential(credentialValue, signal);
-        return await this.authorizeCredentialForProject(
-            row,
-            validateIdentifier(computerId, "computer_id"),
-            requiredPermission,
-            actorReference(actorRef),
-            signal,
-        );
+
+    readonly authorizeProject = async (computerId: string, permission: ProjectPermission, signal: AbortSignal) => {
+        return await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), [permission], signal);
     };
     readonly authorizeSessionCredentialRecord = async (
         computerId: string,
-        credential: CredentialRow,
-        requiredPermission: ProjectPermission,
+        permission: ProjectPermission,
         issuedAt: number,
         signal: AbortSignal,
-    ): Promise<ProjectAccessContext> =>
-        await this.#projectAccess.authorizeSessionCredential(
-            credential,
+    ) =>
+        await this.#projectAccess.authorizeSession(
             validateIdentifier(computerId, "computer_id"),
-            [requiredPermission],
+            [permission],
             issuedAt,
             signal,
         );
-    readonly revokeSessionAccess = async (
-        computerId: string,
-        credentialValue: string,
-        signal: AbortSignal,
-    ): Promise<number> => {
-        await this.authorizeRelayCredential(computerId, credentialValue, ProjectPermission.SessionWrite, "", signal);
+    readonly revokeSessionAccess = async (computerId: string, signal: AbortSignal): Promise<number> => {
+        await this.authorizeProject(computerId, ProjectPermission.SessionWrite, signal);
         return sessionAccessRevokedThrough(
-            await this.#storage.recordSessionAccessRevocation(
-                validateIdentifier(computerId, "computer_id"),
-                Date.now(),
-                signal,
-            ),
+            await this.storage.recordSessionAccessRevocation(computerId, Date.now(), signal),
         );
     };
     readonly readSessionAccessRevokedThrough = async (
         computerId: string,
         signal: AbortSignal,
     ): Promise<number | null> => {
-        const revokedAt = await this.#storage.readSessionAccessRevocation(
+        const revokedAt = await this.storage.readSessionAccessRevocation(
             validateIdentifier(computerId, "computer_id"),
             signal,
         );
         return revokedAt === null ? null : sessionAccessRevokedThrough(revokedAt);
     };
     readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (computerId, signal) => {
-        const project = await this.#storage.readActiveComputerScope(
-            validateIdentifier(computerId, "computer_id"),
-            signal,
-        );
-        if (project === null) {
-            throw new ProjectAuthenticationError("project_access_denied", "The Project is unavailable");
-        }
-    };
-    readonly authorizeRelayCredential = async (
-        computerId: string,
-        credentialValue: string,
-        requiredPermission: ProjectPermission,
-        actorRef: string,
-        signal: AbortSignal,
-    ): Promise<RelayAppCredentialAccess> => {
-        const row = await this.authenticatedCredential(credentialValue, signal);
-        const project = await this.authorizeCredentialForProject(
-            row,
-            validateIdentifier(computerId, "computer_id"),
-            requiredPermission,
-            actorReference(actorRef),
-            signal,
-        );
-        return new RelayAppCredentialAccess(row.app_id, row.public_credential_id, project);
-    };
-    private readonly authorizeCredentialForProject = async (
-        row: CredentialRow,
-        computerId: string,
-        requiredPermission: ProjectPermission,
-        _actorRef: string,
-        signal: AbortSignal,
-    ): Promise<ProjectAccessContext> =>
-        await this.#projectAccess.authorize(row, computerId, [requiredPermission], signal);
-    private readonly authenticatedCredential = async (
-        credentialValue: string,
-        signal: AbortSignal,
-    ): Promise<CredentialRow> => await this.#appAuthentication.verify(credentialValue, signal);
-    private readonly allowedProjects = async (row: CredentialRow, signal: AbortSignal): Promise<readonly string[]> => {
-        const projects = await this.#storage.listActiveComputerIds(row.app_id, signal);
-        if (row.all_projects === 1) {
-            return Object.freeze(projects);
-        }
-        return Object.freeze(await this.#storage.scopedProjects(row.credential_id, projects, signal));
+        await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), [], signal);
     };
 }

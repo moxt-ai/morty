@@ -9,7 +9,7 @@ test("Given a creation operation still applying initial settings, When another c
     const release = Promise.withResolvers<void>();
     try {
         const identity = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(identity.computerId, [
+        await using runtime = await cloud.connectAgent(identity.computerId, identity.token, [
             {
                 harness: "configuration-test",
                 label: "Settings Agent",

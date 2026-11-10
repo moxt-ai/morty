@@ -1,0 +1,389 @@
+{
+    "version": "6",
+    "dialect": "sqlite",
+    "id": "d858dc22-2b77-48bb-b012-1b305a5793d1",
+    "prevId": "aad7acbd-c840-460a-b973-f4f853d3f753",
+    "tables": {
+        "machine_access_revocations": {
+            "name": "machine_access_revocations",
+            "columns": {
+                "computer_id": {
+                    "name": "computer_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "revoked_at": {
+                    "name": "revoked_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "checkConstraints": {}
+        },
+        "machine_accounts": {
+            "name": "machine_accounts",
+            "columns": {
+                "computer_id": {
+                    "name": "computer_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "user_id": {
+                    "name": "user_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "display_name": {
+                    "name": "display_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "client_reference": {
+                    "name": "client_reference",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "idempotency_key": {
+                    "name": "idempotency_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "lifecycle": {
+                    "name": "lifecycle",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "deleted_at": {
+                    "name": "deleted_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "location_hint": {
+                    "name": "location_hint",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": "'apac'"
+                }
+            },
+            "indexes": {
+                "machine_accounts_user": {
+                    "name": "machine_accounts_user",
+                    "columns": ["user_id", "lifecycle", "created_at", "computer_id"],
+                    "isUnique": false
+                },
+                "machine_accounts_user_id_idempotency_key_unique": {
+                    "name": "machine_accounts_user_id_idempotency_key_unique",
+                    "columns": ["user_id", "idempotency_key"],
+                    "isUnique": true
+                },
+                "machine_accounts_user_id_client_reference_unique": {
+                    "name": "machine_accounts_user_id_client_reference_unique",
+                    "columns": ["user_id", "client_reference"],
+                    "isUnique": true
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "checkConstraints": {
+                "machine_accounts_lifecycle_check": {
+                    "name": "machine_accounts_lifecycle_check",
+                    "value": "\"machine_accounts\".\"lifecycle\" in ('active', 'deleted')"
+                },
+                "machine_accounts_location_hint_check": {
+                    "name": "machine_accounts_location_hint_check",
+                    "value": "\"machine_accounts\".\"location_hint\" in ('wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me')"
+                }
+            }
+        },
+        "service_audit_events": {
+            "name": "service_audit_events",
+            "columns": {
+                "audit_id": {
+                    "name": "audit_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "service_id": {
+                    "name": "service_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "computer_id": {
+                    "name": "computer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "actor_kind": {
+                    "name": "actor_kind",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "actor_id": {
+                    "name": "actor_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "actor_ref": {
+                    "name": "actor_ref",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "action": {
+                    "name": "action",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "subject_id": {
+                    "name": "subject_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "outcome": {
+                    "name": "outcome",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "details_json": {
+                    "name": "details_json",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "recorded_at": {
+                    "name": "recorded_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {
+                "service_audit_events_service": {
+                    "name": "service_audit_events_service",
+                    "columns": ["service_id", "recorded_at", "audit_id"],
+                    "isUnique": false
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "checkConstraints": {
+                "service_audit_events_computer_id_check": {
+                    "name": "service_audit_events_computer_id_check",
+                    "value": "\"service_audit_events\".\"computer_id\" = ''"
+                },
+                "service_audit_events_outcome_check": {
+                    "name": "service_audit_events_outcome_check",
+                    "value": "\"service_audit_events\".\"outcome\" in ('succeeded', 'denied')"
+                }
+            }
+        },
+        "machine_account_grants": {
+            "name": "machine_account_grants",
+            "columns": {
+                "credential_id": {
+                    "name": "credential_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "computer_id": {
+                    "name": "computer_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {
+                "machine_account_grants_credential_id_computer_id_pk": {
+                    "columns": ["credential_id", "computer_id"],
+                    "name": "machine_account_grants_credential_id_computer_id_pk"
+                }
+            },
+            "uniqueConstraints": {},
+            "checkConstraints": {}
+        },
+        "service_credentials": {
+            "name": "service_credentials",
+            "columns": {
+                "credential_id": {
+                    "name": "credential_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "public_credential_id": {
+                    "name": "public_credential_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "service_id": {
+                    "name": "service_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "secret_digest": {
+                    "name": "secret_digest",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "permissions_json": {
+                    "name": "permissions_json",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "all_accounts": {
+                    "name": "all_accounts",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "issued_at": {
+                    "name": "issued_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "overlap_ends_at": {
+                    "name": "overlap_ends_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "replaced_by_credential_id": {
+                    "name": "replaced_by_credential_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "revoked_at": {
+                    "name": "revoked_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                }
+            },
+            "indexes": {
+                "service_credentials_public_credential_id_unique": {
+                    "name": "service_credentials_public_credential_id_unique",
+                    "columns": ["public_credential_id"],
+                    "isUnique": true
+                },
+                "service_credentials_lookup": {
+                    "name": "service_credentials_lookup",
+                    "columns": ["public_credential_id", "revoked_at", "overlap_ends_at"],
+                    "isUnique": false
+                },
+                "service_credentials_app": {
+                    "name": "service_credentials_app",
+                    "columns": ["service_id", "issued_at", "credential_id"],
+                    "isUnique": false
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "checkConstraints": {
+                "service_credentials_all_projects_check": {
+                    "name": "service_credentials_all_projects_check",
+                    "value": "\"service_credentials\".\"all_accounts\" in (0, 1)"
+                }
+            }
+        }
+    },
+    "views": {},
+    "enums": {},
+    "_meta": {
+        "schemas": {},
+        "tables": {},
+        "columns": {
+            "\"machine_accounts\".\"service_id\"": "\"machine_accounts\".\"user_id\""
+        }
+    },
+    "internal": {
+        "indexes": {}
+    }
+}

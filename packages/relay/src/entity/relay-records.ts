@@ -9,7 +9,6 @@ export const AuditRowSchema = v.object({
     actor_id: v.string(),
     actor_kind: v.string(),
     actor_ref: v.string(),
-    app_id: v.string(),
     audit_id: v.string(),
     details_json: v.string(),
     outcome: v.picklist(["succeeded", "denied"]),
@@ -22,26 +21,11 @@ type AuditRow = Readonly<v.InferOutput<typeof AuditRowSchema>>;
 /** A Relay audit event kept in its Project's own storage; its Tenant is the Project's. */
 export type ProjectAuditRow = AuditRow;
 
-export const CredentialRowSchema = v.object({
-    all_projects: v.picklist([0, 1]),
-    app_id: v.string(),
-    credential_id: v.string(),
-    issued_at: nonNegativeInteger,
-    overlap_ends_at: v.nullable(nonNegativeInteger),
-    permissions_json: v.string(),
-    public_credential_id: v.string(),
-    replaced_by_credential_id: v.nullable(v.string()),
-    revoked_at: v.nullable(nonNegativeInteger),
-    secret_digest: v.string(),
-});
-export type CredentialRow = Readonly<v.InferOutput<typeof CredentialRowSchema>>;
-
 export interface RelayAuditRecord {
     readonly action: string;
     readonly actorId: string;
     readonly actorKind: string;
     readonly actorRef: string;
-    readonly appId: string;
     readonly auditId: string;
     readonly detailsJson: string;
     readonly outcome: "succeeded" | "denied";
@@ -51,14 +35,14 @@ export interface RelayAuditRecord {
 }
 
 export const RelayComputerScopeRowSchema = v.object({
-    app_id: v.string(),
+    user_id: v.string(),
     lifecycle,
     computer_id: v.string(),
 });
 export type RelayComputerScopeRow = Readonly<v.InferOutput<typeof RelayComputerScopeRowSchema>>;
 
 export const ProjectRowSchema = v.object({
-    app_id: v.string(),
+    user_id: v.string(),
     client_reference: v.string(),
     created_at: nonNegativeInteger,
     deleted_at: v.nullable(nonNegativeInteger),

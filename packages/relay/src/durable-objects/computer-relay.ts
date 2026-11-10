@@ -5,6 +5,7 @@ import {
     type ClaimPairing,
     ComputerScope,
     createLocalSessionOperations,
+    createWorkerContext,
     DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
     RelaySockets,
@@ -29,8 +30,10 @@ import {
     type ComputerRelayRelayBindings,
     type ConfiguredRelayRelayBindings,
     createRelayAccessServices,
+    createRelayGateways,
     createRelayWorker,
 } from "../relay-worker.ts";
+import { ComputerBackendService } from "../service/computer-backend-service.ts";
 import { SqliteComputerManagementStore } from "../storage/sqlite-computer-management-store.ts";
 import { migrateComputerStorage } from "./migrate-computer-storage.ts";
 import { createRelayDurableObjectContext } from "./relay-durable-object-context.ts";
@@ -55,6 +58,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         this.ctx.storage,
         (id) => this.#owns(id),
         (computerId, change, signal) => this.#commitAccessRevocation(computerId, change, signal),
+        (computerId) => this.#backendServices(computerId),
     );
 
     readonly #uploads = new WebSocketUploadBudget();
@@ -319,6 +323,35 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             await this.scheduleConnectionChecks();
         }
         return response;
+    }
+
+    #backendServices(computerId: string): ComputerBackendService {
+        const environment = {
+            ...this.env,
+            MORTY_COMPUTER_ID: computerId,
+            MORTY_LOCAL_CHANNEL: this.#localChannel,
+            MORTY_COMPUTER_STORE: this.#operate(computerId),
+            MORTY_RUNTIME_EXECUTION: {
+                computerId,
+                operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
+            },
+        };
+        const access = createRelayAccessServices(environment);
+        const context = createWorkerContext({
+            applications: access.control,
+            authorization: access.control,
+            stores: access.stores,
+            identityStores: access.identityStores,
+            projects: access.projects,
+            apiPrefix: "/morty/api",
+            gateways: createRelayGateways(environment),
+        });
+        return new ComputerBackendService(
+            computerId,
+            context,
+            access.sessionAccess,
+            this.env.MORTY_SESSION_SIGNING_SECRET,
+        );
     }
 
     /**

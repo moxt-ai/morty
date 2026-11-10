@@ -51,7 +51,6 @@ async function startIdentityFixture(
         options.relayAllowedOrigins === undefined ? {} : { allowedOrigins: options.relayAllowedOrigins },
         createBindings,
     );
-    // The public Chat and Relay origins are distinct while their requests share the same Computer namespace.
     const chatNetwork = options.listenOnLoopback === true ? await createResponseLossProxy(relay.baseUrl) : null;
     const network = options.loseTurnResponses === true ? await createResponseLossProxy(relay.baseUrl) : null;
     const executionNetwork =
@@ -61,13 +60,13 @@ async function startIdentityFixture(
         const ready = new URL(chatNetwork?.origin ?? relay.baseUrl);
         const baseConfiguration = {
             APP_ORIGIN: options.listenOnLoopback === true ? ready.origin : APP_ORIGIN,
-            MORTY_SERVICE_SECRET: relay.appCredential,
-            MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? relay.baseUrl,
         };
         await relay.configure(baseConfiguration);
         let cloudBindings = await cloudflare.getBindings();
         let computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
         const chatProjects = {
+            getByName: (name: string, options?: Parameters<typeof computerObjects.get>[1]) =>
+                computerObjects.get(computerObjects.idFromName(name), options),
             idFromName: (name: string) => computerObjects.idFromName(name),
             get: (
                 id: ReturnType<typeof computerObjects.idFromName>,
@@ -120,6 +119,7 @@ async function startIdentityFixture(
             );
         };
         return {
+            reload: reconfigure,
             baseConfiguration,
             network,
             executionNetwork,
@@ -131,14 +131,6 @@ async function startIdentityFixture(
             origin: ready.origin,
             changeAppOrigin: async (origin: string) => {
                 baseConfiguration.APP_ORIGIN = origin;
-                await reconfigure();
-            },
-            changeRelayCredential: async (credential: string) => {
-                baseConfiguration.MORTY_SERVICE_SECRET = credential;
-                await reconfigure();
-            },
-            changeRelayOrigin: async (origin: string) => {
-                baseConfiguration.MORTY_RELAY_URL = origin;
                 await reconfigure();
             },
             close: async () => {

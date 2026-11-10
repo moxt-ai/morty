@@ -47,38 +47,22 @@ function createRuntimeRelayDependencies(cx: {
             if (service === null) {
                 return "revoked";
             }
-            const { credentialId } = identity.credential;
             if (
                 !(await service.isRuntimeActive(identity, signal)) ||
-                !(await cx.gateways.projectCredentials.grants(
-                    identity.computerId,
-                    credentialId,
-                    PROJECT_HOST_PERMISSIONS,
-                    signal,
-                ))
+                !(await cx.gateways.projectCredentials.grants(identity.computerId, PROJECT_HOST_PERMISSIONS, signal))
             ) {
                 return "revoked";
             }
             if (permission === null || PROJECT_HOST_PERMISSIONS.includes(permission)) {
                 return "granted";
             }
-            return (await cx.gateways.projectCredentials.grants(
-                identity.computerId,
-                credentialId,
-                [permission],
-                signal,
-            ))
+            return (await cx.gateways.projectCredentials.grants(identity.computerId, [permission], signal))
                 ? "granted"
                 : "denied";
         },
         authorizeViewer: async (identity, signal) => {
-            // A persisted view without complete authorization metadata must reconnect.
-            if (identity.credential === null) {
-                return "revoked";
-            }
             return (await cx.gateways.projectCredentials.grantsSessionCredential(
                 identity.computerId,
-                identity.credential.credentialId,
                 identity.credential.issuedAt,
                 [ProjectPermission.SessionRead],
                 signal,

@@ -13,7 +13,7 @@ import {
 } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
-import { type HostCredential, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
+import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import { logger } from "../../infra/logger.ts";
 import { runtimeCommandPermission } from "../pairing/runtime-control-registry.ts";
 import type { ChannelActor, ChannelPeers, ChannelSocket } from "./channel-actor.ts";
@@ -38,13 +38,12 @@ export type RuntimeSocketIdentity =
           readonly role: "viewer";
           readonly expiresAt: number;
           /**
-           * The verified Session credential's authority and signing generation. A missing identity is revoked.
+           * The verified Session credential's authority and signing generation.
            */
           readonly credential: {
-              readonly credentialId: string;
               readonly signingKeyId: string;
               readonly issuedAt: number;
-          } | null;
+          };
           readonly computerId: string;
 
           readonly sessionFilter: NativeSessionTarget;
@@ -55,7 +54,6 @@ export type RuntimeSocketIdentity =
       }
     | {
           readonly role: "host";
-          readonly credential: HostCredential;
           readonly nativeRequestId?: string;
           readonly sessionFilter?: NativeSessionTarget;
 

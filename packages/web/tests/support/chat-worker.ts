@@ -60,7 +60,7 @@ export async function createChatWorkerEnvironment(
         const transport = new TestApiTransport(origin);
         transport.open();
         const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
-            const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
+            const runtime = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/setup`, {
                 computerId: runtime.computerId,
                 harness: agents[0]?.harness ?? "codex",
@@ -148,9 +148,9 @@ export async function createChatWorkerEnvironment(
                 /** Revokes the Runtime through the Relay, as the Relay does when its credential was reused. */
                 revoke: async (): Promise<void> => {
                     const response = await cloud.relayRequest(
-                        new Request(`https://relay.test/morty/api/v1/computers/${identity.computerId}/pairing`, {
+                        new Request(`${origin}/morty/api/computers/${identity.computerId}/management/pairing`, {
                             method: "DELETE",
-                            headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
+                            headers: { authorization: `Bearer ${identity.token}` },
                         }),
                     );
                     if (response.status !== 204) {
@@ -172,7 +172,7 @@ export async function createChatWorkerEnvironment(
             connectAgents: async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) =>
                 await connect(agents, sessionIds),
             connectRuntime: async () => {
-                const runtime = await cloud.connectAgent(identity.computerId);
+                const runtime = await cloud.connectAgent(identity.computerId, identity.token);
                 return { failure: runtime.failure, computerId: runtime.computerId };
             },
             createTransferUrl: async () => {

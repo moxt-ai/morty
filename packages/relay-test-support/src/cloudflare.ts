@@ -1,13 +1,11 @@
 import { fileURLToPath, URL as NodeURL } from "node:url";
 import { readD1Migrations } from "@cloudflare/vitest-plugin";
-import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database } from "@cloudflare/workers-types";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare, WebSocketPair, Response as WorkerResponse } from "miniflare";
 
 type TestRelayBindings = {
     readonly RELAY_DIRECTORY_DATABASE: D1Database;
-    readonly R2_BUCKET_APAC: R2Bucket;
-    readonly R2_BUCKET_WNAM: R2Bucket;
 };
 
 import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
@@ -37,12 +35,13 @@ export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
 function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<string>) {
     const packageDirectory = new NodeURL("../../relay/", import.meta.url);
     const options = {
+        name: "morty-test-relay",
         modules: true,
         script,
         compatibilityDate: "2026-09-07",
         compatibilityFlags: ["nodejs_compat"],
         d1Databases: ["RELAY_DIRECTORY_DATABASE"],
-        r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM", "CHAT_ATTACHMENTS_APAC"],
+        r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
         ratelimits: {
             ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
         },

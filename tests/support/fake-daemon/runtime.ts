@@ -300,7 +300,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
+                new Request(`${options.origin}/morty/api/computers/${options.computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,

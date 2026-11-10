@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const serviceCredential = sqliteTable(
+// Migration-only declaration: preserve historical records without a runtime reader or writer.
+export const retainedServiceCredentialTable = sqliteTable(
     "service_credentials",
     {
         credentialId: text("credential_id").primaryKey(),

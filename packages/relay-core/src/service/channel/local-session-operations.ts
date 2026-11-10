@@ -42,7 +42,6 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
         scope: Scope,
         target: NativeSessionTarget,
         credential: {
-            readonly credentialId: string;
             readonly signingKeyId: string;
             readonly issuedAt: number;
             readonly expiresAt: number;
@@ -136,7 +135,6 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
                 sessionFilter: sessionTarget,
                 expiresAt: credential.expiresAt,
                 credential: {
-                    credentialId: credential.credentialId,
                     signingKeyId: credential.signingKeyId,
                     issuedAt: credential.issuedAt,
                 },

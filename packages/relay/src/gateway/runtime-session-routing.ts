@@ -22,5 +22,6 @@ export async function routeRuntimeSessionRequest(
             { status: 400 },
         );
     }
-    return environment.COMPUTER_RELAY.getByName(target.computerId, placement).fetch(request);
+    const computer = environment.COMPUTER_RELAY.getByName(target.computerId, placement);
+    return computer.fetch(request);
 }

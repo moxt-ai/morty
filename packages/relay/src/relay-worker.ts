@@ -48,7 +48,6 @@ import {
 import { ComputerDurableObjectStores } from "./gateway/computer-durable-object-store.ts";
 import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
 import { createProjectApplication } from "./http/project-routes.ts";
-import { createRelayControlApplication } from "./http/relay-routes.ts";
 import { authorizeSessionContentUpload } from "./http/session-content-upload.ts";
 import { ComputerManagementStorageDirectory } from "./infra/computer-management-storage-directory.ts";
 import { createBrowserCors } from "./middleware/browser-cors.ts";
@@ -56,7 +55,6 @@ import {
     initializeSessionAccessTargetMiddleware,
     sessionAccessTargetMiddleware,
 } from "./middleware/session-access-target.ts";
-import { AppCredentialAuthenticationService } from "./service/app-credential-authentication-service.ts";
 import { ComputerManagementService } from "./service/computer-management-service.ts";
 import {
     type SessionAccess,
@@ -64,11 +62,9 @@ import {
     type SessionAccessTarget,
 } from "./service/session-access-service.ts";
 import { ComputerManagementStorage } from "./storage/computer-management-storage.ts";
-import { type RelayStorageBindings, RelayStorageRegistry } from "./storage/relay-storage-registry.ts";
 
-export interface RelayRelayBindings extends RelayStorageBindings, ComputerWorkerRoutingBindings {
+export interface RelayRelayBindings extends ComputerWorkerRoutingBindings {
     readonly RELAY_DIRECTORY_DATABASE: D1Database;
-    readonly R2_BUCKET_APAC: R2Bucket;
     /** Worker secret from which the Relay derives the keys that sign Session credentials. */
     readonly MORTY_SESSION_SIGNING_SECRET: string;
 }
@@ -86,7 +82,6 @@ type RelayApplicationBindings = RelayRelayBindings | ComputerRelayRelayBindings 
 export interface ConfiguredRelayRelayBindings extends RelayRelayBindings, RelayAuthenticationEnvironment {
     readonly APP_ORIGIN?: string;
     readonly MORTY_RELAY_URL?: string;
-    readonly MORTY_SERVICE_SECRET?: string;
 }
 
 // A request a Session credential authorizes is routed to its ComputerRelay before any Session route runs.
@@ -148,7 +143,6 @@ function submittedTurnState(state: TurnAdmission["state"], answeredAt: string): 
 
 const projectApplication = createMortyApplication();
 const scopedProjectApplication = createProjectApplication();
-const controlApplication = createRelayControlApplication();
 const RELAY_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 const sessionIdentifier = v.custom<Identifier>(isIdentifier);
 
@@ -156,7 +150,6 @@ type DispatchEnvironment = {
     readonly Bindings: RelayApplicationBindings;
     readonly Variables: {
         readonly control: ComputerManagementService;
-        readonly appAuthentication: AppCredentialAuthenticationService;
         readonly stores: ComputerDurableObjectStores;
         readonly projects: ComputerManagementStorageDirectory;
         readonly identityStores: readonly ProjectStore[];
@@ -183,20 +176,16 @@ export function createRelayAccessServices(environment: RelayApplicationBindings)
     const stores = new ComputerDurableObjectStores(environment.COMPUTER_RELAY, execution);
     const identityStores = execution === null ? [] : [execution.store];
     const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
-    const storageRegistry = new RelayStorageRegistry(environment);
-    const appAuthentication = new AppCredentialAuthenticationService(controlStorage);
-    const control = new ComputerManagementService(controlStorage, storageRegistry, appAuthentication);
+    const control = new ComputerManagementService(controlStorage);
     return {
         stores,
         identityStores,
         control,
-        appAuthentication,
         sessionAccess: new SessionAccessService(
-            appAuthentication,
             control,
             new SessionAccessSigner(environment.MORTY_SESSION_SIGNING_SECRET),
         ),
-        projects: new ComputerManagementStorageDirectory(storageRegistry, controlStorage),
+        projects: new ComputerManagementStorageDirectory(controlStorage),
     };
 }
 
@@ -204,36 +193,12 @@ export function createRelayApplication(
     authentication: RelayAuthenticationConfiguration,
     gateways: (environment: RelayApplicationBindings) => WorkerRuntimeGateways,
 ): Hono<{ Bindings: RelayApplicationBindings }> {
-    const controlHandler: Handler<DispatchEnvironment> = (context) =>
-        controlApplication.fetch(context.req.raw, {
-            control: context.var.control,
-            appAuthentication: context.var.appAuthentication,
-            allowedOrigins: authentication.allowedOrigins,
-        });
     const projectHandler: Handler<DispatchEnvironment> = (context) =>
         scopedProjectApplication.fetch(context.req.raw, {
             relay: context.var.relay,
             allowedOrigins: authentication.allowedOrigins,
         });
 
-    const controlRoutes = new Hono<DispatchEnvironment>()
-        .all("/health", controlHandler)
-        .all("/capabilities", controlHandler)
-        .route(
-            "/v1",
-            new Hono<DispatchEnvironment>()
-                .post("/machine-accounts", controlHandler)
-                .all("/relay/*", controlHandler)
-                .route(
-                    "/computers/:computerId",
-                    new Hono<DispatchEnvironment>()
-                        .all("/storage-placement", controlHandler)
-                        .all("/storage-placement/", controlHandler)
-                        .all("/audit-events", controlHandler)
-                        .all("/audit-events/", controlHandler)
-                        .all("/harnesses/*", controlHandler),
-                ),
-        );
     const sessionRoutes = new Hono<DispatchEnvironment>()
         .use(
             "*",
@@ -250,31 +215,6 @@ export function createRelayApplication(
                 authentication.allowedOrigins,
             ),
         )
-        .post("/:sessionId/access-credentials", sessionAccessTargetMiddleware, async (context) => {
-            const authorization = context.req.header("authorization") ?? "";
-            const credential = authorization.match(/^Bearer ([^\s]+)$/u)?.[1];
-            if (credential === undefined) {
-                return context.json(
-                    { error: { code: "project_credential_required", message: "An App credential is required" } },
-                    401,
-                );
-            }
-            const body: unknown = await context.req.json();
-            const input = v.parse(
-                v.strictObject({
-                    expiresInSeconds: v.pipe(v.number(), v.safeInteger(), v.minValue(60), v.maxValue(900)),
-                }),
-                body,
-            );
-            const access = await context.var.sessionAccess.issue(
-                context.var.sessionAccessTarget,
-                credential,
-                input.expiresInSeconds,
-                context.req.raw.signal,
-            );
-            context.header("Cache-Control", "no-store");
-            return context.json(access, 201);
-        })
         .get("/:sessionId/live-event-subscription-target", sessionAccessTargetMiddleware, async (context) => {
             const authorization = context.req.header("authorization") ?? "";
             const credential = authorization.match(/^Bearer ([^\s]+)$/u)?.[1];
@@ -645,7 +585,6 @@ export function createRelayApplication(
 
                 nativeTarget(context.req),
                 {
-                    credentialId: target.credentialId,
                     signingKeyId: target.signingKeyId,
                     issuedAt: target.issuedAtEpochMilliseconds,
                     expiresAt: target.expiresAtEpochMilliseconds,
@@ -653,36 +592,8 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
         });
-    const sessionAccessRoutes = new Hono<DispatchEnvironment>().post("/revocations", async (context) => {
-        const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
-        if (credential === undefined) {
-            return context.json(
-                { error: { code: "project_credential_required", message: "An App credential is required" } },
-                401,
-            );
-        }
-        v.parse(v.strictObject({}), await context.req.json());
-        if (!("MORTY_COMPUTER_STORE" in context.env)) {
-            throw new Error("Session access is revoked only in the Project's ComputerRelay");
-        }
-        const computerId = validateIdentifier(context.req.param("computerId") ?? "", "computer_id");
-        const _store = context.env.MORTY_COMPUTER_STORE;
-        const channel = gateways(context.env).channel;
-        const revoked = await context.var.sessionAccess.revoke(
-            computerId,
-            credential,
-            {
-                disconnect: (computerId, revokedThrough, signal) =>
-                    channel.disconnectSessionViewers(computerId, revokedThrough, signal),
-            },
-            context.req.raw.signal,
-        );
-        context.header("Cache-Control", "no-store");
-        return context.json(revoked);
-    });
     const projectRoutes = new Hono<DispatchEnvironment>()
         .route("/harnesses/:harness/sessions", sessionRoutes)
-        .route("/session-access", sessionAccessRoutes)
         .all("/pairings/*", projectHandler)
         .all("/*", projectHandler);
     const versionedRoutes = new Hono<DispatchEnvironment>()
@@ -713,17 +624,14 @@ export function createRelayApplication(
         })
         .use("*", async (context, next) => {
             const environment = context.env;
-            const { stores, identityStores, control, appAuthentication, sessionAccess, projects } =
-                createRelayAccessServices(environment);
+            const { stores, identityStores, control, sessionAccess, projects } = createRelayAccessServices(environment);
             context.set("control", control);
-            context.set("appAuthentication", appAuthentication);
             context.set("sessionAccess", sessionAccess);
             context.set("stores", stores);
             context.set("projects", projects);
             context.set("identityStores", identityStores);
             await next();
         })
-        .route(`${MORTY_API_PREFIX}/dashboard`, controlRoutes)
         .use("*", initializeSessionAccessTargetMiddleware)
         .use("*", async (context, next) => {
             const environment = context.env;

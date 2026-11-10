@@ -1,7 +1,5 @@
-import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
-    type CredentialRow,
-    CredentialRowSchema,
     type ProjectRow,
     ProjectRowSchema,
     type RelayAuditRecord,
@@ -9,16 +7,15 @@ import {
     RelayComputerScopeRowSchema,
 } from "../entity/relay-records.ts";
 import type { ComputerManagementStores } from "../infra/computer-management-store.ts";
-import { machineAccount, machineAccountGrant, serviceCredential } from "../schema/d1/index.ts";
+import { machineAccount } from "../schema/d1/index.ts";
 import { waitForD1 } from "./d1-operation.ts";
 import { decodeOptionalStorageRecord } from "./decode-storage-record.ts";
 import { computerDirectoryDrizzle } from "./relay-drizzle-database.ts";
 import { projectServed } from "./relay-lifecycle.ts";
 
-// Row selections keep the SQL column names that the entity schemas decode.
 const projectRow = {
     computer_id: machineAccount.computerId,
-    app_id: machineAccount.appId,
+    user_id: machineAccount.userId,
     display_name: machineAccount.displayName,
     client_reference: machineAccount.clientReference,
     idempotency_key: machineAccount.idempotencyKey,
@@ -29,39 +26,25 @@ const projectRow = {
     deleted_at: machineAccount.deletedAt,
 };
 
-const credentialRow = {
-    credential_id: serviceCredential.credentialId,
-    public_credential_id: serviceCredential.publicCredentialId,
-    app_id: serviceCredential.appId,
-    secret_digest: serviceCredential.secretDigest,
-    permissions_json: serviceCredential.permissionsJson,
-    all_projects: serviceCredential.allProjects,
-    issued_at: serviceCredential.issuedAt,
-    overlap_ends_at: serviceCredential.overlapEndsAt,
-    replaced_by_credential_id: serviceCredential.replacedByCredentialId,
-    revoked_at: serviceCredential.revokedAt,
-};
-
 export class ComputerManagementStorage {
-    readonly #database: D1Database;
-    readonly #projects: Pick<ComputerManagementStores, "forProject">;
-
+    readonly database: D1Database;
+    readonly projects: Pick<ComputerManagementStores, "forProject">;
     constructor(database: D1Database, projects: Pick<ComputerManagementStores, "forProject">) {
-        this.#database = database;
-        this.#projects = projects;
+        this.database = database;
+        this.projects = projects;
     }
 
     readonly readProjectByIdempotencyKey = async (
-        appId: string,
-        idempotencyKey: string,
+        userId: string,
+        key: string,
         signal: AbortSignal,
     ): Promise<ProjectRow | null> => {
         const rows = await waitForD1(
             () =>
-                computerDirectoryDrizzle(this.#database)
+                computerDirectoryDrizzle(this.database)
                     .select(projectRow)
                     .from(machineAccount)
-                    .where(and(eq(machineAccount.appId, appId), eq(machineAccount.idempotencyKey, idempotencyKey)))
+                    .where(and(eq(machineAccount.userId, userId), eq(machineAccount.idempotencyKey, key)))
                     .limit(1),
             signal,
         );
@@ -74,9 +57,9 @@ export class ComputerManagementStorage {
     ): Promise<RelayComputerScopeRow | null> => {
         const rows = await waitForD1(
             () =>
-                computerDirectoryDrizzle(this.#database)
+                computerDirectoryDrizzle(this.database)
                     .select({
-                        app_id: machineAccount.appId,
+                        user_id: machineAccount.userId,
                         computer_id: machineAccount.computerId,
                         lifecycle: machineAccount.lifecycle,
                     })
@@ -88,112 +71,37 @@ export class ComputerManagementStorage {
         return decodeOptionalStorageRecord(RelayComputerScopeRowSchema, rows[0] ?? null);
     };
 
-    /**
-     * Records that the Project revoked its Session credentials at `revokedAt`, in the Project's own storage, and returns
-     * its latest revocation.
-     */
     readonly recordSessionAccessRevocation = async (
         computerId: string,
         revokedAt: number,
         signal: AbortSignal,
-    ): Promise<number> => await this.#projects.forProject(computerId).revokeSessionAccess(revokedAt, signal);
-
-    /** The latest time the Project revoked its Session credentials, or null when it never did. */
+    ): Promise<number> => await this.projects.forProject(computerId).revokeSessionAccess(revokedAt, signal);
     readonly readSessionAccessRevocation = async (computerId: string, signal: AbortSignal): Promise<number | null> =>
-        await this.#projects.forProject(computerId).readSessionAccessRevocation(signal);
+        await this.projects.forProject(computerId).readSessionAccessRevocation(signal);
+    readonly recordAudit = async (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
+        await this.projects.forProject(audit.computerId).recordAudit(audit, signal);
 
-    /** The authoritative grant list is owned by the credential in D1. */
-    readonly scopedProjects = async (
-        credentialId: string,
-        candidates: readonly string[],
-        signal: AbortSignal,
-    ): Promise<readonly string[]> => {
-        const rows = await waitForD1(
+    readonly registerMachineAccount = async (project: ProjectRow, signal: AbortSignal): Promise<boolean> => {
+        const result = await waitForD1(
             () =>
-                computerDirectoryDrizzle(this.#database)
-                    .select({ computerId: machineAccountGrant.computerId })
-                    .from(machineAccountGrant)
-                    .where(eq(machineAccountGrant.credentialId, credentialId))
-                    .orderBy(asc(machineAccountGrant.computerId)),
-            signal,
-        );
-        const scope = new Set(rows.map((row) => row.computerId));
-        return candidates.filter((computerId) => scope.has(computerId));
-    };
-
-    readonly readCredentialByPublicId = async (
-        publicCredentialId: string,
-        signal: AbortSignal,
-    ): Promise<CredentialRow | null> =>
-        await this.readCredential(eq(serviceCredential.publicCredentialId, publicCredentialId), signal);
-
-    readonly readCredentialById = async (credentialId: string, signal: AbortSignal): Promise<CredentialRow | null> =>
-        await this.readCredential(eq(serviceCredential.credentialId, credentialId), signal);
-
-    private readonly readCredential = async (match: SQL, signal: AbortSignal): Promise<CredentialRow | null> => {
-        const rows = await waitForD1(
-            () =>
-                computerDirectoryDrizzle(this.#database)
-                    .select(credentialRow)
-                    .from(serviceCredential)
-                    .where(match)
-                    .limit(1),
-            signal,
-        );
-        return decodeOptionalStorageRecord(CredentialRowSchema, rows[0] ?? null);
-    };
-
-    readonly listActiveComputerIds = async (appId: string, signal: AbortSignal): Promise<readonly string[]> => {
-        const rows = await waitForD1(
-            () =>
-                computerDirectoryDrizzle(this.#database)
-                    .select({ computerId: machineAccount.computerId })
-                    .from(machineAccount)
-                    .where(and(eq(machineAccount.appId, appId), projectServed)),
-            signal,
-        );
-        return rows.map((row) => row.computerId);
-    };
-
-    readonly recordAudit = async (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> => {
-        await this.#projects.forProject(audit.computerId).recordAudit(audit, signal);
-    };
-
-    readonly registerMachineAccount = async (
-        project: ProjectRow,
-        credentialId: string,
-        signal: AbortSignal,
-    ): Promise<boolean> => {
-        const database = computerDirectoryDrizzle(this.#database);
-        const insert = database
-            .insert(machineAccount)
-            .select(
-                database
-                    .select({
-                        computerId: sql<string>`${project.computer_id}`.as("computerId"),
-                        appId: serviceCredential.appId,
-                        displayName: sql<string>`${project.display_name}`.as("displayName"),
-                        clientReference: sql<string>`${project.client_reference}`.as("clientReference"),
-                        idempotencyKey: sql<string>`${project.idempotency_key}`.as("idempotencyKey"),
-                        lifecycle: sql<"active">`'active'`.as("lifecycle"),
-                        createdAt: sql<number>`${project.created_at}`.as("createdAt"),
-                        updatedAt: sql<number>`${project.updated_at}`.as("updatedAt"),
-                        deletedAt: sql<null>`NULL`.as("deletedAt"),
-                        locationHint: sql<ProjectRow["location_hint"]>`${project.location_hint}`.as("locationHint"),
+                computerDirectoryDrizzle(this.database)
+                    .insert(machineAccount)
+                    .values({
+                        computerId: project.computer_id,
+                        userId: project.user_id,
+                        displayName: project.display_name,
+                        clientReference: project.client_reference,
+                        idempotencyKey: project.idempotency_key,
+                        lifecycle: "active",
+                        createdAt: project.created_at,
+                        updatedAt: project.updated_at,
+                        deletedAt: null,
+                        locationHint: project.location_hint,
                     })
-                    .from(serviceCredential)
-                    .where(
-                        and(
-                            eq(serviceCredential.credentialId, credentialId),
-                            eq(serviceCredential.allProjects, 1),
-                            sql`(${serviceCredential.replacedByCredentialId} IS NULL OR ${serviceCredential.overlapEndsAt} > ${Date.now()})`,
-                            eq(serviceCredential.appId, project.app_id),
-                            isNull(serviceCredential.revokedAt),
-                        ),
-                    ),
-            )
-            .onConflictDoNothing();
-        const result = await waitForD1(() => insert.run(), signal);
+                    .onConflictDoNothing()
+                    .run(),
+            signal,
+        );
         return result.meta.changes === 1;
     };
 }

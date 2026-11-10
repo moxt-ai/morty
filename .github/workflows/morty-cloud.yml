@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Restore a completed release or provision service authority
+        description: Restore a completed consolidated Morty release
         type: choice
         required: true
-        options: [restore, provision-service]
+        options: [restore]
       artifact_run_id:
         description: Successful automatic Morty CLI or accepted legacy Morty Cloud run
         type: string
@@ -50,12 +50,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: python3 deployment/verify-account-token.py
-      - name: Prepare the environment-owned Morty service credential
-        if: env.OPERATION == 'provision-service'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
-        run: node deployment/provision-service.ts "$TARGET_ENVIRONMENT" prepare
       - name: Verify the requested archive run
         if: env.OPERATION == 'restore'
         id: archive
@@ -99,7 +93,6 @@ jobs:
         if: env.OPERATION == 'restore'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
           MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
           EXPECTED_REVISION: ${{ steps.archive.outputs.revision }}
           MORTY_ALLOW_RESTORE: 'true'

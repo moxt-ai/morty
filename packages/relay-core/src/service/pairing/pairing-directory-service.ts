@@ -14,7 +14,6 @@ import {
     normalizePairingCode,
     PAIRING_LIFETIME_MILLISECONDS,
     PairingDirectoryError,
-    ProjectCredentialHostAccess,
     parseAgents,
     RevokedProjectRuntime,
     VerifiedChannelAccess,
@@ -103,11 +102,11 @@ export class PairingDirectoryService implements PairingOperations {
         return rotation;
     };
 
-    readonly authorizeProject: PairingOperations["authorizeProject"] = async (computerId, token, permission, signal) =>
-        await this.#cx.services.projectAuthentication.authorizeProject(computerId, token, permission, "", signal);
+    readonly authorizeProject: PairingOperations["authorizeProject"] = async (computerId, permission, signal) =>
+        await this.#cx.services.projectAuthentication.authorizeProject(computerId, permission, signal);
 
-    readonly authorizePairedHost: PairingOperations["authorizePairedHost"] = async (computerId, token, signal) => {
-        const access = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
+    readonly authorizePairedHost: PairingOperations["authorizePairedHost"] = async (computerId, signal) => {
+        const access = await this.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
         if (!PROJECT_HOST_PERMISSIONS.every(access.permits)) {
             throw new ProjectAuthenticationError(
                 "project_permission_denied",
@@ -116,16 +115,11 @@ export class PairingDirectoryService implements PairingOperations {
         }
         const storage = await this.projectStorage(access.scope, signal);
         const runtime = await this.readActivePairing(storage, computerId, signal);
-        return new ProjectCredentialHostAccess(runtime.computerId, access.credentialId);
+        return new VerifiedChannelAccess(runtime.computerId, []);
     };
 
-    readonly authorizePairing: PairingOperations["authorizePairing"] = async (
-        computerId,
-        token,
-        permission,
-        signal,
-    ) => {
-        const access = await this.authorizeProject(computerId, token, permission, signal);
+    readonly authorizePairing: PairingOperations["authorizePairing"] = async (computerId, permission, signal) => {
+        const access = await this.authorizeProject(computerId, permission, signal);
         const storage = await this.projectStorage(access.scope, signal);
         return await this.readActivePairing(storage, computerId, signal);
     };
@@ -147,17 +141,17 @@ export class PairingDirectoryService implements PairingOperations {
     private readonly decodeCreatedRuntimePairing = async (
         row: RuntimePairingRow,
         owner: ProjectAccessContext,
-        token: string,
+        pairingKey: string,
         idempotencyKey: string,
         signal: AbortSignal,
     ) => {
-        if (row.computer_id !== owner.computerId || row.created_by_owner_credential_id !== owner.credentialId) {
+        if (row.computer_id !== owner.computerId || row.created_by_owner_credential_id !== owner.actor.actorId) {
             throw new PairingDirectoryError(
                 "idempotency_conflict",
                 "The Runtime pairing idempotency key belongs to another authorized request",
             );
         }
-        const secrets = await deriveRuntimePairingSecrets(token, owner.computerId, idempotencyKey);
+        const secrets = await deriveRuntimePairingSecrets(pairingKey, owner.computerId, idempotencyKey);
         const codeHash = await hashPairingCredential(secrets.pairingCode);
         const pollHash = await hashPairingCredential(secrets.pollToken);
         signal.throwIfAborted();
@@ -177,16 +171,16 @@ export class PairingDirectoryService implements PairingOperations {
 
     readonly createProjectRuntimePairing: PairingOperations["createProjectRuntimePairing"] = async (
         computerId,
-        token,
+        pairingKey,
         idempotencyKey,
         signal,
     ) => {
         const normalizedComputerId = validateIdentifier(computerId, "computer_id");
         const normalizedKey = validateIdentifier(idempotencyKey, "idempotency_key");
-        const owner = await this.authorizeProject(normalizedComputerId, token, ProjectPermission.RuntimePair, signal);
+        const owner = await this.authorizeProject(normalizedComputerId, ProjectPermission.RuntimePair, signal);
         const storage = await this.projectStorage(owner.scope, signal);
         // The secrets derive from the request, so a retry presents the same hashes as the request it repeats.
-        const secrets = await deriveRuntimePairingSecrets(token, owner.computerId, normalizedKey);
+        const secrets = await deriveRuntimePairingSecrets(pairingKey, owner.computerId, normalizedKey);
         const now = Date.now();
         const expiresAt = now + PAIRING_LIFETIME_MILLISECONDS;
         let stored: Awaited<ReturnType<ProjectStore["requestRuntimePairing"]>>;
@@ -199,7 +193,7 @@ export class PairingDirectoryService implements PairingOperations {
                     now,
                     expiresAt,
                     idempotencyKey: normalizedKey,
-                    ownerId: owner.credentialId,
+                    ownerId: owner.actor.actorId,
                     actorKind: owner.actor.kind.value,
                     actorId: owner.actor.actorId,
                     auditId: `rpa_${crypto.randomUUID()}`,
@@ -215,7 +209,7 @@ export class PairingDirectoryService implements PairingOperations {
         }
         switch (stored.kind) {
             case "existing":
-                return this.decodeCreatedRuntimePairing(stored.request, owner, token, normalizedKey, signal);
+                return this.decodeCreatedRuntimePairing(stored.request, owner, pairingKey, normalizedKey, signal);
             case "quota_exceeded":
                 throw new PairingDirectoryError(
                     "runtime_quota_exceeded",
@@ -231,12 +225,8 @@ export class PairingDirectoryService implements PairingOperations {
         }
     };
 
-    readonly readProjectRuntimePairing: PairingOperations["readProjectRuntimePairing"] = async (
-        computerId,
-        token,
-        signal,
-    ) => {
-        const owner = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
+    readonly readProjectRuntimePairing: PairingOperations["readProjectRuntimePairing"] = async (computerId, signal) => {
+        const owner = await this.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
         const storage = await this.projectStorage(owner.scope, signal);
         const row = await storage.readRuntimePairing(validateIdentifier(computerId, "computer_id"), signal);
         if (row === null) {
@@ -245,13 +235,13 @@ export class PairingDirectoryService implements PairingOperations {
         return projectRuntimePairingStatus(row, Date.now());
     };
 
-    readonly revokeProjectRuntime: PairingOperations["revokeProjectRuntime"] = async (computerId, token, signal) => {
-        const owner = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRevoke, signal);
+    readonly revokeProjectRuntime: PairingOperations["revokeProjectRuntime"] = async (computerId, signal) => {
+        const owner = await this.authorizeProject(computerId, ProjectPermission.RuntimeRevoke, signal);
         const storage = await this.projectStorage(owner.scope, signal);
         const row = await storage.revokeRuntime(
             {
                 computerId: validateIdentifier(computerId, "computer_id"),
-                ownerId: owner.credentialId,
+                ownerId: owner.actor.actorId,
                 now: Date.now(),
                 actorKind: owner.actor.kind.value,
                 actorId: owner.actor.actorId,
@@ -326,8 +316,8 @@ export class PairingDirectoryService implements PairingOperations {
             signal,
         );
 
-    readonly listProjectRuntimes: PairingOperations["listProjectRuntimes"] = async (computerId, token, signal) => {
-        const access = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
+    readonly listProjectRuntimes: PairingOperations["listProjectRuntimes"] = async (computerId, signal) => {
+        const access = await this.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
         const storage = await this.projectStorage(access.scope, signal);
         const runtimes = await storage.listRuntimes(signal);
         return runtimes.map(
@@ -341,12 +331,8 @@ export class PairingDirectoryService implements PairingOperations {
         );
     };
 
-    readonly isProjectRuntimeRevoked: PairingOperations["isProjectRuntimeRevoked"] = async (
-        computerId,
-        token,
-        signal,
-    ) => {
-        const access = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
+    readonly isProjectRuntimeRevoked: PairingOperations["isProjectRuntimeRevoked"] = async (computerId, signal) => {
+        const access = await this.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
         const storage = await this.projectStorage(access.scope, signal);
         const row = await storage.readRuntime(validateIdentifier(computerId, "computer_id"), signal);
         return row !== null && runtimeRevokedAt(row.revoked_at) !== null;

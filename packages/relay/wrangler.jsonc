@@ -66,16 +66,6 @@
             "migrations_dir": "migrations/d1"
         }
     ],
-    "r2_buckets": [
-        {
-            "binding": "R2_BUCKET_APAC",
-            "bucket_name": "morty-relay-local-apac-objects"
-        },
-        {
-            "binding": "R2_BUCKET_WNAM",
-            "bucket_name": "morty-relay-local-wnam-objects"
-        }
-    ],
     "vars": {
         "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
         "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret"
