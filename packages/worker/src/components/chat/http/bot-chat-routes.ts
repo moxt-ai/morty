@@ -361,12 +361,12 @@ export function createBotChatRoutes() {
         )
         .post(
             "/setup",
-            localSession("configureBot"),
+            localSession("verifyAgent"),
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof setupInput>(setupInput),
             async (context) => {
                 const input = context.req.valid("json");
-                return json(await context.env.services.chat.configureBot(context.get("chatScope"), input), 202);
+                return json(await context.env.services.chat.verifyAgent(context.get("chatScope"), input), 202);
             },
         );
 }

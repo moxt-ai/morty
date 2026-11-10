@@ -125,7 +125,7 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
         const identities = new IdentityStorage(new DurableObjectDatabase(state.storage), computerId);
         const signal = AbortSignal.timeout(10_000);
-        const credential = await identities.findCredential(owner.token, signal);
+        const credential = await identities.findCredential(owner.token, Date.now(), signal);
         if (credential === null) {
             throw new Error("Expected the owner credential");
         }

@@ -77,7 +77,9 @@ export class ComputerRelay extends ProductionComputerRelay {
         if (request.url === "https://computer.internal/credential-kinds") {
             return Response.json(
                 this.ctx.storage.sql
-                    .exec<{ kind: string }>("SELECT kind FROM anonymous_credential")
+                    .exec<{ kind: string }>(
+                        "SELECT kind FROM owner_credential UNION ALL SELECT 'browser' FROM browser_credential",
+                    )
                     .toArray()
                     .map((row) => row.kind),
             );

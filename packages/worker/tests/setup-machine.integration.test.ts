@@ -204,7 +204,8 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     expect(original.status).toBe(200);
     const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
     expect(originalStatus).toBe("paired");
-    expect(actual).toMatchObject({ computerId: pairedRuntime });
+    expect(actual).toEqual({ runtimePairing: "paired" });
+    expect(saved.identity.computer_id).toBe(pairedRuntime);
 });
 
 test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
@@ -273,7 +274,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         expect(response.status).toBe(200);
         return {
             identity,
-            computerId: v.parse(v.object({ computerId: v.string() }), await response.json()).computerId,
+            runtimePairing: v.parse(v.object({ runtimePairing: v.string() }), await response.json()).runtimePairing,
         };
     };
     const first = await run();
@@ -285,16 +286,18 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
             headers: { authorization: `Bearer ${before.identity.user_token}` },
         }),
     );
-    expect(revokedWorkspace.status).toBe(401);
-    expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "runtime_revoked" } });
+    expect(revokedWorkspace.status).toBe(410);
+    expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "RUNTIME_REVOKED" } });
+
+    expect((await machineRuntime()).runtimePairing).toBe("revoked");
 
     const again = await run();
     const after = await machineRuntime();
 
     expect(again.events).toContainEqual(
-        expect.objectContaining({ status: "runtime_revoked", computerId: before.computerId }),
+        expect.objectContaining({ status: "runtime_revoked", computerId: before.identity.computer_id }),
     );
     expect(again.ready.computerId).toBe(first.ready.computerId);
     expect(after.identity).toEqual(before.identity);
-    expect(after.computerId).toBe(before.computerId);
+    expect(after.runtimePairing).toBe("paired");
 });

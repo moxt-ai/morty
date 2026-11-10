@@ -42,7 +42,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
-import { managedBot } from "../../worker/src/schema/project-do/managed-bot.ts";
 import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
 import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
@@ -1057,9 +1056,6 @@ describe.sequential("Relay Session-only boundary", () => {
                 ];
                 expect(sessionTables).toEqual([]);
             });
-            await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
-                new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
-            });
             const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
             const liveTarget = await responseJson(
                 await worker.fetch(
@@ -1207,9 +1203,6 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     if (options.anchorClockToHeartbeat === true) {
         vi.setSystemTime(await heartbeat());
     }
-    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
-        new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
-    });
     const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
     return {
         credential: text(sessionAccess, "credential"),
@@ -2310,9 +2303,6 @@ describe.sequential("Relay Turn submission", () => {
         daemon.accept();
         try {
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
-            await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
-                new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
-            });
             const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
             const submitTurn = (idempotencyKey: string, content: string, attachments: readonly unknown[]) =>
                 worker.fetch(
@@ -2543,9 +2533,6 @@ describe.sequential("Relay Turn submission", () => {
             200,
         );
         const sessionId = "capability-gated-session";
-        await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
-            new DurableObjectSqlDatabase(state.storage).orm.update(managedBot).set({ computerId }).run();
-        });
         const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
         const sessionCredential = text(sessionAccess, "credential");
 

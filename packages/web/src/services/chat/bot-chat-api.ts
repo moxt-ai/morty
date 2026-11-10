@@ -26,7 +26,7 @@ import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-catalog.ts";
-import { CloudApiError, ManagementApi, runtimeBindingUrl } from "../management/management-api.ts";
+import { CloudApiError, ManagementApi, machineUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const nativeSessionTargetSchema = v.pipe(v.strictObject({ harness: identifier, sessionId: identifier }), v.readonly());
@@ -255,8 +255,7 @@ export class BotChatApi {
     readonly #credentialRejected: (() => void) | undefined;
     readonly #sessionTransport = new BrowserSessionTransport();
     readonly #waitForChange: ApiTransport["waitForChange"];
-    readonly readBot: ManagementApi["readBot"];
-    readonly readRuntimeBinding: ManagementApi["readRuntimeBinding"];
+    readonly readRuntimePairing: ManagementApi["readRuntimePairing"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -279,8 +278,7 @@ export class BotChatApi {
         this.#credentialRejected = options.credentialRejected;
         this.#waitForChange = options.waitForChange;
         const management = new ManagementApi(options);
-        this.readBot = management.readBot;
-        this.readRuntimeBinding = management.readRuntimeBinding;
+        this.readRuntimePairing = management.readRuntimePairing;
     }
     readonly resetSessionConnections = (): void => {
         this.#sessionTransport.reset();
@@ -423,9 +421,9 @@ export class BotChatApi {
             onReady,
         );
     };
-    /** Resolves once the Machine's Runtime binding differs from the binding this client last read. */
-    readonly waitForRuntimeBindingChange = async (parent: AbortSignal): Promise<void> =>
-        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#computerId), "GET", parent);
+    /** Resolves once the Machine's Runtime pairing differs from the pairing this client last read. */
+    readonly waitForRuntimePairingChange = async (parent: AbortSignal): Promise<void> =>
+        await this.#waitForResourceChange(machineUrl(this.#origin, this.#computerId), "GET", parent);
     readonly waitForRuntimeConfigurationChange = async (
         parent: AbortSignal,
         onReady?: (configuration: BotRuntimeConfiguration) => void,

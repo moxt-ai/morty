@@ -49,7 +49,6 @@ test("Given an identity creation whose reply was lost, When the client retries i
                 token: v.string(),
                 userId: v.string(),
                 computerId: v.string(),
-                bot: v.object({ displayName: v.string() }),
             }),
             await response.json(),
         );
@@ -370,18 +369,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         fixture.environment(),
     );
     expect(served.status).toBe(200);
-    expect(await served.json()).toEqual({ computerId: null, displayName: "My Machine", configured: false });
-    const persisted = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
-            headers: { authorization: `Bearer ${identity.token}` },
-        }),
-        fixture.environment(),
-    );
-    expect(await persisted.json()).toEqual({
-        computerId: null,
-        configured: false,
-        displayName: "My Machine",
-    });
+    expect(await served.json()).toEqual({ runtimePairing: "unpaired" });
     const projectResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
             headers: { authorization: `Bearer ${identity.token}` },

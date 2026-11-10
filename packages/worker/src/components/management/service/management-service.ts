@@ -45,8 +45,8 @@ export class ManagementService {
     ) => {
         const token = await bootstrapToken(this.#credentialKey, userId, project.computerId, origin, signal);
         const identity = await this.#authentication.createAnonymous(userId, project.computerId, signal, token);
-        const { displayName } = await this.#provisionUserBot(identity.userId, signal);
-        return { ...identity, bot: { displayName } };
+        await this.#provisionUserBot(identity.userId, signal);
+        return identity;
     };
 
     /**
@@ -54,34 +54,21 @@ export class ManagementService {
      * both are retried writes, so repeating them returns the same Machine.
      */
     readonly #provisionUserBot = async (userId: string, signal: AbortSignal) =>
-        await this.#managedBots.claimMachine(userId, { displayName: "My Machine" }, Date.now(), signal);
+        await this.#managedBots.claimMachine(userId, Date.now(), signal);
 
-    readonly readBot = async (userId: string, signal: AbortSignal) => {
-        const bot = await this.#managedBots.readBot(userId, signal);
-        if (bot === null) {
+    /** The owner's Machine: where its Runtime pairing stands, read from the Relay that owns it. */
+    readonly readMachine = async (userId: string, signal: AbortSignal) => {
+        const project = await this.readProject(userId, signal);
+        if (project === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return {
-            computerId: bot.configuration?.computerId ?? null,
-            displayName: bot.displayName,
-            configured: bot.configuration !== null,
-        };
+        return { runtimePairing: await this.#relay.readRuntimePairing(project.computerId, signal) };
     };
 
-    readonly readBotRuntimeBinding = async (userId: string, signal: AbortSignal) => {
-        const bot = await this.#managedBots.readBot(userId, signal);
-        if (bot === null) {
-            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
-        }
-        return { computerId: bot.configuration?.computerId ?? null };
-    };
-
-    readonly readProject = async (userId: string, signal: AbortSignal) => {
-        const machine = await this.#managedBots.readMachine(userId, signal);
-        return machine === null || this.#computerId === undefined
+    readonly readProject = async (userId: string, signal: AbortSignal) =>
+        this.#computerId === undefined || !(await this.#managedBots.hasMachine(userId, signal))
             ? null
-            : { computerId: this.#computerId, displayName: machine.displayName };
-    };
+            : { computerId: this.#computerId };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {

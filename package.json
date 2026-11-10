@@ -71,7 +71,6 @@
         "@vitest/coverage-istanbul": "catalog:",
         "dependency-cruiser": "catalog:",
         "drizzle-kit": "catalog:",
-        "drizzle-orm": "catalog:",
         "esbuild": "catalog:",
         "happy-dom": "catalog:",
         "istanbul-lib-coverage": "catalog:",

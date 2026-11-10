@@ -1,28 +1,7 @@
-import { isIdentifier } from "@morty-build/client/protocol";
-import { and, eq, isNull, or } from "drizzle-orm";
-import * as v from "valibot";
+import { eq } from "drizzle-orm";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import { managedBot } from "../../../schema/project-do/index.ts";
-import { type BotConfiguration, botConfigurationSchema } from "../entity/bot-configuration.ts";
-
-const identifier = v.custom<string>(isIdentifier);
-const managedBotSchema = v.pipe(
-    v.object({ displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)) }),
-    v.readonly(),
-);
-
-const listedBotSchema = v.pipe(
-    v.object({
-        displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
-        computerId: v.nullable(identifier),
-    }),
-    v.readonly(),
-);
-
-export type ManagedBot = v.InferOutput<typeof managedBotSchema>;
-type ListedManagedBot = v.InferOutput<typeof listedBotSchema>;
-export type ConfigureManagedBotResult = "configured" | "not-found" | "runtime-mismatch";
 
 export class ManagedBotStorage {
     readonly #database: unknown;
@@ -38,108 +17,32 @@ export class ManagedBotStorage {
         return database;
     };
 
-    /** The Machine of this Project's owner, if it has one. */
-    readonly readMachine = async (userId: string, signal: AbortSignal): Promise<ListedManagedBot | null> => {
+    /** Whether this Project's owner has its Machine. */
+    readonly hasMachine = async (userId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
-            .select({ displayName: managedBot.displayName, computerId: managedBot.computerId })
+            .select({ userId: managedBot.userId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
             .get();
         signal.throwIfAborted();
-        return row === undefined ? null : v.parse(listedBotSchema, row);
-    };
-
-    readonly readBot = async (
-        userId: string,
-        signal: AbortSignal,
-    ): Promise<
-        | (ManagedBot & {
-              readonly configuration: BotConfiguration | null;
-          })
-        | null
-    > => {
-        signal.throwIfAborted();
-        const row = await this.#requireDatabase()
-            .select({
-                displayName: managedBot.displayName,
-                computerId: managedBot.computerId,
-            })
-            .from(managedBot)
-            .where(eq(managedBot.userId, userId))
-            .get();
-        signal.throwIfAborted();
-        if (row === undefined) {
-            return null;
-        }
-        const bot = v.parse(managedBotSchema, row);
-        const configuration = v.safeParse(botConfigurationSchema, row);
-        return {
-            ...bot,
-            configuration: configuration.success ? configuration.output : null,
-        };
-    };
-
-    /** Configures the Agent on the computer that owns this chat. */
-    readonly configureBot = async (
-        userId: string,
-        configuration: BotConfiguration,
-        now: number,
-        signal: AbortSignal,
-    ): Promise<ConfigureManagedBotResult> => {
-        const value = v.parse(botConfigurationSchema, configuration);
-        signal.throwIfAborted();
-        const database = this.#requireDatabase();
-        const result = await database
-            .update(managedBot)
-            .set({ computerId: value.computerId, updatedAt: now })
-            .where(
-                and(
-                    eq(managedBot.userId, userId),
-                    or(isNull(managedBot.computerId), eq(managedBot.computerId, value.computerId)),
-                ),
-            )
-            .run();
-        signal.throwIfAborted();
-        if (result.meta.changes === 1) {
-            return "configured";
-        }
-        const current = await database
-            .select({ computerId: managedBot.computerId })
-            .from(managedBot)
-            .where(eq(managedBot.userId, userId))
-            .get();
-        signal.throwIfAborted();
-        if (current === undefined) {
-            return "not-found";
-        }
-        return current.computerId !== null && current.computerId !== value.computerId
-            ? "runtime-mismatch"
-            : "not-found";
+        return row !== undefined;
     };
 
     /**
-     * Gives the owner `machine` unless it already has a Machine, and returns the owner's Machine either way: the owner
-     * is the key, so a repeated or concurrent claim never adds a second one.
+     * Gives the owner its Machine unless it already has one: the owner is the key, so a repeated or concurrent claim
+     * never adds a second one.
      */
-    readonly claimMachine = async (
-        userId: string,
-        machine: ManagedBot,
-        now: number,
-        signal: AbortSignal,
-    ): Promise<ListedManagedBot> => {
-        const value = v.parse(managedBotSchema, machine);
+    readonly claimMachine = async (userId: string, now: number, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(managedBot)
-            .values({ userId, displayName: value.displayName, createdAt: now, updatedAt: now })
+            .values({ userId, createdAt: now })
             .onConflictDoNothing({ target: managedBot.userId })
             .run();
-        const claimed = await this.readMachine(userId, signal);
-        if (claimed === null) {
+        if (!(await this.hasMachine(userId, signal))) {
             throw new ManagementStorageError("DATABASE_UNAVAILABLE", "The Machine could not be stored.");
         }
-        return claimed;
     };
 }
 

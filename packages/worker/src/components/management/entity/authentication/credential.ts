@@ -40,30 +40,6 @@ export function accessHolder(credential: Credential): SessionAccessHolder {
     }
 }
 
-/** A browser device's access: it holds until its term unless it was ended first, and ended access never resumes. */
-export type DeviceAccess =
-    | { readonly kind: "holding"; readonly expiresAt: number }
-    | { readonly kind: "ended" }
-    | { readonly kind: "expired" };
-
-/**
- * The one rule for a browser device's access, read from what the device stores: when it was ended, if it was, and its
- * term, the latest among the links it opened (null when it opened none). Revoking a link only stops it from adding a
- * device; it never ends a device's access.
- */
-export function deviceAccess(
-    device: { readonly endedAt: number | null; readonly accessExpiresAt: number | null },
-    now: number,
-): DeviceAccess {
-    if (device.endedAt !== null) {
-        return { kind: "ended" };
-    }
-    if (device.accessExpiresAt === null || device.accessExpiresAt <= now) {
-        return { kind: "expired" };
-    }
-    return { kind: "holding", expiresAt: device.accessExpiresAt };
-}
-
 const linkLifetime = 10 * 60 * 1000;
 const hour = 60 * 60 * 1000;
 
@@ -120,15 +96,15 @@ export function sharedLinkTerms(sharer: Credential, now: number, duration: Devic
  * The credential kinds that may perform each identity or management operation; any other operation accepts every
  * active credential. Browser and recovery access may use and share the Machine and disconnect the other browsers, so
  * whoever notices a device they did not add can remove it without losing their own access. Only the machine's local
- * credential may issue a recovery credential (which ending browser access does not reach), pair a Runtime, bind the
- * Machine or revoke all access.
+ * credential may issue a recovery credential (which ending browser access does not reach), pair a Runtime, verify the
+ * Machine's Agent or revoke all access.
  */
 const permittedKinds = {
     shareAccess: ["local", "browser", "recovery"],
     listDevices: ["local", "browser", "recovery"],
     issueRecoveryCredential: ["local"],
     pairRuntime: ["local"],
-    configureBot: ["local"],
+    verifyAgent: ["local"],
     revokeAllAccess: ["local"],
     replaceProject: ["local"],
     endBrowserAccess: ["browser"],

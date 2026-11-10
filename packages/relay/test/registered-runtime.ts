@@ -1,12 +1,10 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
 import { runtimePairing, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
 import { holdsAccess } from "../../worker/src/components/management/service/authentication-service.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
-import { ManagedBotStorage } from "../../worker/src/components/management/storage/managed-bot-storage.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { migrateComputerStorage } from "../src/durable-objects/migrate-computer-storage.ts";
 import { machineAccount } from "../src/schema/d1/index.ts";
@@ -18,47 +16,6 @@ export function computerManagementStore(computerId: string, storage: DurableObje
     return new SqliteComputerManagementStore(computerId, new DurableObjectDatabaseAdapter(storage), (holder, signal) =>
         holdsAccess(new IdentityStorage(new DurableObjectDatabase(storage), computerId), holder, signal),
     );
-}
-
-/**
- * The computer's owner holding its local credential, stored as identity bootstrap stores it. Session credentials the
- * scenarios issue carry this access, so they stay valid until the scenario ends it with `endOwnerAccess`.
- */
-export async function ownerAccessHolder(computerId: string): Promise<SessionAccessHolder> {
-    return await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
-        const signal = AbortSignal.timeout(10_000);
-        const database = new DurableObjectDatabase(state.storage);
-        const userId = `user_${computerId}`;
-        const token = `morty_anon_v1_${"o".repeat(43)}`;
-        await new ManagedBotStorage(database).claimMachine(userId, { displayName: "My Machine" }, Date.now(), signal);
-        const identities = new IdentityStorage(database, computerId);
-        await identities.createAnonymous(userId, computerId, Date.now(), signal, token);
-        const credential = await identities.findCredential(token, signal);
-        if (credential === null) {
-            throw new Error("Missing owner credential");
-        }
-        return { kind: "credential", credentialId: credential.credentialId };
-    });
-}
-
-/** Revokes the owner's local credential in storage, as retiring it does, without closing any live connection. */
-export async function endOwnerAccess(computerId: string, holder: SessionAccessHolder): Promise<void> {
-    if (holder.kind !== "credential") {
-        throw new Error("Expected the owner's credential");
-    }
-    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
-        const revoked = await new IdentityStorage(
-            new DurableObjectDatabase(state.storage),
-            computerId,
-        ).revokeCredential(
-            { kind: "local", credentialId: holder.credentialId, userId: `user_${computerId}` },
-            Date.now(),
-            AbortSignal.timeout(10_000),
-        );
-        if (!revoked) {
-            throw new Error("The owner's credential was not revoked");
-        }
-    });
 }
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */

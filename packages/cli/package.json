@@ -51,8 +51,6 @@
         "test:manual": "vitest run tests/manual",
         "pretest:agents": "pnpm build && pnpm pack:test",
         "test:agents": "vitest run tests/agents --maxWorkers=2",
-        "pretest:pressure": "tsc --project src/engine/acp/harness/claude/upstream/tsconfig.json && tsc --project src/engine/acp/harness/pi/upstream/tsconfig.json",
-        "test:pressure": "node tests/pressure/concurrent-sessions.mjs",
         "pack:test": "node scripts/pack-test-release.ts"
     },
     "dependencies": {
@@ -80,8 +78,7 @@
         "pngjs": "catalog:",
         "qrcode": "catalog:",
         "@types/pngjs": "catalog:",
-        "@types/qrcode": "catalog:",
-        "miniflare": "catalog:"
+        "@types/qrcode": "catalog:"
     },
     "keywords": [],
     "author": "Moxt",

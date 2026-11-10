@@ -27,6 +27,7 @@ import * as v from "valibot";
 import type { ComputerBackendService } from "../../../../../relay/src/service/computer-backend-service.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ComputerManagementError, relayIdentifier } from "../entity/computer-management.ts";
+import { type RuntimePairing, runtimeRevoked } from "../entity/runtime-pairing.ts";
 
 type ChatSessionTarget = {
     readonly target: NativeSessionTarget;
@@ -96,6 +97,9 @@ export class LocalComputerService {
             if (deadline.signal.aborted) {
                 throw new ComputerManagementError("RELAY_TIMEOUT", "Morty did not respond in time.", 504, { cause });
             }
+            if (isHttpError(cause) && cause.toHttpJson().body.error.code === "runtime_revoked") {
+                throw runtimeRevoked({ cause });
+            }
             if (cause instanceof ComputerManagementError || isHttpError(cause)) {
                 throw cause;
             }
@@ -113,10 +117,35 @@ export class LocalComputerService {
     });
     readonly readPairing = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.readPairing(signal), 15_000);
+    readonly readRuntimePairing = async (computerId: string, signal: AbortSignal): Promise<RuntimePairing> => {
+        try {
+            const pairing = await this.readPairing(computerId, signal);
+            switch (pairing.status) {
+                case "paired":
+                    return "paired";
+                case "revoked":
+                    return "revoked";
+                default:
+                    return "unpaired";
+            }
+        } catch (cause) {
+            if (isHttpError(cause) && cause.toHttpJson().body.error.code === "pairing_not_found") {
+                return "unpaired";
+            }
+            throw cause;
+        }
+    };
     readonly revokeRuntime = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.revokeRuntime(signal), 15_000);
-    readonly chatRuntimes = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000);
+    readonly chatRuntimes = async (computerId: string, signal: AbortSignal) => {
+        const runtimes = await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000);
+        return runtimes.map(({ computerId, machineName, online, agents }) => ({
+            computerId,
+            machineName,
+            online,
+            agents: agents.map(({ harness, label }) => ({ harness, label })),
+        }));
+    };
     readonly getChatRuntimeAgents = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.agents(signal), 15_000);
     readonly readRuntimeDiagnostics = async (computerId: string, signal: AbortSignal) =>
@@ -281,12 +310,7 @@ export class LocalComputerService {
                     ),
                 ).entries,
         );
-    readonly readChatSession = async (
-        computerId: string,
-        _selection: { readonly computerId: string },
-        target: NativeSessionTarget,
-        signal: AbortSignal,
-    ) =>
+    readonly readChatSession = async (computerId: string, target: NativeSessionTarget, signal: AbortSignal) =>
         await this.#run(computerId, signal, async (computer, signal) => {
             const restored = decodeSessionRestoredEvent(
                 JSON.stringify(

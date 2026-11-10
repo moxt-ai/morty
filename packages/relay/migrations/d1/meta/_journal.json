@@ -162,6 +162,13 @@
             "when": 1794298058817,
             "tag": "0022_dusty_tombstone",
             "breakpoints": true
+        },
+        {
+            "idx": 23,
+            "version": "6",
+            "when": 1794302038867,
+            "tag": "0023_nasty_ben_grimm",
+            "breakpoints": true
         }
     ]
 }

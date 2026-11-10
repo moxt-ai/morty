@@ -36,7 +36,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
-import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
+import { SessionWelcomeInChat } from "../../components/chat/session-welcome.tsx";
 import { isFileEditToolCall } from "../../components/chat/tools/tool-renderer-registry.tsx";
 import { TurnWorkDisclosure, type TurnWorkSummary } from "../../components/chat/turn-work-disclosure.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
@@ -1266,11 +1266,17 @@ function MortySessionPaneBody({
                                             />
                                         </div>
                                     )}
-                                    {welcome.kind === "visible" && model.connection.kind === "ready" && (
-                                        <SessionWelcome
+                                    {model.connection.kind === "ready" && (
+                                        <SessionWelcomeInChat
                                             canSuggestProgress={presentation.canSuggestProgress}
                                             onDismiss={pane.welcome.getState().dismiss}
+                                            onMockSuggestProgress={() =>
+                                                model.setDraft(
+                                                    "Summarize the current task's progress and anything that needs my attention.",
+                                                )
+                                            }
                                             onSuggestProgress={pane.welcome.getState().suggestProgress}
+                                            visible={welcome.kind === "visible"}
                                         />
                                     )}
                                 </div>

@@ -1,6 +1,52 @@
 import { ArrowUpRight, X } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/cloud-button";
 import { MortyAlert } from "@/components/ui/morty-alert";
+
+export function SessionWelcomeInChat({
+    canSuggestProgress,
+    onDismiss,
+    onMockSuggestProgress,
+    onSuggestProgress,
+    visible,
+}: {
+    readonly canSuggestProgress: boolean;
+    readonly onDismiss: () => void;
+    readonly onMockSuggestProgress: () => void;
+    readonly onSuggestProgress: () => void;
+    readonly visible: boolean;
+}) {
+    const [showMock, setShowMock] = useState(
+        () => new URLSearchParams(window.location.search).get("mockSessionWelcome") === "1",
+    );
+    if (!visible && !showMock) {
+        return null;
+    }
+    return (
+        <SessionWelcome
+            canSuggestProgress={showMock || canSuggestProgress}
+            onDismiss={() => {
+                setShowMock(false);
+                if (visible) {
+                    onDismiss();
+                }
+            }}
+            onSuggestProgress={() => {
+                if (showMock) {
+                    setShowMock(false);
+                    if (canSuggestProgress) {
+                        onMockSuggestProgress();
+                    }
+                    if (visible) {
+                        onDismiss();
+                    }
+                    return;
+                }
+                onSuggestProgress();
+            }}
+        />
+    );
+}
 
 export function SessionWelcome({
     canSuggestProgress,
@@ -14,18 +60,13 @@ export function SessionWelcome({
     return (
         <section aria-label="Continue your work here" className="relative">
             <MortyAlert
-                className="pr-10"
+                className="border-white pr-10"
                 description={
                     <>
                         Check its progress, send your next instruction, or respond to requests here.
                         {canSuggestProgress && (
                             <div className="mt-3">
-                                <Button
-                                    className="gap-1.5 min-h-11 md:min-h-9"
-                                    onClick={onSuggestProgress}
-                                    size="sm"
-                                    variant="outline"
-                                >
+                                <Button onClick={onSuggestProgress} size="sm" variant="primary">
                                     Ask for a progress update
                                     <ArrowUpRight aria-hidden="true" className="size-3.5" />
                                 </Button>

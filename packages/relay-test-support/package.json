@@ -20,7 +20,6 @@
         "@morty-build/relay-core": "workspace:*",
         "@morty-build/client": "workspace:*",
         "@types/ws": "^8.18.2",
-        "drizzle-orm": "catalog:",
         "esbuild": "catalog:",
         "hono": "catalog:",
         "miniflare": "catalog:",

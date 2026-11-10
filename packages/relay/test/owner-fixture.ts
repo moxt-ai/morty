@@ -9,7 +9,7 @@ import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-dat
 import { createRelayAccessServices } from "../src/relay-worker.ts";
 
 export const ownerOrigin = "https://relay.test";
-export const ownerEnvironment = () => ({ ...env, APP_ORIGIN: ownerOrigin });
+const ownerEnvironment = () => ({ ...env, APP_ORIGIN: ownerOrigin });
 export const ownerRequest = (request: Request) => worker.fetch(request, ownerEnvironment());
 
 const owners = new Map<string, string>();
@@ -19,7 +19,7 @@ export async function createOwner() {
     return owner;
 }
 
-export async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
+async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
     const token = owners.get(computerId);
     if (token === undefined) {
         throw new Error("Expected a publicly created owner");
@@ -28,7 +28,7 @@ export async function ownerHolder(computerId: string): Promise<SessionAccessHold
         const credential = await new IdentityStorage(
             new DurableObjectDatabase(state.storage),
             computerId,
-        ).findCredential(token, AbortSignal.timeout(10_000));
+        ).findCredential(token, Date.now(), AbortSignal.timeout(10_000));
         if (credential === null) {
             throw new Error("Expected active owner access");
         }

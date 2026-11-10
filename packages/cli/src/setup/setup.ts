@@ -244,8 +244,8 @@ type RuntimeSelection =
     | {
           readonly kind: "existing";
           readonly computerId: string;
-          /** Whether the Worker binds the Machine to this Runtime. The Worker's binding is the only record of it. */
-          readonly bound: boolean;
+          /** Whether the Relay records this Runtime as the computer's paired Runtime. */
+          readonly paired: boolean;
       }
     | {
           readonly kind: "pairing";
@@ -260,7 +260,8 @@ interface ManagedConnection {
 
 interface VerifiedIdentity {
     readonly context: Context;
-    readonly expectedComputerId: string | null;
+    /** Where the Machine's Runtime pairing stands, as the Relay records it. */
+    readonly runtimePairing: "unpaired" | "paired" | "revoked";
 }
 
 /**
@@ -1127,12 +1128,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (identifier(session["userId"]) !== context.identity.userId) {
             fail("IDENTITY_CONFLICT");
         }
-        // The Worker decides which Machine the user has, the same one every browser handoff opens.
-        const bot = await request(context, "/management/machine");
-        return {
-            context,
-            expectedComputerId: bot["computerId"] === null ? null : identifier(bot["computerId"]),
-        };
+        // The Worker reads the Machine's Runtime pairing from the Relay, the same one every browser handoff opens.
+        const runtimePairing = text((await request(context, "/management/machine"))["runtimePairing"]);
+        if (runtimePairing !== "unpaired" && runtimePairing !== "paired" && runtimePairing !== "revoked") {
+            fail("INVALID_RESPONSE");
+        }
+        return { context, runtimePairing };
     }
 
     async function runMorty(
@@ -1293,7 +1294,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareRuntime(
         context: Context,
         cwd: string,
-        expectedComputerId: string | null,
+        runtimePairing: VerifiedIdentity["runtimePairing"],
         confirmedComputerId: string | null,
     ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
@@ -1303,7 +1304,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 status: "replacement_check",
                 reason,
                 computerId,
-                expectedComputerId,
+                expectedComputerId: runtimePairing === "unpaired" ? null : computerId,
                 managedConnectionCount,
                 approved: confirmedComputerId === computerId,
                 platform: process.platform,
@@ -1332,32 +1333,35 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             return { existing, managedConnectionCount: connections.length };
         };
-        if (expectedComputerId !== null && !(await machineRuntimeRevoked(context))) {
-            const { existing, managedConnectionCount } = await reusable(expectedComputerId);
-            if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing, bound: true } };
+        switch (runtimePairing) {
+            case "paired": {
+                const { existing, managedConnectionCount } = await reusable(context.identity.computerId);
+                if (existing !== undefined) {
+                    return { context, runtime: { kind: "existing", ...existing, paired: true } };
+                }
+                // Losing the local pairing does not itself authorize ending shared access.
+                return await replaceWithApproval("managed_runtime_missing", managedConnectionCount);
             }
-            // Losing the local pairing does not itself authorize ending shared access.
-            return await replaceWithApproval("managed_runtime_missing", managedConnectionCount);
+            case "revoked":
+                // Morty disconnected this computer because a copy of its connection key was used. The Machine and the
+                // browsers that open it stay; only the computer's connection is paired again.
+                emit({ status: "runtime_revoked", computerId: context.identity.computerId });
+                progress(
+                    "pairing",
+                    "Morty disconnected this computer because its connection key was used somewhere else. Pairing it again.",
+                );
+                // The connection list can retain the revoked credential. Only a new pairing can replace it.
+                return await pairRuntime(context);
+            case "unpaired": {
+                // A Runtime an earlier run started for this computer may still be waiting for its pairing, so continue
+                // on it while this machine still manages its connection.
+                const { existing } = await reusable(context.identity.computerId);
+                if (existing !== undefined) {
+                    return { context, runtime: { kind: "existing", ...existing, paired: false } };
+                }
+                return await pairRuntime(context);
+            }
         }
-        if (expectedComputerId !== null) {
-            // Morty disconnected this computer because a copy of its connection key was used. The Machine and the
-            // browsers that open it stay; only the computer's connection is paired again.
-            emit({ status: "runtime_revoked", computerId: expectedComputerId });
-            progress(
-                "pairing",
-                "Morty disconnected this computer because its connection key was used somewhere else. Pairing it again.",
-            );
-            // The connection list can retain the revoked credential. Only a new pairing can replace it.
-            return await pairRuntime(context);
-        }
-        // The Machine is unbound. A Runtime an earlier run paired for it still holds one of
-        // the Project's Runtime slots, so continue on it while this machine still manages its connection.
-        const { existing } = await reusable(context.identity.computerId);
-        if (existing !== undefined) {
-            return { context, runtime: { kind: "existing", ...existing, bound: false } };
-        }
-        return await pairRuntime(context);
     }
 
     /**
@@ -1473,26 +1477,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
     }
 
-    /** Whether the Machine's Runtime was revoked, so this computer pairs the Machine with a new one. */
-    async function machineRuntimeRevoked(context: Context): Promise<boolean> {
-        try {
-            await request(context, `/chat/computers/${context.identity.computerId}/workspace`, {});
-            return false;
-        } catch (cause) {
-            if (errorCode(cause) === "runtime_revoked") {
-                return true;
-            }
-            throw cause;
-        }
-    }
-
     /** The Agents the Runtime offers while it is online, or null while it is not. */
     async function onlineRuntimeAgents(context: Context, runtime: RuntimeSelection): Promise<readonly string[] | null> {
         const botPath = `/chat/computers/${context.identity.computerId}`;
-        // A bound Machine's Runtime is read through the Machine; an unbound one is among the setup candidates.
-        const alreadyConfigured = runtime.kind === "existing" && runtime.bound;
-        const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
-        const candidates = alreadyConfigured
+        // A paired Runtime is read through the Machine; one still waiting for its pairing is among the setup candidates.
+        const alreadyPaired = runtime.kind === "existing" && runtime.paired;
+        const state = await request(context, `${botPath}/${alreadyPaired ? "workspace" : "setup/runtimes"}`, {});
+        const candidates = alreadyPaired
             ? [object(state["runtime"])]
             : Array.isArray(state["runtimes"])
               ? state["runtimes"].map(object)
@@ -1649,13 +1640,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             throw cause;
         }
-        // The Machine now owns its Runtime, so the pairing record is no longer needed.
+        // The Relay records the Runtime the computer paired, so the local pairing record is no longer needed.
         const saved = await commit(context, withoutPairingIntent(context.identity));
         emit({ status: "binding_activated", computerId: context.identity.computerId, harness });
         return saved;
     }
 
-    /** Waits until the bound Machine's Runtime is online and offers the harness this run bound. */
+    /** Waits until the Machine's Runtime is online and offers the harness this run set up. */
     async function waitForReadiness(context: Context, runtime: RuntimeSelection, requestedHarness: string) {
         const harness = identifier(requestedHarness);
         let attempts = 0;
@@ -1840,7 +1831,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let machine = verified.context;
         emit({ status: "identity_ready", userId: machine.identity.userId, computerId: machine.identity.computerId });
-        const prepared = await prepareRuntime(machine, cwd, verified.expectedComputerId, options.replaceProject);
+        const prepared = await prepareRuntime(machine, cwd, verified.runtimePairing, options.replaceProject);
         machine = prepared.context;
         await startRuntime(machine, prepared.runtime, cwd, options.harness);
         await waitForRuntime(machine, prepared.runtime, options.harness, cwd);
