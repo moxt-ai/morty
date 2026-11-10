@@ -31,6 +31,7 @@ import {
     type RuntimeDiagnosticsResult,
     type RuntimePingCommand,
     type RuntimePongEvent,
+    requestReplyAddress,
     type SessionArchiveCommand,
     type SessionArchivedEvent,
     type SessionCancelBeforeStartCommand,
@@ -125,14 +126,6 @@ export type RuntimeControlResult =
     | SessionsListedEvent
     | SessionsQueriedEvent
     | SessionRestoredEvent;
-
-/**
- * The identifier the Runtime answers a control command under. A prompt is its own request, named by the Turn it
- * creates; every other command names its own request.
- */
-export function runtimeControlRequestId(command: RuntimeControlCommand): string {
-    return command.kind === "session.prompt" ? command.commandId : command.requestId;
-}
 
 export interface RuntimeFileStream {
     readonly finished: Promise<void>;
@@ -511,7 +504,7 @@ export async function requestRuntimeControl(
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
-    const requestId = runtimeControlRequestId(command);
+    const requestId = requestReplyAddress(command);
     let cleanup = () => {};
     try {
         deadline.throwIfAborted();

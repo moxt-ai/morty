@@ -563,6 +563,7 @@ export type {
     DaemonToRelayMessage,
     DaemonToServiceMessage,
     ServiceToDaemonMessage,
+    ServiceToDaemonRequest,
 } from "./transport/daemon-transport.ts";
 
 export {
@@ -573,4 +574,6 @@ export {
     decodeServiceToDaemonMessage,
     encodeDaemonToServiceMessage,
     encodeServiceToDaemonMessage,
+    readUndecodedRequestAddress,
+    requestReplyAddress,
 } from "./transport/daemon-transport.ts";
