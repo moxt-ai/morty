@@ -8,6 +8,7 @@ import { registerDaemonProcessLifecycleHandlers, registerInternalRuntimeHandlers
 import { registerDiagnoseCommand } from "./handler/diagnose/index.ts";
 import { registerLogsCommand } from "./handler/logs/index.ts";
 import { registerPairHandlers } from "./handler/pair/index.ts";
+import { registerSetupHandlers } from "./handler/setup/index.ts";
 import { registerVersionHandler } from "./handler/version/index.ts";
 
 function createProgram(cliContext: CliContext): Command {
@@ -29,6 +30,7 @@ function createProgram(cliContext: CliContext): Command {
     registerDiagnoseCommand(program, cliContext);
     registerInternalRuntimeHandlers(program, cliContext);
     registerPairHandlers(program, cliContext);
+    registerSetupHandlers(program, cliContext);
     registerDaemonProcessLifecycleHandlers(program, cliContext);
     return program;
 }

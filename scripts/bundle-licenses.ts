@@ -13,10 +13,8 @@ const licenseSchema = v.array(
     }),
 );
 
-type LicenseOutput = { readonly kind: "standalone" } | { readonly kind: "asset"; readonly fileName: string };
-
 /** Vite identifies the bundled dependencies; refuse to distribute missing license text. */
-export function bundleLicenses(output: LicenseOutput): Plugin {
+export function bundleLicenses(fileName: string): Plugin {
     return {
         name: "morty-bundle-licenses",
         generateBundle: {
@@ -134,16 +132,7 @@ export function bundleLicenses(output: LicenseOutput): Plugin {
                     "\n--------------------------------------------------------------------------------\n\n",
                 );
                 delete bundle["bundle-licenses.json"];
-                if (output.kind === "standalone") {
-                    const setup = bundle["setup.mjs"];
-                    if (setup?.type !== "chunk" || text.includes("*/")) {
-                        throw new Error("Cannot embed the license inventory in the standalone setup script");
-                    }
-                    // The standalone installer has no hashed chunks or source map to invalidate.
-                    setup.code += `\n/*\n${text}\n*/\n`;
-                } else {
-                    this.emitFile({ type: "asset", fileName: output.fileName, source: text });
-                }
+                this.emitFile({ type: "asset", fileName, source: text });
             },
         },
     };

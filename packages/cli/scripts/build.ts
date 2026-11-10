@@ -20,6 +20,10 @@ const result = await build({
     platform: "node",
     target: "node22.19.0",
     format: "esm",
+    // Setup's QR encoders are CommonJS and load Node built-ins dynamically.
+    banner: {
+        js: 'import { createRequire as mortyCreateRequire } from "node:module"; const require = mortyCreateRequire(import.meta.url);',
+    },
     sourcemap: true,
     outbase: "src",
     outdir: "dist",

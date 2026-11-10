@@ -181,7 +181,6 @@ export async function createTestRuntime(
                 const result = await followSetupInstructions({
                     instructionUrl: url.href,
                     cwd: workspace ?? stack.directories.workspace,
-                    downloads: journey.workDirectory,
                     state: join(journey.workDirectory, "morty-state"),
                     harness,
                     signal: journey.signal,

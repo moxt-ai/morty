@@ -8,7 +8,6 @@ import {
 } from "./components/management/entity/client-location.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
-import { setupArtifact } from "./gateway/setup-artifact.ts";
 import { notFoundPage, webPages } from "./gateway/web-pages.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
@@ -30,7 +29,6 @@ const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
     .get("/morty/api/health", (context) => context.body(null, 204))
     .route("/", webPages)
     .route("/", instructionDocumentRoutes)
-    .route("/", setupArtifact)
     .route("/morty/api", cloudRoutes)
     .notFound((context) => notFoundPage(context.req.raw) ?? notFound());
 

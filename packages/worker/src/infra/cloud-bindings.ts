@@ -11,8 +11,6 @@ function hasMethods(value: unknown, methods: readonly string[]): boolean {
 
 export const d1DatabaseBindingSchema = v.custom<D1Database>((value) => hasMethods(value, ["batch", "prepare"]));
 
-export const readableR2BucketBindingSchema = v.custom<Pick<R2Bucket, "get">>((value) => hasMethods(value, ["get"]));
-
 export const durableObjectNamespaceBindingSchema = <T extends Rpc.DurableObjectBranded | undefined = undefined>() =>
     v.custom<DurableObjectNamespace<T>>((value) => hasMethods(value, ["get", "idFromName"]));
 

@@ -36,17 +36,20 @@ if (
 ) {
     throw new Error("No successful deployment evidence for this exact release");
 }
-const currentSetup = await fetch(new URL("/setup.mjs", cloud.target.morty_origin), {
+const instructionUrl = new URL("/setup.md", cloud.target.morty_origin);
+const instructionCheck = evidence.checks?.find((check) => check.url === instructionUrl.href && check.status === 200);
+const currentInstructions = await fetch(instructionUrl, {
     signal: AbortSignal.timeout(40_000),
     headers: { "cache-control": "no-cache" },
 });
 if (
-    !currentSetup.ok ||
+    !instructionCheck ||
+    !currentInstructions.ok ||
     createHash("sha256")
-        .update(Buffer.from(await currentSetup.arrayBuffer()))
-        .digest("hex") !== cloud.files["setup.mjs"]
+        .update(Buffer.from(await currentInstructions.arrayBuffer()))
+        .digest("hex") !== instructionCheck.sha256
 ) {
-    throw new Error("Production no longer serves this release's setup artifact");
+    throw new Error("Production no longer serves the verified CLI setup instructions");
 }
 const currentNpm = await fetch("https://registry.npmjs.org/@morty-build%2fcli/latest", {
     headers: { "cache-control": "no-cache" },

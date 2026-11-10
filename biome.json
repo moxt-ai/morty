@@ -141,7 +141,6 @@
                 "**/packages/*/src/**",
                 "**/packages/web/**",
                 "**/packages/worker/**",
-                "**/packages/setup/**",
                 "**/packages/e2e/**",
                 "**/packages/local-state/**",
                 "**/scripts/**",
