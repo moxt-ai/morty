@@ -47,7 +47,7 @@ class CreationBudget {
 test("Given setup and a lost creation response, When setup retries across temporary failures, Then it finishes with the original identity, Project and Machine", {
     timeout: 60_000,
 }, async () => {
-    const setup = v.parse(setupModule, await import("../../setup/src/setup.ts"));
+    const setup = v.parse(setupModule, await import("../../cli/src/setup/setup.ts"));
     await using cleanup = new AsyncDisposableStack();
     const fixture = await createIdentityFixture();
     cleanup.defer(() => fixture.close());

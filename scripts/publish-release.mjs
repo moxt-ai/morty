@@ -89,7 +89,7 @@ if (await registryContainsAcceptedRelease()) {
 }
 // Exact-version and dist-tag metadata can become visible at different times.
 while (!(await registryLatestIsAcceptedRelease())) {
-    console.log("Waiting for npm latest to identify the accepted release before the hosted setup changes.");
+    console.log("Waiting for npm latest to identify the accepted release before the setup instructions change.");
     await delay(5000, undefined, { signal });
 }
 console.log(`Verified ${release.name}@${release.version} from ${release.revision}`);

@@ -273,7 +273,6 @@ test("Given the asset router, When an agent requests installation resources, The
         expect(setup.headers.get("content-type")).toContain("text/markdown");
         expect(await setup.text()).toMatch(/^# Set up Morty/);
         const download = await runtime.dispatchFetch("https://morty.example/setup.mjs", { headers });
-        expect(download.status).toBe(503);
-        expect(await download.json()).toMatchObject({ error: { code: "SETUP_ARTIFACT_UNAVAILABLE" } });
+        expect(download.status).toBe(404);
     }
 });

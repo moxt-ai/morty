@@ -47,6 +47,9 @@ def main():
     environment = args.environment
     spec = targets['environments'][environment]
     release = ROOT / '.deployment-output' / environment
+    # This generated directory belongs to this build; never retain artifacts from an earlier release.
+    if release.exists():
+        shutil.rmtree(release)
     generated = ROOT / 'node_modules/.cache/morty-deployment' / environment
     generated.mkdir(parents=True, exist_ok=True)
     morty = overlay(ROOT / 'wrangler.jsonc', environment)
@@ -55,17 +58,16 @@ def main():
     morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
     morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['relay_origin']}
     write(generated / 'morty.json', morty)
-    env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_SETUP_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
+    env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_RELEASE_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
     env.update(MORTY_WORKER_CONFIG=str(generated / 'morty.json'), MORTY_APP_ORIGIN=spec['morty_origin'], MORTY_ASSET_ORIGIN=spec['asset_origin'])
     sentry = read(ROOT / 'deployment/sentry.json')
-    sentry_release = 'morty@' + env['MORTY_SETUP_REVISION']
+    sentry_release = 'morty@' + env['MORTY_RELEASE_REVISION']
     env.update(VITE_SENTRY_DSN=sentry['dsn'], VITE_SENTRY_ENVIRONMENT=environment,
                VITE_SENTRY_RELEASE=sentry_release, VITE_SENTRY_ORIGIN=spec['morty_origin'])
     # Source-map credentials belong only to the deployment job, never a PR build.
     env.pop('SENTRY_AUTH_TOKEN', None)
     env.pop('CLOUDFLARE_ENV', None)
     env.pop('CLOUDFLARE_API_TOKEN', None)
-    run(['pnpm', 'build:setup'], env=env)
     run(['pnpm', 'exec', 'vite', 'build', '--outDir', str(release)], env=env)
     if (release / 'sourcemaps').exists():
         shutil.rmtree(release / 'sourcemaps')
@@ -126,7 +128,6 @@ def main():
     portable.update(no_bundle=True, find_additional_modules=True)
     write(morty_dir / 'wrangler.json', portable)
     shutil.copytree(ROOT / 'packages/relay/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
-    shutil.copy2(ROOT / 'packages/setup/dist/setup.mjs', release / 'setup.mjs')
     configs = {'relay': 'relay/wrangler.json', 'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
     for label, file in configs.items():
         config = read(release / file)
@@ -136,10 +137,10 @@ def main():
     cli_release = None
     if os.environ.get('MORTY_CLI_RELEASE_MANIFEST'):
         cli_release = read(ROOT / os.environ['MORTY_CLI_RELEASE_MANIFEST'])
-        if cli_release['revision'] != env['MORTY_SETUP_REVISION'] or cli_release['version'] != read(ROOT / 'packages/cli/package.json')['version']:
+        if cli_release['revision'] != env['MORTY_RELEASE_REVISION'] or cli_release['version'] != read(ROOT / 'packages/cli/package.json')['version']:
             raise ValueError('Cloud and CLI release identities differ')
     files = {p.relative_to(release).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(release.rglob('*')) if p.is_file() and p.name != 'release.json'}
-    write(release / 'release.json', {'format': 'morty-cloud-release-v2', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_SETUP_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'files': files})
+    write(release / 'release.json', {'format': 'morty-cloud-release-v2', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'files': files})
     print(json.dumps({'release': str(release), 'environment': environment, 'files': len(files)}))
 
 

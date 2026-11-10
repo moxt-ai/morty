@@ -76,6 +76,11 @@
         "ws": "^8.22.1",
         "zod": "^4.6.7",
         "@morty-build/local-state": "workspace:*",
+        "jsqr": "catalog:",
+        "pngjs": "catalog:",
+        "qrcode": "catalog:",
+        "@types/pngjs": "catalog:",
+        "@types/qrcode": "catalog:",
         "miniflare": "catalog:"
     },
     "keywords": [],

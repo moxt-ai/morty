@@ -68,7 +68,6 @@ def main():
     parser.add_argument('--cli-release', type=Path, help='Accepted CLI manifest and adjacent archive, including for legacy cloud releases')
     parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
     parser.add_argument('--preflight-only', action='store_true', help='Verify deployment credentials and resources before any write')
-    parser.add_argument('--activate-setup', action='store_true', help='Replace the hosted setup once npm serves the accepted CLI archive')
     args = parser.parse_args()
     release = args.release.resolve()
     manifest = read(release / 'release.json')
@@ -129,12 +128,12 @@ def main():
                 latest = json.load(response)['version']
             if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', latest):
                 raise ValueError('Unexpected npm latest version')
-            # The Workers deploy before npm moves latest; setup activation follows publication.
+            # CLI setup uses the existing service contracts. Publish its accepted bytes before activating its instructions.
             published, accepted_version = (tuple(map(int, item.split('.'))) for item in (latest, version))
-            if published > accepted_version or (args.activate_setup and published != accepted_version):
+            if published != accepted_version:
                 raise ValueError('A superseded release cannot automatically replace production')
-        if args.activate_setup:
-            # The hosted setup installs the CLI from npm, so it may change only after the accepted bytes are available.
+        if not args.preflight_only:
+            # Instructions invoke the CLI from npm; refuse to activate them before the accepted bytes are available.
             with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/' + version, headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
                 package = json.load(response)
             if package.get('name') != '@morty-build/cli' or package.get('version') != version or package.get('bin', {}).get('morty') != 'dist/cli.js':
@@ -144,16 +143,6 @@ def main():
     env = dict(os.environ, WRANGLER_SEND_METRICS='false')
     for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
         env.pop(key, None)
-    if args.activate_setup:
-        upload_objects(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
-        with urllib.request.urlopen(urllib.request.Request(expected['morty_origin'] + '/setup.mjs', headers={'User-Agent': 'Morty-Deployment/1.0', 'Cache-Control': 'no-cache'}), timeout=40) as response:
-            served = hashlib.sha256(response.read()).hexdigest()
-            if response.status != 200 or served != manifest['files']['setup.mjs']:
-                raise ValueError('Hosted setup differs from the accepted cloud release')
-        evidence = {'passed': True, 'revision': manifest['revision'], 'cliVersion': manifest['cliVersion'], 'setupSha256': served}
-        (ROOT / 'setup-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
-        print(json.dumps(evidence))
-        return
     # Check lifecycle history before uploading assets, applying D1 migrations,
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
@@ -218,8 +207,8 @@ def main():
                     command += ['--secrets-file', str(secret_file)]
                 run(command, env)
             checks = []
-            for url, content in [(expected['relay_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty')]:
-                with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
+            for url, content in [(expected['relay_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.md', 'morty setup --base-url ' + expected['morty_origin'])]:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0', 'Cache-Control': 'no-cache'}), timeout=40) as response:
                     body = response.read()
                     if response.status != 200 or content and content not in body.decode():
                         raise ValueError('Post-deployment health verification failed')

@@ -7,8 +7,8 @@ import {
     createMortyFakeDaemon,
 } from "../../../tests/support/fake-daemon/runtime.ts";
 import type { RuntimeCredentials } from "../../cli/src/engine/runtime/connection/runtime-credentials.ts";
+import type { SetupRuntime } from "../../cli/src/setup/setup.ts";
 import { memoryRuntimeCredentials } from "../../cli/tests/support/runtime-credentials.ts";
-import type { SetupRuntime } from "../../setup/src/setup.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{

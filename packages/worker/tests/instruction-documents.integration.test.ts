@@ -33,20 +33,18 @@ function createRuntime(options: { readonly appOrigin?: string; readonly attachme
     );
 }
 
-test("Given a published setup artifact, When a user downloads the setup URL, Then the Worker serves the current R2 JavaScript", async () => {
+test("Given a retained setup artifact, When a user requests the retired download URL, Then the Worker refuses to serve it and instructions use the CLI", async () => {
     const runtime = createRuntime({ attachments: true });
     try {
-        const missing = await runtime.dispatchFetch("https://chat.example/setup.mjs");
-        expect(missing.status).toBe(503);
-        expect(await missing.json()).toMatchObject({ error: { code: "SETUP_ARTIFACT_UNAVAILABLE" } });
-
         const bucket = await runtime.getR2Bucket("CHAT_ATTACHMENTS_APAC");
         const artifact = "console.log('published setup');\n";
         await bucket.put("artifacts/setup.mjs", artifact);
         const response = await runtime.dispatchFetch("https://chat.example/setup.mjs?token=ignored");
-        expect(response.status).toBe(200);
-        expect(response.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
-        expect(await response.text()).toBe(artifact);
+        expect(response.status).toBe(404);
+        expect(await response.text()).not.toContain(artifact);
+        const instructions = await runtime.dispatchFetch("https://chat.example/setup.md");
+        expect(instructions.status).toBe(200);
+        expect(await instructions.text()).toContain("morty setup --base-url https://chat.example");
     } finally {
         await runtime.dispose();
     }
@@ -63,7 +61,9 @@ test("Given the setup document, When users fetch it from configured and standalo
     expect(document).toMatch(/^# Set up Morty\n/);
     expect(document).not.toContain("change-policy");
     expect(document).toContain("Chat origin: https://chat.example");
-    expect(document).toContain("https://chat.example/setup.mjs");
+    expect(document).toContain("morty setup --base-url https://chat.example");
+    expect(document).toContain("morty revoke-all-access");
+    expect(document).not.toContain("/setup.mjs");
     expect(document).not.toContain("/setup-help/");
     expect(document).toContain("local\napplication data directory");
     expect(document).not.toContain("Documents");
@@ -152,7 +152,7 @@ test("Given the setup document, When an agent follows it, Then it neither passes
         APP_ORIGIN: "https://chat.example",
     });
     const document = await response.text();
-    const command = document.match(/^node <downloaded-setup\.mjs> (.+)$/mu)?.[1];
+    const command = document.match(/^morty (setup .+)$/mu)?.[1];
 
     expect(command).toContain("--harness <own-harness-id>");
     expect(command).not.toContain("--session-id");

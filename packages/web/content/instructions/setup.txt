@@ -10,34 +10,31 @@ Chat origin: {{BASE_URL}}
 1. Identify the actual operating system, current shell, and original working directory.
    Keep Node, the Agent, and working directory in the same operating system. WSL is Linux;
    do not mix its executables or paths with native Windows ones.
-2. Ensure Node.js 22.19.0 or newer and npm (including npx) are installed.
-   Setup installs one exact Morty release in a durable user-owned directory. Morty commands use that installation. Old users must reinstall and pair again; old Morty state is never inherited.
+2. Ensure Node.js 22.19+ or 24.20+ and npm (including npx) are installed.
+   Setup uses the invoked Morty CLI release for pairing and daemon startup. Old users must reinstall and pair again; old Morty state is never inherited.
    Do not install Morty globally.
    Choose your own harness: Codex = `codex`, Claude Code = `claude`, Pi = `pi`.
    Honor an explicit user choice; never substitute another harness.
    Setup reads the current session from the harness itself; do not look up or ask
    for a session ID.
-3. Download {{BASE_URL}}/setup.mjs to a private temporary directory, with a finite
-   timeout and no redirects. Inspect it before running. Its header names the public
-   source revision it was built from and the command that rebuilds the same file.
-   Use commands appropriate to the current shell; stop if installation or download
-   fails.
-   Make the temporary directory private with native filesystem permissions.
+3. Use the installed `morty` CLI. If it is not installed, run it with
+   `npx --yes @morty-build/cli@latest` instead of `morty` in the commands below.
+   Do not download or run a separate setup script. Stop if installation fails.
 4. Run the following command with real values and shell-appropriate quoting.
-   Use the original absolute working directory, not the download directory.
+   Use the original absolute working directory.
 
 ```text
-node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id>
+morty setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id>
 ```
 
 The browser that opens the link keeps access for one day. Only when the user asks for a different period, add
 `--device-access 1h`, `--device-access 7d`, or `--device-access 30d`; nothing longer than 30 days is available.
 
-The script keeps this computer's Morty identity in the operating system's local
+The CLI keeps this computer's Morty identity in the operating system's local
 application data directory for the current user, which is not synced to other
 computers, and protects it using filesystem permissions. Each computer has its own.
 Do not copy it to a repository, a synced folder, or another computer.
-The script reuses the saved identity and Machine for this origin and reconnects an
+The CLI reuses the saved identity and Machine for this origin and reconnects an
 active managed connection when possible. If the saved Machine's Runtime is no
 longer managed here, setup stops with `PROJECT_REPLACEMENT_REQUIRED` before replacing
 anything. Explain in the user's language: **I cannot find this computer's original
@@ -95,7 +92,7 @@ Keep saved credentials private. Do not output tokens, pairing tickets, or privat
 configuration; only the ready handoff URL is intended for the user.
 
 Managing previously shared access:
-- When the user asks to revoke all previously shared access from this machine, run `node <setup.mjs> revoke-all-access`, as the same user on the same computer as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the deployment-owned setup download as above; never put local credentials in command arguments or output.
+- When the user asks to revoke all previously shared access from this machine, run `morty revoke-all-access`, as the same user on the same computer as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the same CLI installation as setup; never put local credentials in command arguments or output.
 - This command uses the original locally saved identity, revokes previous sharing links and all other Morty credentials for its current Project (including recovery credentials), and replaces this computer's own local credential, so a copy of it stops working too; setup saves the replacement itself, so new sharing links can still be created. It does not stop the daemon or its tasks. It also closes chat windows already open with the revoked access. If it fails with `SESSION_ACCESS_REVOCATION_UNAVAILABLE`, the access is already revoked but windows already open elsewhere are not closed yet; run the same command again, which is safe and finishes closing them.
 - Report success only after `status: "access_revoked"`. A missing local identity is an error; do not run setup or create a new identity to conceal it. This command is scoped to the Project saved in this local configuration, not other installations; a Project that setup replaced already ended everything shared from it.
 
