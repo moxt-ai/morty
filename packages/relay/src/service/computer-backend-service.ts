@@ -2,6 +2,7 @@ import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import type {
     AgentSettingsDiscoverCommand,
     NativeSessionTarget,
+    SessionAccessHolder,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
 import { hashSecret, type RelayContext, SessionControl } from "@morty-build/relay-core";
@@ -64,12 +65,16 @@ export class ComputerBackendService {
                 ),
             target,
         );
-    readonly issueSessionAccess = async (target: NativeSessionTarget, lifetime: number, signal: AbortSignal) =>
-        await this.sessionAccess.issue({ kind: "session", computerId: this.computerId, target }, lifetime, signal);
-    readonly revokeSessionAccess = async (signal: AbortSignal) =>
-        await this.sessionAccess.revoke(
-            this.computerId,
-            { disconnect: this.context.gateways.channelGateway.disconnectSessionViewers },
+    readonly issueSessionAccess = async (
+        target: NativeSessionTarget,
+        lifetime: number,
+        holder: SessionAccessHolder,
+        signal: AbortSignal,
+    ) =>
+        await this.sessionAccess.issue(
+            { kind: "session", computerId: this.computerId, target },
+            lifetime,
+            holder,
             signal,
         );
     readonly openHost = async (signal: AbortSignal): Promise<WebSocket> => {

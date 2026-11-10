@@ -68,3 +68,18 @@ test("Given unavailable abuse protection, When a visitor asks for a new identity
         },
     });
 });
+
+test("Given an invalid user credential, When a visitor tries to pair a Machine, Then pairing is refused without exposing credential details", async () => {
+    const identity = await fixture.createAnonymousUser();
+    const token = `${identity.token.slice(0, -1)}${identity.token.endsWith("A") ? "B" : "A"}`;
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/pairing`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ idempotencyKey: "security-error-sanitization" }),
+        }),
+        fixture.environment(),
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
+});

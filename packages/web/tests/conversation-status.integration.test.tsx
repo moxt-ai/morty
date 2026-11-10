@@ -1,3 +1,4 @@
+import { queryAllByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { refreshSessions, sendPrompt } from "./infra/application-scenario.ts";
@@ -135,4 +136,38 @@ test("Given an earlier turn failed and a later one completed, When I return to t
         expect(document.body.textContent).toContain("The controlled Agent rejected this turn.");
     });
     await app.close();
+});
+
+test("Given a conversation I left while it was answering, When I return, watch the reply finish and leave again, Then the sidebar shows it neither working nor unread", {
+    timeout: 30_000,
+}, async () => {
+    const heldPrompt = "hold after first delta";
+    const app = await createTestApp({ connectAgent: true });
+    onTestFinished(() => app.close());
+    const { daemon } = app;
+    if (daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await sendPrompt(app, await readyComposer(app), heldPrompt);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBe("Session working"));
+
+    const entry = directoryEntry(app, heldPrompt);
+    if (entry === undefined) {
+        throw new Error("Expected the answering conversation in the directory");
+    }
+    await app.user.click(entry);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply(heldPrompt, { outcome: "complete", output: [] });
+    await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBeNull());
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(document.body.textContent).not.toContain("Partial reply"));
+    expect(entryStatus(app, heldPrompt)).toBeNull();
+    await refreshSessions(app);
+    await app.waitForView(() =>
+        expect(queryAllByRole(document.body, "button", { name: "Refreshing sessions" })).toHaveLength(0),
+    );
+    expect(entryStatus(app, heldPrompt)).toBeNull();
 });

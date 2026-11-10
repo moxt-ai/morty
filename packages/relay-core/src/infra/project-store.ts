@@ -44,8 +44,6 @@ export interface ClaimPairing {
 
 export interface RevokeRuntime {
     readonly computerId: string;
-    /** The owner credential that revoked the Runtime; null when the Relay revoked it for a reused credential. */
-    readonly ownerId: string | null;
     readonly now: number;
     readonly actorKind: string;
     readonly actorId: string;
@@ -64,7 +62,8 @@ export interface ProjectStore {
         agents: string,
         signal: AbortSignal,
     ) => Promise<boolean>;
-    readonly isRuntimeActive: (computerId: string, signal: AbortSignal) => Promise<boolean>;
+    /** The pairing generation whose daemon may act for the computer now; null while none may. */
+    readonly readActiveGeneration: (computerId: string, signal: AbortSignal) => Promise<number | null>;
     readonly readRuntime: (computerId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     readonly listRuntimes: (signal: AbortSignal) => Promise<readonly RuntimeChannelRow[]>;
     /**
@@ -83,14 +82,10 @@ export interface ProjectStore {
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
     /**
-     * Revokes a Runtime, and with it the Session credentials issued until then, and returns its committed revocation;
-     * null when the Project has no such Runtime.
+     * Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. Session
+     * credentials carry their holder's access, not the Runtime's, so they are unaffected.
      */
     readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
-    /** Revokes the Session credentials issued until `revokedAt`; returns the latest revocation, which never moves back. */
-    readonly revokeSessionAccess: (revokedAt: number, signal: AbortSignal) => Promise<number>;
-    /** The latest time the computer revoked its Session credentials, by either operation; null when it never did. */
-    readonly readSessionAccessRevocation: (signal: AbortSignal) => Promise<number | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
     readonly findCredential: (
         credential: ComputerIdentityCredential,

@@ -1,22 +1,14 @@
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import {
-    DurableObjectDatabaseAdapter,
-    DurableObjectSqlDatabase,
-    runtimeConnectionDurableObjectMigrations,
-} from "@morty-build/relay-core";
-import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import { daemonCredential } from "@morty-build/relay-core/schema/project-do";
-import { eq } from "drizzle-orm";
+import { DurableObjectDatabaseAdapter } from "@morty-build/relay-core";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { hashPairingCredential, hashSecret } from "../../relay-core/src/entity/pairing/pairing.ts";
+import { hashPairingCredential } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
-import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
+import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
@@ -66,17 +58,6 @@ async function project(_name = "Runtime pairing") {
     const create = (idempotencyKey: string) => management("POST", { idempotencyKey });
     return {
         computerId,
-        issueSession: async () =>
-            Response.json(await issueSession(computerId, { harness: "codex", sessionId: "revoke-test" }), {
-                status: 201,
-            }),
-        checkSession: (token: string) =>
-            request(
-                `/v1/computers/${computerId}/harnesses/codex/sessions/revoke-test/live-event-subscription-target`,
-                "GET",
-                undefined,
-                token,
-            ),
         create,
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
@@ -132,7 +113,7 @@ it("Given pending reservations at capacity, When their deadline passes without e
     expect(await responseJson(await app.status(first), 200)).toEqual({ status: "expired" });
     expect(await responseJson(await app.claim(first), 400)).toMatchObject({ error: { code: "invalid_pairing_code" } });
     expect(await app.pair("replacement")).toMatchObject({ computerId: app.computerId });
-    expect((await app.create("reservation-0")).status).toBe(429);
+    expect(await app.pair("reservation-0")).toEqual(first);
 });
 
 it("Given simultaneous retries of one creation, When they commit, Then they share one reservation and occupy the single daemon slot", async () => {
@@ -320,144 +301,19 @@ it("Given separate Projects, When they use the same pairing idempotency key, The
     expect(await second.pair("same-key")).toEqual(right);
 });
 
-it("Given stored Relay control host leases beside other Channel credentials, When the Project upgrades, Then only the leases are removed", async () => {
-    const app = await project();
-    const remaining = await app.storage(async (storage) => {
-        await storage.deleteAll();
-        const upgrade = computerDurableObjectMigrations.findIndex(
-            (migration) => migration.name === "0008_remove_control_host_leases.sql",
-        );
-        applyDurableObjectMigrations(storage, computerDurableObjectMigrations.slice(0, upgrade));
-        const database = new DurableObjectSqlDatabase(storage);
-        const credential = (credentialId: string, authority: "owner" | "linked", sourceGrantId: string | null) =>
-            database.run(
-                `INSERT INTO channel_host_credentials
-                    (credential_id, channel_id, token_hash, authority, created_at, last_used_at, source_grant_id)
-                 VALUES (?, 'channel-leases', ?, ?, 1, 1, ?)`,
-                [credentialId, `hash-${credentialId}`, authority, sourceGrantId],
-            );
-        credential("ctl_lease", "linked", null);
-        credential("ctlX_owner", "owner", null);
-        credential("lnk_device", "linked", "grant-device");
-        applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
-        applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
-        return database.query("SELECT credential_id FROM channel_host_credentials ORDER BY credential_id");
-    });
-    expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
-});
-
-it("Given a Runtime and a Session credential issued before its owner revoked it, When the computer is paired again, Then neither the old daemon credential nor that Session credential is accepted", async () => {
+it("Given a Runtime its owner revoked, When the computer is paired again, Then the old daemon credential is not accepted", async () => {
     const app = await project();
     const original = await app.pair("original");
     const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });
     const old = v.parse(credential, await responseJson(await app.claim(original), 200));
     expect(old.computerId).toBe(original.computerId);
-    const { credential: sessionToken } = v.parse(
-        v.object({ credential: v.string() }),
-        await responseJson(await app.issueSession(), 201),
-    );
-    expect((await app.checkSession(sessionToken)).status).toBe(200);
     expect((await app.revoke(original)).status).toBe(204);
     const replacement = await app.pair("replacement");
     const current = v.parse(credential, await responseJson(await app.claim(replacement), 200));
     expect(current.computerId).toBe(replacement.computerId);
     expect(current.computerId).toBe(old.computerId);
     expect(current.runtimeCredential).not.toBe(old.runtimeCredential);
-    expect((await app.checkSession(sessionToken)).status).toBe(401);
     expect((await app.publish(original, old.runtimeCredential)).status).toBe(401);
     expect((await app.publish(replacement, old.runtimeCredential)).status).toBe(401);
     expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
-});
-
-it.each(["", "morty-pairing-v1\0"])(
-    "Given a retained Runtime credential from retired domain %j, When it reaches Morty authorization, Then it is rejected while project records remain and new pairing succeeds",
-    async (retiredDomain) => {
-        const app = await project();
-        const oldPairing = await app.pair("pre-cutover-runtime");
-        const old = v.parse(
-            v.object({ runtimeCredential: v.string() }),
-            await responseJson(await app.claim(oldPairing), 200),
-        );
-        await app.storage(async (storage) => {
-            const database = new DurableObjectSqlDatabase(storage);
-            database.orm
-                .update(daemonCredential)
-                .set({ tokenHash: await hashSecret(`${retiredDomain}${old.runtimeCredential}`) })
-                .where(eq(daemonCredential.computerId, oldPairing.computerId))
-                .run();
-        });
-        expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);
-        expect(await responseJson(await app.status(oldPairing), 200)).toMatchObject({ status: "paired" });
-        expect((await app.revoke(oldPairing)).status).toBe(204);
-        const replacement = await app.pair("morty-generation-two");
-        const current = v.parse(
-            v.object({ runtimeCredential: v.string() }),
-            await responseJson(await app.claim(replacement), 200),
-        );
-        expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
-    },
-);
-
-it("migrates the registered computer and independent audit IDs together", async () => {
-    const app = await project();
-    await app.storage(async (storage) => {
-        await storage.deleteAll();
-        const cutover = computerDurableObjectMigrations.findIndex(
-            (entry) => entry.name === "0013_computer_storage.sql",
-        );
-        expect(cutover).toBeGreaterThan(0);
-        applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
-        applyDurableObjectMigrations(storage, computerDurableObjectMigrations.slice(0, cutover));
-        storage.sql.exec(`
-            INSERT INTO runtimes (computer_id, created_at) VALUES ('machine', 10);
-            INSERT INTO runtime_registrations (computer_id, claimed_at, machine_name, workspace_name, agents_json)
-                VALUES ('machine', 11, 'laptop', 'work', '[]');
-            INSERT INTO runtime_pairing_audit_events (audit_id,computer_id,actor_kind,actor_id,action,details_json,recorded_at)
-                VALUES ('same','machine','runtime','machine','runtime_pairing.claimed','{}',11);
-            INSERT INTO platform_audit_events (audit_id,project_id,app_id,actor_kind,actor_id,actor_ref,action,subject_id,outcome,details_json,recorded_at)
-                VALUES ('same','machine','service','application','owner','owner','project.created','machine','succeeded','{}',10);
-        `);
-        applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
-        const migrated = storage.sql.exec("SELECT * FROM computer").one();
-        expect(migrated).toMatchObject({
-            computer_id: "machine",
-            claimed_at: 11,
-            machine_name: "laptop",
-            workspace_name: "work",
-            agents_json: "[]",
-        });
-        expect(
-            storage.sql.exec("SELECT category FROM audit_events WHERE audit_id='same' ORDER BY category").toArray(),
-        ).toEqual([{ category: "computer_management" }, { category: "pairing" }]);
-    });
-});
-
-it("keeps the newer epoch online when the previous daemon closes after reconnect", async () => {
-    const app = await project();
-    const paired = await app.pair("epoch-fencing");
-    await app.claim(paired);
-    await app.storage(async (storage) => {
-        const { RuntimeConnectionStorage } = await import("../../relay-core/src/storage/runtime-connection-storage.ts");
-        const { RuntimeConnectionService } = await import(
-            "../../relay-core/src/service/channel/runtime-connection-service.ts"
-        );
-        const database = new RuntimeConnectionStorage(new DurableObjectSqlDatabase(storage));
-        const connections = new RuntimeConnectionService(database);
-        const first = connections.prepare(paired.computerId);
-        expect(first.kind).toBe("ready");
-        if (first.kind !== "ready") {
-            throw new Error("Connection was refused");
-        }
-        connections.connected(first.identity, 100);
-        const second = connections.prepare(paired.computerId);
-        if (second.kind !== "ready") {
-            throw new Error("Reconnect was refused");
-        }
-        expect(second.identity.connectionEpoch).toBe(first.identity.connectionEpoch + 1);
-        connections.connected(second.identity, 200);
-        connections.disconnected(first.identity, 300);
-        expect(connections.isCurrent(first.identity)).toBe(false);
-        expect(connections.isCurrent(second.identity)).toBe(true);
-        expect(connections.current()?.state).toBe("online");
-    });
 });

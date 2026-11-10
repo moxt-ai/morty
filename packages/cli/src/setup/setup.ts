@@ -1479,7 +1479,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             await request(context, `/chat/computers/${context.identity.computerId}/workspace`, {});
             return false;
         } catch (cause) {
-            if (errorCode(cause) === "RUNTIME_REVOKED") {
+            if (errorCode(cause) === "runtime_revoked") {
                 return true;
             }
             throw cause;

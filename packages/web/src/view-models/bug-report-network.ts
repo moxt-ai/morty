@@ -88,9 +88,7 @@ export async function collectNetworkDiagnostics(
         measurements: {
             browserMorty: latency(browserMorty),
             mortyRuntime:
-                hops.kind === "available"
-                    ? latency({ kind: "available", value: hops.value.mortyRuntimeLatencyMs })
-                    : hops,
+                hops.kind === "available" ? latency({ kind: "available", value: hops.value.runtimeLatencyMs }) : hops,
         },
     };
 }

@@ -14,12 +14,15 @@ interface Execution {
     readonly commandId: string;
     readonly phase: ExecutionPhase;
     readonly cancellation: Cancellation;
+    /** Aborts the execution's preparation; a cancellation stops a preparing execution through it. */
+    readonly preparation: AbortController;
 }
 
 /**
  * The single authority for which command each Session is executing and in what phase. Every reader asks it: steering
  * joins only a started execution, the Agent process may change only while no execution holds the Session, a
- * cancellation stops only the execution it names, and the Session's working/idle status is derived from it.
+ * cancellation stops only the execution it names, and the Session's working/idle status is derived from it. From the
+ * moment an execution begins, its cancellation is recorded here and nowhere else.
  *
  * Contract: admission is the only owner of whether a Session is busy, so `begin` requires an idle Session. Each
  * transition names its command and is ignored for any other. All operations are synchronous, so a check and the
@@ -39,6 +42,10 @@ export class ActiveExecutions {
     };
 
     readonly isBusy = (sessionTarget: NativeSessionTarget): boolean => this.#entries.has(sessionTarget);
+
+    /** Whether the Session began executing the command and has not yet released it. */
+    readonly executes = (sessionTarget: NativeSessionTarget, commandId: string): boolean =>
+        this.#entries.get(sessionTarget)?.commandId === commandId;
 
     /** A steering prompt can join only the named execution while the Agent holds it and no one is stopping it. */
     readonly acceptsSteering = (sessionTarget: NativeSessionTarget, targetCommandId: string): boolean => {
@@ -66,12 +73,20 @@ export class ActiveExecutions {
         return cancellation?.kind === "requested" ? cancellation.completion : undefined;
     };
 
-    readonly begin = (sessionTarget: NativeSessionTarget, commandId: string): void => {
+    /** Begins the command's execution and returns the signal its preparation runs under. */
+    readonly begin = (sessionTarget: NativeSessionTarget, commandId: string): AbortSignal => {
         if (this.#entries.has(sessionTarget)) {
             throw new Error("A Session executes one command at a time");
         }
-        this.#entries.set(sessionTarget, { commandId, phase: "preparing", cancellation: { kind: "none" } });
+        const preparation = new AbortController();
+        this.#entries.set(sessionTarget, {
+            commandId,
+            phase: "preparing",
+            cancellation: { kind: "none" },
+            preparation,
+        });
         this.#statusChanged(sessionTarget, this.status(sessionTarget));
+        return preparation.signal;
     };
 
     /** The Agent receives the prompt. A cancelled execution must not start. */
@@ -94,8 +109,9 @@ export class ActiveExecutions {
     };
 
     /**
-     * Records a cancellation of the named execution and asks `stop` to end it once. Another command's cancellation,
-     * or one for an idle Session, has nothing to stop. A cancelled execution that has not started never starts.
+     * Records a cancellation of the named execution at once and asks `stop` to end it once. Another command's
+     * cancellation, or one for an idle Session, has nothing to stop. A cancelled execution that has not started never
+     * starts, and its preparation is aborted.
      */
     readonly cancel = (
         sessionTarget: NativeSessionTarget,
@@ -114,6 +130,9 @@ export class ActiveExecutions {
             ...execution,
             cancellation: { kind: "requested", completion: completion.promise },
         });
+        if (execution.phase === "preparing") {
+            execution.preparation.abort(new Error("The Agent turn was cancelled before it started"));
+        }
         void (async () => await stop())().then(completion.resolve, completion.reject);
         return completion.promise;
     };

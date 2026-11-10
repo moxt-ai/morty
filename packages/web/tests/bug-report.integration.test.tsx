@@ -394,6 +394,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
             online: navigator.onLine,
             measurements: {
                 browserMorty: { kind: "unavailable" },
+                mortyRuntime: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
             },
         });
         expect(report.network).not.toHaveProperty("vpn");

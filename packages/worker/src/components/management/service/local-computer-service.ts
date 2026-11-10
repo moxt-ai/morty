@@ -19,6 +19,7 @@ import {
     type NativeEventPageRequest,
     type NativeSessionRequest,
     type NativeSessionTarget,
+    type SessionAccessHolder,
     type SessionReadyEvent,
 } from "@morty-build/client/protocol";
 import { isHttpError } from "@morty-build/relay-core";
@@ -46,32 +47,6 @@ export type NewChatSessionInput = {
         readonly valueType: "select" | "boolean";
     }[];
 };
-
-function runtimeSetupMessage(code: string): string {
-    switch (code) {
-        case "native_session_not_found":
-            return "Morty could not complete Runtime setup. Cause: The native session was not found.";
-        case "session_not_found":
-            return "Morty could not complete Runtime setup. Cause: The session was not found.";
-        case "local_authorization_failed":
-            return "Morty could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
-        case "session_configuration_conflict":
-            return "The selected Agent settings could not all be applied. Review the settings and try again.";
-        case "session_close_timeout":
-            return "The agent did not stop in time, so the session is still open. Try again.";
-        default:
-            return "Morty could not complete Runtime setup.";
-    }
-}
-
-function chatRuntime(runtime: Awaited<ReturnType<ComputerBackendService["agents"]>>) {
-    return {
-        computerId: runtime.computerId,
-        machineName: runtime.machineName,
-        online: runtime.online,
-        agents: runtime.agents.map(({ harness, label }) => ({ harness, label })),
-    };
-}
 
 /** Application use cases call the services in their own ComputerRelay, not an HTTP client or another Worker. */
 export class LocalComputerService {
@@ -121,17 +96,8 @@ export class LocalComputerService {
             if (deadline.signal.aborted) {
                 throw new ComputerManagementError("RELAY_TIMEOUT", "Morty did not respond in time.", 504, { cause });
             }
-            if (cause instanceof ComputerManagementError) {
+            if (cause instanceof ComputerManagementError || isHttpError(cause)) {
                 throw cause;
-            }
-            if (isHttpError(cause)) {
-                const error = cause.toHttpJson();
-                throw new ComputerManagementError(
-                    error.body.error.code === "runtime_revoked" ? "RUNTIME_REVOKED" : error.body.error.code,
-                    runtimeSetupMessage(error.body.error.code),
-                    error.status,
-                    { cause },
-                );
             }
             throw new ComputerManagementError("RELAY_UNAVAILABLE", "Morty could not complete Runtime setup.", 502, {
                 cause,
@@ -150,9 +116,9 @@ export class LocalComputerService {
     readonly revokeRuntime = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.revokeRuntime(signal), 15_000);
     readonly chatRuntimes = async (computerId: string, signal: AbortSignal) =>
-        (await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000)).map(chatRuntime);
+        await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000);
     readonly getChatRuntimeAgents = async (computerId: string, signal: AbortSignal) =>
-        chatRuntime(await this.#run(computerId, signal, (computer, signal) => computer.agents(signal), 15_000));
+        await this.#run(computerId, signal, (computer, signal) => computer.agents(signal), 15_000);
     readonly readRuntimeDiagnostics = async (computerId: string, signal: AbortSignal) =>
         await this.#run(
             computerId,
@@ -163,7 +129,6 @@ export class LocalComputerService {
         );
     readonly measureRuntimeLatency = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.latency(signal), 15_000);
-
     readonly openChatRuntimeHost = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.openHost(signal), 20_000);
     readonly listChatDirectory = async (computerId: string, directory: string, signal: AbortSignal) =>
@@ -230,9 +195,10 @@ export class LocalComputerService {
         session: ChatSessionTarget,
         ready: SessionReadyEvent,
         lifetime: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) => ({
-        ...(await computer.issueSessionAccess(session.target, lifetime, signal)),
+        ...(await computer.issueSessionAccess(session.target, lifetime, holder, signal)),
         endpoint: this.configuration().origin,
         computerId,
         target: session.target,
@@ -245,15 +211,17 @@ export class LocalComputerService {
         session: ChatSessionTarget,
         ready: SessionReadyEvent,
         lifetime: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
         await this.#run(computerId, signal, (computer, signal) =>
-            this.#sessionAccess(computer, computerId, session, ready, lifetime, signal),
+            this.#sessionAccess(computer, computerId, session, ready, lifetime, holder, signal),
         );
     readonly openChatSession = async (
         computerId: string,
         input: ExistingChatSessionInput,
         lifetime: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
         await this.#run(computerId, signal, async (computer, signal) => {
@@ -275,7 +243,7 @@ export class LocalComputerService {
                 ),
                 input.target,
             );
-            return await this.#sessionAccess(computer, computerId, input, ready, lifetime, signal);
+            return await this.#sessionAccess(computer, computerId, input, ready, lifetime, holder, signal);
         });
     readonly listChatSessions = async (computerId: string, limit: number, signal: AbortSignal) =>
         await this.#run(
@@ -376,10 +344,11 @@ export class LocalComputerService {
         computerId: string,
         target: NativeSessionTarget,
         lifetime: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
         await this.#run(computerId, signal, async (computer, signal) => ({
-            ...(await computer.issueSessionAccess(target, lifetime, signal)),
+            ...(await computer.issueSessionAccess(target, lifetime, holder, signal)),
             endpoint: this.configuration().origin,
         }));
     readonly nativeSessions = async (

@@ -77,9 +77,14 @@ export {
 export type {
     SessionAccessClaims,
     SessionAccessCredential,
+    SessionAccessHolder,
 } from "./session/access/index.ts";
 
-export { decodeSessionAccessCredential } from "./session/access/index.ts";
+export {
+    decodeSessionAccessCredential,
+    decodeSessionAccessHolder,
+    isSessionAccessHolder,
+} from "./session/access/index.ts";
 
 export type {
     AgentCatalogDiscoverCommand,

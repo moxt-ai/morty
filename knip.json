@@ -5,14 +5,15 @@
         ".": {
             "entry": [
                 "drizzle/*.config.ts",
+                "drizzle/retained-relay-*.ts",
                 "vite.web-dev.config.ts",
                 ".agents/skills/*/scripts/*.{ts,cjs}",
-                "deployment/relay-entry.mjs",
+                "deployment/verify-session-access.ts",
                 "scripts/prepare-claude-desktop.ts"
             ]
         },
         "packages/e2e": {
-            "entry": ["*.e2e.test.ts", "fixtures/local-relay-worker.ts", "release-acceptance.mjs"]
+            "entry": ["*.e2e.test.ts", "release-acceptance.mjs"]
         },
         "packages/web": {
             "entry": ["src/main.tsx", "tests/**/*.integration.test.tsx", "src/components/ui/*.tsx"]

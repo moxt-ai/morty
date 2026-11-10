@@ -1,5 +1,6 @@
 import {
     decodeIdentifier,
+    decodeSessionAccessCredential,
     decodeSessionCapabilities,
     decodeTurn,
     type Identifier,
@@ -81,8 +82,10 @@ export class MortySessionAccess {
     constructor(value: unknown) {
         const resource = record(value, "Session access");
         this.credential = stringField(resource, "credential", 2_048);
-        if (!/^msession_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/u.test(this.credential)) {
-            throw invalidResponse("The Session credential is invalid");
+        try {
+            decodeSessionAccessCredential(this.credential);
+        } catch (cause) {
+            throw new MortyProtocolError("The Session credential is invalid", { cause });
         }
         this.computerId = identifierField(resource, "computerId");
         const target = readNativeSessionTarget(resource["target"]);
@@ -91,15 +94,6 @@ export class MortySessionAccess {
         }
         this.target = target;
         this.expiresAt = validateTimestamp(stringField(resource, "expiresAt", 128), "expiresAt");
-    }
-}
-
-/** A revocation of a Project's Session credentials: every one issued no later than `revokedThrough`. */
-export class MortySessionAccessRevocation {
-    readonly revokedThrough: string;
-    constructor(value: unknown) {
-        const resource = record(value, "Session access revocation");
-        this.revokedThrough = validateTimestamp(stringField(resource, "revokedThrough", 128), "revokedThrough");
     }
 }
 

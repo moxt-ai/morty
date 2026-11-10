@@ -3,7 +3,7 @@ export interface BrowserNetworkOperations {
 }
 export interface ServerNetworkOperations {
     readonly readNetwork: (signal: AbortSignal) => Promise<{
-        readonly mortyRuntimeLatencyMs: number;
+        readonly runtimeLatencyMs: number;
     }>;
 }
 export type NetworkMeasurement =

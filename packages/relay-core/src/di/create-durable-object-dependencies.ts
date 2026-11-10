@@ -48,7 +48,7 @@ function createRuntimeRelayDependencies(cx: {
                 return "revoked";
             }
             if (
-                !(await service.isRuntimeActive(identity, signal)) ||
+                (await service.activeGeneration(identity, signal)) === null ||
                 !(await cx.gateways.projectCredentials.grants(identity.computerId, PROJECT_HOST_PERMISSIONS, signal))
             ) {
                 return "revoked";
@@ -63,16 +63,16 @@ function createRuntimeRelayDependencies(cx: {
         authorizeViewer: async (identity, signal) => {
             return (await cx.gateways.projectCredentials.grantsSessionCredential(
                 identity.computerId,
-                identity.credential.issuedAt,
+                identity.credential.holder,
                 [ProjectPermission.SessionRead],
                 signal,
             ))
                 ? "granted"
                 : "revoked";
         },
-        isRuntimeActive: async (identity, signal) => {
+        activeGeneration: async (identity, signal) => {
             const service = await credentialService(new ComputerScope(identity.computerId), signal);
-            return service !== null && (await service.isRuntimeActive(identity, signal));
+            return service === null ? null : await service.activeGeneration(identity, signal);
         },
     };
     const services = {

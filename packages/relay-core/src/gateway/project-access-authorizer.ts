@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import type { ProjectAccessContext, ProjectPermission } from "../entity/authentication/project-authentication.ts";
 
 /** Internal authorization of an already selected computer at the execution boundary. */
@@ -20,13 +21,13 @@ export interface ProjectCredentialAuthority {
         signal: AbortSignal,
     ) => Promise<boolean>;
     /**
-     * The host's current answer for a Session credential the project credential issued at `issuedAt`, which opened a
-     * live Session view: the same rule its requests apply, so revoking the credential or the Project's Session access
-     * ends the view.
+     * The host's current answer for a Session credential the project credential issued for `holder`, which opened a
+     * live Session view: the same rule its requests apply, so revoking the project credential or ending the holder's
+     * access ends the view.
      */
     readonly grantsSessionCredential: (
         computerId: string,
-        issuedAt: number,
+        holder: SessionAccessHolder,
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,
     ) => Promise<boolean>;

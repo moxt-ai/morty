@@ -3,7 +3,6 @@ import type { SqlDatabase } from "../infra/sql-database.ts";
 import { ChannelCredentialStorage } from "./channel-credential-storage.ts";
 import { credentialMatches } from "./pairing-identity-storage.ts";
 import { RuntimeDirectoryStorage } from "./runtime-directory-storage.ts";
-import { SessionAccessRevocationStorage } from "./session-access-revocation-storage.ts";
 
 /**
  * A Project's operations over its own SQLite storage. Only the Project's storage owner constructs this; each
@@ -14,21 +13,19 @@ export class SqliteProjectStore implements ProjectStore {
     readonly #database: SqlDatabase;
     readonly #runtimes: RuntimeDirectoryStorage;
     readonly #credentials: ChannelCredentialStorage;
-    readonly #sessionAccessRevocations: SessionAccessRevocationStorage;
 
     constructor(computerId: string, database: SqlDatabase) {
         this.#computerId = computerId;
         this.#database = database;
         this.#runtimes = new RuntimeDirectoryStorage(computerId, database);
         this.#credentials = new ChannelCredentialStorage(database);
-        this.#sessionAccessRevocations = new SessionAccessRevocationStorage(computerId, database);
     }
 
     readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (computerId, tokenHash, agents, signal) =>
         (await this.#runtimes.updateAgents(computerId, tokenHash, agents, signal)).meta.changes === 1;
 
-    readonly isRuntimeActive: ProjectStore["isRuntimeActive"] = async (computerId, signal) =>
-        computerId === this.#computerId && (await this.#credentials.readActiveRuntime({ computerId }, signal));
+    readonly readActiveGeneration: ProjectStore["readActiveGeneration"] = async (computerId, signal) =>
+        computerId === this.#computerId ? await this.#credentials.readActiveGeneration({ computerId }, signal) : null;
 
     readonly readRuntime: ProjectStore["readRuntime"] = async (computerId, signal) =>
         await this.#runtimes.readRuntime(computerId, signal);
@@ -95,12 +92,6 @@ export class SqliteProjectStore implements ProjectStore {
 
     readonly revokeRuntime: ProjectStore["revokeRuntime"] = async (value, signal) =>
         await this.#runtimes.revokeRuntime(value, signal);
-
-    readonly revokeSessionAccess: ProjectStore["revokeSessionAccess"] = async (revokedAt, signal) =>
-        await this.#sessionAccessRevocations.record(revokedAt, signal);
-
-    readonly readSessionAccessRevocation: ProjectStore["readSessionAccessRevocation"] = async (signal) =>
-        await this.#sessionAccessRevocations.read(signal);
 
     readonly findCredential: ProjectStore["findCredential"] = async (credential, signal) =>
         await credentialMatches(this.#database, credential, signal);

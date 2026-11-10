@@ -45,19 +45,6 @@ export async function parseJsonBody(
     return value;
 }
 
-export function readString(
-    value: Readonly<Record<string, unknown>>,
-    key: string,
-    maximumLength = 128,
-    allowEmpty = false,
-): string {
-    const field = value[key];
-    if (typeof field !== "string" || field.length > maximumLength || (!allowEmpty && field.length === 0)) {
-        throw new PairingDirectoryError("invalid_request", `The ${key} field is invalid`);
-    }
-    return field;
-}
-
 export function bearerToken(request: Request): string {
     const authorization = request.headers.get("authorization") ?? "";
     if (!authorization.startsWith("Bearer ")) {

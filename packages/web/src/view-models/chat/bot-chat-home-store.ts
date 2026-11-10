@@ -707,7 +707,7 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    if (cause instanceof CloudApiError && cause.code === "RUNTIME_REVOKED") {
+                    if (cause instanceof CloudApiError && cause.code === "runtime_revoked") {
                         // Setup on that computer pairs the Machine with a new Runtime; the page loads again once the
                         // Machine's binding names it.
                         set((current) => ({

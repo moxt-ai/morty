@@ -129,6 +129,9 @@ export async function createResponseLossProxy(upstream: string) {
                 ...(incoming.headers.authorization === undefined
                     ? {}
                     : { authorization: incoming.headers.authorization }),
+                ...(incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === undefined
+                    ? {}
+                    : { [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] }),
             },
         });
         sockets.add(remote);

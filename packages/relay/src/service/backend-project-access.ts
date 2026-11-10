@@ -1,4 +1,4 @@
-import { RELAY_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
+import { RELAY_APP_PROJECT_PERMISSIONS, type SessionAccessHolder } from "@morty-build/client/protocol";
 import {
     AuditActor,
     ComputerScope,
@@ -9,7 +9,6 @@ import {
     ProjectPermission,
 } from "@morty-build/relay-core";
 import { RelayAuditActorKind } from "../entity/computer-management.ts";
-import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 
 const permissions = new Set(RELAY_APP_PROJECT_PERMISSIONS.map(ProjectPermission.named));
@@ -45,14 +44,14 @@ export class BackendProjectAccess implements ProjectCredentialAuthority {
     readonly authorizeSession = async (
         computerId: string,
         requiredPermissions: readonly ProjectPermission[],
-        issuedAt: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => {
-        const [access, revokedAt] = await Promise.all([
+        const [access, holdsAccess] = await Promise.all([
             this.authorize(computerId, requiredPermissions, signal),
-            this.storage.readSessionAccessRevocation(computerId, signal),
+            this.storage.holdsAccess(computerId, holder, signal),
         ]);
-        if (revokedAt !== null && issuedAt <= sessionAccessRevokedThrough(revokedAt)) {
+        if (!holdsAccess) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session credential has been revoked");
         }
         return access;
@@ -63,10 +62,10 @@ export class BackendProjectAccess implements ProjectCredentialAuthority {
 
     readonly grantsSessionCredential: ProjectCredentialAuthority["grantsSessionCredential"] = async (
         computerId,
-        issuedAt,
+        holder,
         required,
         signal,
-    ) => await this.#granted(() => this.authorizeSession(computerId, required, issuedAt, signal));
+    ) => await this.#granted(() => this.authorizeSession(computerId, required, holder, signal));
 
     readonly #granted = async (authorize: () => Promise<ProjectAccessContext>): Promise<boolean> => {
         try {

@@ -23,18 +23,6 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             context.set("scope", new ComputerScope(validateIdentifier(context.req.param("computerId"), "computer_id")));
             await next();
         })
-        .delete("/session-viewers/revoke", (context) => {
-            const value = context.req.header("x-morty-session-access-revoked-through");
-            const revokedThrough = Number(value);
-            if (value === undefined || !Number.isSafeInteger(revokedThrough) || revokedThrough < 0) {
-                return Response.json(
-                    { error: { code: "invalid_request", message: "A verified Session revocation is required" } },
-                    { status: 400 },
-                );
-            }
-            runtime.revokeSessionViewers(context.var.scope, revokedThrough);
-            return new Response(null, { status: 204 });
-        })
         .delete("/runtime/revoke", async (context) => {
             await runtime.revokeRuntime(context.var.scope, context.req.raw.signal);
             return new Response(null, { status: 204 });
@@ -44,23 +32,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return Response.json({ online: runtime.isOnline(context.var.scope.computerId) });
         })
         .get("/daemon", webSocketUpgrade, async (context) => {
-            const result = await runtime.acceptDaemon(context.var.scope, context.req.raw.signal);
-            switch (result.kind) {
-                case "accepted":
-                    return result.response;
-                case "revoked":
-                    return revoked();
-                case "conflict":
-                    return Response.json(
-                        {
-                            error: {
-                                code: "computer_identity_conflict",
-                                message: "The computer is assigned to another Runtime",
-                            },
-                        },
-                        { status: 409 },
-                    );
-            }
+            return admitted(await runtime.acceptDaemon(context.var.scope, context.req.raw.signal));
         })
         .get("/host", webSocketUpgrade, async (context) => {
             const nativeRequestId = context.req.query("nativeRequestId");

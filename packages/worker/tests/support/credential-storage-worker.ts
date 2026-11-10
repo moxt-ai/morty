@@ -33,20 +33,21 @@ export default {
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
-        if (new URL(request.url).pathname === "/revoke-runtime" && request.method === "DELETE") {
-            const computerId = new URL(request.url).searchParams.get("computerId");
-            if (computerId === null) {
-                throw new Error("Missing fixture computer");
-            }
+        if (request.url === "https://computer.internal/revoked-runtime" && request.method === "POST") {
+            const computerId = await request.text();
             await this.revokeRuntime(computerId, {
                 computerId,
-                ownerId: null,
                 now: Date.now(),
                 actorKind: "system",
-                actorId: "fixture",
-                auditId: crypto.randomUUID(),
+                actorId: computerId,
+                auditId: `test-revocation-${crypto.randomUUID()}`,
             });
-            return new Response(null, { status: 204 });
+            return await super.fetch(
+                new Request(`https://runtime.internal/computers/${computerId}/runtime/revoke`, {
+                    method: "DELETE",
+                    signal: request.signal,
+                }),
+            );
         }
         if (request.url === "https://computer.internal/incomplete-bootstrap" && request.method === "DELETE") {
             // Reconstruct an interrupted bootstrap: the credential committed, but the mapping and Machine did not.

@@ -8,7 +8,7 @@ import type {
 import type { ActiveRuntimeTurn, PromptDispatch, RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
 import { RuntimeTurnActivity } from "./runtime-turn-activity.ts";
-import { SessionExecutionState } from "./session-execution.ts";
+import { type SessionExecutes, SessionExecutionState } from "./session-execution.ts";
 
 type QueuedTurnSnapshot = Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"];
 
@@ -16,10 +16,12 @@ type QueuedTurnSnapshot = Extract<NativeSessionResult, { readonly action: "activ
 export class SessionTurns {
     readonly #bySessionTarget = new NativeSessionMap<SessionExecutionState>();
     readonly #operations: ExecutionReceipts;
+    readonly #executes: SessionExecutes;
     readonly #activity: RuntimeTurnActivity;
 
-    constructor(operations: ExecutionReceipts, activity = new RuntimeTurnActivity()) {
+    constructor(operations: ExecutionReceipts, executes: SessionExecutes, activity = new RuntimeTurnActivity()) {
         this.#operations = operations;
+        this.#executes = executes;
         this.#activity = activity;
     }
 
@@ -28,7 +30,7 @@ export class SessionTurns {
     readonly session = (sessionTarget: NativeSessionTarget): SessionExecutionState => {
         let session = this.#bySessionTarget.get(sessionTarget);
         if (session === undefined) {
-            session = new SessionExecutionState(sessionTarget, this.#operations);
+            session = new SessionExecutionState(sessionTarget, this.#operations, this.#executes);
             this.#bySessionTarget.set(sessionTarget, session);
         }
         return session;

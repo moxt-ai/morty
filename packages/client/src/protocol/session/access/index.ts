@@ -1,9 +1,24 @@
 import { z } from "zod";
 import { identifierStringSchema } from "../../shared/identifier.ts";
-import { ProtocolMessageError } from "../../shared/message-codec.ts";
+import { decodeZodValue, ProtocolMessageError } from "../../shared/message-codec.ts";
 import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 const SESSION_ACCESS_PATTERN = /^msession_([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/u;
+
+/** Whose access a Session credential carries: a browser device's, or the machine's local or recovery credential's. */
+const sessionAccessHolderSchema = z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("device"), deviceId: identifierStringSchema }).readonly(),
+    z.strictObject({ kind: z.literal("credential"), credentialId: identifierStringSchema }).readonly(),
+]);
+
+export type SessionAccessHolder = z.infer<typeof sessionAccessHolderSchema>;
+
+export const decodeSessionAccessHolder = (value: unknown): SessionAccessHolder =>
+    decodeZodValue(value, sessionAccessHolderSchema);
+
+export function isSessionAccessHolder(value: unknown): value is SessionAccessHolder {
+    return sessionAccessHolderSchema.safeParse(value).success;
+}
 
 const claimsSchema = z
     .object({
@@ -11,7 +26,11 @@ const claimsSchema = z
         issuedAtEpochMilliseconds: z.number().int().nonnegative(),
         computerId: identifierStringSchema,
         purpose: z.literal("session-access"),
-
+        /**
+         * Whose access the credential carries. It is honored only while that access holds, so ending the access ends
+         * the credential without any record of its own.
+         */
+        holder: sessionAccessHolderSchema,
         target: nativeSessionTargetSchema,
     })
     .readonly();

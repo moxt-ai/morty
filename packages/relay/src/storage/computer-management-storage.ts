@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq } from "drizzle-orm";
 import {
     type ProjectRow,
@@ -71,13 +72,12 @@ export class ComputerManagementStorage {
         return decodeOptionalStorageRecord(RelayComputerScopeRowSchema, rows[0] ?? null);
     };
 
-    readonly recordSessionAccessRevocation = async (
+    /** Whether `holder`'s access to the computer holds now. */
+    readonly holdsAccess = async (
         computerId: string,
-        revokedAt: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
-    ): Promise<number> => await this.projects.forProject(computerId).revokeSessionAccess(revokedAt, signal);
-    readonly readSessionAccessRevocation = async (computerId: string, signal: AbortSignal): Promise<number | null> =>
-        await this.projects.forProject(computerId).readSessionAccessRevocation(signal);
+    ): Promise<boolean> => await this.projects.forProject(computerId).holdsAccess(holder, signal);
     readonly recordAudit = async (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
         await this.projects.forProject(audit.computerId).recordAudit(audit, signal);
 

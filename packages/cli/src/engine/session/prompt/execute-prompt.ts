@@ -4,7 +4,7 @@ import { operationErrorCode, operationErrorMessage } from "../../infra/operation
 import type { ReportFailure, ResolveAgent } from "../api/session-api.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import type { StoredSession } from "../record/session-store.ts";
-import type { PromptDispatch } from "../turn/active-turn.ts";
+import { isWithdrawn, type PromptDispatch } from "../turn/active-turn.ts";
 import { resolveSessionDirectory } from "../workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import { agentForSessionConfiguration, applyCompleteSessionConfiguration } from "./apply-session-configuration.ts";
@@ -25,8 +25,8 @@ export interface ExecutePromptOptions {
     readonly epoch: string;
     /** Waits for the Session to admit the prompt, and answers how it executes. */
     readonly waitForSessionAdmission: (signal: AbortSignal) => Promise<PromptDispatch>;
+    /** The prompt's own signal; aborted with a withdrawal when the prompt is cancelled before its execution begins. */
     readonly signal: AbortSignal;
-    readonly cancellationRequested: () => boolean;
 }
 
 /**
@@ -47,7 +47,6 @@ export async function executePrompt({
     epoch,
     waitForSessionAdmission,
     signal,
-    cancellationRequested,
 }: ExecutePromptOptions): Promise<void> {
     try {
         // The directory the Session records is authorized again before the Agent uses it.
@@ -133,7 +132,6 @@ export async function executePrompt({
         } else {
             const result = await sessions.runPrompt({
                 adapter,
-                cancellationRequested,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
                 agent: executionAgent,
                 commandId: command.commandId,
@@ -151,7 +149,7 @@ export async function executePrompt({
 
         await eventProjection.completed(command.target, command.commandId, stopReason);
     } catch (error) {
-        if (signal.aborted && cancellationRequested()) {
+        if (isWithdrawn(signal)) {
             await eventProjection.completed(command.target, command.commandId, "cancelled");
             return;
         }

@@ -31,8 +31,7 @@ test("Given a machine owner, When the owner opens management, Then they can pair
     }
 });
 
-test("Given an existing Project and Machine, When the Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
-    // Run the real Worker and reload the application at the new origin.
+test("Given an existing Project and Machine, When Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
     timeout: 30_000,
 }, async () => {
     const fixture = await createIdentityFixture();
@@ -54,7 +53,7 @@ test("Given an existing Project and Machine, When the Morty moves to another ori
         const bot = await originalBot.json();
 
         // A second listener forwards to the same real Relay and its existing storage.
-        const relocated = await createResponseLossProxy(fixture.baseConfiguration.APP_ORIGIN);
+        const relocated = await createResponseLossProxy(fixture.origin);
         try {
             await fixture.changeAppOrigin(relocated.origin);
             const environment = fixture.environment();

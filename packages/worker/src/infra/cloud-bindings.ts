@@ -33,8 +33,8 @@ export interface CloudBindings {
     readonly DATABASE?: unknown;
     readonly CHAT_COMPUTER_ID?: string;
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
-    /** Commits a local identity change and the computer's Session revocation in the same storage transaction. */
-    readonly CHAT_REVOKE_ACCESS?: (change: () => Promise<boolean>, signal: AbortSignal) => Promise<boolean>;
+    /** Ends at once the live connections whose access to the computer an identity change has just ended. */
+    readonly CHAT_ACCESS_ENDED?: () => Promise<void>;
     /** The Project object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
     readonly RELAY_DIRECTORY_DATABASE?: unknown;

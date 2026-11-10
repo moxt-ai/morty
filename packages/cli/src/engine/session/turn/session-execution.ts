@@ -8,6 +8,9 @@ import {
 import { ActiveRuntimeTurn, type PromptDispatch, type RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
 
+/** Whether the Session began executing the command and still holds it, as its execution authority answers. */
+export type SessionExecutes = (sessionTarget: NativeSessionTarget, commandId: string) => boolean;
+
 const waitForTurnCompletion = (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<void> => {
     waitSignal.throwIfAborted();
     return new Promise<void>((resolve, reject) => {
@@ -43,10 +46,12 @@ export class SessionExecutionState {
     readonly #sessionTarget: NativeSessionTarget;
     readonly #turnsByCommandId = new Map<string, ActiveRuntimeTurn>();
     readonly #operations: ExecutionReceipts;
+    readonly #executes: SessionExecutes;
 
-    constructor(sessionTarget: NativeSessionTarget, operations: ExecutionReceipts) {
+    constructor(sessionTarget: NativeSessionTarget, operations: ExecutionReceipts, executes: SessionExecutes) {
         this.#sessionTarget = sessionTarget;
         this.#operations = operations;
+        this.#executes = executes;
     }
 
     readonly isEmpty = (): boolean => this.#turnsByCommandId.size === 0;
@@ -61,6 +66,7 @@ export class SessionExecutionState {
             attemptId,
             () => this.#operations.hasStarted(command.commandId, this.#sessionTarget),
             () => this.#operations.startedAt(command.commandId, this.#sessionTarget),
+            () => this.#executes(this.#sessionTarget, command.commandId),
         );
         this.#turnsByCommandId.set(command.commandId, turn);
         if (command.disposition !== SessionPromptDisposition.Steer && this.#head() !== turn) {

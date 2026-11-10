@@ -1,4 +1,9 @@
-import { isIdentifier, type NativeSessionTarget, ProtocolMessageError } from "@morty-build/client/protocol";
+import {
+    decodeSessionAccessHolder,
+    isIdentifier,
+    type NativeSessionTarget,
+    ProtocolMessageError,
+} from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ChannelSocket, HistoryRequestKind } from "../service/channel/channel-actor.ts";
 import type {
@@ -34,9 +39,11 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("viewer"),
         expiresAt: v.number(),
-        credential: v.object({ signingKeyId: v.string(), issuedAt: v.number() }),
+        credential: v.object({
+            signingKeyId: v.string(),
+            holder: v.pipe(v.unknown(), v.transform(decodeSessionAccessHolder)),
+        }),
         computerId: v.string(),
-
         sessionFilter: targetSchema,
     }),
     v.object({
@@ -83,13 +90,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
             };
         }
         if (attachment.role === "viewer") {
-            return {
-                credential: attachment.credential,
-                expiresAt: attachment.expiresAt,
-                computerId: attachment.computerId,
-                role: attachment.role,
-                sessionFilter: attachment.sessionFilter,
-            };
+            return attachment;
         }
         if (attachment.role === "daemon" || attachment.role === "replaced-daemon") {
             return {

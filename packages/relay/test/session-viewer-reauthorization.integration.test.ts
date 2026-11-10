@@ -1,10 +1,10 @@
 import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter } from "@morty-build/relay-core";
 import { afterAll, expect, it } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
+import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
+import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
@@ -117,16 +117,25 @@ it("Given a live Session view, When the owner revokes browser access, Then the l
 });
 
 it("Given a live Session view the revocation push missed, When the Project's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
-    const { daemon, computerId, sessionId, viewInbox } = await openSessionView("missed");
+    const { daemon, owner, computerId, sessionId, viewInbox } = await openSessionView("missed");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
     // The revocation commits, but its push never reaches the view (or reached it before the view opened).
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
-        await new SqliteComputerManagementStore(
-            computerId,
-            new DurableObjectDatabaseAdapter(state.storage),
-        ).revokeSessionAccess(Date.now(), AbortSignal.timeout(10_000));
+        const identities = new IdentityStorage(new DurableObjectDatabase(state.storage), computerId);
+        const signal = AbortSignal.timeout(10_000);
+        const credential = await identities.findCredential(owner.token, signal);
+        if (credential === null) {
+            throw new Error("Expected the owner credential");
+        }
+        expect(
+            await identities.revokeCredential(
+                { kind: "local", credentialId: credential.credentialId, userId: credential.userId },
+                Date.now(),
+                signal,
+            ),
+        ).toBe(true);
     });
     expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 

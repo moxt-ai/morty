@@ -1,3 +1,4 @@
+import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
@@ -158,6 +159,108 @@ test("Given a device with an open Session, When its owner disconnects it while t
         const denied = await readAccess();
         expect(denied.status).toBe(401);
         expect(await denied.json()).toMatchObject({ error: { code: "credential_revoked" } });
+    } finally {
+        await cloud.close();
+    }
+}, 60_000);
+
+/** The owner's computer with a connected Runtime, and the requests a browser or the owner make against it. */
+async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFixture>>) {
+    const owner = await cloud.createAnonymousUser();
+    const runtime = await cloud.connectAgent(owner.computerId, owner.token);
+    const request = (path: string, token: string, body?: object, method = body === undefined ? "GET" : "POST") =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }),
+            cloud.environment(),
+        );
+    const project = `computers/${owner.computerId}`;
+    const chat = `chat/computers/${owner.computerId}`;
+    expect(
+        (await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" })).status,
+    ).toBe(202);
+    /** A browser joins through a link the owner shares, and opens a conversation it then reads. */
+    const joinBrowser = async (label: string) => {
+        const shared = await request(`${project}/identity/transfers`, owner.token, {
+            operationId: crypto.randomUUID(),
+        });
+        const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+        const redeemed = await request("identity/transfers/redeem", owner.token, { code, device: label });
+        const token = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+        const { devices } = v.parse(
+            v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
+            await (await request(`${project}/identity/devices`, owner.token)).json(),
+        );
+        const device = devices.find((entry) => entry.label === label);
+        if (device === undefined) {
+            throw new Error(`Missing joined browser ${label}`);
+        }
+        const opened = await request(`${chat}/access`, token, {
+            harness: "codex",
+            configurations: [],
+            conversationKey: `${label.toLowerCase().replaceAll(" ", "-")}-window`,
+            workspaceRef: ".",
+        });
+        expect(opened.status).toBe(200);
+        const window = v.parse(
+            v.object({
+                endpoint: v.string(),
+                computerId: v.string(),
+                target: v.object({ harness: v.string(), sessionId: v.string() }),
+                credential: v.string(),
+            }),
+            await opened.json(),
+        );
+        const readConversation = () =>
+            new MortyClient({
+                endpoint: window.endpoint,
+                computerId: window.computerId,
+                credentialProvider: { credential: async () => window.credential },
+                transport: { fetch: cloud.relayRequest },
+            }).events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
+        await readConversation();
+        return { deviceId: device.id, token, readConversation };
+    };
+    return { owner, runtime, request, project, joinBrowser };
+}
+
+test("Given two browsers reading their conversations, When the owner removes one of them, Then only the removed browser stops reading while the other keeps reading with the access it holds", async () => {
+    const cloud = await createIdentityFixture();
+    try {
+        const { owner, runtime, request, project, joinBrowser } = await sharedComputer(cloud);
+        await using _runtime = runtime;
+        const removed = await joinBrowser("Removed browser");
+        const kept = await joinBrowser("Kept browser");
+
+        const ended = await request(
+            `${project}/identity/v1/devices/${removed.deviceId}`,
+            owner.token,
+            undefined,
+            "DELETE",
+        );
+
+        expect(await ended.json()).toEqual({ status: "device_access_ended" });
+        await expect(removed.readConversation()).rejects.toMatchObject({ code: "credential_revoked" });
+        await expect(kept.readConversation()).resolves.toBeDefined();
+    } finally {
+        await cloud.close();
+    }
+}, 60_000);
+
+test("Given a browser reading its conversation, When it ends its own access, Then the access it already holds no longer reads the conversation", async () => {
+    const cloud = await createIdentityFixture();
+    try {
+        const { runtime, request, project, joinBrowser } = await sharedComputer(cloud);
+        await using _runtime = runtime;
+        const browser = await joinBrowser("Leaving browser");
+
+        const ended = await request(`${project}/identity/v1/browser-access`, browser.token, undefined, "DELETE");
+
+        expect(ended.status).toBe(204);
+        await expect(browser.readConversation()).rejects.toMatchObject({ code: "credential_revoked" });
     } finally {
         await cloud.close();
     }

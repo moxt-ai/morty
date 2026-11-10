@@ -296,7 +296,7 @@ test("Given shared Morty access, When the user opens the user menu, Then replaci
     expect(queryByRole(document.body, "menuitem", { name: "Replace current user" })).toBeNull();
 });
 
-test("Given connected shared Morty access, When the user refreshes Network latency, Then every network hop latency updates", {
+test("Given one Morty Worker and a connected Runtime, When the user refreshes Network latency, Then browser-to-Morty and Morty-to-Runtime measurements update without retired Relay hops", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -311,6 +311,8 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     await app.waitForView(() => {
         expect(dialog.textContent).toContain("Relay location: Western North America");
         expect(dialog.textContent).toContain("Browser ↔ Morty");
+        expect(dialog.textContent).not.toContain("Browser ↔ Relay");
+        expect(dialog.textContent).not.toContain("Morty ↔ Relay");
         expect(dialog.textContent).toContain("Morty ↔ Runtime");
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
         expect(getByRole(dialog, "status", { name: "Morty to Runtime latency" }).textContent).toMatch(/^\d+ ms$/u);

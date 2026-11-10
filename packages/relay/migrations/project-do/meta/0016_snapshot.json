@@ -1,7 +1,7 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "1988d0c1-4a3e-4eff-a7d7-e72daf4fc679",
+    "id": "36b91a7d-13c5-4a57-8883-a185d74d7fe6",
     "prevId": "9fbf69fb-d55e-4d5f-ac32-e9b10b26904d",
     "tables": {
         "audit_events": {
@@ -95,7 +95,7 @@
             "indexes": {
                 "audit_events_category_time": {
                     "name": "audit_events_category_time",
-                    "columns": ["category", "recorded_at", "audit_id"],
+                    "columns": ["category", "\"recorded_at\" desc", "\"audit_id\" desc"],
                     "isUnique": false
                 }
             },
@@ -114,7 +114,7 @@
                 },
                 "audit_event_computer_management": {
                     "name": "audit_event_computer_management",
-                    "value": "\"audit_events\".\"category\" != 'computer_management' or (\"audit_events\".\"actor_ref\" is not null and \"audit_events\".\"subject_id\" is not null and \"audit_events\".\"outcome\" is not null)"
+                    "value": "\"audit_events\".\"category\" != 'computer_management' or (\"audit_events\".\"service_id\" is not null and \"audit_events\".\"actor_ref\" is not null and \"audit_events\".\"subject_id\" is not null and \"audit_events\".\"outcome\" is not null)"
                 }
             }
         },
@@ -277,185 +277,6 @@
                 }
             }
         },
-        "computer": {
-            "name": "computer",
-            "columns": {
-                "computer_id": {
-                    "name": "computer_id",
-                    "type": "text",
-                    "primaryKey": true,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "claimed_at": {
-                    "name": "claimed_at",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "machine_name": {
-                    "name": "machine_name",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "workspace_name": {
-                    "name": "workspace_name",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "agents_json": {
-                    "name": "agents_json",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "connection_epoch": {
-                    "name": "connection_epoch",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false,
-                    "default": 0
-                },
-                "state": {
-                    "name": "state",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "connected_at": {
-                    "name": "connected_at",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "disconnected_at": {
-                    "name": "disconnected_at",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "created_at": {
-                    "name": "created_at",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "revoked_at": {
-                    "name": "revoked_at",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "revoked_by_owner_credential_id": {
-                    "name": "revoked_by_owner_credential_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                }
-            },
-            "indexes": {},
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "checkConstraints": {
-                "computer_registration": {
-                    "name": "computer_registration",
-                    "value": "(\"computer\".\"claimed_at\" is null and \"computer\".\"machine_name\" is null and \"computer\".\"workspace_name\" is null and \"computer\".\"agents_json\" is null) or (\"computer\".\"claimed_at\" is not null and \"computer\".\"machine_name\" is not null and \"computer\".\"workspace_name\" is not null and \"computer\".\"agents_json\" is not null)"
-                },
-                "computer_connection": {
-                    "name": "computer_connection",
-                    "value": "(\"computer\".\"connection_epoch\" = 0 and \"computer\".\"connected_at\" is null and \"computer\".\"state\" is null) or (\"computer\".\"connection_epoch\" > 0 and \"computer\".\"connected_at\" is not null and \"computer\".\"state\" is not null and \"computer\".\"state\" in ('online', 'offline', 'revoked'))"
-                },
-                "computer_revoked_at_check": {
-                    "name": "computer_revoked_at_check",
-                    "value": "\"computer\".\"revoked_at\" is null or (typeof(\"computer\".\"revoked_at\") = 'integer' and \"computer\".\"revoked_at\" >= 0)"
-                },
-                "computer_revocation_actor_check": {
-                    "name": "computer_revocation_actor_check",
-                    "value": "\"computer\".\"revoked_by_owner_credential_id\" is null or \"computer\".\"revoked_at\" is not null"
-                }
-            }
-        },
-        "daemon_credentials": {
-            "name": "daemon_credentials",
-            "columns": {
-                "computer_id": {
-                    "name": "computer_id",
-                    "type": "text",
-                    "primaryKey": true,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "token_hash": {
-                    "name": "token_hash",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                }
-            },
-            "indexes": {
-                "daemon_credentials_token_hash_unique": {
-                    "name": "daemon_credentials_token_hash_unique",
-                    "columns": ["token_hash"],
-                    "isUnique": true
-                }
-            },
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "checkConstraints": {}
-        },
-        "retired_daemon_credentials": {
-            "name": "retired_daemon_credentials",
-            "columns": {
-                "token_hash": {
-                    "name": "token_hash",
-                    "type": "text",
-                    "primaryKey": true,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "computer_id": {
-                    "name": "computer_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "successor_hash": {
-                    "name": "successor_hash",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                }
-            },
-            "indexes": {
-                "retired_daemon_credentials_computer": {
-                    "name": "retired_daemon_credentials_computer",
-                    "columns": ["computer_id"],
-                    "isUnique": false
-                }
-            },
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "checkConstraints": {}
-        },
         "machine_browser_credentials": {
             "name": "machine_browser_credentials",
             "columns": {
@@ -533,74 +354,6 @@
             "uniqueConstraints": {},
             "checkConstraints": {}
         },
-        "runtime_pairing_requests": {
-            "name": "runtime_pairing_requests",
-            "columns": {
-                "computer_id": {
-                    "name": "computer_id",
-                    "type": "text",
-                    "primaryKey": true,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "pairing_code_hash": {
-                    "name": "pairing_code_hash",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "poll_token_hash": {
-                    "name": "poll_token_hash",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "expires_at": {
-                    "name": "expires_at",
-                    "type": "integer",
-                    "primaryKey": false,
-                    "notNull": true,
-                    "autoincrement": false
-                },
-                "creation_idempotency_key": {
-                    "name": "creation_idempotency_key",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                },
-                "created_by_owner_credential_id": {
-                    "name": "created_by_owner_credential_id",
-                    "type": "text",
-                    "primaryKey": false,
-                    "notNull": false,
-                    "autoincrement": false
-                }
-            },
-            "indexes": {
-                "runtime_pairing_requests_pairing_code_hash_unique": {
-                    "name": "runtime_pairing_requests_pairing_code_hash_unique",
-                    "columns": ["pairing_code_hash"],
-                    "isUnique": true
-                },
-                "runtime_pairing_requests_creation_idempotency_key_unique": {
-                    "name": "runtime_pairing_requests_creation_idempotency_key_unique",
-                    "columns": ["creation_idempotency_key"],
-                    "isUnique": true
-                },
-                "runtime_pairing_requests_expires_at": {
-                    "name": "runtime_pairing_requests_expires_at",
-                    "columns": ["expires_at"],
-                    "isUnique": false
-                }
-            },
-            "foreignKeys": {},
-            "compositePrimaryKeys": {},
-            "uniqueConstraints": {},
-            "checkConstraints": {}
-        },
         "session_access_revocations": {
             "name": "session_access_revocations",
             "columns": {
@@ -639,6 +392,17 @@
         "columns": {}
     },
     "internal": {
-        "indexes": {}
+        "indexes": {
+            "audit_events_category_time": {
+                "columns": {
+                    "\"recorded_at\" desc": {
+                        "isExpression": true
+                    },
+                    "\"audit_id\" desc": {
+                        "isExpression": true
+                    }
+                }
+            }
+        }
     }
 }

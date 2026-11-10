@@ -601,7 +601,7 @@ export function createRelayApplication(
                 nativeTarget(context.req),
                 {
                     signingKeyId: target.signingKeyId,
-                    issuedAt: target.issuedAtEpochMilliseconds,
+                    holder: target.holder,
                     expiresAt: target.expiresAtEpochMilliseconds,
                 },
                 context.req.raw.signal,

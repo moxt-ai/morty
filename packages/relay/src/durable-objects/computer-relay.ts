@@ -1,9 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
-import { RUNTIME_HEARTBEAT_ACK_MESSAGE, RUNTIME_HEARTBEAT_MESSAGE } from "@morty-build/client/protocol";
+import {
+    RUNTIME_HEARTBEAT_ACK_MESSAGE,
+    RUNTIME_HEARTBEAT_MESSAGE,
+    type SessionAccessHolder,
+} from "@morty-build/client/protocol";
 import {
     acceptWebSocketHttpTransport,
     type ClaimPairing,
-    ComputerScope,
     createLocalSessionOperations,
     createWorkerContext,
     DurableObjectDatabaseAdapter,
@@ -22,7 +25,6 @@ import { decodeComputerDurableObjectPath } from "../entity/computer-durable-obje
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { ProjectAuditRow, RelayAuditRecord } from "../entity/relay-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
-import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
@@ -57,7 +59,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
     readonly #chat = new ComputerChat(
         this.ctx.storage,
         (id) => this.#owns(id),
-        (computerId, change, signal) => this.#commitAccessRevocation(computerId, change, signal),
+        () => this.#accessEnded(),
         (computerId) => this.#backendServices(computerId),
     );
 
@@ -106,6 +108,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             this.#store = new SqliteComputerManagementStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),
+                (holder, signal) => this.#chat.holdsAccess(computerId, holder, signal),
             );
         }
         return this.#store;
@@ -181,8 +184,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).updateAgentCatalog(computerId, tokenHash, agents, uncancelled);
     }
 
-    async isRuntimeActive(computerId: string): Promise<boolean> {
-        return await this.#operate(computerId).isRuntimeActive(computerId, uncancelled);
+    async readActiveGeneration(computerId: string): Promise<number | null> {
+        return await this.#operate(computerId).readActiveGeneration(computerId, uncancelled);
     }
 
     async readRuntime(computerId: string): Promise<Result<"readRuntime">> {
@@ -228,40 +231,17 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
     }
 
-    async revokeSessionAccess(computerId: string, revokedAt: number): Promise<number> {
-        return await this.#operate(computerId).revokeSessionAccess(revokedAt, uncancelled);
+    async holdsAccess(computerId: string, holder: SessionAccessHolder): Promise<boolean> {
+        return await this.#operate(computerId).holdsAccess(holder, uncancelled);
     }
 
-    /** Identity and Session authorization belong to this computer; neither can commit without the other. */
-    readonly #commitAccessRevocation = async (
-        computerId: string,
-        change: () => Promise<boolean>,
-        signal: AbortSignal,
-    ): Promise<boolean> => {
-        const store = this.#operate(computerId);
-        const revokedAt = await this.ctx.storage.transaction(async () => {
-            signal.throwIfAborted();
-            if (!(await change())) {
-                return null;
-            }
-            const committed = await store.revokeSessionAccess(Date.now(), signal);
-            signal.throwIfAborted();
-            return committed;
-        });
-        if (revokedAt === null) {
-            return false;
-        }
-        // Authorization already observes the committed cutoff. Close existing local viewers without another RPC.
-        this.#connectionsForComputer.context.services.runtime.revokeSessionViewers(
-            new ComputerScope(computerId),
-            sessionAccessRevokedThrough(revokedAt),
-        );
-        return true;
+    /**
+     * Access to the computer ended. Every request reads that from the identities already; closing the live views and
+     * host connections it no longer authorizes only ends them at once rather than at their next reauthorization.
+     */
+    readonly #accessEnded = async (): Promise<void> => {
+        await this.#connectionsForComputer.sockets.reauthorizeConnections();
     };
-
-    async readSessionAccessRevocation(computerId: string): Promise<number | null> {
-        return await this.#operate(computerId).readSessionAccessRevocation(uncancelled);
-    }
 
     async recordAudit(computerId: string, audit: RelayAuditRecord): Promise<void> {
         await this.#operate(computerId).recordAudit(audit, uncancelled);

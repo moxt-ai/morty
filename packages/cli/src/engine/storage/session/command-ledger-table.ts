@@ -11,11 +11,13 @@ const OUTCOMES_PER_SESSION = 1_024;
 /**
  * What became of a command. A settled command's outcome is the content-free terminal event it recorded, or null once
  * retention dropped it; a command that settled before it started without being cancelled is forgotten with its outcome.
+ * `interrupted-before-start`: a Runtime restart settled the command before it started.
  */
 export type CommandFate =
     | { readonly kind: "pending" }
     | { readonly kind: "started"; readonly startedAt: string }
     | { readonly kind: "cancelled"; readonly outcome: string | null }
+    | { readonly kind: "interrupted-before-start"; readonly outcome: string }
     | { readonly kind: "settled-before-start"; readonly outcome: string }
     | { readonly kind: "settled-after-start"; readonly startedAt: string; readonly outcome: string | null };
 
@@ -44,7 +46,7 @@ const rowSchema = z
         commandHash: z.string(),
         attemptId: z.string(),
         admissionOrder: z.number().int().positive().safe(),
-        fate: z.enum(["pending", "started", "cancelled", "settled-before-start", "settled-after-start"]),
+        fate: z.enum(command.fate.enumValues),
         startedAt: z.string().nullable(),
         outcome: z.string().nullable(),
     })
@@ -70,6 +72,7 @@ function ledgerCommand({ fate, startedAt, outcome, sessionId, ...columns }: z.in
                 : invalid();
         case "cancelled":
             return { ...identity, fate: { kind: fate, outcome } };
+        case "interrupted-before-start":
         case "settled-before-start":
             return outcome === null ? invalid() : { ...identity, fate: { kind: fate, outcome } };
         case "settled-after-start":
@@ -134,32 +137,44 @@ export class CommandLedgerTable {
             .all()
             .map((row) => row.commandId);
 
-    /**
-     * Admits a command after every other. An earlier admission of the identifier that settled before it started is
-     * replaced; any other earlier admission makes this one fail.
-     */
+    /** Admits an unseen command after every other; an identifier the ledger already holds makes this fail. */
     readonly admit = (identity: CommandIdentity): void => {
+        this.#database.transaction(() => this.#insertPending(identity));
+    };
+
+    /**
+     * Admits again, after every other, a command a Runtime restart interrupted before it started, replacing that
+     * admission and its outcome. Fails when the identifier holds no such admission.
+     */
+    readonly readmitInterrupted = (identity: CommandIdentity): void => {
         this.#database.transaction(() => {
             const replaced = this.#database.orm
                 .delete(command)
-                .where(and(eq(command.commandId, identity.commandId), eq(command.fate, "settled-before-start")))
+                .where(and(eq(command.commandId, identity.commandId), eq(command.fate, "interrupted-before-start")))
                 .returning({ commandId: command.commandId })
                 .get();
-            if (replaced !== undefined) {
-                this.#database.orm.delete(commandOutcome).where(eq(commandOutcome.commandId, replaced.commandId)).run();
+            if (replaced === undefined) {
+                throw new Error("The command holds no interrupted admission", {
+                    cause: { commandId: identity.commandId },
+                });
             }
-            this.#database.orm
-                .insert(command)
-                .values({
-                    commandId: identity.commandId,
-                    commandHash: identity.commandHash,
-                    attemptId: identity.attemptId,
-                    sessionId: nativeSessionKey(identity.target),
-                    admissionOrder: this.#nextAdmissionOrder(),
-                    fate: "pending",
-                })
-                .run();
+            this.#database.orm.delete(commandOutcome).where(eq(commandOutcome.commandId, replaced.commandId)).run();
+            this.#insertPending(identity);
         });
+    };
+
+    readonly #insertPending = (identity: CommandIdentity): void => {
+        this.#database.orm
+            .insert(command)
+            .values({
+                commandId: identity.commandId,
+                commandHash: identity.commandHash,
+                attemptId: identity.attemptId,
+                sessionId: nativeSessionKey(identity.target),
+                admissionOrder: this.#nextAdmissionOrder(),
+                fate: "pending",
+            })
+            .run();
     };
 
     /** Records that a pending command was handed to its Agent. */
@@ -239,7 +254,12 @@ export class CommandLedgerTable {
             this.#database.orm.delete(commandOutcome).where(inArray(commandOutcome.commandId, commandIds)).run();
             this.#database.orm
                 .delete(command)
-                .where(and(inArray(command.commandId, commandIds), eq(command.fate, "settled-before-start")))
+                .where(
+                    and(
+                        inArray(command.commandId, commandIds),
+                        inArray(command.fate, ["interrupted-before-start", "settled-before-start"]),
+                    ),
+                )
                 .run();
         }
         return commandIds;

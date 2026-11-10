@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createResponseLossProxy } from "../../../relay-test-support/src/response-loss-proxy.ts";
@@ -68,6 +69,17 @@ export async function createChatWorkerEnvironment(
             if (setup.status !== 202) {
                 throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
             }
+            const sessionClient = async (
+                target: { readonly harness: string; readonly sessionId: string },
+                signal: AbortSignal,
+            ) => {
+                const access = await runtime.api.access(signal, target);
+                return new MortyClient({
+                    endpoint: cloud.directOrigin,
+                    computerId: runtime.computerId,
+                    credentialProvider: new StaticMortyCredentialProvider(access.credential),
+                });
+            };
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
@@ -85,7 +97,7 @@ export async function createChatWorkerEnvironment(
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
                     const target = { harness: agents[0]?.harness ?? "codex", sessionId };
-                    const client = await runtime.sessionClient(target, signal);
+                    const client = await sessionClient(target, signal);
                     try {
                         const snapshot = await client.sessions.readConfiguration(target, signal);
                         await client.sessions.updateConfiguration(
@@ -107,7 +119,7 @@ export async function createChatWorkerEnvironment(
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30000);
                     const target = { harness: agents[0]?.harness ?? "codex", sessionId };
-                    const client = await runtime.sessionClient(target, signal);
+                    const client = await sessionClient(target, signal);
                     try {
                         await client.turns.submit(
                             target,
@@ -142,7 +154,7 @@ export async function createChatWorkerEnvironment(
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30000);
                     const target = { harness: agents[0]?.harness ?? "codex", sessionId };
-                    const client = await runtime.sessionClient(target, signal);
+                    const client = await sessionClient(target, signal);
                     try {
                         await client.sessions.rename(target, title, signal);
                     } finally {
@@ -152,18 +164,7 @@ export async function createChatWorkerEnvironment(
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
                 /** Revokes the Runtime through the Relay, as the Relay does when its credential was reused. */
-                revoke: async (): Promise<void> => {
-                    const response = await cloud
-                        .environment()
-                        .COMPUTER_RELAY.getByName(identity.computerId)
-                        .fetch(`https://computer.internal/revoke-runtime?computerId=${identity.computerId}`, {
-                            method: "DELETE",
-                            headers: { authorization: `Bearer ${identity.token}` },
-                        });
-                    if (response.status !== 204) {
-                        throw new Error(`Could not revoke the test Runtime: ${response.status}`);
-                    }
-                },
+                revoke: async (): Promise<void> => await cloud.revokeRuntime(identity.computerId),
                 writeFiles: runtime.writeFiles,
             };
         };

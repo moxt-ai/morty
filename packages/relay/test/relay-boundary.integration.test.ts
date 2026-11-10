@@ -37,12 +37,7 @@ import {
     runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import {
-    DurableObjectDatabaseAdapter,
-    DurableObjectSqlDatabase,
-    RelaySockets,
-    SessionControl,
-} from "@morty-build/relay-core";
+import { DurableObjectSqlDatabase, RelaySockets, SessionControl } from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
@@ -50,9 +45,9 @@ import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-
 import { managedBot } from "../../worker/src/schema/project-do/managed-bot.ts";
 import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
 import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
-import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
+import { computerManagementStore } from "./registered-runtime.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -1154,34 +1149,37 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
     const { computerId } = owner;
     const appCredential = owner.token;
     const backend = computerBackend(computerId);
-    const pairing = await responseJson(
-        await ownerRequest(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                body: JSON.stringify({ idempotencyKey: `${slug}-runtime` }),
-                headers: credentialHeaders(appCredential),
-                method: "POST",
-            }),
-        ),
-        201,
-    );
-    const claimed = await responseJson(
-        await worker.fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
-                body: JSON.stringify({
-                    agents: readyAgents,
-                    machineName: `${slug} Runtime`,
-                    pairingCode: text(pairing, "pairingCode"),
-                    workspaceName: `${slug}-workspace`,
+    const pairComputer = async (idempotencyKey: string) => {
+        const pairing = await responseJson(
+            await ownerRequest(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
+                    body: JSON.stringify({ idempotencyKey }),
+                    headers: credentialHeaders(appCredential),
+                    method: "POST",
                 }),
-                headers: { "content-type": "application/json" },
-                method: "POST",
-            }),
-            environment,
-        ),
-        200,
-    );
+            ),
+            201,
+        );
+        const claimed = await responseJson(
+            await worker.fetch(
+                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
+                    body: JSON.stringify({
+                        agents: readyAgents,
+                        machineName: `${slug} Runtime`,
+                        pairingCode: text(pairing, "pairingCode"),
+                        workspaceName: `${slug}-workspace`,
+                    }),
+                    headers: { "content-type": "application/json" },
+                    method: "POST",
+                }),
+                environment,
+            ),
+            200,
+        );
+        return new DaemonCredential(text(claimed, "runtimeCredential"));
+    };
     const sessionId = `${slug}-session`;
-    const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+    const daemonCredential = await pairComputer(`${slug}-runtime`);
     const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
     if (daemonResponse.webSocket === null) {
         throw new Error("Expected the Runtime socket");
@@ -1224,12 +1222,13 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             ),
         computerId,
         sessionTarget: nativeTarget(sessionId),
-        revokeSessionAccess: async () => Response.json(await backend.revokeSessionAccess(AbortSignal.timeout(10000))),
         revoke: async () => {
             await backend.revokeRuntime(AbortSignal.timeout(10000));
             return new Response(null, { status: 204 });
         },
         reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
+        pairAgain: pairComputer,
+        connect: (credential: DaemonCredential) => credential.connect((request) => worker.fetch(request, environment)),
         subscribe: () =>
             worker.fetch(
                 new Request(
@@ -1461,8 +1460,7 @@ it.each(["text", "binary"])(
                 const database = new DurableObjectSqlDatabase(state.storage);
                 const context = createRelayDurableObjectContext(state, bindings(), {
                     database,
-                    storeFor: (computerId) =>
-                        new SqliteComputerManagementStore(computerId, new DurableObjectDatabaseAdapter(state.storage)),
+                    storeFor: (computerId) => computerManagementStore(computerId, state.storage),
                 });
                 const relay = new RelaySockets(
                     createDurableObjectDependencies({
@@ -1490,7 +1488,7 @@ it.each(["text", "binary"])(
             await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF state ON computer
+                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
@@ -1530,6 +1528,39 @@ it.each(["text", "binary"])(
         }
     },
 );
+
+it("Given a Runtime its owner revoked and then paired again, When the earlier daemon reconnects with its saved credential, Then the Relay tells it the Runtime was revoked while the new daemon connects", async () => {
+    const runtime = await connectRuntimeDaemon("paired-again");
+    try {
+        expect((await runtime.revoke()).status).toBe(204);
+        expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Runtime revoked" });
+        const replacement = await runtime.pairAgain("paired-again-replacement");
+
+        const earlier = await runtime.reconnect();
+
+        expect(earlier.status).toBe(101);
+        const refused = earlier.webSocket;
+        if (refused === null) {
+            throw new Error("Expected the refused Runtime socket");
+        }
+        const refusal = new Promise<CloseEvent>((resolve) =>
+            refused.addEventListener("close", resolve, { once: true }),
+        );
+        refused.accept();
+        expect(await refusal).toMatchObject({ code: 1008, reason: "Runtime revoked" });
+        const connected = await runtime.connect(replacement);
+        const daemon = connected.webSocket;
+        if (daemon === null) {
+            throw new Error("Expected the paired Runtime socket");
+        }
+        const messages = new SocketMessages(daemon);
+        daemon.accept();
+        expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+        daemon.close(1000, "Test complete");
+    } finally {
+        runtime.daemon.close(1000, "Test complete");
+    }
+});
 
 it("Given Chat reads the Session execution naming an unconfirmed command, When the Runtime reports that command's delivery, Then the Relay returns the delivery", async () => {
     const runtime = await connectRuntimeDaemon("command-delivery");
@@ -2213,40 +2244,6 @@ describe.sequential("Relay Turn submission", () => {
             expect(await closed).toMatchObject({ code: 1008, reason: "Session signing key rotated" });
         } finally {
             view.close(1000, "Test complete");
-            runtime.daemon.close(1000, "Test complete");
-        }
-    });
-    it("Given a Session credential with an open live view, When the App revokes the Project's Session access, Then the credential is refused as revoked and its view closes while a credential issued right afterwards works", async () => {
-        // Issuing right after a revocation waits out the revocation's clock margin, which takes real time.
-        vi.useRealTimers();
-        const runtime = await connectRuntimeDaemon("session-access-revocation");
-        try {
-            const subscribed = await runtime.subscribe();
-            if (subscribed.webSocket === null) {
-                throw new Error("Expected the live Session view");
-            }
-            const view = subscribed.webSocket;
-            const viewClosed = new Promise<CloseEvent>((resolve) => {
-                view.addEventListener("close", resolve, { once: true });
-            });
-            view.accept();
-
-            const revoked = await responseJson(await runtime.revokeSessionAccess(), 200);
-            expect(Date.parse(text(revoked, "revokedThrough"))).toBeGreaterThan(Date.now());
-
-            expect(await viewClosed).toMatchObject({ code: 1008, reason: "Session access revoked" });
-            expect(await responseJson(await runtime.submitRuntimeTurn("revoked"), 401)).toMatchObject({
-                error: { code: "credential_revoked" },
-            });
-            const reissued = await runtime.issueRuntimeCredential(runtime.computerId);
-            const submitted = runtime.submitRuntimeTurn("reissued", () => reissued);
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
-                kind: "session.prompt",
-                commandId: "reissued",
-            });
-            runtime.startTurn("reissued", "1");
-            expect(await responseJson(await submitted, 200)).toMatchObject({ state: { kind: "running" } });
-        } finally {
             runtime.daemon.close(1000, "Test complete");
         }
     });
