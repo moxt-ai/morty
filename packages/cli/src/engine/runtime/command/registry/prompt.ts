@@ -162,7 +162,6 @@ export const sessionPromptCommand: RuntimeCommand = {
             epoch: turn.epoch,
             waitForSessionAdmission: (signal) => context.sessionTurns.admitAndWait(turn, signal),
             signal: turn.signal,
-            cancellationRequested: turn.cancellationRequested,
         })
             .catch((error: unknown) => {
                 console.error("Morty daemon turn failed", error);

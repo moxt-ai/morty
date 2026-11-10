@@ -808,9 +808,11 @@ export class AgentSession implements AgentSessionRestore {
 
     /**
      * Hands a prepared prompt to the Agent. Precondition: `preparePrompt` completed and the Session's execution
-     * authority records this command as started.
+     * authority records this command as started. `cancellationRequested` reads that authority's cancellation of it.
      */
-    readonly prompt = async (options: SessionTurnOptions): Promise<PromptResult> => {
+    readonly prompt = async (
+        options: SessionTurnOptions & { readonly cancellationRequested: () => boolean },
+    ): Promise<PromptResult> => {
         validatePromptContent(options, this.#capabilities);
         // Recording prompt.started below is the command's start; a cancellation that arrived first withdraws it.
         options.signal.throwIfAborted();
@@ -874,22 +876,21 @@ export class AgentSession implements AgentSessionRestore {
             if (lifecycle !== undefined) {
                 const message = failure instanceof AcpPromptExecutionError ? { messageId: failure.messageId } : {};
                 await this.recordLifecycleEvent({
-                    payload:
-                        options.cancellationRequested?.() === true
-                            ? {
-                                  commandId: options.commandId,
-                                  kind: "prompt.completed",
-                                  ...message,
-                                  stopReason: "cancelled",
-                              }
-                            : {
-                                  attemptId: lifecycle.attemptId,
-                                  code: failure.code,
-                                  commandId: options.commandId,
-                                  kind: "prompt.failed",
-                                  message: truncate(failure.message, 500),
-                                  ...message,
-                              },
+                    payload: options.cancellationRequested()
+                        ? {
+                              commandId: options.commandId,
+                              kind: "prompt.completed",
+                              ...message,
+                              stopReason: "cancelled",
+                          }
+                        : {
+                              attemptId: lifecycle.attemptId,
+                              code: failure.code,
+                              commandId: options.commandId,
+                              kind: "prompt.failed",
+                              message: truncate(failure.message, 500),
+                              ...message,
+                          },
                     type: "lifecycle-metadata",
                 });
             }
