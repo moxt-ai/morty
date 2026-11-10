@@ -1,4 +1,4 @@
-import { type ElicitationPropertySchema, RequestError } from "@agentclientprotocol/sdk";
+import { type ElicitationPropertySchema, RequestError } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import type { PiRpcEvent, PiRpcProcess } from "../pi-rpc/process.js";
 import type { PiAcpClient } from "./client.js";

@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
 

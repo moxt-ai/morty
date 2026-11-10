@@ -1,7 +1,7 @@
 // Modified and maintained by Moxt for Morty.
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
-import type { RequestPermissionRequest, ToolCallLocation } from "@agentclientprotocol/sdk";
+import type { RequestPermissionRequest, ToolCallLocation } from "@agentclientprotocol/sdk/unstable";
 import { toolInfoFromToolUse } from "../tools.js";
 
 export interface ClaudePermissionPresentationInput {

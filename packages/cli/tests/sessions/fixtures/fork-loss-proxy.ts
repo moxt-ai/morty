@@ -5,7 +5,7 @@ import {
     type NativeSessionTarget,
     RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 
 /** Drops a real Runtime transport at the Fork boundary; never fabricates a reply. */

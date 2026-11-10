@@ -1,12 +1,12 @@
 import { resolve } from "node:path";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
-import { createResponseLossProxy } from "../../../platform-test-support/src/response-loss-proxy.ts";
+import { createResponseLossProxy } from "../../../relay-test-support/src/response-loss-proxy.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { TestApiTransport } from "./test-api-transport.ts";
 
 /**
- * The budget of a scenario that starts its own Chat and Platform Workers. Starting them costs seconds on a busy
+ * The budget of a scenario that starts its own Chat and Relay Workers. Starting them costs seconds on a busy
  * runner, on top of the waits the shared test budget already covers, so these scenarios get room for both.
  */
 export const dedicatedEnvironmentTimeout = 60_000;
@@ -20,7 +20,7 @@ export async function createChatWorkerEnvironment(
         listenOnLoopback: true,
         ...(loseTurnResponses ? { loseTurnResponses: true as const } : {}),
         ...(delayExecutionReads ? { delayExecutionReads: true as const } : {}),
-        platformAllowedOrigins: new Set(["*"]),
+        relayAllowedOrigins: new Set(["*"]),
         workerEntryPoint: resolve(process.cwd(), "../worker/tests/support/credential-storage-worker.ts"),
     });
     const sharingNetwork = loseSharingResponses ? await createResponseLossProxy(cloud.origin) : null;
@@ -71,14 +71,14 @@ export async function createChatWorkerEnvironment(
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
+                /** Closes a Session through the Relay, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     await runtime.client.sessions.close(
                         { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
                         new AbortController().signal,
                     );
                 },
-                /** Applies another client's explicit model edit through the public Platform contract. */
+                /** Applies another client's explicit model edit through the public Relay contract. */
                 selectModel: async (sessionId: string, value: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30_000);
                     const snapshot = await runtime.client.sessions.readConfiguration(
@@ -99,7 +99,7 @@ export async function createChatWorkerEnvironment(
                         signal,
                     );
                 },
-                /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
+                /** Starts a turn through the Relay, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
                         { harness: agents[0]?.harness ?? "codex", sessionId: sessionId },
@@ -134,7 +134,7 @@ export async function createChatWorkerEnvironment(
                     }
                     return session.title;
                 },
-                /** Renames a Session through the Platform, the way another Morty client of this Runtime would. */
+                /** Renames a Session through the Relay, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
                         runtime.computerId,
@@ -145,10 +145,10 @@ export async function createChatWorkerEnvironment(
                 },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
-                /** Revokes the Runtime through the Platform, as the Relay does when its credential was reused. */
+                /** Revokes the Runtime through the Relay, as the Relay does when its credential was reused. */
                 revoke: async (): Promise<void> => {
-                    const response = await cloud.platformRequest(
-                        new Request(`https://platform.test/morty/api/v1/computers/${identity.computerId}/pairing`, {
+                    const response = await cloud.relayRequest(
+                        new Request(`https://relay.test/morty/api/v1/computers/${identity.computerId}/pairing`, {
                             method: "DELETE",
                             headers: { authorization: `Bearer ${cloud.baseConfiguration.MORTY_SERVICE_SECRET}` },
                         }),

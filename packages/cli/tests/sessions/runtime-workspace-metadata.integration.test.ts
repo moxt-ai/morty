@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MORTY_API_PREFIX } from "@morty-build/client";
 import { expect, it } from "vitest";
-import { startTestPlatform } from "../support/platform.ts";
+import { startTestRelay } from "../support/relay.ts";
 
 // @no-uc: Performance; validating a directory must not require enumerating its children.
 it("describes a selected directory without browsing its children and still rejects unavailable directories", async () => {
@@ -12,9 +12,9 @@ it("describes a selected directory without browsing its children and still rejec
         await mkdir(join(root, "child"));
         const canonical = await realpath(root);
         const directory = canonical;
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Directory metadata",
@@ -23,15 +23,15 @@ it("describes a selected directory without browsing its children and still rejec
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.computerId);
+        const runtime = await relay.connectAgent(project.computerId);
         const listing = await runtime.client.runtimes.listWorkspace(directory, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 
         const invalid = await fetch(
-            `${platform.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/daemon/workspace`,
+            `${relay.baseUrl}${MORTY_API_PREFIX}/v1/computers/${project.computerId}/daemon/workspace`,
             {
                 method: "POST",
-                headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
+                headers: { authorization: `Bearer ${relay.appCredential}`, "content-type": "application/json" },
                 body: JSON.stringify({ directory, view: "children" }),
                 signal,
             },

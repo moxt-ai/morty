@@ -10,7 +10,7 @@ test("Given a conversation recovering after suspension, when its history read ti
     let holdHistory = false;
     const connections = new Set<WebSocketRoute>();
     let heartbeat: PromiseWithResolvers<void> | null = null;
-    // Forward to the real Platform. Delay one real history request while
+    // Forward to the real Relay. Delay one real history request while
     // keeping subscription acknowledgements and heartbeats flowing.
     await page.routeWebSocket("**/morty/api/v1/computers/*/transport", (socket) => {
         const server = socket.connectToServer();
@@ -44,7 +44,7 @@ test("Given a conversation recovering after suspension, when its history read ti
                 frame.method === "GET" &&
                 "path" in frame &&
                 typeof frame.path === "string" &&
-                new URL(frame.path, "https://platform.test").pathname.endsWith("/events-v2")
+                new URL(frame.path, "https://relay.test").pathname.endsWith("/events-v2")
             ) {
                 holdHistory = false;
                 historyHeld.resolve(() => server.send(message));

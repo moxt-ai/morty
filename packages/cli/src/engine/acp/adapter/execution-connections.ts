@@ -1,5 +1,5 @@
 import { isAbsolute, resolve } from "node:path";
-import { methods, RequestError } from "@agentclientprotocol/sdk";
+import { methods, RequestError } from "@agentclientprotocol/sdk/unstable";
 import { decodeAgentPromptResponse, type SessionConfigOption } from "@morty-build/client/protocol";
 import { z } from "zod";
 import { isRecord, truncate } from "../../util/value-utils.ts";

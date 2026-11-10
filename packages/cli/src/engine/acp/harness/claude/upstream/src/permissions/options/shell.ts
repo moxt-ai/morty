@@ -2,7 +2,7 @@
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
 import path from "node:path";
-import type { PermissionOption } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import type { DurablePermissionChangeSet } from "../normalization.js";
 import { type PermissionOptionContext, plainString, withOptionalUpdate } from "./shared.js";
 

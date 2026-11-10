@@ -6,7 +6,7 @@ import { json } from "../../infra/http.ts";
 import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
 import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
-import { platformIdentifier } from "../management/entity/platform-project.ts";
+import { relayIdentifier } from "../management/entity/computer-management.ts";
 
 /**
  * One computer's storage. Only the computer's bootstrap binds the object and creates its schema; a request for an computer
@@ -42,7 +42,7 @@ export class ComputerChat {
         if (computerId === null) {
             return json({ error: { code: "PROJECT_REQUIRED", message: "Morty context is required." } }, 400);
         }
-        const validatedComputerId = v.parse(platformIdentifier, computerId);
+        const validatedComputerId = v.parse(relayIdentifier, computerId);
         const bound: unknown = await this.#storage.get("computer-id");
         if (bound === undefined) {
             return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty computer does not exist." } }, 404);

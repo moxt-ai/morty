@@ -537,7 +537,7 @@ for (const configured of [false, true]) {
         }
         const computerId = fixture.runtime.computerId;
         const identity = { harness: "codex", directory: "." };
-        // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
+        // Obtain a valid discovery on the other Runtime through its public Relay API, so rejection cannot be
         // attributed to a nonexistent Runtime, entry, or discovery.
         const found = await fixture.runtime.client.runtimes.findNativeSessionBySessionId(
             { ...identity, sessionId },
@@ -791,7 +791,7 @@ test("Given the Runtime is offline, When its owner archives a Session, Then arch
     expect(await (await fixture.request(`chat/managed-sessions`, {})).json()).toEqual({ sessions: [] });
 });
 
-test("Given a chat opened with a Session credential, When the machine's owner revokes all access, Then the Platform refuses that credential at once", async ({
+test("Given a chat opened with a Session credential, When the machine's owner revokes all access, Then the Relay refuses that credential at once", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);

@@ -7,12 +7,12 @@
                 "drizzle/*.config.ts",
                 "vite.web-dev.config.ts",
                 ".agents/skills/*/scripts/*.{ts,cjs}",
-                "deployment/platform-entry.mjs",
+                "deployment/relay-entry.mjs",
                 "scripts/prepare-claude-desktop.ts"
             ]
         },
         "packages/e2e": {
-            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "release-acceptance.mjs"]
+            "entry": ["*.e2e.test.ts", "fixtures/local-relay-worker.ts", "release-acceptance.mjs"]
         },
         "packages/web": {
             "entry": ["src/main.tsx", "tests/**/*.integration.test.tsx", "src/components/ui/*.tsx"]
@@ -35,8 +35,8 @@
         "packages/relay": {
             "entry": ["src/schema/**/*.ts"]
         },
-        "packages/platform-test-support": {
-            "entry": ["src/platform-worker-entry.ts"]
+        "packages/relay-test-support": {
+            "entry": ["src/relay-worker-entry.ts"]
         }
     },
     "ignoreBinaries": ["openssl"],

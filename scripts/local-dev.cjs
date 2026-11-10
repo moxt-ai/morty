@@ -12,7 +12,7 @@
 //   node scripts/local-dev.cjs logs    --state-dir <dir> [options]
 //   node scripts/local-dev.cjs remove  --state-dir <dir> [options]
 //
-// `prepare` starts an isolated Chat Worker plus the local Platform fixture it
+// `prepare` starts an isolated Chat Worker plus the local Relay fixture it
 // authenticates against, then prints a single JSON descriptor on stdout. All
 // human-readable progress goes to stderr so stdout stays machine-parseable.
 
@@ -28,14 +28,14 @@ const hostPlatform = require("./platform/index.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
-const PLATFORM_CONFIG = "packages/e2e/fixtures/wrangler.platform.jsonc";
+const RELAY_CONFIG = "packages/e2e/fixtures/wrangler.relay.jsonc";
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
 const MORTY_ROOT = REPO_ROOT;
 const MORTY_LOCKFILE = path.join(MORTY_ROOT, "pnpm-lock.yaml");
 const MORTY_INSTALLED_LOCKFILE = path.join(MORTY_ROOT, "node_modules", ".pnpm", "lock.yaml");
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
-/** An identifier the setup bundle and Platform accept for a harness or native session. */
+/** An identifier the setup bundle and Relay accept for a harness or native session. */
 const HARNESS_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
 
 async function availablePort() {
@@ -83,8 +83,8 @@ function parseArguments(argv) {
                 options.stateDir = path.resolve(requireValue(index, token));
                 index += 1;
                 break;
-            case "--platform-port":
-                options.platformPort = Number.parseInt(requireValue(index, token), 10);
+            case "--relay-port":
+                options.relayPort = Number.parseInt(requireValue(index, token), 10);
                 index += 1;
                 break;
             case "--chat-port":
@@ -196,7 +196,7 @@ async function runOwnedCommand(command, args, options) {
         if (cleanup !== undefined) {
             return;
         }
-        // Use the production platform adapters to own and reap the entire tree.
+        // Use the production operating system adapters to own and reap the entire tree.
         // Resolve the interruption only after graceful/forced termination completes.
         cleanup = stopProcessTree(child).then(
             () => failure,
@@ -423,14 +423,14 @@ async function prepare(options) {
     if (!validModes.has(options.mode)) {
         throw new Error(`Unknown mode ${options.mode}; use web-server or web-server-morty-cli`);
     }
-    const platformPort = options.platformPort ?? (await availablePort());
+    const relayPort = options.relayPort ?? (await availablePort());
     const chatPort = options.chatPort ?? (await availablePort());
     const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-full-dev-"));
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 
     const existing = readStack(stateDir);
     if (existing !== null) {
-        if (options.force !== true && isAlive(existing.chatPid) && isAlive(existing.platformPid)) {
+        if (options.force !== true && isAlive(existing.chatPid) && isAlive(existing.relayPid)) {
             log(`reusing live stack at ${stateDir}`);
             process.stdout.write(`${JSON.stringify(existing)}\n`);
             return;
@@ -439,21 +439,21 @@ async function prepare(options) {
         await stopRecorded(existing);
     }
 
-    const platformPersist = path.join(stateDir, "platform");
+    const relayPersist = path.join(stateDir, "relay");
     const chatPersist = path.join(stateDir, "chat");
     const chatLog = path.join(stateDir, "chat.log");
-    const platformLog = path.join(stateDir, "platform.log");
+    const relayLog = path.join(stateDir, "relay.log");
     const chatOrigin = `http://localhost:${chatPort}`;
-    const platformOrigin = `http://127.0.0.1:${platformPort}`;
+    const relayOrigin = `http://127.0.0.1:${relayPort}`;
     let stack = {
         mode: options.mode,
         chatLog,
         chatOrigin,
         chatPersist,
-        platformConfig: PLATFORM_CONFIG,
-        platformLog,
-        platformOrigin,
-        platformPersist,
+        relayConfig: RELAY_CONFIG,
+        relayLog,
+        relayOrigin,
+        relayPersist,
         ready: false,
         stateDir,
     };
@@ -461,59 +461,59 @@ async function prepare(options) {
 
     try {
         await ensureMortyDependencies();
-        log("applying Platform migrations");
+        log("applying Relay migrations");
         await wrangler([
             "d1",
             "migrations",
             "apply",
-            "PLATFORM_DIRECTORY_DATABASE",
+            "RELAY_DIRECTORY_DATABASE",
             "--local",
             "--persist-to",
-            platformPersist,
+            relayPersist,
             "--config",
-            PLATFORM_CONFIG,
+            RELAY_CONFIG,
         ]);
 
         log("provisioning local Morty service");
         const { provisionLocalService } = await import("./provision-local-service.ts");
         const { appId, appSecret } = await provisionLocalService(
-            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
-            platformPersist,
+            path.resolve(REPO_ROOT, RELAY_CONFIG),
+            relayPersist,
             AbortSignal.timeout(60_000),
         );
 
-        log("starting Platform fixture");
-        const platformPid = await startProcess(
-            "platform",
+        log("starting Relay fixture");
+        const relayPid = await startProcess(
+            "relay",
             [
                 "dev",
                 "--config",
-                PLATFORM_CONFIG,
+                RELAY_CONFIG,
                 "--var",
                 `APP_ORIGIN:${chatOrigin}`,
                 "--var",
-                `MORTY_RELAY_URL:${platformOrigin}`,
+                `MORTY_RELAY_URL:${relayOrigin}`,
                 "--var",
                 `MORTY_SERVICE_SECRET:${appSecret}`,
                 "--ip",
                 "127.0.0.1",
                 "--port",
-                String(platformPort),
+                String(relayPort),
                 "--inspector-port",
                 "0",
                 "--persist-to",
-                platformPersist,
+                relayPersist,
             ],
-            platformLog,
+            relayLog,
         );
-        stack = { ...stack, platformPid };
+        stack = { ...stack, relayPid };
         writeStack(stack);
         await waitForHttp(
-            `${platformOrigin}/morty/api/dashboard/health`,
+            `${relayOrigin}/morty/api/dashboard/health`,
             (response) => response.ok,
             90_000,
-            "Platform health",
-            { pid: platformPid, logPath: platformLog },
+            "Relay health",
+            { pid: relayPid, logPath: relayLog },
         );
 
         if (options.build !== false) {
@@ -542,7 +542,7 @@ async function prepare(options) {
         const variables = {
             APP_ORIGIN: chatOrigin,
             MORTY_SERVICE_SECRET: appSecret,
-            MORTY_RELAY_URL: platformOrigin,
+            MORTY_RELAY_URL: relayOrigin,
         };
         const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
 
@@ -594,11 +594,11 @@ async function prepare(options) {
             chatOrigin,
             chatPersist,
             chatPid,
-            platformConfig: PLATFORM_CONFIG,
-            platformLog,
-            platformOrigin,
-            platformPersist,
-            platformPid,
+            relayConfig: RELAY_CONFIG,
+            relayLog,
+            relayOrigin,
+            relayPersist,
+            relayPid,
             ready: true,
             stateDir,
         };
@@ -849,7 +849,7 @@ async function reload(options) {
     process.once("SIGTERM", cancel);
     const operation = { signal: controller.signal, timeout: SETUP_READY_TIMEOUT_MILLISECONDS };
     try {
-        log("rebuilding web/Chat; Platform and paired runtimes will stay running");
+        log("rebuilding web/Chat; Relay and paired runtimes will stay running");
         // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
         await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
         controller.signal.throwIfAborted();
@@ -893,30 +893,30 @@ async function status(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const chatAlive = isAlive(stack.chatPid);
-    const platformAlive = stack.platformPid === undefined ? false : isAlive(stack.platformPid);
+    const relayAlive = stack.relayPid === undefined ? false : isAlive(stack.relayPid);
     const runtimes = Array.isArray(stack.runtimes)
         ? stack.runtimes.map((runtime) => ({ ...runtime, alive: isAlive(runtime.runtimePid) }))
         : [];
     let chatHttp = false;
-    let platformHttp = false;
+    let relayHttp = false;
     try {
         chatHttp = (await fetch(stack.chatOrigin, { signal: AbortSignal.timeout(3_000) })).ok;
     } catch {
         chatHttp = false;
     }
-    if (stack.platformOrigin !== undefined) {
+    if (stack.relayOrigin !== undefined) {
         try {
-            platformHttp = (
-                await fetch(`${stack.platformOrigin}/morty/api/dashboard/health`, {
+            relayHttp = (
+                await fetch(`${stack.relayOrigin}/morty/api/dashboard/health`, {
                     signal: AbortSignal.timeout(3_000),
                 })
             ).ok;
         } catch {
-            platformHttp = false;
+            relayHttp = false;
         }
     }
     process.stdout.write(
-        `${JSON.stringify({ ...stack, chatAlive, chatHttp, platformAlive, platformHttp, runtimes }, null, 2)}\n`,
+        `${JSON.stringify({ ...stack, chatAlive, chatHttp, relayAlive, relayHttp, runtimes }, null, 2)}\n`,
     );
 }
 
@@ -937,11 +937,11 @@ async function logs(options) {
     const uniqueRuntimeLogs = [...new Set(runtimeLogs.filter((file) => typeof file === "string"))];
     const files =
         worker === "all"
-            ? [stack.chatLog, stack.platformLog, ...uniqueRuntimeLogs].filter((file) => file !== undefined)
-            : worker === "platform"
-              ? stack.platformLog === undefined
+            ? [stack.chatLog, stack.relayLog, ...uniqueRuntimeLogs].filter((file) => file !== undefined)
+            : worker === "relay"
+              ? stack.relayLog === undefined
                   ? []
-                  : [stack.platformLog]
+                  : [stack.relayLog]
               : worker === "runtime"
                 ? uniqueRuntimeLogs
                 : [stack.chatLog];
@@ -1028,9 +1028,9 @@ async function stopRecorded(stack) {
     if (stack.webPid !== undefined) {
         await stopProcess(stack.webPid);
     }
-    if (stack.platformPid !== undefined) {
-        log(`stopping Platform (pid ${stack.platformPid})`);
-        await stopProcess(stack.platformPid);
+    if (stack.relayPid !== undefined) {
+        log(`stopping Relay (pid ${stack.relayPid})`);
+        await stopProcess(stack.relayPid);
     }
 }
 
@@ -1057,14 +1057,14 @@ function usage(stream = process.stdout) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--relay-port N] [--chat-port N] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
-            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
+            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|relay|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
-            "reload rebuilds web/Chat and refreshes setup.mjs without restarting Platform or runtimes.",
+            "reload rebuilds web/Chat and refreshes setup.mjs without restarting Relay or runtimes.",
             "",
         ].join("\n"),
     );

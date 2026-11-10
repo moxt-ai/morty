@@ -9,7 +9,7 @@ import {
     RUNTIME_LIVENESS_READY_KIND,
     RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { MortyRuntimeEngine } from "../../src/exports/engine.ts";

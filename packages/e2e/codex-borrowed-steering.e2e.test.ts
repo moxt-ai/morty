@@ -38,7 +38,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
     let success = false;
     try {
         const stack = await LocalStack.create(harness);
-        const application = await stack.startPlatform();
+        const application = await stack.startRelay();
         await stack.startChat(application);
         const environment = codex.environment;
         const completed = Promise.withResolvers<void>();
@@ -112,10 +112,13 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         const pairedAgent = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), "codex");
         await chat.bindAgent(pairedAgent.computerId, "codex");
         await page.addInitScript(
-            ({ key, userId, token }) => {
-                localStorage.setItem(key, JSON.stringify({ [userId]: token }));
+            ({ key, scope, token }) => {
+                localStorage.setItem(
+                    key,
+                    JSON.stringify({ credentials: { [scope.userId]: token }, computers: [{ scope }] }),
+                );
             },
-            { key: ANONYMOUS_CREDENTIAL_KEY_NAME, userId, token },
+            { key: ANONYMOUS_CREDENTIAL_KEY_NAME, scope: { computerId, userId }, token },
         );
         const url = new URL(stack.chatOrigin);
         url.searchParams.set("identity", encodeIdentityScope({ computerId, userId }));

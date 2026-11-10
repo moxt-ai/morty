@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { exitsAfterSessionCreation, persistsEmptySessions } from "../../support/acp-process.ts";
 import { configOptions, sessionConfiguration } from "./acp-session-settings.ts";
 import {

@@ -5,21 +5,21 @@ export {
     mortyApiPath,
     mortyApiUrl,
     parseMortyApiPrefix,
-} from "./platform/morty-api.ts";
+} from "./relay/morty-api.ts";
 
-export type { ProjectLocationHint } from "./platform/project-location.ts";
+export type { ProjectLocationHint } from "./relay/project-location.ts";
 
 export {
     isProjectLocationHint,
     PROJECT_LOCATION_HINTS,
-} from "./platform/project-location.ts";
+} from "./relay/project-location.ts";
 
-export type { ProjectPermissionName } from "./platform/project-permission.ts";
+export type { ProjectPermissionName } from "./relay/project-permission.ts";
 
 export {
-    PLATFORM_APP_PROJECT_PERMISSIONS,
     PROJECT_PERMISSION_NAMES,
-} from "./platform/project-permission.ts";
+    RELAY_APP_PROJECT_PERMISSIONS,
+} from "./relay/project-permission.ts";
 export {
     isRuntimeCredentialSuccessor,
     RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
@@ -563,6 +563,7 @@ export type {
     DaemonToRelayMessage,
     DaemonToServiceMessage,
     ServiceToDaemonMessage,
+    ServiceToDaemonRequest,
 } from "./transport/daemon-transport.ts";
 
 export {
@@ -573,4 +574,6 @@ export {
     decodeServiceToDaemonMessage,
     encodeDaemonToServiceMessage,
     encodeServiceToDaemonMessage,
+    readUndecodedRequestAddress,
+    requestReplyAddress,
 } from "./transport/daemon-transport.ts";

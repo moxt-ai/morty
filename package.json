@@ -38,7 +38,7 @@
         "preview": "vite preview",
         "build:production": "python3 deployment/build.py production",
         "typecheck:tooling": "tsc --project tsconfig.tooling.json",
-        "db:generate:platform-d1": "drizzle-kit generate --config drizzle/drizzle.platform-d1.config.ts",
+        "db:generate:relay-d1": "drizzle-kit generate --config drizzle/drizzle.relay-d1.config.ts",
         "db:generate:cli-acp-session-store": "drizzle-kit generate --config drizzle/drizzle.cli-acp-session-store.config.ts && pnpm db:codegen",
         "db:generate:cli-session-event-cache": "pnpm --filter @morty-build/cli exec drizzle-kit generate --config ../../drizzle/drizzle.cli-session-event-cache.config.ts && pnpm db:codegen",
         "db:generate:project-do": "drizzle-kit generate --config drizzle/drizzle.project-do.config.ts && pnpm db:codegen",
@@ -50,18 +50,20 @@
         "test:relay": "pnpm --filter @morty-build/relay test:integration",
         "check:runtime-architecture": "node scripts/check-runtime-architecture.ts",
         "test:client": "vitest run packages/client/tests",
-        "test:platform": "vitest run packages/platform-test-support/tests"
+        "test:relay-support": "vitest run packages/relay-test-support/tests"
     },
     "simple-git-hooks": {
         "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm check:view-hooks && pnpm biome check --error-on-warnings --staged --files-ignore-unknown=true --no-errors-on-unmatched && pnpm check:architecture"
     },
     "devDependencies": {
-        "@agentclientprotocol/sdk": "1.4.0",
+        "@agentclientprotocol/sdk": "catalog:",
         "@biomejs/biome": "catalog:",
         "@cloudflare/vite-plugin": "catalog:",
+        "@electron/asar": "4.3.1",
         "@morty-build/cli": "workspace:*",
         "@morty-build/client": "workspace:*",
         "@morty-build/runtime-test-support": "workspace:*",
+        "@sentry/cli": "2.58.6",
         "@sentry/vite-plugin": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@types/node": "catalog:",
@@ -70,6 +72,7 @@
         "@vitest/coverage-istanbul": "catalog:",
         "dependency-cruiser": "catalog:",
         "drizzle-kit": "catalog:",
+        "drizzle-orm": "catalog:",
         "esbuild": "catalog:",
         "happy-dom": "catalog:",
         "istanbul-lib-coverage": "catalog:",
@@ -82,9 +85,7 @@
         "vite": "catalog:",
         "vitest": "catalog:",
         "wrangler": "catalog:",
-        "ws": "^8.22.1",
-        "@electron/asar": "4.3.1",
-        "drizzle-orm": "catalog:"
+        "ws": "^8.22.1"
     },
     "dependencies": {
         "valibot": "catalog:"

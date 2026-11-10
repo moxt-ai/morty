@@ -1,19 +1,19 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { PLATFORM_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
+import { RELAY_APP_PROJECT_PERMISSIONS } from "@morty-build/client/protocol";
 import { eq } from "drizzle-orm";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
 import { computer } from "../../relay-core/src/schema/project-do/index.ts";
 import { migrateComputerStorage } from "../src/durable-objects/migrate-computer-storage.ts";
 import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
-import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
+import { computerDirectoryDrizzle } from "../src/storage/relay-drizzle-database.ts";
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
 export async function registerRuntimeFixture(computerId: string): Promise<{ readonly hostCredentialId: string }> {
     const registeredAt = Date.UTC(2026, 9, 27);
     const appId = `app_${computerId}`;
-    const directory = platformDrizzle(env.PLATFORM_DIRECTORY_DATABASE);
+    const directory = computerDirectoryDrizzle(env.RELAY_DIRECTORY_DATABASE);
     await directory.batch([
         directory
             .insert(machineAccount)
@@ -60,7 +60,7 @@ export async function registerRuntimeFixture(computerId: string): Promise<{ read
         publicCredentialId: crypto.randomUUID(),
         appId: project.appId,
         secretDigest: "internal-verified-host-fixture",
-        permissionsJson: JSON.stringify(PLATFORM_APP_PROJECT_PERMISSIONS),
+        permissionsJson: JSON.stringify(RELAY_APP_PROJECT_PERMISSIONS),
         allProjects: 1,
         issuedAt: registeredAt,
     });

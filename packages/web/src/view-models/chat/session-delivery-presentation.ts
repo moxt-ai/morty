@@ -6,7 +6,7 @@ import {
     type SessionDeliveryStore,
     type SubmittedMessage,
 } from "./session-delivery-store.ts";
-import type { QueuedCommand } from "./session-execution.ts";
+import { runtimeCoversMessage, type SessionExecutionState } from "./session-execution.ts";
 import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import { type SessionExecutionMessage, sessionUserCommandIds } from "./session-presentation.ts";
 
@@ -35,13 +35,18 @@ function currentMessage(state: DeliveryState): LocalMessage | null {
     }
 }
 
-/** History, then the Runtime queue, then local delivery own each command's sole display location. */
+/**
+ * History, then the Runtime queue, then local delivery own each command's sole display location. This is the one place
+ * that decides whether the page still shows its own copy of a message the service accepted: only until the Runtime's
+ * account covers it.
+ */
 export function sessionDeliveryPresentation(
     messages: readonly SessionExecutionMessage[],
-    queued: readonly QueuedCommand[],
+    execution: SessionExecutionState,
     delivery: Pick<SessionDeliveryStore, "state" | "accepted">,
     queue: Pick<SessionMessageQueueStore, "requests">,
 ) {
+    const { queued } = execution;
     const historyIds = new Set(sessionUserCommandIds(messages));
     const claimed = new Set([
         ...historyIds,
@@ -51,7 +56,9 @@ export function sessionDeliveryPresentation(
     const current = currentMessage(delivery.state);
     const candidates: readonly LocalMessage[] = [
         ...(current === null ? [] : [current]),
-        ...delivery.accepted.map((message): LocalMessage => ({ kind: "accepted", message })),
+        ...delivery.accepted
+            .filter((message) => !runtimeCoversMessage(execution, message))
+            .map((message): LocalMessage => ({ kind: "accepted", message })),
     ];
     const local = candidates.filter(({ message }) => {
         if (claimed.has(message.commandId)) {

@@ -1,7 +1,7 @@
 // Modified and maintained by Moxt for Morty.
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
-import type { PermissionOption } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import {
     allowOnce,
     exactLocalAllowRule,

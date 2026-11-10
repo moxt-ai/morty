@@ -1,16 +1,16 @@
 import type { D1Migration } from "cloudflare:test";
-import type { PlatformRelayBindings } from "../src/worker.ts";
+import type { RelayRelayBindings } from "../src/worker.ts";
 
-interface PlatformTestBindings extends PlatformRelayBindings {
+interface RelayTestBindings extends RelayRelayBindings {
     readonly MORTY_ALLOWED_ORIGINS: string;
     readonly R2_BUCKET_WNAM: R2Bucket;
     readonly TEST_UNINITIALIZED_SHARD: D1Database;
-    readonly TEST_PLATFORM_MIGRATIONS: D1Migration[];
+    readonly TEST_RELAY_MIGRATIONS: D1Migration[];
 }
 
 declare global {
     namespace Cloudflare {
-        interface Env extends PlatformTestBindings {}
+        interface Env extends RelayTestBindings {}
 
         interface GlobalProps {
             readonly durableNamespaces: string;

@@ -22,6 +22,7 @@ function sessionRuntimeErrorStatus(code: string): number {
         code === "session_creation_outcome_unknown" ||
         code === "command_result_expired" ||
         code === "turn_already_started" ||
+        code === "permission_response_conflict" ||
         code === "session_configuration_conflict" ||
         code === "steering_target_unavailable" ||
         code === "steering_unsupported"

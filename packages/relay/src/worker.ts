@@ -1,9 +1,9 @@
-import { createPlatformWorker } from "./platform-worker.ts";
+import { createRelayWorker } from "./relay-worker.ts";
 
 export { ComputerRelay } from "./durable-objects/computer-relay.ts";
-export * from "./platform-worker.ts";
+export * from "./relay-worker.ts";
 
-export default createPlatformWorker();
+export default createRelayWorker();
 
 // Preserve the retired namespace and its records without binding it to incoming requests.
 export { DurableObject as ProjectDO, DurableObject as RuntimeRelay } from "cloudflare:workers";

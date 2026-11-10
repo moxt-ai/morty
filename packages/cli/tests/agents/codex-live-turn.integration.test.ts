@@ -33,7 +33,7 @@ import {
     SESSION_OPERATION_FAILED_KIND,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { CodexAgentConnection } from "../../src/engine/acp/adapter/codex/agent-connection.ts";

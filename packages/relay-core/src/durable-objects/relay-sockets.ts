@@ -10,11 +10,7 @@ function socketLogContext(webSocket: WebSocket) {
         return {
             computerId,
             role,
-            ...("connectionEpoch" in identity
-                ? { connectionEpoch: identity.connectionEpoch }
-                : "computerId" in identity
-                  ? { computerId: identity.computerId }
-                  : {}),
+            ...("connectionEpoch" in identity ? { connectionEpoch: identity.connectionEpoch } : {}),
         };
     } catch {
         // A socket can fail before it has a valid attachment.

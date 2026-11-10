@@ -11,15 +11,15 @@ import { daemonCredential } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
-import { seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
 import { hashPairingCredential, hashSecret } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
+import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
+import { seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
 import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
-import { SqlitePlatformProjectStore } from "../src/storage/sqlite-platform-project-store.ts";
-import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
+import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
 
-const origin = `https://platform.test${MORTY_API_PREFIX}`;
+const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
     expiresAt: v.string(),
     pairingCode: v.string(),
@@ -42,8 +42,8 @@ afterEach(() => vi.useRealTimers());
 afterAll(async () => await abortAllDurableObjects());
 
 async function project(_name = "Runtime pairing") {
-    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
-    const { defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const { defaultCredential } = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
         "content-type": "application/json",
@@ -78,7 +78,7 @@ async function project(_name = "Runtime pairing") {
                 }),
                 {
                     ...env,
-                    MORTY_COMPUTER_STORE: new SqlitePlatformProjectStore(
+                    MORTY_COMPUTER_STORE: new SqliteComputerManagementStore(
                         computerId,
                         new DurableObjectDatabaseAdapter(state.storage),
                     ),
@@ -450,6 +450,36 @@ it("migrates the registered computer and independent audit IDs together", async 
         });
         expect(
             storage.sql.exec("SELECT category FROM audit_events WHERE audit_id='same' ORDER BY category").toArray(),
-        ).toEqual([{ category: "pairing" }, { category: "platform" }]);
+        ).toEqual([{ category: "computer_management" }, { category: "pairing" }]);
+    });
+});
+
+it("keeps the newer epoch online when the previous daemon closes after reconnect", async () => {
+    const app = await project();
+    const paired = await app.pair("epoch-fencing");
+    await app.claim(paired);
+    await app.storage(async (storage) => {
+        const { RuntimeConnectionStorage } = await import("../../relay-core/src/storage/runtime-connection-storage.ts");
+        const { RuntimeConnectionService } = await import(
+            "../../relay-core/src/service/channel/runtime-connection-service.ts"
+        );
+        const database = new RuntimeConnectionStorage(new DurableObjectSqlDatabase(storage));
+        const connections = new RuntimeConnectionService(database);
+        const first = connections.prepare(paired.computerId);
+        expect(first.kind).toBe("ready");
+        if (first.kind !== "ready") {
+            throw new Error("Connection was refused");
+        }
+        connections.connected(first.identity, 100);
+        const second = connections.prepare(paired.computerId);
+        if (second.kind !== "ready") {
+            throw new Error("Reconnect was refused");
+        }
+        expect(second.identity.connectionEpoch).toBe(first.identity.connectionEpoch + 1);
+        connections.connected(second.identity, 200);
+        connections.disconnected(first.identity, 300);
+        expect(connections.isCurrent(first.identity)).toBe(false);
+        expect(connections.isCurrent(second.identity)).toBe(true);
+        expect(connections.current()?.state).toBe("online");
     });
 });

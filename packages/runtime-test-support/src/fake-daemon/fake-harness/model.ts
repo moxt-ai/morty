@@ -1,4 +1,4 @@
-import type { ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type { AgentQuestion } from "@morty-build/client/protocol";
 import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/in-process-endpoint.ts";
 
@@ -38,7 +38,7 @@ export type HarnessOutput =
     | {
           /** Pushes agent-side config options as a config_option_update, including an explicit empty list. */
           readonly kind: "agent-config";
-          readonly configOptions: readonly import("@agentclientprotocol/sdk").SessionConfigOption[];
+          readonly configOptions: readonly import("@agentclientprotocol/sdk/unstable").SessionConfigOption[];
       }
     | {
           readonly kind: "activity";

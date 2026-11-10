@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as v from "valibot";
-import { PLATFORM_APP_PROJECT_PERMISSIONS } from "../packages/client/src/protocol/index.ts";
+import { RELAY_APP_PROJECT_PERMISSIONS } from "../packages/client/src/protocol/index.ts";
 import { serviceCredential } from "../packages/relay/src/schema/d1/index.ts";
 
 const account = "b903018a1c3d9d9a4bd68a11eb03e764";
@@ -78,7 +78,7 @@ if (operation === "prepare") {
                     publicCredentialId,
                     appId: target.app_id,
                     secretDigest,
-                    permissionsJson: JSON.stringify(PLATFORM_APP_PROJECT_PERMISSIONS),
+                    permissionsJson: JSON.stringify(RELAY_APP_PROJECT_PERMISSIONS),
                     allProjects: 1,
                     issuedAt: Date.now(),
                 })

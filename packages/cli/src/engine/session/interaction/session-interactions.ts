@@ -4,7 +4,7 @@ import type {
     CreateElicitationResponse,
     RequestPermissionRequest,
     RequestPermissionResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import {
     type NativeSessionTarget,
     SESSION_ELICITATION_REQUESTED_KIND,
@@ -42,6 +42,9 @@ interface SessionInteractionContext {
     readonly recordSessionEvent: (event: SessionEventPayload) => Promise<void>;
 }
 export class SessionInteractions {
+    // A bounded receipt window for answers in this live Session. Eviction or Session replacement makes an
+    // old answer unavailable, never implicitly successful. These are completed decisions, not pending requests.
+    readonly #permissionAnswers = new Map<string, SessionPermissionResolvedEvent>();
     readonly #pendingPermissions = new Map<string, PendingPermission>();
     readonly #pendingElicitations = new Map<string, PendingElicitation>();
     readonly #acceptedUrlElicitations = new Map<string, SessionElicitationRequestedEvent>();
@@ -84,6 +87,20 @@ export class SessionInteractions {
         await this.#context.observer().onElicitationResolved(event);
     };
     readonly respondPermission = async (options: PermissionResponseOptions): Promise<void> => {
+        const answered = this.#permissionAnswers.get(options.interactionId);
+        if (answered !== undefined) {
+            if (
+                answered.outcome === options.outcome &&
+                (options.outcome !== "selected" || answered.optionId === options.optionId)
+            ) {
+                return;
+            }
+            throw new AcpExecutionError(
+                "The permission request has a different recorded answer",
+                {},
+                "permission_response_conflict",
+            );
+        }
         const pending = this.#pendingPermissions.get(options.interactionId);
         if (pending === undefined) {
             throw new AcpExecutionError(
@@ -108,13 +125,21 @@ export class SessionInteractions {
             );
         }
         this.#pendingPermissions.delete(options.interactionId);
-        await this.#notifyPermissionResolved({
+        const answer: SessionPermissionResolvedEvent = {
             interactionId: options.interactionId,
             kind: SESSION_PERMISSION_RESOLVED_KIND,
             optionId: options.outcome === "selected" ? options.optionId : "",
             outcome: options.outcome,
             target: this.#context.target(),
-        });
+        };
+        this.#permissionAnswers.set(options.interactionId, answer);
+        if (this.#permissionAnswers.size > 256) {
+            const oldest = this.#permissionAnswers.keys().next().value;
+            if (oldest !== undefined) {
+                this.#permissionAnswers.delete(oldest);
+            }
+        }
+        await this.#notifyPermissionResolved(answer);
     };
 
     readonly respondElicitation = async (options: ElicitationResponseOptions): Promise<void> => {

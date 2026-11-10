@@ -29,7 +29,7 @@ function encodeBase64Url(value: Uint8Array): string {
 
 /**
  * Signs and verifies Session credentials with keys only the Relay holds. Each AppCredential's key is derived from the
- * Relay's signing secret, a Worker secret that is never stored with Platform records, so reading the Platform database
+ * Relay's signing secret, a Worker secret that is never stored with Relay records, so reading the Relay database
  * does not allow forging a Session credential.
  */
 export class SessionAccessSigner {

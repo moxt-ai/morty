@@ -4,13 +4,13 @@
         "production": {
             "d1_id": "41b0bb37-d19f-4376-a694-b32e08de9fc8",
             "d1_name": "morty-platform-production-control-plane-wnam",
-            "platform": "morty-platform-production",
+            "relay": "morty-platform-production",
             "morty": "morty-production",
-            "platform_origin": "https://relay.mobius.host",
+            "relay_origin": "https://relay.mobius.host",
             "morty_origin": "https://morty.build",
             "buckets": {
-                "platform_apac": "morty-platform-production-apac-objects",
-                "platform_wnam": "morty-platform-production-wnam-objects",
+                "relay_apac": "morty-platform-production-apac-objects",
+                "relay_wnam": "morty-platform-production-wnam-objects",
                 "attachments": "morty-production-apac-attachments",
                 "web_assets": "morty-production-web-assets"
             },

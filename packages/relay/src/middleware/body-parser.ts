@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
-import { PlatformControlPlaneError } from "../entity/platform-control-plane.ts";
+import { ComputerManagementError } from "../entity/computer-management.ts";
 
 const DEFAULT_MAXIMUM_BODY_BYTES = 128 * 1_024;
 
@@ -35,11 +35,11 @@ async function parseBody<TSchema extends v.GenericSchema<unknown, object>>(
     signal.throwIfAborted();
     const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
     if (contentType !== "application/json") {
-        throw new PlatformControlPlaneError("invalid_request", "A JSON request body is required", 400);
+        throw new ComputerManagementError("invalid_request", "A JSON request body is required", 400);
     }
     const declaredLength = request.headers.get("content-length");
     if (declaredLength !== null && Number(declaredLength) > maximumBodyBytes) {
-        throw new PlatformControlPlaneError("invalid_request", "The request body is too large", 413);
+        throw new ComputerManagementError("invalid_request", "The request body is too large", 413);
     }
     const reader = request.body?.getReader();
     const decoder = new TextDecoder();
@@ -62,7 +62,7 @@ async function parseBody<TSchema extends v.GenericSchema<unknown, object>>(
                 length += chunk.value.byteLength;
                 if (length > maximumBodyBytes) {
                     void reader.cancel().catch(() => undefined);
-                    throw new PlatformControlPlaneError("invalid_request", "The request body is too large", 413);
+                    throw new ComputerManagementError("invalid_request", "The request body is too large", 413);
                 }
                 encoded += decoder.decode(chunk.value, { stream: true });
             }
@@ -75,7 +75,7 @@ async function parseBody<TSchema extends v.GenericSchema<unknown, object>>(
     try {
         value = JSON.parse(encoded);
     } catch (cause) {
-        throw new PlatformControlPlaneError("invalid_request", "The request body is invalid", 400, { cause });
+        throw new ComputerManagementError("invalid_request", "The request body is invalid", 400, { cause });
     }
     const result = v.safeParse(
         v.pipe(
@@ -86,7 +86,7 @@ async function parseBody<TSchema extends v.GenericSchema<unknown, object>>(
         value,
     );
     if (!result.success) {
-        throw new PlatformControlPlaneError("invalid_request", "The request body is invalid", 400, {
+        throw new ComputerManagementError("invalid_request", "The request body is invalid", 400, {
             cause: new v.ValiError(result.issues),
         });
     }

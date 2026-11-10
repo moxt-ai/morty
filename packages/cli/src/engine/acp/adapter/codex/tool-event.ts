@@ -71,4 +71,4 @@ export function fitCodexToolEvent(event: unknown): unknown {
     };
 }
 
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";

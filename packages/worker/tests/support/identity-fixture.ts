@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { prepareTestMortyPlatformBindings } from "@morty-build/platform-test-support/cloudflare";
-import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
+import { prepareTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
+import { createResponseLossProxy } from "@morty-build/relay-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect } from "vitest";
 import { createSessionExecutionProxy } from "../../../../tests/support/session-execution-proxy.ts";
@@ -10,7 +10,7 @@ import worker from "../../src/application.ts";
 export const anonymousCreationKey = (): string =>
     Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 
-import { startTestPlatform } from "./test-platform.ts";
+import { startTestRelay } from "./test-relay.ts";
 
 export const AUTH_TIME = new Date("2026-09-07T00:00:00.000Z");
 export const APP_ORIGIN = "http://localhost:5173";
@@ -26,7 +26,7 @@ type IdentityFixtureOptions = {
     readonly listenOnLoopback?: true;
     readonly loseTurnResponses?: true;
     readonly delayExecutionReads?: true;
-    readonly platformAllowedOrigins?: ReadonlySet<string>;
+    readonly relayAllowedOrigins?: ReadonlySet<string>;
     readonly workerEntryPoint?: string;
 };
 
@@ -37,7 +37,7 @@ export async function createIdentityFixture(options: IdentityFixtureOptions = {}
 
 /** Call in beforeAll so each suite run rebuilds its inputs, including watch reruns. */
 export async function prepareIdentityFixture(options: IdentityFixtureOptions = {}) {
-    const createBindings = await prepareTestMortyPlatformBindings(
+    const createBindings = await prepareTestMortyRelayBindings(
         options.workerEntryPoint ?? fileURLToPath(new URL("./credential-storage-worker.ts", import.meta.url)),
     );
     return () => startIdentityFixture(options, createBindings);
@@ -45,26 +45,26 @@ export async function prepareIdentityFixture(options: IdentityFixtureOptions = {
 
 async function startIdentityFixture(
     options: IdentityFixtureOptions,
-    createBindings: Awaited<ReturnType<typeof prepareTestMortyPlatformBindings>>,
+    createBindings: Awaited<ReturnType<typeof prepareTestMortyRelayBindings>>,
 ) {
-    const platform = await startTestPlatform(
-        options.platformAllowedOrigins === undefined ? {} : { allowedOrigins: options.platformAllowedOrigins },
+    const relay = await startTestRelay(
+        options.relayAllowedOrigins === undefined ? {} : { allowedOrigins: options.relayAllowedOrigins },
         createBindings,
     );
     // The public Chat and Relay origins are distinct while their requests share the same Computer namespace.
-    const chatNetwork = options.listenOnLoopback === true ? await createResponseLossProxy(platform.baseUrl) : null;
-    const network = options.loseTurnResponses === true ? await createResponseLossProxy(platform.baseUrl) : null;
+    const chatNetwork = options.listenOnLoopback === true ? await createResponseLossProxy(relay.baseUrl) : null;
+    const network = options.loseTurnResponses === true ? await createResponseLossProxy(relay.baseUrl) : null;
     const executionNetwork =
-        options.delayExecutionReads === true ? await createSessionExecutionProxy(platform.baseUrl) : null;
+        options.delayExecutionReads === true ? await createSessionExecutionProxy(relay.baseUrl) : null;
     try {
-        const cloudflare = platform.cloudflare;
-        const ready = new URL(chatNetwork?.origin ?? platform.baseUrl);
+        const cloudflare = relay.cloudflare;
+        const ready = new URL(chatNetwork?.origin ?? relay.baseUrl);
         const baseConfiguration = {
             APP_ORIGIN: options.listenOnLoopback === true ? ready.origin : APP_ORIGIN,
-            MORTY_SERVICE_SECRET: platform.appCredential,
-            MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,
+            MORTY_SERVICE_SECRET: relay.appCredential,
+            MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? relay.baseUrl,
         };
-        await platform.configure(baseConfiguration);
+        await relay.configure(baseConfiguration);
         let cloudBindings = await cloudflare.getBindings();
         let computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
         const chatProjects = {
@@ -100,7 +100,7 @@ async function startIdentityFixture(
         });
         /** Restarts the Worker with the changed deployment settings, keeping its storage. */
         const reconfigure = async () => {
-            await platform.configure(baseConfiguration);
+            await relay.configure(baseConfiguration);
             cloudBindings = await cloudflare.getBindings();
             computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
         };
@@ -123,8 +123,8 @@ async function startIdentityFixture(
             baseConfiguration,
             network,
             executionNetwork,
-            connectAgent: platform.connectAgent,
-            platformRequest: platform.app.request,
+            connectAgent: relay.connectAgent,
+            relayRequest: relay.app.request,
             createAnonymousUser,
             dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
             environment,
@@ -133,11 +133,11 @@ async function startIdentityFixture(
                 baseConfiguration.APP_ORIGIN = origin;
                 await reconfigure();
             },
-            changePlatformCredential: async (credential: string) => {
+            changeRelayCredential: async (credential: string) => {
                 baseConfiguration.MORTY_SERVICE_SECRET = credential;
                 await reconfigure();
             },
-            changePlatformOrigin: async (origin: string) => {
+            changeRelayOrigin: async (origin: string) => {
                 baseConfiguration.MORTY_RELAY_URL = origin;
                 await reconfigure();
             },
@@ -145,14 +145,14 @@ async function startIdentityFixture(
                 await executionNetwork?.close();
                 await network?.close();
                 await chatNetwork?.close();
-                await platform.close();
+                await relay.close();
             },
         };
     } catch (cause) {
         await executionNetwork?.close();
         await network?.close();
         await chatNetwork?.close();
-        await platform.close();
+        await relay.close();
         throw cause;
     }
 }

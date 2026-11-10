@@ -265,7 +265,7 @@ export async function connectControlledAgentRuntime(options: {
                 state = { kind: "running", runtime: await start() };
             }
         },
-        /** Restarts the Runtime offering other Agents, which it publishes to the Platform when it reconnects. */
+        /** Restarts the Runtime offering other Agents, which it publishes to the Relay when it reconnects. */
         restartWithAgents: async (
             agents: Pick<ControlledAgentBehavior, "additionalAgents" | "harness" | "agentName">,
         ): Promise<void> => {

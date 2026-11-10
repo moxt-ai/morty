@@ -107,7 +107,7 @@ function wsHeaders(value: unknown): Headers {
     return headers;
 }
 
-class PlatformMortyWebSocketConnector implements MortyWebSocketConnector {
+class RelayMortyWebSocketConnector implements MortyWebSocketConnector {
     readonly connect = async (endpoint: URL, signal: AbortSignal): Promise<WebSocket> => {
         signal.throwIfAborted();
         const socket = new WebSocket(endpoint.toString());
@@ -171,7 +171,7 @@ export class WsTransport implements MortyHttpTransport {
             options.connectionTimeoutMilliseconds ?? DEFAULT_CONNECTION_TIMEOUT_MILLISECONDS,
             "WebSocket transport connection timeout",
         );
-        this.#connector = options.connector ?? new PlatformMortyWebSocketConnector();
+        this.#connector = options.connector ?? new RelayMortyWebSocketConnector();
         this.#idleTimeoutMilliseconds = validatePositiveInteger(
             options.idleTimeoutMilliseconds ?? 60_000,
             "WebSocket transport idle timeout",

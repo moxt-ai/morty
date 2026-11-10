@@ -23,7 +23,7 @@ export async function waitForD1<Value>(operation: () => Promise<Value>, signal: 
         signal.throwIfAborted();
         throw new DatabaseError(
             timeout.signal.aborted ? "database_timeout" : "database_unavailable",
-            "Platform storage is unavailable",
+            "Relay storage is unavailable",
             { cause },
         );
     } finally {

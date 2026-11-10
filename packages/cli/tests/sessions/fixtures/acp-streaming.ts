@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { waitForAbort, waitForFile } from "../../support/acp-process.ts";
 import { type ControlledSessionState, type nativeHistory, persistState } from "./acp-session-state.ts";
 

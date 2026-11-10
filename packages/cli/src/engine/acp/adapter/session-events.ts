@@ -1,5 +1,5 @@
 import { setImmediate as yieldToRuntime } from "node:timers/promises";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import {
     type AcpSessionUpdate,
     decodeAcpSessionUpdate,

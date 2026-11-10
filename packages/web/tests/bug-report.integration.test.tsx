@@ -1,11 +1,12 @@
 import { createServer } from "node:http";
-import { close as closeSentry, init, makeFetchTransport } from "@sentry/react";
+import { close as closeSentry, flush, makeFetchTransport } from "@sentry/react";
 import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { HttpApiTransport } from "../src/services/api/http-api-transport.ts";
+import { initializeBrowserMonitoring } from "../src/services/diagnostics/sentry-monitoring.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -25,6 +26,57 @@ function noopTransport(): HttpApiTransport {
 }
 
 const observers = new Set<MutationObserver>();
+
+test("Given a browser error contains private data, When the user submits two reports, Then the error preserves its stack and both reports associate with that error without leaking automatic private data", async () => {
+    const inbox = await createReportInbox();
+    try {
+        const app = await createTestApp({ connectAgent: true });
+        await app.queryElementByTestId(dataTestId.messageComposer);
+        const error = Object.assign(new Error("PRIVATE_CHAT_CONTENT token=PRIVATE_ACCESS_TOKEN"), {
+            code: "ACCEPTANCE_ERROR",
+            requestId: "12345678-1234-4234-8234-123456789012",
+        });
+        error.stack =
+            "Error: PRIVATE_CHAT_CONTENT\n    at renderChat (https://morty.example/assets/app.js?token=PRIVATE_ACCESS_TOKEN:42:7)";
+        globalThis.onerror?.(error.message, "https://morty.example/assets/app.js", 42, 7, error);
+        await flush(2000);
+        const errorEnvelope = inbox.envelopes.find((envelope) => envelope.includes('"type":"event"')) ?? "";
+        expect(errorEnvelope).not.toContain("PRIVATE_CHAT_CONTENT");
+        expect(errorEnvelope).not.toContain("PRIVATE_ACCESS_TOKEN");
+        const event = JSON.parse(errorEnvelope.split("\n")[2] ?? "null");
+        expect(event.tags).toMatchObject({
+            component: "web",
+            errorCode: "ACCEPTANCE_ERROR",
+            requestId: error.requestId,
+        });
+        expect(event.contexts.morty.diagnostics.entries.length).toBeGreaterThan(0);
+        expect(event.exception.values[0].stacktrace.frames).toContainEqual(
+            expect.objectContaining({
+                filename: "https://morty.example/assets/app.js",
+                lineno: 42,
+                colno: 7,
+            }),
+        );
+        for (const description of ["First report", "Second report"]) {
+            await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+            const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
+            await app.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), description);
+            await app.user.click(getByRole(dialog, "button", { name: "Send report" }));
+            await visibleMessage(dialog, "status", "Report sent");
+            const envelope = inbox.envelopes.at(-1) ?? "";
+            const report = JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
+            const feedback = JSON.parse(envelope.split("\n")[2] ?? "null");
+            expect(report.relatedEventId).toBe(event.event_id);
+            expect(feedback.contexts.feedback.associated_event_id).toBe(event.event_id);
+            expect(report.release).toBe("morty@test-release");
+            expect(envelope).not.toContain("PRIVATE_CHAT_CONTENT");
+            expect(envelope).not.toContain("PRIVATE_ACCESS_TOKEN");
+            await app.user.click(getByRole(dialog, "button", { name: "Close dialog" }));
+        }
+    } finally {
+        await inbox.close();
+    }
+});
 
 test("Given an Agent with a known CLI version and private model metadata, When reports are sent from the draft and a configured conversation, Then they contain version and model evidence without chat content or private metadata", {
     timeout: 60_000,
@@ -92,6 +144,9 @@ test("Given an Agent with a known CLI version and private model metadata, When r
             (element) => element.textContent?.includes("GPT-6.1-Sol") === true,
         );
         const session = await report();
+        const feedback = JSON.parse((inbox.envelopes.at(-1) ?? "").split("\n")[2] ?? "null");
+        expect(feedback.tags).toMatchObject({ component: "web", reportId: session.id });
+        expect(session.relatedEventId).toBeNull();
         expect(session.sessionId).not.toBe("");
         expect(session.chat).toMatchObject({
             kind: "available",
@@ -286,10 +341,11 @@ async function createReportInbox() {
     if (address === null || typeof address === "string") {
         throw new Error("The report inbox did not listen");
     }
-    init({
+    initializeBrowserMonitoring({
         dsn: `http://public@127.0.0.1:${address.port}/1`,
-        defaultIntegrations: false,
-        sendClientReports: false,
+        environment: "test",
+        release: "morty@test-release",
+        tracesSampleRate: 0,
         transport: (options) => makeFetchTransport(options, window.fetch.bind(window)),
     });
     return {

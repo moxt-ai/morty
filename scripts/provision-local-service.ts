@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
-import { PLATFORM_APP_PROJECT_PERMISSIONS } from "../packages/client/src/protocol/index.ts";
+import { RELAY_APP_PROJECT_PERMISSIONS } from "../packages/client/src/protocol/index.ts";
 import { serviceCredential } from "../packages/relay/src/schema/d1/index.ts";
 
 /** Local development provisioning uses storage, without installing a privileged HTTP bootstrap route. */
@@ -27,7 +27,7 @@ export async function provisionLocalService(config: string, persistTo: string, s
                 publicCredentialId,
                 appId,
                 secretDigest: createHash("sha256").update(appSecret).digest("hex"),
-                permissionsJson: JSON.stringify(PLATFORM_APP_PROJECT_PERMISSIONS),
+                permissionsJson: JSON.stringify(RELAY_APP_PROJECT_PERMISSIONS),
                 allProjects: 1,
                 issuedAt: now,
             })
@@ -61,7 +61,7 @@ export async function provisionLocalService(config: string, persistTo: string, s
                 resolve(import.meta.dirname, "../node_modules/wrangler/bin/wrangler.js"),
                 "d1",
                 "execute",
-                "PLATFORM_DIRECTORY_DATABASE",
+                "RELAY_DIRECTORY_DATABASE",
                 "--local",
                 "--config",
                 config,

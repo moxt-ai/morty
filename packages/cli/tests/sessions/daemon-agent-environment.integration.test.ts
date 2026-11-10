@@ -12,7 +12,7 @@ import {
     encodeAgentSettingsDiscoverCommand,
     MORTY_API_PREFIX,
 } from "@morty-build/client/protocol";
-import { listen, port, sendText } from "@morty-build/platform-test-support/websocket";
+import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";

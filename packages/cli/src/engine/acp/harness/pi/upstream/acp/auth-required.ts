@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { getAuthMethods } from "./auth.js";
 
 /**

@@ -60,7 +60,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:cli
       - run: pnpm test:client
-      - run: pnpm test:platform
+      - run: pnpm test:relay-support
       - run: pnpm test:relay
       - run: pnpm test:worker
 
@@ -112,8 +112,8 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
     # Playwright's image carries the browsers and their system libraries for exactly the suite's Playwright version,
-    # so no shard downloads them: an apt fetch of those libraries once took 18 minutes. Runs as the runner's user.
-    container:
+    # so browser and acceptance jobs never install them. Share the version, digest and runner user for both jobs.
+    container: &playwright-container
       image: mcr.microsoft.com/playwright:v1.65.0-resolute@sha256:4d70b558dbaff71611b2f3e7a32aa2b4d42cfc892078ad368cb7ea229c2ffd1f
       options: --user 1001
     timeout-minutes: 45
@@ -225,6 +225,7 @@ jobs:
   acceptance:
     needs: package
     runs-on: ubuntu-latest
+    container: *playwright-container
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -241,7 +242,6 @@ jobs:
           path: .release
       - name: Install the accepted real Claude boundary dependency
         run: npm install --global @anthropic-ai/claude-code@2.1.273
-      - run: pnpm --filter @morty-build/e2e exec playwright install --with-deps chromium
       - name: Verify setup, pairing, image conversation and restart with the exact archive
         run: node scripts/test-release-journey.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

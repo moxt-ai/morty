@@ -216,7 +216,7 @@ test("Given links shared by a recovery credential and by the machine's own crede
     expect((await redeem(unusedLocalLink)).status).toBe(410);
 });
 
-test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Platform preserves every placement", {
+test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Relay preserves every placement", {
     timeout: 30_000,
 }, async () => {
     // Cloudflare supplies cf metadata on incoming Requests; Node does not.
@@ -401,7 +401,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     ).toBe(404);
 });
 
-test("Given a user with a draft Bot on a Project-scoped Platform, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
+test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const served = await worker.fetch(

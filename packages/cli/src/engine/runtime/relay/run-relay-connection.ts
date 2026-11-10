@@ -1,10 +1,9 @@
 import {
     decodeKnownServiceToDaemonMessage,
-    isIdentifier,
     RUNTIME_HEARTBEAT_ACK_KIND,
     RUNTIME_LIVENESS_READY_KIND,
     type RuntimeUpgradeResult,
-    readNativeSessionTarget,
+    readUndecodedRequestAddress,
 } from "@morty-build/client/protocol";
 import { type MessageEvent, WebSocket } from "undici";
 import type { ResolveAgent } from "../../session/api/session-api.ts";
@@ -310,24 +309,14 @@ export async function runRelayConnection({
  * waiting out its deadline. Only a message naming its own `requestId` can be answered.
  */
 function refuseUnsupportedRequest(socket: WebSocket, encoded: string): void {
-    let value: unknown;
-    try {
-        value = JSON.parse(encoded);
-    } catch {
-        return;
-    }
-    if (typeof value !== "object" || value === null) {
-        return;
-    }
-    const requestId: unknown = Reflect.get(value, "requestId");
-    const target = readNativeSessionTarget(Reflect.get(value, "target"));
-    if (!isIdentifier(requestId)) {
+    const request = readUndecodedRequestAddress(encoded);
+    if (request === null) {
         return;
     }
     replyFailure(
         socket,
-        requestId,
-        target ?? undefined,
+        request.requestId,
+        request.target,
         "unsupported_operation",
         "This Morty Runtime does not support the requested operation.",
     );

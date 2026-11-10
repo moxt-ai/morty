@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { decodeDaemonToServiceMessage } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 

@@ -3,7 +3,7 @@
  * It only helps people recognize their own devices: any browser can describe itself however it likes.
  */
 export function describeBrowser(userAgent: string): string {
-    const platform = /iPhone/u.test(userAgent)
+    const relay = /iPhone/u.test(userAgent)
         ? "iPhone"
         : /iPad/u.test(userAgent)
           ? "iPad"
@@ -31,5 +31,5 @@ export function describeBrowser(userAgent: string): string {
                 : /Safari\//u.test(userAgent)
                   ? "Safari"
                   : "Browser";
-    return `${platform} · ${browser}`;
+    return `${relay} · ${browser}`;
 }

@@ -14,14 +14,14 @@ export default defineConfig({
         environmentOptions: {
             happyDOM: {
                 settings: {
-                    // The page and the Platform differ only by port here, so happy-dom preflights the Platform's file
+                    // The page and the Relay differ only by port here, so happy-dom preflights the Relay's file
                     // reads. Its preflight lists CORS-safelisted headers such as Accept, which browsers leave out,
-                    // and the Platform rightly refuses them. Browsers send these reads, so the tests do too.
+                    // and the Relay rightly refuses them. Browsers send these reads, so the tests do too.
                     fetch: { disableSameOriginPolicy: true },
                 },
             },
         },
-        // Each file owns real Chat and Platform isolates. Bound their concurrent startup.
+        // Each file owns real Chat and Relay isolates. Bound their concurrent startup.
         maxWorkers: 2,
         include: ["tests/**/*.integration.test.tsx"],
         // Scenarios start real isolates, and the harness waits up to 12 s for a view (`waitForView`) and 10 s for the

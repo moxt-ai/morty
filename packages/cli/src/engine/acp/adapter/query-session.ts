@@ -1,4 +1,4 @@
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import type { NativeSessionTarget, SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { NativeSessionQuery, SessionEventPage, SessionEventStore } from "../native-history/preview-contract.ts";

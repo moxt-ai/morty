@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import { decodeAcpSessionUpdate, type SessionEventPayload } from "@morty-build/client/protocol";
 import { z } from "zod";
 import { revalidateExecutable, stopProcessTree } from "../../../util/process/executable.ts";

@@ -26,7 +26,8 @@ import { operationErrorCode } from "../../../infra/operation-error.ts";
 import { AccumulatingOperationMetrics } from "../../../infra/operation-metrics.ts";
 import type { PreparedSession, ResolveAgent, SessionRecovery } from "../../../session/api/session-api.ts";
 import { SessionError } from "../../../session/api/session-error.ts";
-import type { ClosedSessionHandling, SessionManager } from "../../../session/manager/session-manager.ts";
+import type { ClosedSessionHandling } from "../../../session/manager/session-lifecycle.ts";
+import type { SessionManager } from "../../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
 import { applyCompleteSessionConfiguration } from "../../../session/prompt/apply-session-configuration.ts";
 import { type HeldSession, resolveHeldSession } from "../../../session/record/held-session.ts";
@@ -349,17 +350,16 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
     );
     const signal = AbortSignal.any([context.signal, timeout.signal]);
     try {
-        const resolved = await resolveSessionDirectory(context.directories, command.directory, signal);
-        const agent = await context.resolveAgent(command.harness, signal);
-        const ready = await context.sessionCreations.run(
-            command.operationId,
-            {
-                harness: command.harness,
-                cwd: resolved.cwd,
-                configurations: command.configurations,
-            },
-            signal,
-            async () => {
+        const input = {
+            action: "create",
+            harness: command.harness,
+            directory: command.directory,
+            configurations: command.configurations,
+        };
+        const create = async () => {
+            const resolved = await resolveSessionDirectory(context.directories, command.directory, signal);
+            const agent = await context.resolveAgent(command.harness, signal);
+            return await context.sessionCreations.run(command.operationId, input, signal, async () => {
                 const target = await context.sessions.createNativeSession({
                     ...agent,
                     cwd: resolved.cwd,
@@ -391,8 +391,9 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                     }
                     throw cause;
                 }
-            },
-        );
+            });
+        };
+        const ready = await (context.sessionCreations.recover(command.operationId, input, signal) ?? create());
         signal.throwIfAborted();
         context.diagnostics.daemonDiagnostic("session_creation_resolved", command.requestId, {
             harness: command.harness,

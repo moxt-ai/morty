@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentConnection, agent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { type AgentConnection, agent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
@@ -23,7 +23,7 @@ import {
     type SessionLiveEvent,
     WORKSPACE_ENTRIES_KIND,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";

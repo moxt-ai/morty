@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { isRecord, truncate } from "../../util/value-utils.ts";
 import { AcpExecutionError, AcpPromptExecutionError } from "../acp-error.ts";

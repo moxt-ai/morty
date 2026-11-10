@@ -1,13 +1,13 @@
 import { expect, it, vi } from "vitest";
-import { startTestPlatform } from "../support/platform.ts";
+import { startTestRelay } from "../support/relay.ts";
 
 it("Given two harnesses create the same native ID, When I create and restore each conversation, Then both native pairs remain independently usable", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
     try {
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Native creation collision",
@@ -16,7 +16,7 @@ it("Given two harnesses create the same native ID, When I create and restore eac
             },
             signal,
         );
-        const runtime = await platform.connectAgent(
+        const runtime = await relay.connectAgent(
             project.computerId,
             ["claude", "codex"].map((harness) => ({
                 harness,
@@ -56,9 +56,9 @@ it("Given a harness announces its title during creation, When the caller creates
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
     try {
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Native creation metadata",
@@ -67,7 +67,7 @@ it("Given a harness announces its title during creation, When the caller creates
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.computerId, [
+        const runtime = await relay.connectAgent(project.computerId, [
             {
                 harness: "claude",
                 label: "Controlled ACP",
@@ -102,9 +102,9 @@ it("Given two harnesses own the same native session ID without prior discovery, 
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"));
     try {
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Harness-scoped native sessions",
@@ -114,7 +114,7 @@ it("Given two harnesses own the same native session ID without prior discovery, 
             signal,
         );
         const sessionId = "same-native-session";
-        const runtime = await platform.connectAgent(
+        const runtime = await relay.connectAgent(
             project.computerId,
             [
                 { harness: "claude", label: "Claude Code" },

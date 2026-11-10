@@ -221,6 +221,7 @@ import {
     SESSION_TURN_STOPPED_KIND,
     SESSION_TURN_WITHDRAWN_KIND,
 } from "../session/prompt/commands.ts";
+import { type NativeSessionTarget, readNativeSessionTarget } from "../session/shared/native-session-target.ts";
 import {
     decodeWorkspaceEntriesEvent,
     decodeWorkspaceListCommand,
@@ -229,6 +230,7 @@ import {
     WORKSPACE_ENTRIES_KIND,
     WORKSPACE_LIST_KIND,
 } from "../session/workspace/index.ts";
+import { isIdentifier } from "../shared/identifier.ts";
 import { decodeMessageKind, ProtocolMessageError } from "../shared/message-codec.ts";
 
 interface MessageSignature<TMessage extends { readonly kind: string }> {
@@ -430,6 +432,45 @@ export function decodeServiceToDaemonMessage(encoded: string): ServiceToDaemonMe
 
 export function encodeServiceToDaemonMessage(message: ServiceToDaemonMessage): string {
     return serviceToDaemonSignatures[message.kind].encoder(message);
+}
+
+/** A message that asks the Runtime for an answer; liveness signals of the connection itself ask for none. */
+export type ServiceToDaemonRequest = Exclude<
+    ServiceToDaemonMessage,
+    { readonly kind: typeof RUNTIME_HEARTBEAT_ACK_KIND | typeof RUNTIME_LIVENESS_READY_KIND }
+>;
+
+/**
+ * The address of a request: every answer to it, `session.operation.failed` included, carries this value as its
+ * `requestId`. A prompt is its own request, addressed by the Turn it creates; every other request names its address
+ * in `requestId`. Senders, the Relay and the Runtime all address replies through this one rule.
+ */
+export function requestReplyAddress(request: ServiceToDaemonRequest): string {
+    return request.kind === SESSION_PROMPT_KIND ? request.commandId : request.requestId;
+}
+
+/**
+ * Reads, by the same rule, the address and Session of a request the receiver could not decode, so that it can still
+ * answer it with a refusal. Null when the message names no address to answer.
+ */
+export function readUndecodedRequestAddress(
+    encoded: string,
+): { readonly requestId: string; readonly target: NativeSessionTarget | undefined } | null {
+    let value: unknown;
+    try {
+        value = JSON.parse(encoded);
+    } catch {
+        return null;
+    }
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return null;
+    }
+    const kind: unknown = Reflect.get(value, "kind");
+    const requestId: unknown = Reflect.get(value, kind === SESSION_PROMPT_KIND ? "commandId" : "requestId");
+    if (!isIdentifier(requestId)) {
+        return null;
+    }
+    return { requestId, target: readNativeSessionTarget(Reflect.get(value, "target")) ?? undefined };
 }
 
 const daemonToServiceSignatures = {

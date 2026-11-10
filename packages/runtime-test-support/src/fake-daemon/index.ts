@@ -1,4 +1,4 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
+import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
 import { AcpAgentDefinition } from "../../../cli/src/engine/acp/agent/agent-definition.ts";
 import type { AgentConnectionOptions } from "../../../cli/src/engine/acp/connection/agent-connection.ts";
 import { EndpointAgentConnection } from "../../../cli/src/engine/acp/connection/endpoint-agent-connection.ts";

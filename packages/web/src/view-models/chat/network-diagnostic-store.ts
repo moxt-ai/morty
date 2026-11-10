@@ -45,11 +45,11 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
             const signal = AbortSignal.any([parent, controller.signal, AbortSignal.timeout(15_000)]);
             set({ state: { kind: "measuring" } });
             try {
-                const [browserMortyLatencyMs, platform] = await Promise.all([
+                const [browserMortyLatencyMs, relay] = await Promise.all([
                     operations.measureBrowserMorty(signal),
                     operations.measureServerHops(signal),
                 ]);
-                const browserRelayLatencyMs = await operations.measureBrowserRelay(platform.relayOrigin, signal);
+                const browserRelayLatencyMs = await operations.measureBrowserRelay(relay.relayOrigin, signal);
                 signal.throwIfAborted();
                 if (active === controller) {
                     set({
@@ -57,8 +57,8 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
                             browserRelayLatencyMs,
                             browserMortyLatencyMs,
                             kind: "ready",
-                            relayRuntimeLatencyMs: platform.relayRuntimeLatencyMs,
-                            mortyRelayLatencyMs: platform.mortyRelayLatencyMs,
+                            relayRuntimeLatencyMs: relay.relayRuntimeLatencyMs,
+                            mortyRelayLatencyMs: relay.mortyRelayLatencyMs,
                         },
                     });
                 }

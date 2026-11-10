@@ -18,7 +18,7 @@ import {
     encodeSessionCreateCommand,
     MORTY_API_PREFIX,
 } from "@morty-build/client/protocol";
-import { listen, port, sendText } from "@morty-build/platform-test-support/websocket";
+import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { discoverLocalAgentInventory } from "../../src/engine/agent/discovery/discover-local-agents.ts";
 import type { LocalAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";

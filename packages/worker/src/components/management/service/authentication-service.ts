@@ -400,7 +400,7 @@ export class AuthenticationService {
 
     /**
      * Disconnects every other browser that joined through a link while the caller keeps its access, so the owner can
-     * remove a device without locking themselves out. The Platform cannot tell browsers apart, so it closes every chat
+     * remove a device without locking themselves out. The Relay cannot tell browsers apart, so it closes every chat
      * window opened until now; those of the access that remains reopen with a new Session credential.
      */
     readonly endOtherBrowserAccess = async (

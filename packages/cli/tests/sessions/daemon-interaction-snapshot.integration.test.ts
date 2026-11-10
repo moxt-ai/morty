@@ -11,6 +11,8 @@ import {
     decodeSessionEventEnvelope,
     decodeSessionHistoryPageLoaded,
     decodeSessionInfoUpdatedEvent,
+    decodeSessionInteractionAnsweredEvent,
+    decodeSessionOperationFailedEvent,
     decodeSessionPermissionRequestedEvent,
     decodeSessionPromptAcceptedEvent,
     decodeSessionReadyEvent,
@@ -41,7 +43,7 @@ import {
     SESSION_STATUS_CHANGED_KIND,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
@@ -224,6 +226,39 @@ test("Given a newly created native Session, When its first Turn resolves interac
         expect(await snapshot("resolved_permission_snapshot")).toMatchObject({
             action: "active-turn",
             turn: { interaction: null },
+        });
+        // A caller that lost the first reply can repeat its answer, but cannot overwrite it.
+        const repeatedAnswer = {
+            interactionId: permission.interactionId,
+            kind: "session.permission.respond" as const,
+            requestId: "repeat-permission",
+            optionId: "allow-once",
+            outcome: "selected" as const,
+            target: sessionTarget,
+        };
+        socket.send(encodeSessionPermissionRespondCommand(repeatedAnswer));
+        expect(
+            decodeSessionInteractionAnsweredEvent(await messages.nextKind("session.interaction.answered")),
+        ).toMatchObject({
+            requestId: "repeat-permission",
+            interactionId: permission.interactionId,
+        });
+        socket.send(
+            encodeSessionPermissionRespondCommand({
+                ...repeatedAnswer,
+                requestId: "conflicting-permission",
+                outcome: "cancelled",
+            }),
+        );
+        expect(decodeSessionOperationFailedEvent(await messages.nextKind("session.operation.failed"))).toMatchObject({
+            requestId: "conflicting-permission",
+            code: "permission_response_conflict",
+        });
+        socket.send(
+            encodeSessionQueryCommand({ kind: "session.query", requestId: "metadata-time", targets: [sessionTarget] }),
+        );
+        expect(decodeSessionsQueriedEvent(await messages.nextKind(SESSION_QUERIED_KIND))).toMatchObject({
+            entries: [expect.objectContaining({ target: sessionTarget, updatedAt: "2026-09-04T00:01:00.000Z" })],
         });
         await writeFile(join(stateDirectory, "agent", "resume-after-permission"), "");
         const elicitation = decodeSessionElicitationRequestedEvent(
@@ -585,7 +620,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     }
 }, 30_000);
 
-test("Given a real daemon prepared a Session, When Platform queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
+test("Given a real daemon prepared a Session, When Relay queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-query-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
@@ -673,7 +708,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
     }
 }, 30_000);
 
-test("Given a real daemon persisted a Session, When Platform restores it by identifier, Then history is loaded once and remains available for paging", async () => {
+test("Given a real daemon persisted a Session, When Relay restores it by identifier, Then history is loaded once and remains available for paging", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-restore-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);

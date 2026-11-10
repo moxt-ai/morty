@@ -1,9 +1,9 @@
 import * as v from "valibot";
-import { platformIdentifier } from "./platform-project.ts";
+import { relayIdentifier } from "./computer-management.ts";
 
 export const botConfigurationSchema = v.pipe(
     v.object({
-        computerId: platformIdentifier,
+        computerId: relayIdentifier,
     }),
     v.readonly(),
 );

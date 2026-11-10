@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import {
     decodeDaemonToServiceMessage,
     encodeNativeSessionRequest,
@@ -13,7 +13,7 @@ import {
     SESSION_EVENT_KIND,
     type SessionLiveEvent,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";

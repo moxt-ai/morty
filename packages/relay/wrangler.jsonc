@@ -62,7 +62,7 @@
     ],
     "d1_databases": [
         {
-            "binding": "PLATFORM_DIRECTORY_DATABASE",
+            "binding": "RELAY_DIRECTORY_DATABASE",
             "migrations_dir": "migrations/d1"
         }
     ],

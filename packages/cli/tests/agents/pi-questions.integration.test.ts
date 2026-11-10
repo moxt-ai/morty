@@ -514,7 +514,9 @@ test("Given real Pi is waiting for an answer, When its process exits unexpectedl
                 if (!Number.isSafeInteger(pid) || pid <= 0) {
                     throw new Error("Missing test Pi process");
                 }
-                process.kill(pid, "SIGTERM");
+                // An unexpected exit is one Pi cannot intercept: Pi treats SIGTERM as a graceful shutdown that
+                // waits for the pending question.
+                process.kill(pid, "SIGKILL");
             }
             if (event.payload.kind === "session.elicitation.resolved") {
                 expect(event.payload.event.interactionId).toBe(interactionId);

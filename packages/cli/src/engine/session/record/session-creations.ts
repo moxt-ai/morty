@@ -28,12 +28,12 @@ export class SessionCreations {
         await Promise.allSettled([...this.#running.values()].map(({ result }) => result));
     };
 
-    readonly run = async (
+    /** A completed operation can be recovered without revalidating its former execution environment. */
+    readonly recover = (
         operationId: string,
         input: unknown,
         signal: AbortSignal,
-        create: () => Promise<SessionReadyEvent>,
-    ): Promise<SessionReadyEvent> => {
+    ): Promise<SessionReadyEvent> | null => {
         signal.throwIfAborted();
         const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
         const prior = this.#table.read(operationId);
@@ -42,7 +42,7 @@ export class SessionCreations {
             throw new AcpExecutionError("The creation operation has different inputs", {}, "idempotency_conflict");
         }
         if (running !== undefined) {
-            return await this.#wait(running.result, signal);
+            return this.#wait(running.result, signal);
         }
         if (prior !== undefined) {
             if (prior.resultJson === null) {
@@ -52,8 +52,22 @@ export class SessionCreations {
                     "session_creation_outcome_unknown",
                 );
             }
-            return decodeSessionReadyEvent(prior.resultJson);
+            return Promise.resolve(decodeSessionReadyEvent(prior.resultJson));
         }
+        return null;
+    };
+
+    readonly run = async (
+        operationId: string,
+        input: unknown,
+        signal: AbortSignal,
+        create: () => Promise<SessionReadyEvent>,
+    ): Promise<SessionReadyEvent> => {
+        const recovered = this.recover(operationId, input, signal);
+        if (recovered !== null) {
+            return await recovered;
+        }
+        const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
         this.#table.start(operationId, hash);
         const result = Promise.resolve().then(async () => {
             try {

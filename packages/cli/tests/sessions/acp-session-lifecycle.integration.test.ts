@@ -237,7 +237,8 @@ describe("ACP conversation sessions", () => {
                 if (!(active instanceof FoundStoredSession)) {
                     throw new Error("Expected the active conversation to remain stored");
                 }
-                expect(active.session.updatedAt).toBe("2026-10-14T12:00:00.000Z");
+                // Activity preserves the Agent's reported modification time rather than the Runtime clock.
+                expect(active.session.updatedAt).toBe("2026-09-05T00:00:00Z");
             } finally {
                 await reopenedManager.close();
             }

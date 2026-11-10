@@ -1,8 +1,8 @@
-import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
+import type { ComputerManagementGateway } from "../../../gateway/computer-management-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import type { BootstrapOrigin } from "../entity/computer-bootstrap.ts";
+import { type ComputerManagement, ComputerManagementError } from "../entity/computer-management.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
@@ -13,7 +13,7 @@ export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
     readonly #computerId: string | undefined;
-    readonly #platform: PlatformProjectGateway;
+    readonly #relay: ComputerManagementGateway;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
 
     constructor(cx: {
@@ -22,12 +22,12 @@ export class ManagementService {
         readonly storages: {
             readonly managedBots: ManagedBotStorage;
         };
-        readonly gateways: { readonly platformProjects: PlatformProjectGateway };
+        readonly gateways: { readonly computerManagements: ComputerManagementGateway };
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID;
-        this.#platform = cx.gateways.platformProjects;
+        this.#relay = cx.gateways.computerManagements;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
     }
 
@@ -37,7 +37,7 @@ export class ManagementService {
      */
     readonly initializeAnonymousUser = async (
         userId: string,
-        project: PlatformProject,
+        project: ComputerManagement,
         signal: AbortSignal,
         origin: BootstrapOrigin,
     ) => {
@@ -85,13 +85,13 @@ export class ManagementService {
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {
         const previous = await this.readProject(userId, signal);
         if (previous === null) {
-            throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
+            throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }
-        // A successor needs its own Platform reference: clientReference is unique per (app, reference)
+        // A successor needs its own Relay reference: clientReference is unique per (app, reference)
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
         const reference = `${userId}.${previous.computerId}`;
-        const project = await this.#platform.create(
+        const project = await this.#relay.create(
             userId,
             "Morty",
             signal,
@@ -103,13 +103,13 @@ export class ManagementService {
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        const pairing = await this.#platform.createPairing(project.computerId, idempotencyKey, signal);
+        const pairing = await this.#relay.createPairing(project.computerId, idempotencyKey, signal);
         return pairing;
     };
 
     readonly readRuntimePairing = async (userId: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
-        return await this.#platform.readPairing(project.computerId, signal);
+        return await this.#relay.readPairing(project.computerId, signal);
     };
 
     /**
@@ -140,7 +140,7 @@ export class ManagementService {
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {
         const project = await this.readProject(userId, signal);
         if (project === null) {
-            throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Runtime.", 409);
+            throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Runtime.", 409);
         }
         return project;
     };
