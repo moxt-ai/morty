@@ -198,8 +198,6 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         commandId,
                         prompt,
                         target: peer.target,
-                        agentId: "claude",
-                        directory: ".",
                         attachments: [],
                         disposition: "append",
                     }),
@@ -248,8 +246,6 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         action: "active-turn",
                         requestId,
                         target: peer.target,
-                        agentId: "claude",
-                        directory: ".",
                     }),
                 );
                 for (;;) {

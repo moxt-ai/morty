@@ -22,10 +22,7 @@ interface QueuedPromptRequest {
     readonly disposition?: string;
     readonly target: NativeSessionTarget;
     readonly targetCommandId?: string;
-    readonly context: {
-        readonly agentId: string;
-        readonly directory: string;
-    };
+    readonly context: PromptExecutionContext;
 }
 
 export interface PromptRequestRecovery {
@@ -96,15 +93,13 @@ export class PromptLifecycle {
         this.#sink = sink;
     }
 
-    readonly requested = (command: SessionPromptCommand): void => {
+    /** Registers a prompt for the Session it names, which runs in `context`: the Session's own Agent and directory. */
+    readonly requested = (command: SessionPromptCommand, context: PromptExecutionContext): void => {
         this.#queued.set(command.commandId, {
             commandId: command.commandId,
             content: promptContent(command),
             disposition: command.disposition,
-            context: {
-                agentId: command.agentId,
-                directory: command.directory,
-            },
+            context,
             target: command.target,
             ...(command.disposition === SessionPromptDisposition.Steer
                 ? { targetCommandId: command.targetCommandId }

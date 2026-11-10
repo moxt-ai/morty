@@ -24,7 +24,6 @@ export class ProjectPermission {
     static readonly ArtifactWrite = ProjectPermission.named("artifact:write");
     static readonly IdentityBindingsManage = ProjectPermission.named("identity-binding:manage");
     static readonly InteractionRespond = ProjectPermission.named("interaction:respond");
-    static readonly OwnerCredentialsManage = ProjectPermission.named("owner-credential:manage");
     static readonly ProjectEventsRead = ProjectPermission.named("project:event:read");
     static readonly ProjectRead = ProjectPermission.named("project:read");
     static readonly RuntimePair = ProjectPermission.named("runtime:pair");

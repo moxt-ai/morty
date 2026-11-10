@@ -1,6 +1,6 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { id: "interaction-test", name: "Interaction Agent" } });
+test.use({ runtimeAgent: { harness: "interaction-test", name: "Interaction Agent" } });
 for (const width of [1440, 390]) {
     test(`Given a pending permission at ${width}px, When the user reloads and approves the exact input, Then the agent continues with that decision`, async ({
         runtime,

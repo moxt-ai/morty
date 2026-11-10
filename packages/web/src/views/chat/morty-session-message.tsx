@@ -267,11 +267,11 @@ export function MortySessionMessage({
     retryUnknownDeliveryDisabled,
     openLocalFile,
     active = false,
-    failureAgentRef = "",
+    failureHarness = "",
     failureMachineName = "",
 }: {
     readonly message: SessionMessage;
-    readonly failureAgentRef?: string;
+    readonly failureHarness?: string;
     readonly failureMachineName?: string;
     readonly deliveryUnknownUserMessageId: string | null;
     readonly onRemoveUnknownDelivery: () => void;
@@ -350,7 +350,7 @@ export function MortySessionMessage({
         );
     }
     if (presentation.kind === "failure") {
-        const guidance = authenticationGuidance(presentation.code, failureAgentRef, failureMachineName);
+        const guidance = authenticationGuidance(presentation.code, failureHarness, failureMachineName);
         if (guidance !== null) {
             return <AuthenticationNotice guidance={guidance} code={presentation.code} message={presentation.message} />;
         }

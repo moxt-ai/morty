@@ -192,7 +192,7 @@ export class AgentSettingsSnapshot {
 
 /** Resolves a catalog Agent's current launch definition and its Runtime-owned adapter. */
 export type ResolveAgent = (
-    agentId: string,
+    harness: string,
     signal: AbortSignal,
     target?: NativeSessionTarget,
 ) => Promise<{

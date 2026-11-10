@@ -44,7 +44,7 @@ test("Given 501 saved Claude sessions, When a user lists every page through the 
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
-                    agentId: "claude",
+                    harness: "claude",
                     directory: ".",
                     kind: "native.session.request",
                     action: "list",

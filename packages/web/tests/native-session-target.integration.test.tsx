@@ -78,8 +78,8 @@ test.each([
         const app = await createTestApp({
             connectAgent: true,
             agents: [
-                { id: "claude", label: "Claude Code" },
-                { id: "codex", label: "Codex" },
+                { harness: "claude", label: "Claude Code" },
+                { harness: "codex", label: "Codex" },
             ],
             sessionIds: new Set([sessionId]),
         });

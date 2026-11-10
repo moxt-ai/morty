@@ -41,8 +41,6 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 kind: "session.prompt",
                 commandId,
                 target: peer.target,
-                agentId: "codex",
-                directory: ".",
                 attachments: [],
                 prompt,
                 disposition: SessionPromptDisposition.Append,
@@ -92,7 +90,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
         }
         // Previewing the saved Codex thread replays it from Codex itself.
         const identity = {
-            agentId: "codex",
+            harness: "codex",
             directory: ".",
         } as const;
         peer.send(

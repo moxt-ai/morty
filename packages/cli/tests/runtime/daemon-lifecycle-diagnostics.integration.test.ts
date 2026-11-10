@@ -94,7 +94,7 @@ test("Given a discovered executable with a known version, When diagnostics are r
                     expect(exported.entries).toContainEqual(
                         expect.objectContaining({
                             event: "agent_inventory",
-                            agentId: "custom",
+                            harness: "custom",
                             agentVersion: "1.0.0",
                             adapterVersion: "1.0.0",
                             executableOverride: "unknown",

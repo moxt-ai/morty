@@ -1,5 +1,5 @@
 export interface AgentProbeDiagnostic {
-    readonly agentId: string;
+    readonly harness: string;
     readonly source: "agent_version" | "adapter_version" | "acp_readiness";
     readonly event: "agent_probe_failed" | "agent_probe_cancelled";
     readonly attempt: number;

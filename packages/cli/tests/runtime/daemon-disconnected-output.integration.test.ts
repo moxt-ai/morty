@@ -329,7 +329,7 @@ async function startRuntime() {
                     kind: "session.create",
                     requestId: crypto.randomUUID(),
                     operationId: crypto.randomUUID(),
-                    agentId: "controlled",
+                    harness: "controlled",
                     directory: ".",
                     configurations: [],
                 }),
@@ -344,9 +344,7 @@ async function startRuntime() {
             const sessionTarget = decodeSessionReadyEvent(created).target;
             peer.socket.send(
                 encodeSessionPromptCommand({
-                    agentId: "controlled",
                     commandId: `command-${label}`,
-                    directory: ".",
                     disposition: "append",
                     attachments: [],
                     kind: "session.prompt",
@@ -532,7 +530,6 @@ test.each([
         }
         runtime.initial.socket.send(
             encodeSessionPreviewHistoryPageLoad({
-                agentId: "controlled",
                 directory: ".",
                 kind: "session.preview-history.page.load",
                 target: { harness: "controlled", sessionId: nativeThought.payload.messageId },

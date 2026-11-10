@@ -1,9 +1,5 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import {
-    type AccessGrantRedemption,
-    PairingDirectoryError,
-    type RuntimePairingRequest,
-} from "@morty-build/relay-core/contracts";
+import { PairingDirectoryError, type RuntimePairingRequest } from "@morty-build/relay-core/contracts";
 import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
 import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
@@ -84,46 +80,6 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
         }
     };
 
-    readonly authenticateHost: PlatformProjectStore["authenticateHost"] = (computerId, tokenHash, now, signal) =>
-        this.call("authenticateHost", (stub) => stub.authenticateHost(computerId, tokenHash, now), signal);
-
-    readonly isHostCredentialActive: PlatformProjectStore["isHostCredentialActive"] = (identity, signal) =>
-        this.call(
-            "isHostCredentialActive",
-            (stub, computerId) => stub.isHostCredentialActive(computerId, identity),
-            signal,
-        );
-
-    readonly listLinkedDevices: PlatformProjectStore["listLinkedDevices"] = (computerId, signal) =>
-        this.call("listLinkedDevices", (stub) => stub.listLinkedDevices(computerId), signal);
-
-    readonly revokeLinkedDevice: PlatformProjectStore["revokeLinkedDevice"] = (computerId, credentialId, now, signal) =>
-        this.call("revokeLinkedDevice", (stub) => stub.revokeLinkedDevice(computerId, credentialId, now), signal);
-
-    readonly createAccessGrant: PlatformProjectStore["createAccessGrant"] = (value, signal) =>
-        this.call("createAccessGrant", (stub, computerId) => stub.createAccessGrant(computerId, value), signal);
-
-    readonly redeemAccessGrant: PlatformProjectStore["redeemAccessGrant"] = (value, signal) =>
-        this.call(
-            "redeemAccessGrant",
-            async (stub, computerId): Promise<AccessGrantRedemption> => await stub.redeemAccessGrant(computerId, value),
-            signal,
-        );
-
-    readonly createBrowserCredential: PlatformProjectStore["createBrowserCredential"] = (value, signal) =>
-        this.call(
-            "createBrowserCredential",
-            (stub, computerId) => stub.createBrowserCredential(computerId, value),
-            signal,
-        );
-
-    readonly revokeBrowserCredential: PlatformProjectStore["revokeBrowserCredential"] = (credentialId, now, signal) =>
-        this.call(
-            "revokeBrowserCredential",
-            (stub, computerId) => stub.revokeBrowserCredential(computerId, credentialId, now),
-            signal,
-        );
-
     readonly updateAgentCatalog: PlatformProjectStore["updateAgentCatalog"] = (computerId, tokenHash, agents, signal) =>
         this.call("updateAgentCatalog", (stub) => stub.updateAgentCatalog(computerId, tokenHash, agents), signal);
 
@@ -135,9 +91,6 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
 
     readonly listRuntimes: PlatformProjectStore["listRuntimes"] = (signal) =>
         this.call("listRuntimes", (stub, computerId) => stub.listRuntimes(computerId), signal);
-
-    readonly readChannel: PlatformProjectStore["readChannel"] = (computerId, signal) =>
-        this.call("readChannel", (stub) => stub.readChannel(computerId), signal);
 
     readonly requestRuntimePairing: PlatformProjectStore["requestRuntimePairing"] = (value, signal) =>
         this.call(
@@ -173,8 +126,15 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly lastDaemonRevocation: PlatformProjectStore["lastDaemonRevocation"] = (signal) =>
-        this.call("lastDaemonRevocation", (stub, computerId) => stub.lastDaemonRevocation(computerId), signal);
+    readonly revokeSessionAccess: PlatformProjectStore["revokeSessionAccess"] = (revokedAt, signal) =>
+        this.call("revokeSessionAccess", (stub, computerId) => stub.revokeSessionAccess(computerId, revokedAt), signal);
+
+    readonly readSessionAccessRevocation: PlatformProjectStore["readSessionAccessRevocation"] = (signal) =>
+        this.call(
+            "readSessionAccessRevocation",
+            (stub, computerId) => stub.readSessionAccessRevocation(computerId),
+            signal,
+        );
 
     readonly recordAudit: PlatformProjectStore["recordAudit"] = (audit, signal) =>
         this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);

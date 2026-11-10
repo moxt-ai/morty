@@ -818,7 +818,7 @@ test("Given an expanded process segment whose tool is still generating, When the
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
     });
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {

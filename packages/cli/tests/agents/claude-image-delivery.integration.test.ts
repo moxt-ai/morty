@@ -52,9 +52,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
         const sendPrompt = (commandId: string, prompt: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "claude",
                     commandId,
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

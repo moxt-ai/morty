@@ -32,7 +32,7 @@ function heldSessionCreation() {
         reject: () =>
             gate.reject(RequestError.invalidParams("The controlled Agent refused Session creation before admission")),
         agent: {
-            id: "settings-test",
+            harness: "settings-test",
             label: "Settings Agent",
             beforeSessionCreated: async () => {
                 if (holding) {

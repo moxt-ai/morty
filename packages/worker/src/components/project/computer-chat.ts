@@ -15,9 +15,19 @@ import { platformIdentifier } from "../management/entity/platform-project.ts";
 export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
-    constructor(storage: DurableObjectStorage, owns: (id: string) => boolean) {
+    readonly #revokeAccess: (
+        computerId: string,
+        change: () => Promise<boolean>,
+        signal: AbortSignal,
+    ) => Promise<boolean>;
+    constructor(
+        storage: DurableObjectStorage,
+        owns: (id: string) => boolean,
+        revokeAccess: (computerId: string, change: () => Promise<boolean>, signal: AbortSignal) => Promise<boolean>,
+    ) {
         this.#storage = storage;
         this.#owns = owns;
+        this.#revokeAccess = revokeAccess;
     }
 
     #database: DurableObjectDatabase | undefined;
@@ -104,6 +114,7 @@ export class ComputerChat {
             ...env,
             CHAT_COMPUTER_ID: computerId,
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
+            CHAT_REVOKE_ACCESS: (change, signal) => this.#revokeAccess(computerId, change, signal),
             CHAT_CREDENTIAL_KEY: this.#credentialKey,
             DATABASE: this.#database,
         };

@@ -18,7 +18,7 @@ type NativeSessionDirectory =
           readonly kind: "ready";
           readonly computerId: string;
 
-          readonly agentRef: string;
+          readonly harness: string;
           readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
           readonly entries: readonly NativeSessionEntry[];
           readonly nextCursor: string | null;
@@ -47,7 +47,7 @@ type ForkIntent = {
 };
 
 export interface NativeSessionStore {
-    /** The agent tab the user chose, by `computerId:agentRef`; the tabs themselves come from the Runtime configuration. */
+    /** The agent tab the user chose, by `computerId:harness`; the tabs themselves come from the Runtime configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -76,7 +76,7 @@ export function nativeSessionPresentation(model: NativeSessionStore, sessions: r
         const linked = sessions.filter(
             (session) =>
                 model.directory.kind === "ready" &&
-                session.target.harness === model.directory.agentRef &&
+                session.target.harness === model.directory.harness &&
                 session.target.sessionId === entry.sessionId &&
                 session.title.trim().length > 0,
         );
@@ -184,7 +184,7 @@ export const createNativeSessionStore = (
                     agent.computerId,
                     {
                         action: "list",
-                        agentId: agent.agentRef,
+                        harness: agent.harness,
                         directory: ".",
                         cursor: null,
                     },
@@ -199,7 +199,7 @@ export const createNativeSessionStore = (
                     directory: {
                         kind: "ready",
                         computerId: agent.computerId,
-                        agentRef: agent.agentRef,
+                        harness: agent.harness,
                         capabilities: result.capabilities,
                         entries,
                         nextCursor: result.nextCursor,
@@ -239,7 +239,7 @@ export const createNativeSessionStore = (
                     : directory.kind === "agent-unavailable"
                       ? `agent-unavailable:${selected}`
                       : directory.kind === "ready"
-                        ? `ready:${harnessValue(directory.computerId, directory.agentRef)}`
+                        ? `ready:${harnessValue(directory.computerId, directory.harness)}`
                         : directory.kind === "loading"
                           ? directory.listing
                           : null;
@@ -272,7 +272,7 @@ export const createNativeSessionStore = (
                 const content = await requests.nativeSession(
                     directory.computerId,
                     {
-                        agentId: directory.agentRef,
+                        harness: directory.harness,
                         directory: entry.directory,
                         sessionId: entry.sessionId,
                     },
@@ -310,7 +310,7 @@ export const createNativeSessionStore = (
             set({ operation: action, error: "" });
             try {
                 const input = {
-                    agentId: directory.agentRef,
+                    harness: directory.harness,
                     directory: preview.entry.directory,
                     sessionId: preview.entry.sessionId,
                 };
@@ -330,7 +330,7 @@ export const createNativeSessionStore = (
                               directory.computerId,
                               {
                                   action,
-                                  agentId: directory.agentRef,
+                                  harness: directory.harness,
                                   directory: preview.entry.directory,
                                   sessionId: preview.entry.sessionId,
                               },
@@ -341,7 +341,7 @@ export const createNativeSessionStore = (
                     throw new Error(`This agent cannot ${action} the selected native session.`);
                 }
                 onOpen({
-                    agentRef: directory.agentRef,
+                    harness: directory.harness,
                     result,
                     entry: preview.entry,
                 });
@@ -370,7 +370,7 @@ export const createNativeSessionStore = (
                     directory.computerId,
                     {
                         action: "list",
-                        agentId: directory.agentRef,
+                        harness: directory.harness,
                         directory: ".",
                         cursor: directory.nextCursor,
                     },

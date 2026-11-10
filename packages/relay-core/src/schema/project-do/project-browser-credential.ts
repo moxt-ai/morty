@@ -1,10 +1,11 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+/** Retained records of the retired link-sharing model; Morty no longer reads or writes this table. */
 export const projectBrowserCredential = sqliteTable(
     "machine_browser_credentials",
     {
         credentialId: text("credential_id").primaryKey(),
-        computerId: text("project_id").notNull(),
+        computerId: text("computer_id").notNull(),
         tokenHash: text("token_hash").notNull().unique(),
         createdByCredentialId: text("created_by_credential_id").notNull(),
         createdAt: integer("created_at").notNull(),

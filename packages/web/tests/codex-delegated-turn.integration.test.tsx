@@ -11,7 +11,7 @@ test("Given the Codex app owns the conversation, When it holds my message in its
     const app = await createTestApp({
         connectAgent: true,
         agent: {
-            id: "codex-app-owned",
+            harness: "codex-app-owned",
             label: "Codex",
             reply: (prompt, turnNumber, mode) =>
                 prompt === PROMPT

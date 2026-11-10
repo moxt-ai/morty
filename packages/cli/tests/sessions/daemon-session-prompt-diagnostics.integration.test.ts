@@ -28,14 +28,9 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                 PATH: executableDirectory,
             },
             async (peer) => {
-                const identity = {
-                    agentId: "controlled-acp",
-                    directory: ".",
-                };
                 const prepareId = randomUUID();
                 peer.send(
                     encodeSessionPrepareCommand({
-                        ...identity,
                         kind: "session.prepare",
                         requestId: prepareId,
                         target: peer.target,
@@ -54,7 +49,6 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                 const prompt = `fail echoing the prompt ${promptText}`;
                 peer.send(
                     encodeSessionPromptCommand({
-                        ...identity,
                         commandId,
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
@@ -105,7 +99,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                             code: "acp_agent_error",
                             commandId,
                             event: "session_prompt_failed",
-                            agentId: peer.target.harness,
+                            harness: peer.target.harness,
                         }),
                     );
                     // The exported report carries correlation identifiers and codes,

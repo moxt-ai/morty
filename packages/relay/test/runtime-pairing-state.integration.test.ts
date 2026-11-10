@@ -1,9 +1,13 @@
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "@morty-build/relay-core";
+import {
+    DurableObjectDatabaseAdapter,
+    DurableObjectSqlDatabase,
+    runtimeConnectionDurableObjectMigrations,
+} from "@morty-build/relay-core";
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import { channelAccessGrant, channelHostCredential, daemonCredential } from "@morty-build/relay-core/schema/project-do";
+import { daemonCredential } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -121,12 +125,6 @@ async function project(_name = "Runtime pairing") {
         list: async () => request(`/v1/computers/${computerId}/runtimes`),
         publish: async (pairing: Pairing, token: string) =>
             request(`/channels/${pairing.computerId}/catalog`, "PUT", { agents: [] }, token),
-        readChannel: async (pairing: Pairing, token: string) =>
-            request(`/channels/${pairing.computerId}`, "GET", undefined, token),
-        createGrant: async (pairing: Pairing, token: string) =>
-            request(`/channels/${pairing.computerId}/access-grants`, "POST", undefined, token),
-        redeemGrant: async (pairing: Pairing, grantId: string, grantSecret: string) =>
-            request(`/channels/${pairing.computerId}/access-grants/${grantId}/redeem`, "POST", { grantSecret }),
         storage: async <T>(operation: (storage: DurableObjectStorage) => Promise<T> | T): Promise<T> =>
             runInDurableObject(stub, async (_instance, state) => operation(state.storage)),
         restart: async () => evictDurableObject(stub),
@@ -153,7 +151,7 @@ it("Given pending reservations at capacity, When their deadline passes without e
     });
     // Expiry is the passage of time. Neither reading it nor reclaiming capacity
     // may require persisting a lifecycle transition, even when that write fails.
-    await app.sql(`CREATE TRIGGER reject_expiry_maintenance BEFORE INSERT ON runtime_pairing_audit_events
+    await app.sql(`CREATE TRIGGER reject_expiry_maintenance BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.expired'
         BEGIN SELECT RAISE(ABORT, 'Expiry maintenance is unavailable'); END`);
     vi.setSystemTime(new Date(first.expiresAt));
@@ -202,7 +200,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
 it("Given a claim whose audit cannot commit, When the caller retries after recovery, Then the request is still pending and can be claimed once", async () => {
     const app = await project();
     const pairing = await app.pair("claim-rollback");
-    await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON runtime_pairing_audit_events
+    await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.claimed'
         BEGIN SELECT RAISE(ABORT, 'Controlled claim failure'); END`);
     expect((await app.claim(pairing)).status).toBe(500);
@@ -243,7 +241,9 @@ it.each(["redeem"] as const)(
         });
         expect(
             await app.storage((storage) =>
-                storage.sql.exec("SELECT action FROM runtime_pairing_audit_events ORDER BY action").toArray(),
+                storage.sql
+                    .exec("SELECT action FROM audit_events WHERE category = 'pairing' ORDER BY action")
+                    .toArray(),
             ),
         ).toEqual([{ action: "runtime_pairing.claimed" }, { action: "runtime_pairing.requested" }]);
         expect((await app.revoke(pairing)).status).toBe(204);
@@ -261,7 +261,7 @@ it("Given a revocation whose audit cannot commit, When it is retried, Then acces
         v.object({ runtimeCredential: v.string() }),
         await responseJson(await app.claim(pairing), 200),
     );
-    await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON runtime_pairing_audit_events
+    await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.revoked'
         BEGIN SELECT RAISE(ABORT, 'Controlled revocation failure'); END`);
     expect((await app.revoke(pairing)).status).toBe(500);
@@ -273,110 +273,6 @@ it("Given a revocation whose audit cannot commit, When it is retried, Then acces
     expect(await responseJson(await app.status(pairing), 200)).toEqual({
         status: "revoked",
         revokedAt: new Date().toISOString(),
-    });
-});
-
-async function pairedChannelWithLegacyOwner() {
-    const app = await project();
-    const pairing = await app.pair("channel-access");
-    const { runtimeCredential } = v.parse(
-        v.object({ runtimeCredential: v.string() }),
-        await responseJson(await app.claim(pairing), 200),
-    );
-    const hostToken = `${app.computerId}_${"H".repeat(43)}`;
-    // Owner credentials issued before Runtime pairing remain valid channel callers.
-    await app.storage(async (storage) => {
-        new DurableObjectSqlDatabase(storage).orm
-            .insert(channelHostCredential)
-            .values({
-                credentialId: "legacy-owner",
-                computerId: pairing.computerId,
-                tokenHash: await hashPairingCredential(hostToken),
-                authority: "owner",
-                createdAt: Date.now(),
-                lastUsedAt: Date.now(),
-            })
-            .run();
-    });
-    const grant = async () =>
-        v.parse(
-            v.strictObject({ expiresAt: v.string(), grantId: v.string(), grantSecret: v.string() }),
-            await responseJson(await app.createGrant(pairing, hostToken), 201),
-        );
-    return { app, pairing, hostToken, runtimeCredential, grant };
-}
-
-it("Given channel credentials and an unused access link, When their Runtime is revoked, Then access is denied without rewriting credential or grant facts", async () => {
-    const { app, pairing, hostToken, runtimeCredential, grant } = await pairedChannelWithLegacyOwner();
-    const used = await grant();
-    const redemptions = await Promise.all([
-        app.redeemGrant(pairing, used.grantId, used.grantSecret),
-        app.redeemGrant(pairing, used.grantId, used.grantSecret),
-    ]);
-    redemptions.sort((left, right) => left.status - right.status);
-    const [redeemed, repeated] = redemptions;
-    if (redeemed === undefined || repeated === undefined) {
-        throw new Error("Expected both redemption responses");
-    }
-    const linked = v.parse(
-        v.strictObject({ hostToken: v.string(), computerId: v.string() }),
-        await responseJson(redeemed, 200),
-    );
-    expect(await responseJson(repeated, 409)).toMatchObject({ error: { code: "access_grant_redeemed" } });
-    expect((await app.readChannel(pairing, linked.hostToken)).status).toBe(200);
-    const unused = await grant();
-    const facts = () =>
-        app.storage((storage) => {
-            const database = new DurableObjectSqlDatabase(storage).orm;
-            return {
-                hosts: database
-                    .select({ id: channelHostCredential.credentialId, revokedAt: channelHostCredential.revokedAt })
-                    .from(channelHostCredential)
-                    .orderBy(channelHostCredential.credentialId)
-                    .all(),
-                grants: database.select().from(channelAccessGrant).orderBy(channelAccessGrant.grantId).all(),
-            };
-        });
-    const before = await facts();
-    expect((await app.revoke(pairing)).status).toBe(204);
-    expect(await facts()).toEqual(before);
-    await app.restart();
-    expect((await app.publish(pairing, runtimeCredential)).status).toBe(401);
-    expect((await app.readChannel(pairing, hostToken)).status).toBe(401);
-    expect((await app.readChannel(pairing, linked.hostToken)).status).toBe(401);
-    expect(await responseJson(await app.redeemGrant(pairing, used.grantId, used.grantSecret), 409)).toMatchObject({
-        error: { code: "access_grant_redeemed" },
-    });
-    expect(await responseJson(await app.redeemGrant(pairing, unused.grantId, unused.grantSecret), 401)).toEqual({
-        error: { code: "runtime_revoked", message: "The Runtime has been revoked" },
-    });
-    // Refusing a revoked Runtime must neither consume the link nor issue a credential.
-    expect(await facts()).toEqual(before);
-});
-
-it("Given expired links and stored links shortened by an older revoker, When they are redeemed, Then genuine expiry and Runtime revocation remain distinguishable", async () => {
-    const { app, pairing, grant } = await pairedChannelWithLegacyOwner();
-    const expired = await grant();
-    vi.setSystemTime(new Date(expired.expiresAt));
-    expect(await responseJson(await app.redeemGrant(pairing, expired.grantId, expired.grantSecret), 410)).toMatchObject(
-        {
-            error: { code: "access_grant_expired" },
-        },
-    );
-    const legacy = await grant();
-    expect((await app.revoke(pairing)).status).toBe(204);
-    // Retain the pre-fix writer's persisted representation. Its lost deadline
-    // cannot be reconstructed, but the authoritative revocation is still known.
-    await app.storage((storage) => {
-        new DurableObjectSqlDatabase(storage).orm
-            .update(channelAccessGrant)
-            .set({ expiresAt: Date.now() })
-            .where(eq(channelAccessGrant.grantId, legacy.grantId))
-            .run();
-    });
-    await app.restart();
-    expect(await responseJson(await app.redeemGrant(pairing, legacy.grantId, legacy.grantSecret), 401)).toEqual({
-        error: { code: "runtime_revoked", message: "The Runtime has been revoked" },
     });
 });
 
@@ -465,13 +361,14 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
         credential("ctl_lease", "linked", null);
         credential("ctlX_owner", "owner", null);
         credential("lnk_device", "linked", "grant-device");
+        applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
         applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
         return database.query("SELECT credential_id FROM channel_host_credentials ORDER BY credential_id");
     });
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
 });
 
-it("revoking a pairing invalidates its daemon credential after the same computer pairs again", async () => {
+it("Given a Runtime and a Session credential issued before its owner revoked it, When the computer is paired again, Then neither the old daemon credential nor that Session credential is accepted", async () => {
     const app = await project();
     const original = await app.pair("original");
     const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });
@@ -522,3 +419,42 @@ it.each(["", "morty-pairing-v1\0"])(
         expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
     },
 );
+
+it("migrates the registered computer, live connection and independent audit IDs together", async () => {
+    const app = await project();
+    await app.storage(async (storage) => {
+        await storage.deleteAll();
+        const cutover = computerDurableObjectMigrations.findIndex(
+            (entry) => entry.name === "0013_computer_storage.sql",
+        );
+        expect(cutover).toBeGreaterThan(0);
+        applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations.slice(0, cutover));
+        storage.sql.exec(`
+            INSERT INTO runtimes (computer_id, created_at) VALUES ('machine', 10);
+            INSERT INTO runtime_registrations (computer_id, claimed_at, machine_name, workspace_name, agents_json)
+                VALUES ('machine', 11, 'laptop', 'work', '[]');
+            INSERT INTO runtime_connection_state (singleton, computer_id, connection_epoch, connection_id, state, connected_at)
+                VALUES (1, 'machine', 7, 'current', 'online', 12);
+            INSERT INTO runtime_pairing_audit_events (audit_id,computer_id,actor_kind,actor_id,action,details_json,recorded_at)
+                VALUES ('same','machine','runtime','machine','runtime_pairing.claimed','{}',11);
+            INSERT INTO platform_audit_events (audit_id,project_id,app_id,actor_kind,actor_id,actor_ref,action,subject_id,outcome,details_json,recorded_at)
+                VALUES ('same','machine','service','application','owner','owner','project.created','machine','succeeded','{}',10);
+        `);
+        applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
+        expect(storage.sql.exec("SELECT * FROM computer").one()).toMatchObject({
+            computer_id: "machine",
+            claimed_at: 11,
+            machine_name: "laptop",
+            workspace_name: "work",
+            agents_json: "[]",
+            connection_id: "current",
+            connection_epoch: 7,
+            state: "online",
+            connected_at: 12,
+        });
+        expect(
+            storage.sql.exec("SELECT category FROM audit_events WHERE audit_id='same' ORDER BY category").toArray(),
+        ).toEqual([{ category: "pairing" }, { category: "platform" }]);
+    });
+});

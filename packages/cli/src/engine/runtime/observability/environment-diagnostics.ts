@@ -28,8 +28,8 @@ function executableLocation(agent: CatalogAgent): string {
     return "other";
 }
 
-function overrideVariable(agentId: string): string | null {
-    switch (agentId) {
+function overrideVariable(harness: string): string | null {
+    switch (harness) {
         case "codex":
             return "MORTY_CODEX_PATH";
         case "claude":
@@ -60,11 +60,11 @@ export function runtimeEnvironmentDiagnostics(config: RuntimeConfig): readonly R
             omittedAgents: Math.max(0, agents.length - 16).toString(),
         },
         ...agents.slice(0, 16).map((agent) => {
-            const override = overrideVariable(agent.id);
+            const override = overrideVariable(agent.harness);
             return {
                 event: "agent_inventory",
                 timestamp,
-                agentId: override === null ? "custom" : agent.id,
+                harness: override === null ? "custom" : agent.harness,
                 agentVersion: version(agent.agentVersion),
                 adapterVersion: version(agent.adapterVersion),
                 versionSource: "runtime_catalog",
@@ -72,7 +72,7 @@ export function runtimeEnvironmentDiagnostics(config: RuntimeConfig): readonly R
                 executableOverride:
                     override === null ? "unknown" : agent.environment[override] === undefined ? "unset" : "set",
                 codexHome:
-                    agent.id !== "codex"
+                    agent.harness !== "codex"
                         ? "not_applicable"
                         : agent.environment["CODEX_HOME"] === undefined
                           ? "default"

@@ -73,22 +73,23 @@ export async function codexFixture(
     const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));
     const creations = new SessionCreations(new SessionCreationTable(database));
     const service = new NativeSessionService(
-        (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
+        (harness) => sessions.resolveAgent(config.catalog.find(harness)),
         directories,
         sessions.sessions,
         creations,
-        async () => ({
+        () => ({
             turn: null,
             queued: [],
+            executionPosition: { sessionGenerationId: "fixture-generation", throughPosition: "0" },
             interactionState: null,
         }),
     );
     const identity = {
-        agentId: agent.id,
+        harness: agent.harness,
         directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",
-    } satisfies Omit<NativeSessionCommand, "action">;
+    } satisfies Omit<Extract<NativeSessionCommand, { readonly action: "find" }>, "action" | "sessionId">;
     const prompt = async (target: NativeSessionTarget, text: string): Promise<void> => {
         await sessions.runPrompt({
             agent,

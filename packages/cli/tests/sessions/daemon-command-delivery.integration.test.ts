@@ -18,15 +18,9 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-const identity = (_peer: RealDaemonPeer) => ({
-    agentId: "controlled-acp",
-    directory: ".",
-});
-
 const submit = (peer: RealDaemonPeer, commandId: string, prompt: string): void =>
     peer.send(
         encodeSessionPromptCommand({
-            ...identity(peer),
             attachments: [],
             commandId,
             disposition: SessionPromptDisposition.Append,
@@ -52,7 +46,6 @@ const readExecution = async (peer: RealDaemonPeer, commandId?: string) => {
     const requestId = randomUUID();
     peer.send(
         JSON.stringify({
-            ...identity(peer),
             action: "active-turn",
             ...(commandId === undefined ? {} : { deliveryCommandId: commandId }),
             kind: "native.session.request",
@@ -144,7 +137,6 @@ test("Given a running turn and a later queued command, When the clock moves back
                 vi.setSystemTime(new Date("2026-10-28T09:00:00Z"));
                 peer.send(
                     encodeSessionPromptCommand({
-                        ...identity(peer),
                         attachments: [],
                         commandId: queued,
                         disposition: SessionPromptDisposition.Append,
@@ -313,7 +305,6 @@ test.each([
                     const steering = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
-                            ...identity(peer),
                             attachments: [],
                             commandId: steering,
                             disposition: SessionPromptDisposition.Append,

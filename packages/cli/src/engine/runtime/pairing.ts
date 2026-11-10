@@ -173,7 +173,7 @@ async function claimPairing(
         agentPath: agent.agentIdentity.requestedPath,
         agentVersion: agent.agentVersion,
         capabilities: agent.capabilities,
-        id: agent.id,
+        harness: agent.harness,
         label: agent.label,
     }));
     const endpoint = mortyApiUrl(options.relayOrigin, `/v1/pairings/${encodeURIComponent(options.computerId)}/redeem`);

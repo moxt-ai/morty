@@ -12,7 +12,7 @@ export function nativeSessionQuery(options: SessionCreationOptions): NativeSessi
             ? {}
             : {
                   externalizeUpdate: (_sessionId, update, signal) =>
-                      externalize({ harness: options.agent.id, sessionId: _sessionId }, update, signal),
+                      externalize({ harness: options.agent.harness, sessionId: _sessionId }, update, signal),
               }),
     };
 }

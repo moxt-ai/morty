@@ -20,7 +20,7 @@ type Connection = Readonly<{
 
 /** An installed Agent the machine's Morty cannot offer, as `morty agents` reports it. */
 export interface UnavailableAgentReport {
-    readonly id: string;
+    readonly harness: string;
     readonly label: string;
     readonly status: string;
     readonly code: string;
@@ -51,7 +51,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     /** What `morty agents --output-json` reports as unavailable; `null` is a release without that option. */
     #unavailableAgents: readonly UnavailableAgentReport[] | null = null;
     /** Agents `morty agents` reports ready although the running Runtime did not publish them. */
-    #unpublishedReadyAgents: readonly { readonly id: string; readonly label: string }[] = [];
+    #unpublishedReadyAgents: readonly { readonly harness: string; readonly label: string }[] = [];
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
     #release: DaemonRelease;
@@ -106,7 +106,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
                 output.slice("--output-json=".length),
                 JSON.stringify({
                     available: [...createMortyFakeDaemon(this.#options).catalog, ...this.#unpublishedReadyAgents].map(
-                        ({ id, label }) => ({ id, label, status: "ready" }),
+                        ({ harness, label }) => ({ harness, label, status: "ready" }),
                     ),
                     unavailable: this.#unavailableAgents,
                 }),
@@ -167,7 +167,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
      * publish the new catalog once they reconnect; later connections offer the same Agents.
      */
     readonly installAgents = async (
-        agents: Pick<ControlledAgentBehavior, "additionalAgents" | "agentId" | "agentName">,
+        agents: Pick<ControlledAgentBehavior, "additionalAgents" | "harness" | "agentName">,
     ): Promise<void> => {
         this.#options = { ...this.#options, ...agents };
         for (const daemon of this.#active.values()) {
@@ -181,7 +181,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
      */
     readonly reportAgentInventory = (
         unavailable: readonly UnavailableAgentReport[],
-        unpublishedReady: readonly { readonly id: string; readonly label: string }[] = [],
+        unpublishedReady: readonly { readonly harness: string; readonly label: string }[] = [],
     ): void => {
         this.#unavailableAgents = unavailable;
         this.#unpublishedReadyAgents = unpublishedReady;

@@ -50,14 +50,8 @@ export class AcpExecutionConnections {
         const existing = [...this.#sessions].find(
             ({ subscriber }) => subscriber.onSessionEvent === params.onSessionEvent,
         );
+        // A subscriber is one Agent session, whose Agent and workspace never change.
         if (existing !== undefined) {
-            if (existing.scope.agent !== params.scope.agent || existing.scope.cwd !== params.scope.cwd) {
-                throw new AcpExecutionError(
-                    "The agent or workspace cannot change after a conversation has started",
-                    {},
-                    "session_identity_mismatch",
-                );
-            }
             return existing;
         }
         const connection = new AdapterSessionConnection(
@@ -395,7 +389,7 @@ export class AcpExecutionConnections {
         }
         connection.beginStateChange();
         try {
-            const configured = await sessionConfigProtocolForAgent(scope.agent.id).configure(
+            const configured = await sessionConfigProtocolForAgent(scope.agent.harness).configure(
                 current,
                 {
                     booleanValue: selection.type === "boolean" ? selection.booleanValue : false,

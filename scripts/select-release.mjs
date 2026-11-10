@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFile } from "node:fs/promises";
 
 // Releases run one at a time, and each release ships every earlier main commit. Release only the newest main commit,
-// and only when it changes something other than Markdown since the production release.
+// and only when it changes something that ships since the production release.
 const repository = process.env.GITHUB_REPOSITORY;
 const revision = process.env.GITHUB_SHA;
 if (!/^[^/]+\/[^/]+$/.test(repository ?? "") || !/^[a-f0-9]{40}$/.test(revision ?? "")) {
@@ -10,6 +10,16 @@ if (!/^[^/]+\/[^/]+$/.test(repository ?? "") || !/^[a-f0-9]{40}$/.test(revision 
 }
 const gh = (...args) => execFileSync("gh", args, { encoding: "utf8", timeout: 120000 });
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", timeout: 30000 });
+
+// Documentation, repository automation and tests never reach a release artifact.
+const unshipped = [
+    /\.(md|markdown|mdx)$/i,
+    /^\.github\//,
+    /^\.gitignore$/,
+    /(^|\/)tests?\//,
+    /^packages\/e2e\//,
+    /^packages\/[^/]+-test-support\//,
+];
 
 function selection() {
     const newest = JSON.parse(gh("api", `repos/${repository}/branches/main`)).commit.sha;
@@ -26,10 +36,10 @@ function selection() {
     }
     const shippable = git("diff", "--no-renames", "--name-only", production, revision)
         .split("\n")
-        .filter((path) => path !== "" && !/\.(md|markdown|mdx)$/i.test(path));
+        .filter((path) => path !== "" && !unshipped.some((pattern) => pattern.test(path)));
     return shippable.length > 0
-        ? { release: true, reason: `${shippable.length} non-Markdown files changed since ${production}` }
-        : { release: false, reason: `only Markdown changed since ${production}` };
+        ? { release: true, reason: `${shippable.length} shipped files changed since ${production}` }
+        : { release: false, reason: `nothing that ships changed since ${production}` };
 }
 
 const { release, reason } = selection();

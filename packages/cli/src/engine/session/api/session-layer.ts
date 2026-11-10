@@ -1,4 +1,3 @@
-import { sameNativeSession } from "@morty-build/client/native-session";
 import type { SessionInfoUpdatedEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
 import { AcpSessionTable } from "../../storage/session/acp-session-table.ts";
@@ -128,41 +127,21 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         activeSessions.recordSessionEvent,
         operations,
     );
-    const nativeSessions = new NativeSessionService(
-        resolveAgent,
-        directories,
-        manager,
-        sessionCreations,
-        async (request, requestOptions) => {
-            return await activeSessions.executionSnapshot(
-                request.target,
-                async (command) => {
-                    if (!sameNativeSession(command.target, request.target) || command.agentId !== request.agentId) {
-                        return false;
-                    }
-                    const cwd = await directories.resolve(command.directory, requestOptions.signal);
-                    return cwd === requestOptions.cwd;
-                },
-                (snapshot) => {
-                    const lastTurn = snapshot.turn === null ? operations.lastTurn(request.target) : undefined;
-                    const interactionState = manager.interactionSnapshot({
-                        ...requestOptions,
-                        target: request.target,
-                    });
-                    return {
-                        ...snapshot,
-                        executionPosition: events.livePosition(request.target),
-                        interactionState: interactionState ?? null,
-                        ...(request.deliveryCommandId === undefined
-                            ? {}
-                            : { command: operations.delivery(request.deliveryCommandId, request.target) }),
-                        ...(lastTurn === undefined ? {} : { lastTurn }),
-                    };
-                },
-                requestOptions.signal,
-            );
-        },
-    );
+    // The Session's commands, receipts, interactions and event position are read in one synchronous step.
+    const nativeSessions = new NativeSessionService(resolveAgent, directories, manager, sessionCreations, (request) => {
+        const interactionState = manager.interactionSnapshot(request.target);
+        const snapshot = activeSessions.executionSnapshot(request.target);
+        const lastTurn = snapshot.turn === null ? operations.lastTurn(request.target) : undefined;
+        return {
+            ...snapshot,
+            executionPosition: events.livePosition(request.target),
+            interactionState,
+            ...(request.deliveryCommandId === undefined
+                ? {}
+                : { command: operations.delivery(request.deliveryCommandId, request.target) }),
+            ...(lastTurn === undefined ? {} : { lastTurn }),
+        };
+    });
     // Outcomes retained across a restart are published once. The sink keeps them until the Relay connects,
     // and a later reconnect does not replay events it already sent. An outcome the previous process recorded is
     // restated as the outcome it recorded, so status notifications do not take it for a new one.

@@ -205,10 +205,10 @@ export class CodexAdapter implements Adapter {
     }): Promise<SessionEventPage> => {
         const { agent, cwd } = query;
         const signal = AbortSignal.any([query.signal, AbortSignal.timeout(60_000)]);
-        const target = { harness: agent.id, sessionId: request.sessionId };
+        const target = { harness: agent.harness, sessionId: request.sessionId };
         signal.throwIfAborted();
         sessionIdSchema.parse(request.sessionId);
-        if (agent.id !== "codex") {
+        if (agent.harness !== "codex") {
             throw new AcpExecutionError(
                 "The Codex adapter cannot preview history for another agent.",
                 {},

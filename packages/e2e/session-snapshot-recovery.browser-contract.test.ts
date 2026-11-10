@@ -1,7 +1,7 @@
 import { createServer, request } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { dataTestId } from "../web/src/data-testid.ts";
-import { test as base, expect } from "./infra/test.ts";
+import { test as base, conversationLoaded, expect } from "./infra/test.ts";
 
 type Gate = {
     readonly reached: Promise<void>;
@@ -258,6 +258,7 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
         const composer = page.getByRole("textbox", { name: "Message" });
         const responses = page.getByRole("article", { name: "Agent response" });
         await expect(composer).toBeEnabled();
+        await conversationLoaded(page);
         await composer.fill("wait for steering");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(responses).toContainText("Waiting for steering");
@@ -327,6 +328,7 @@ test("Given a partial reply, when it finishes while the browser is disconnected,
     const composer = page.getByRole("textbox", { name: "Message" });
     const responses = page.getByRole("article", { name: "Agent response" });
     await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("wait for steering");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(responses).toContainText("Waiting for steering");

@@ -201,7 +201,7 @@ Declared license: Apache-2.0
 
 --------------------------------------------------------------------------------
 
-Component: @anthropic-ai/claude-agent-sdk@0.3.257
+Component: @anthropic-ai/claude-agent-sdk@0.3.319
 Declared license: SEE LICENSE IN README.md
 
 --- LICENSE.md ---
@@ -210,7 +210,7 @@ Declared license: SEE LICENSE IN README.md
 --- README.md ---
 # Claude Agent SDK
 
-![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square) [![npm]](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)
+![](https://img.shields.io/badge/Node.js-18.14%2B-brightgreen?style=flat-square) [![npm]](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)
 
 [npm]: https://img.shields.io/npm/v/@anthropic-ai/claude-agent-sdk.svg?style=flat-square
 
@@ -225,6 +225,10 @@ Install the Claude Agent SDK:
 ```sh
 npm install @anthropic-ai/claude-agent-sdk
 ```
+
+## The `/core` entry (for apps that bundle the SDK)
+
+`@anthropic-ai/claude-agent-sdk/core` exports the same `query()`, `startup()`, `prewarm()`, `tool()`, `createSdkMcpServer()`, `renameSession()`/`tagSession()`/`deleteSession()`, `resolveSettings()`/`filterEscalatingDefaultMode()` and runtime constants as the root entry, and nothing else — no session listing/reading/import helpers — so its eagerly loaded code is about a quarter of the root's; the settings resolver behind `resolveSettings()` and the code behind the three session mutations load on first call. Unlike the root entry it does **not** inline the SDK's peer dependencies: `zod` (^4, as declared in this package's `peerDependencies`) and `@modelcontextprotocol/sdk` (^1.29) are imported from your install — specifically the `zod/v4` subpath, plus `zod/v3` when the settings resolver loads — which is what you want when your bundler already carries them. (zod 3.25+, which carries the v4 engine under `zod/v4`, also works in practice, but ^4 is the supported range.) Import from **either** the root **or** `/core` in a given process, not both — they are separate bundles, and mixing them loads two copies of the SDK's classes and state. Its types require TypeScript 5.0+.
 
 ## Compiled binaries (`bun build --compile`)
 
@@ -735,7 +739,7 @@ Declared license: Apache-2.0
 
 --------------------------------------------------------------------------------
 
-Component: semver@7.8.5
+Component: semver@7.8.6
 Declared license: ISC
 
 --- LICENSE ---

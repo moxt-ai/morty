@@ -10,7 +10,7 @@ export const AGENT_CATALOG_DISCOVERY_FAILED_KIND = "agent.catalog.discovery.fail
 const catalogedAgentSchema = z
     .object({
         agentVersion: z.string().min(1).max(128),
-        id: IDENTIFIER,
+        harness: IDENTIFIER,
         label: z.string().min(1).max(255),
     })
     .readonly();

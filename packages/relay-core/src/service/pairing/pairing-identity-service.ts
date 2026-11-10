@@ -14,9 +14,7 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
             ? "pairing_not_found"
             : credential.kind === "pairing-code"
               ? "invalid_pairing_code"
-              : credential.kind === "grant"
-                ? "access_grant_invalid"
-                : "unauthorized";
+              : "unauthorized";
     return new PairingDirectoryError(code, "A valid pairing or channel credential is required");
 }
 
@@ -128,23 +126,6 @@ export class ComputerIdentityService {
             for (const source of this.#sources) {
                 for (const row of await source.findCredential(credential, signal)) {
                     signal.throwIfAborted();
-                    if (credential.kind === "project") {
-                        if (
-                            (row.revoked_at !== null && !Number.isSafeInteger(row.revoked_at)) ||
-                            (row.expires_at !== null && !Number.isSafeInteger(row.expires_at))
-                        ) {
-                            throw new PairingDirectoryError(
-                                "invalid_directory_record",
-                                "The Project directory is invalid",
-                            );
-                        }
-                        if (row.revoked_at !== null) {
-                            throw new PairingDirectoryError("credential_revoked", "The browser credential was revoked");
-                        }
-                        if (row.expires_at !== null && row.expires_at <= Date.now()) {
-                            throw new PairingDirectoryError("credential_expired", "The browser credential expired");
-                        }
-                    }
                     matches.push({ computerId: validateIdentifier(row.computer_id, "computer_id"), source });
                 }
             }

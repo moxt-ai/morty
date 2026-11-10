@@ -1,4 +1,3 @@
-import type { ChannelCredentialIdentity } from "../../entity/pairing/pairing-records.ts";
 import type { ProjectStore } from "../../infra/project-store.ts";
 
 export class ChannelCredentialService {
@@ -13,12 +12,6 @@ export class ChannelCredentialService {
         signal: AbortSignal,
     ): Promise<boolean> => {
         const active = await this.#store.isRuntimeActive(identity.computerId, signal);
-        signal.throwIfAborted();
-        return active;
-    };
-
-    readonly isActive = async (identity: ChannelCredentialIdentity, signal: AbortSignal): Promise<boolean> => {
-        const active = await this.#store.isHostCredentialActive(identity, signal);
         signal.throwIfAborted();
         return active;
     };

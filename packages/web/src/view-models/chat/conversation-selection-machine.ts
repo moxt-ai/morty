@@ -71,7 +71,7 @@ export function transitionConversationSelection(
                       target: {
                           kind: "session",
                           identity: {
-                              harness: event.session.result.ready.agentId,
+                              harness: event.session.result.ready.harness,
                               sessionId: event.session.entry.sessionId,
                           },
                       },

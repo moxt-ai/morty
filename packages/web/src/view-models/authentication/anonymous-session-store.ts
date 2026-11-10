@@ -1,9 +1,9 @@
 import { createStore } from "zustand/vanilla";
 import { isComponentLibraryPath } from "../../navigation/component-library-path.ts";
 import {
-    type AccessCheck,
     type AnonymousIdentity,
     AnonymousIdentityApi,
+    type LostAccess,
 } from "../../services/identity/anonymous-identity-api.ts";
 import {
     hasIdentityScope,
@@ -88,7 +88,7 @@ export const createAnonymousSessionStore = (
          * and the page leaves that computer's address; other access that stopped opening it reports the link invalid.
          * Neither switches to another computer by itself.
          */
-        const leave = (check: Exclude<AccessCheck, { readonly kind: "open" }>) => {
+        const leave = (check: LostAccess) => {
             const fallback = rememberedComputers().length > 0 ? "/" : null;
             switch (check.kind) {
                 case "revoked":

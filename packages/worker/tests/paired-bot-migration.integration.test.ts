@@ -51,12 +51,12 @@ test("Given a user with a configured bot and a bot created by a consumed pairing
     expect(
         database
             .prepare(
-                "SELECT project_id, user_id, resource_id, harness, session_id, created_at FROM chat_managed_session",
+                "SELECT computer_id, user_id, resource_id, harness, session_id, created_at FROM chat_managed_session",
             )
             .all(),
     ).toEqual([
         {
-            project_id: "prj_owner",
+            computer_id: "prj_owner",
             user_id: "usr_owner",
             resource_id: "kept-conversation",
             harness: "codex",

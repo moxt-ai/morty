@@ -1,5 +1,6 @@
 import {
     fireEvent,
+    getAllByRole,
     getByLabelText,
     getByRole,
     getByText,
@@ -68,7 +69,7 @@ test("Given a new conversation, When I send its first prompt, Then its preview a
 test("Given a loaded session whose initial user chunk is delayed, When its first ACP event arrives and I steer, Then the submitted message stays visible until native chunks replace it without duplicates", async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
         page: { kind: "bootstrap", identity: true },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold delayed initial message");
@@ -102,7 +103,7 @@ test("Given a loaded session whose initial user chunk is delayed, When its first
 test("Given lifecycle events arrive before ACP output, When I queue a follow-up, Then the optimistic prompt remains until the first ACP event", async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
         page: { kind: "bootstrap", identity: true },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold before first acp");
@@ -540,7 +541,7 @@ test("Given another Session is selected, When the user closes a background Sessi
     });
 });
 
-test("Given a saved Session whose Runtime becomes unavailable, When the user closes it, Then the entry is removed and the unconfirmed close is visible", {
+test("Given a saved Session whose Runtime becomes unavailable, When the user closes it, Then closing fails visibly, the entry stays and closing again after reconnecting removes it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -559,13 +560,20 @@ test("Given a saved Session whose Runtime becomes unavailable, When the user clo
 
     await app.user.click(close);
 
+    await app.waitForView(() =>
+        expect(getAllByRole(document.body, "alert").map((alert) => alert.textContent)).toContainEqual(
+            expect.stringContaining("Your Morty Runtime is disconnected."),
+        ),
+    );
+    expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(1);
+    expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(true);
+
+    await app.daemon.reconnect();
+    flushSync(() => fireEvent.contextMenu(app.elementByTestId(dataTestId.managedConversation)));
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Close session" })));
     await app.waitForView(() => {
         expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0);
         expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false);
-        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
-        expect(getByRole(document.body, "alert").textContent).toBe(
-            "Removed from the list, but stopping the session could not be confirmed. The agent may still be running on your computer.",
-        );
     });
 });
 
@@ -704,7 +712,7 @@ test("Given Claude Code does not echo the submitted prompt, When the response st
     const prompt = "Show this prompt without an Agent echo";
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "claude-code", label: "Claude Code" },
+        agent: { harness: "claude-code", label: "Claude Code" },
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,

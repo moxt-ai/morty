@@ -1,9 +1,10 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+/** Retained records of the former cloud Session list; nothing reads them. The Runtime holds Morty's Sessions. */
 export const chatManagedSession = sqliteTable(
     "chat_managed_session",
     {
-        computerId: text("project_id").notNull(),
+        computerId: text("computer_id").notNull(),
         userId: text("user_id").notNull(),
         resourceId: text("resource_id").notNull(),
         harness: text("harness"),

@@ -131,7 +131,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         const socket = await connected.promise;
         socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
         const identity = {
-            agentId: "claude",
+            harness: "claude",
             directory: ".",
         };
         socket.send(
@@ -153,7 +153,6 @@ test("Given a completed foreground turn, When its Agent requests background perm
         const sessionTarget = created.target;
         socket.send(
             encodeSessionPromptCommand({
-                ...identity,
                 commandId: "foreground",
                 target: sessionTarget,
                 disposition: "append",
@@ -173,7 +172,6 @@ test("Given a completed foreground turn, When its Agent requests background perm
         const snapshot = async (requestId: string) => {
             socket.send(
                 encodeNativeSessionRequest({
-                    ...identity,
                     action: "active-turn",
                     kind: "native.session.request",
                     requestId,

@@ -981,7 +981,7 @@ describe("daemon relay connection liveness", () => {
                     (options) =>
                         new ControlledAcpConnection(
                             {
-                                id: "codex",
+                                harness: "codex",
                                 adapterPath: process.execPath,
                                 arguments: [fakeAgentPath],
                                 environment: options.environment,
@@ -1015,7 +1015,7 @@ describe("daemon relay connection liveness", () => {
                         kind: "session.create",
                         requestId: commandId,
                         operationId: commandId,
-                        agentId: "codex",
+                        harness: "codex",
                         directory: ".",
                         configurations: [],
                     }),
@@ -1040,8 +1040,6 @@ describe("daemon relay connection liveness", () => {
                             kind: SESSION_PROMPT_KIND,
                             commandId,
                             target: sessionTarget,
-                            agentId: "codex",
-                            directory: ".",
                             disposition: "append",
                             attachments: [],
                             prompt: "broadcast without viewers",
@@ -1089,9 +1087,7 @@ describe("daemon relay connection liveness", () => {
                 writeServerTextFrame(
                     firstSocket,
                     encodeSessionPromptCommand({
-                        agentId: "codex",
                         commandId: `live-command-${turn}`,
-                        directory: ".",
                         disposition: "append",
                         attachments: [],
                         kind: SESSION_PROMPT_KIND,

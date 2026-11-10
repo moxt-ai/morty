@@ -8,7 +8,7 @@ import type { RelayConnectionDiagnostics } from "../relay/diagnostics.ts";
 import { reportOperationFailure, send } from "./transport.ts";
 
 type PendingRequest = Readonly<{
-    agentId: string;
+    harness: string;
     controller: AbortController;
     completion: Promise<void>;
 }>;
@@ -35,7 +35,8 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
     };
 
     const handle = (command: NativeSessionCommand): void => {
-        const previous = [...pending.values()].filter((request) => request.agentId === command.agentId);
+        const harness = command.action === "active-turn" ? command.target.harness : command.harness;
+        const previous = [...pending.values()].filter((request) => request.harness === harness);
         // Serialize native operations per Agent within the existing bounded, cancellable admission window.
         if (pending.has(command.requestId) || pending.size >= 4) {
             reportOperationFailure(
@@ -89,7 +90,7 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
                     command.requestId,
                     {
                         action: command.action,
-                        agentId: command.agentId,
+                        harness,
                         code: operationErrorCode(failure),
                     },
                     failure,
@@ -106,7 +107,7 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
             }
         })();
         pending.set(command.requestId, {
-            agentId: command.agentId,
+            harness,
             controller,
             completion,
         });

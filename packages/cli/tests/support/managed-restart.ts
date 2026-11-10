@@ -22,15 +22,13 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 const interruptedPrompt = "Begin work that will be interrupted by the runtime restart";
 
-async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Promise<void> {
-    const sessionTarget = await prepareNewRealSession(peer, agentId);
-    const identity = { agentId, directory: "." };
+async function journey(peer: RealDaemonPeer, harness: string, reply: string): Promise<void> {
+    const sessionTarget = await prepareNewRealSession(peer, harness);
     const prompt = "Remember this conversation across a daemon restart";
     const sendAndFinish = async (text: string): Promise<void> => {
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
-                ...identity,
                 kind: "session.prompt",
                 commandId,
                 target: sessionTarget,
@@ -66,7 +64,7 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
     await sendAndFinish(prompt);
     await peer.restart();
     const requestId = randomUUID();
-    peer.send(encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, target: sessionTarget }));
+    peer.send(encodeSessionPrepareCommand({ kind: "session.prepare", requestId, target: sessionTarget }));
     for (;;) {
         const message = await peer.nextMessage();
         const kind = decodeMessageKind(message);
@@ -121,8 +119,8 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
     await sendAndFinish("Continue the restored conversation");
 }
 
-export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "pi"): void {
-    if (agentId === "codex") {
+export function registerManagedRestartScenarios(harness: "codex" | "claude" | "pi"): void {
+    if (harness === "codex") {
         test("Given a managed real Codex session, When the user quits and starts Morty, Then history is restored and another turn completes", async () => {
             await using provider = await FakeOpenAiProvider.start("gpt-5.4", "MANAGED_CODEX_REPLY");
             await using agent = await CodexFixture.create(provider);
@@ -134,7 +132,7 @@ export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "p
             );
         });
     }
-    if (agentId === "claude") {
+    if (harness === "claude") {
         test("Given a managed real Claude Code session, When the user quits and starts Morty, Then history is restored and another turn completes", async () => {
             await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "MANAGED_CLAUDE_REPLY");
             await using agent = await ClaudeFixture.create(provider);
@@ -146,7 +144,7 @@ export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "p
             );
         });
     }
-    if (agentId === "pi") {
+    if (harness === "pi") {
         test("Given a managed real Pi session, When the user quits and starts Morty, Then history is restored and another turn completes", async () => {
             await using provider = await FakeOpenAiProvider.start("gpt-4.1", "MANAGED_PI_REPLY");
             await using agent = await PiFixture.create(provider);
@@ -162,20 +160,18 @@ export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "p
 
 async function interruptedJourney(
     peer: RealDaemonPeer,
-    agentId: string,
+    harness: string,
     entered: Promise<void>,
     release: () => void,
     disconnected: Promise<void>,
 ): Promise<void> {
     let stage = "preparing the original session";
     try {
-        const sessionTarget = await prepareNewRealSession(peer, agentId);
-        const identity = { agentId, directory: "." };
+        const sessionTarget = await prepareNewRealSession(peer, harness);
         const commandId = randomUUID();
         const sendPrompt = (id: string, prompt: string): void =>
             peer.send(
                 encodeSessionPromptCommand({
-                    ...identity,
                     kind: "session.prompt",
                     commandId: id,
                     target: sessionTarget,
@@ -205,9 +201,7 @@ async function interruptedJourney(
         }
         stage = "restoring the native session";
         const requestId = randomUUID();
-        peer.send(
-            encodeSessionPrepareCommand({ ...identity, kind: "session.prepare", requestId, target: sessionTarget }),
-        );
+        peer.send(encodeSessionPrepareCommand({ kind: "session.prepare", requestId, target: sessionTarget }));
         for (;;) {
             const message = await peer.nextMessage();
             const kind = decodeMessageKind(message);
@@ -278,7 +272,7 @@ async function interruptedJourney(
             }
         }
     } catch (cause) {
-        throw new Error(`Could not continue ${agentId} while ${stage}`, { cause });
+        throw new Error(`Could not continue ${harness} while ${stage}`, { cause });
     }
 }
 
@@ -318,8 +312,8 @@ function firstRequestGate() {
     };
 }
 
-export function registerManagedCrashScenarios(agentId: "codex" | "claude" | "pi"): void {
-    if (agentId === "codex") {
+export function registerManagedCrashScenarios(harness: "codex" | "claude" | "pi"): void {
+    if (harness === "codex") {
         // @no-uc: Compatibility; a real Codex native session remains resumable after an interrupted request.
         test("Given a running real Codex request, When SIGKILL restarts its managed runtime, Then a continuation completes in the native session", async () => {
             const gate = firstRequestGate();
@@ -339,7 +333,7 @@ export function registerManagedCrashScenarios(agentId: "codex" | "claude" | "pi"
             }
         }, 120_000);
     }
-    if (agentId === "claude") {
+    if (harness === "claude") {
         // @no-uc: Compatibility; a real Claude native session remains resumable after an interrupted request.
         test("Given a running real Claude request, When SIGKILL restarts its managed runtime, Then a continuation completes in the native session", async () => {
             const gate = firstRequestGate();
@@ -365,7 +359,7 @@ export function registerManagedCrashScenarios(agentId: "codex" | "claude" | "pi"
             }
         }, 120_000);
     }
-    if (agentId === "pi") {
+    if (harness === "pi") {
         // @no-uc: Compatibility; a real Pi native session remains resumable after an interrupted request.
         test("Given a running real Pi request, When SIGKILL restarts its managed runtime, Then a continuation completes in the native session", async () => {
             const gate = firstRequestGate();

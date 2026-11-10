@@ -19,7 +19,7 @@ export abstract class LocalAgentSpecification {
     abstract readonly adapterVersion: string;
     abstract readonly agentExecutable: string;
     abstract readonly agentOverrideVariable: string;
-    abstract readonly id: string;
+    abstract readonly harness: string;
     abstract readonly label: string;
     abstract readonly launchArguments: readonly string[];
     readonly minimumSupportedAgentVersion: string = "0.0.0";

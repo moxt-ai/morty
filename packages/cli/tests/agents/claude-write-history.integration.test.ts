@@ -93,7 +93,6 @@ test("Given Claude history contains an interrupted Write and completed Writes, W
         await writeFile(join(project, `${nativeId}.jsonl`), `${records.join("\n")}\n`);
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
-                agentId: "claude",
                 directory: ".",
                 cursor: null,
                 eventLimit: 200,

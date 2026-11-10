@@ -12,7 +12,7 @@ import {
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { NativeSessionInfo } from "../../acp/protocol/native-session.ts";
 import { sessionIdSchema } from "../../acp/protocol/native-session.ts";
-import type { ResolveAgent, SessionCreationOptions, SessionPrepareOptions } from "../api/session-api.ts";
+import type { ResolveAgent, SessionCreationOptions } from "../api/session-api.ts";
 import { RuntimeOperations } from "../manager/operation-drain.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import type { SessionCreations } from "../record/session-creations.ts";
@@ -31,6 +31,12 @@ interface AuthorizedNativeSession {
     readonly directory: string;
     readonly directoryLabel: string;
 }
+
+/** What an execution read of a Session this Runtime holds reports; a Session it does not hold is refused. */
+export type ActiveTurnRead = Pick<
+    Extract<NativeSessionResult, { readonly action: "active-turn" }>,
+    "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
+>;
 
 const MAXIMUM_SESSION_TITLE_LENGTH = 500;
 const forkSuffixPattern = / \(Fork #([1-9][0-9]*)\)$/u;
@@ -66,28 +72,14 @@ export class NativeSessionService {
     readonly #creations: SessionCreations;
     readonly #activeTurn: (
         command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>,
-        options: SessionPrepareOptions,
-    ) => Promise<
-        Pick<
-            Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-            "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
-        >
-    >;
+    ) => ActiveTurnRead;
 
     constructor(
         resolveAgent: ResolveAgent,
         directories: WorkspaceDirectoryService,
         sessions: SessionManager,
         creations: SessionCreations,
-        activeTurn: (
-            command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>,
-            options: SessionPrepareOptions,
-        ) => Promise<
-            Pick<
-                Extract<NativeSessionResult, { readonly action: "active-turn" }>,
-                "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
-            >
-        >,
+        activeTurn: (command: Extract<NativeSessionCommand, { readonly action: "active-turn" }>) => ActiveTurnRead,
     ) {
         this.#resolveAgent = resolveAgent;
         this.#directories = directories;
@@ -123,31 +115,23 @@ export class NativeSessionService {
 
     readonly #execute = async (command: NativeSessionCommand, signal: AbortSignal): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
-        const cwd = await this.#directories.resolve(command.directory, signal);
-        signal.throwIfAborted();
-        const options: SessionCreationOptions = {
-            ...(await this.#resolveAgent(command.agentId, signal)),
-            cwd,
-            signal,
-        };
         if (command.action === "active-turn") {
-            sessionIdSchema.parse(command.target.sessionId);
-            if (command.target.harness !== command.agentId) {
-                throw new AcpExecutionError(
-                    "The native Session belongs to a different harness",
-                    {},
-                    "session_identity_mismatch",
-                );
-            }
             return {
                 action: "active-turn",
                 kind: "native.session.result",
                 requestId: command.requestId,
                 target: command.target,
-                ...(await this.#activeTurn(command, { ...options, target: command.target })),
+                ...this.#activeTurn(command),
                 queuedCancellation: "before-start",
             };
         }
+        const cwd = await this.#directories.resolve(command.directory, signal);
+        signal.throwIfAborted();
+        const options: SessionCreationOptions = {
+            ...(await this.#resolveAgent(command.harness, signal)),
+            cwd,
+            signal,
+        };
         const capabilities = await options.adapter.getCapabilities(nativeSessionQuery(options));
         if (!capabilities.listSessions) {
             throw new AcpExecutionError(
@@ -156,7 +140,7 @@ export class NativeSessionService {
                 "native_session_unsupported",
             );
         }
-        const cursorScope = JSON.stringify([command.agentId, cwd]);
+        const cursorScope = JSON.stringify([command.harness, cwd]);
         const register = async (info: NativeSessionInfo): Promise<NativeSessionEntry | null> => {
             const authorized = await this.authorizeEntry(options, info);
             if (authorized === null) {
@@ -266,7 +250,7 @@ export class NativeSessionService {
             );
             signal.throwIfAborted();
             return {
-                agentId: command.agentId,
+                harness: command.harness,
                 agentName: opened.prepared.agentName,
                 agentVersion: opened.prepared.agentVersion,
                 capabilities: opened.prepared.capabilities,
@@ -287,7 +271,7 @@ export class NativeSessionService {
                       command.requestId,
                       {
                           action,
-                          harness: command.agentId,
+                          harness: command.harness,
                           sessionId: target.info.sessionId,
                           cwd: target.cwd,
                       },
@@ -323,7 +307,7 @@ export class NativeSessionService {
             // Report the recorded workspace even if it was deleted or unmounted.
             const directory = this.#directories.identifyRecorded(session.cwd);
             entries.push({
-                agentId: session.agentId,
+                harness: session.harness,
                 directory: directory.directory,
                 directoryLabel: directory.label,
                 prompted: session.prompted,

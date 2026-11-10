@@ -27,7 +27,7 @@ test("Given full harness settings, When the user searches and edits them with th
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "configuration-test", label: "Settings Agent" },
+        agent: { harness: "configuration-test", label: "Settings Agent" },
     });
     const trigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
     await app.user.click(trigger);
@@ -80,7 +80,7 @@ test("Given a paired Bot on desktop, When the user hovers Mode, Then its options
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "configuration-test", label: "Settings Agent" },
+        agent: { harness: "configuration-test", label: "Settings Agent" },
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -186,7 +186,7 @@ test("Given full harness settings, When one setting changes, Then only that sett
                     await configurationCanFinish.promise;
                 }
             },
-            id: "configuration-test",
+            harness: "configuration-test",
             label: "Settings Agent",
         },
     });
@@ -428,7 +428,7 @@ test("Given a project directory whose Agent settings choose another model, When 
         await writeFile(join(project, ".claude", "settings.json"), JSON.stringify({ model: "test-large" }));
         const app = await createTestApp({
             connectAgent: true,
-            agent: { id: "settings-test", label: "Settings Agent" },
+            agent: { harness: "settings-test", label: "Settings Agent" },
         });
         await app.queryElementByTestId(
             dataTestId.agentConfiguration,
@@ -473,7 +473,7 @@ test("Given a conversation whose settings the user left untouched, When the user
         await writeFile(join(project, ".claude", "settings.json"), JSON.stringify({ model: "test-large" }));
         const app = await createTestApp({
             connectAgent: true,
-            agent: { id: "settings-test", label: "Settings Agent" },
+            agent: { harness: "settings-test", label: "Settings Agent" },
         });
         await app.queryElementByTestId(
             dataTestId.agentConfiguration,
@@ -527,7 +527,7 @@ test("Given a chosen New Session directory the Runtime briefly cannot read, When
         await mkdir(project, { recursive: true });
         const app = await createTestApp({
             connectAgent: true,
-            agent: { id: "settings-test", label: "Settings Agent" },
+            agent: { harness: "settings-test", label: "Settings Agent" },
         });
         await app.queryElementByTestId(
             dataTestId.agentConfiguration,
@@ -572,7 +572,7 @@ test("Given a chosen New Session directory the Runtime briefly cannot read, When
 test("Given a Bot paired with the Claude harness, When the user opens its settings, Then the Claude brand mark labels the harness field and the trigger", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "claude", label: "Claude Code" } });
+    const app = await createTestApp({ connectAgent: true, agent: { harness: "claude", label: "Claude Code" } });
     await waitForConnection(app, "connected");
 
     const triggerMark = await app.queryElementByTestId(
@@ -650,7 +650,10 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
 test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness field without renaming it", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "unlisted-agent", label: "Unlisted Agent" } });
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { harness: "unlisted-agent", label: "Unlisted Agent" },
+    });
     await waitForConnection(app, "connected");
 
     const triggerMark = await app.queryElementByTestId(
@@ -672,7 +675,7 @@ test("Given a Bot paired with an unlisted harness, When the user opens its setti
 test("Given a Bot paired with Pi, When the user opens its settings and sends a prompt, Then Pi and its streamed reply are visible", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
+    const app = await createTestApp({ connectAgent: true, agent: { harness: "pi", label: "Pi" } });
     await waitForConnection(app, "connected");
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });

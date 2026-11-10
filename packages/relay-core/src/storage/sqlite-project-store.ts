@@ -2,8 +2,8 @@ import type { ProjectStore } from "../infra/project-store.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
 import { ChannelCredentialStorage } from "./channel-credential-storage.ts";
 import { credentialMatches } from "./pairing-identity-storage.ts";
-import { PairingStorage } from "./pairing-storage.ts";
 import { RuntimeDirectoryStorage } from "./runtime-directory-storage.ts";
+import { SessionAccessRevocationStorage } from "./session-access-revocation-storage.ts";
 
 /**
  * A Project's operations over its own SQLite storage. Only the Project's storage owner constructs this; each
@@ -12,87 +12,17 @@ import { RuntimeDirectoryStorage } from "./runtime-directory-storage.ts";
 export class SqliteProjectStore implements ProjectStore {
     readonly #computerId: string;
     readonly #database: SqlDatabase;
-    readonly #pairings: PairingStorage;
     readonly #runtimes: RuntimeDirectoryStorage;
     readonly #credentials: ChannelCredentialStorage;
+    readonly #sessionAccessRevocations: SessionAccessRevocationStorage;
 
     constructor(computerId: string, database: SqlDatabase) {
         this.#computerId = computerId;
         this.#database = database;
-        this.#pairings = new PairingStorage(database);
         this.#runtimes = new RuntimeDirectoryStorage(computerId, database);
         this.#credentials = new ChannelCredentialStorage(database);
+        this.#sessionAccessRevocations = new SessionAccessRevocationStorage(computerId, database);
     }
-
-    readonly authenticateHost: ProjectStore["authenticateHost"] = async (computerId, tokenHash, now, signal) => {
-        const row = await this.#pairings.readHost(computerId, tokenHash, signal);
-        return row !== null && (await this.#pairings.touchHost(row.credential_id, now, signal)) ? row : null;
-    };
-
-    readonly isHostCredentialActive: ProjectStore["isHostCredentialActive"] = async (identity, signal) =>
-        identity.computerId === this.#computerId && (await this.#credentials.readActive(identity, signal));
-
-    readonly listLinkedDevices: ProjectStore["listLinkedDevices"] = async (computerId, signal) =>
-        await this.#pairings.listLinked(computerId, signal);
-
-    readonly revokeLinkedDevice: ProjectStore["revokeLinkedDevice"] = async (computerId, credentialId, now, signal) =>
-        (await this.#pairings.revokeLinked(computerId, credentialId, now, signal)) ||
-        (await this.#pairings.hasLinked(computerId, credentialId, signal));
-
-    readonly createAccessGrant: ProjectStore["createAccessGrant"] = async (value, signal) =>
-        await this.#pairings.createGrant(
-            value.grantId,
-            value.computerId,
-            value.secretHash,
-            value.ownerCredentialId,
-            value.now,
-            value.expiresAt,
-            signal,
-        );
-
-    readonly redeemAccessGrant: ProjectStore["redeemAccessGrant"] = async (value, signal) => {
-        const results = await this.#pairings.redeemGrant(
-            value.computerId,
-            value.grantId,
-            value.secretHash,
-            value.credentialId,
-            value.tokenHash,
-            value.now,
-            signal,
-        );
-        if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) {
-            const state = await this.#pairings.readGrant(value.computerId, value.grantId, value.secretHash, signal);
-            if (state === null) {
-                return { kind: "invalid" };
-            }
-            if (state.redeemed_at !== null) {
-                return { kind: "already_redeemed" };
-            }
-            if (state.runtime_revoked_at !== null) {
-                return { kind: "runtime_revoked" };
-            }
-            if (state.expires_at <= value.now) {
-                return { kind: "expired" };
-            }
-            return { kind: "not_redeemed" };
-        }
-        const channel = await this.#runtimes.readChannel(value.computerId, signal);
-        return channel === null ? { kind: "channel_missing" } : { kind: "redeemed", computerId: channel.computer_id };
-    };
-
-    readonly createBrowserCredential: ProjectStore["createBrowserCredential"] = async (value, signal) =>
-        await this.#pairings.createBrowser(
-            value.credentialId,
-            this.#computerId,
-            value.tokenHash,
-            value.ownerCredentialId,
-            value.now,
-            value.expiresAt,
-            signal,
-        );
-
-    readonly revokeBrowserCredential: ProjectStore["revokeBrowserCredential"] = async (credentialId, now, signal) =>
-        await this.#pairings.revokeBrowser(this.#computerId, credentialId, now, signal);
 
     readonly updateAgentCatalog: ProjectStore["updateAgentCatalog"] = async (computerId, tokenHash, agents, signal) =>
         (await this.#runtimes.updateAgents(computerId, tokenHash, agents, signal)).meta.changes === 1;
@@ -104,9 +34,6 @@ export class SqliteProjectStore implements ProjectStore {
         await this.#runtimes.readRuntime(computerId, signal);
 
     readonly listRuntimes: ProjectStore["listRuntimes"] = async (signal) => await this.#runtimes.listRuntimes(signal);
-
-    readonly readChannel: ProjectStore["readChannel"] = async (computerId, signal) =>
-        await this.#runtimes.readChannel(computerId, signal);
 
     readonly requestRuntimePairing: ProjectStore["requestRuntimePairing"] = async (value, signal) => {
         const existing = await this.#runtimes.readRuntimePairingRequest(value.idempotencyKey, signal);
@@ -168,6 +95,12 @@ export class SqliteProjectStore implements ProjectStore {
 
     readonly revokeRuntime: ProjectStore["revokeRuntime"] = async (value, signal) =>
         await this.#runtimes.revokeRuntime(value, signal);
+
+    readonly revokeSessionAccess: ProjectStore["revokeSessionAccess"] = async (revokedAt, signal) =>
+        await this.#sessionAccessRevocations.record(revokedAt, signal);
+
+    readonly readSessionAccessRevocation: ProjectStore["readSessionAccessRevocation"] = async (signal) =>
+        await this.#sessionAccessRevocations.read(signal);
 
     readonly findCredential: ProjectStore["findCredential"] = async (credential, signal) =>
         await credentialMatches(this.#database, credential, signal);

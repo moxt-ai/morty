@@ -16,7 +16,7 @@ import {
 import { createWritableAcpStream, readableAcpStream } from "./acp-stream.ts";
 
 interface ControlledAcpLaunch {
-    readonly id: string;
+    readonly harness: string;
     readonly adapterPath: string;
     readonly arguments: readonly string[];
     readonly environment: Readonly<Record<string, string>>;
@@ -89,7 +89,7 @@ export class ControlledAcpConnection implements AgentConnection {
                 }
                 return;
             }
-            process.stderr.write(`[${agent.id}-acp] ${chunk.toString("utf8")}`);
+            process.stderr.write(`[${agent.harness}-acp] ${chunk.toString("utf8")}`);
         };
         stderr.on("data", this.#consumeStderr);
         const stream = ndJsonStream(

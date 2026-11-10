@@ -20,7 +20,7 @@ import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/rea
 class ForkSettingsAgent extends ControlledAcpSpecification {
     readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
-    readonly id = "controlled-acp";
+    readonly harness = "controlled-acp";
     readonly label = "Controlled Fork settings";
     override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
@@ -47,7 +47,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                 },
                 async (peer) => {
                     const identity = {
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         directory: ".",
                     };
                     const configureSource = async (
@@ -57,7 +57,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                     ): Promise<void> => {
                         peer.send(
                             encodeSessionPromptCommand({
-                                ...identity,
                                 kind: "session.prompt",
                                 target: peer.target,
                                 commandId: crypto.randomUUID(),
@@ -143,7 +142,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                     }
                     peer.send(
                         encodeSessionPrepareCommand({
-                            ...identity,
                             kind: "session.prepare",
                             requestId: crypto.randomUUID(),
                             target: peer.target,

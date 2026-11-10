@@ -80,7 +80,7 @@ describe("ACP conversation sessions", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -139,7 +139,7 @@ describe("ACP conversation sessions", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -709,7 +709,7 @@ describe("ACP conversation sessions", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "claude",
+                        harness: "claude",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                         environment: options.environment,
@@ -780,7 +780,7 @@ describe("ACP conversation sessions", () => {
         });
         try {
             expect(restartedRuntime.findSessions([sessionTarget])).toEqual([
-                expect.objectContaining({ agentId: "claude", prompted: true, target: sessionTarget }),
+                expect.objectContaining({ harness: "claude", prompted: true, target: sessionTarget }),
             ]);
         } finally {
             await restartedRuntime.close();
@@ -844,7 +844,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 (options) =>
                     new ControlledAcpConnection(
                         {
-                            id: "pi",
+                            harness: "pi",
                             adapterPath: adapterIdentity.realPath,
                             arguments: [],
                             environment: options.environment,
@@ -922,7 +922,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         },
     );
 
-    it("Given a harness owns an empty conversation, When another harness is selected, Then the old pair cannot be rebound and the new harness creates its own conversation", async () => {
+    it("Given a harness owns an empty conversation, When another harness is selected, Then the new harness creates its own conversation", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -948,7 +948,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -963,7 +963,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "claude",
+                        harness: "claude",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Claude Code"],
                         environment: options.environment,
@@ -973,19 +973,11 @@ child.once("exit", (code) => process.exit(code ?? 84));
         );
 
         try {
-            const target = await manager.createNativeSession({
+            await manager.createNativeSession({
                 agent: codex,
                 cwd: process.cwd(),
                 signal: new AbortController().signal,
             });
-            await expect(
-                manager.prepareSession({
-                    agent: claude,
-                    cwd: process.cwd(),
-                    target,
-                    signal: new AbortController().signal,
-                }),
-            ).rejects.toMatchObject({ code: "session_identity_mismatch" });
             const selected = await manager.createNativeSession({
                 agent: claude,
                 cwd: process.cwd(),
@@ -1038,7 +1030,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 (options) =>
                     new ControlledAcpConnection(
                         {
-                            id: "codex",
+                            harness: "codex",
                             adapterPath: process.execPath,
                             arguments: [fakeAgentPath, "--agent-name", "Codex"],
                             environment: options.environment,
@@ -1096,7 +1088,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -1187,7 +1179,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex", "--exclusive-writer"],
                         environment: options.environment,
@@ -1298,7 +1290,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [
                             fakeAgentPath,
@@ -1352,7 +1344,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--authentication-required"],
                         environment: options.environment,
@@ -1400,7 +1392,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -1460,7 +1452,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Codex"],
                         environment: options.environment,
@@ -1549,7 +1541,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [adapterPath],
                         environment: options.environment,
@@ -1617,89 +1609,6 @@ agent.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an existing Agent conversation, When a caller changes its Agent identity, Then the local boundary rejects the request", async () => {
-        const manager = new SessionManager({
-            observer: new NullSessionObserver(),
-            store: new MemorySessionStore(),
-            adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
-            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
-                new UnretainedExternalContentStore().put({
-                    bytes: content.bytes,
-                    kind: content.kind,
-                    mediaType: content.mediaType,
-                    name: content.name,
-                    target: sessionTarget,
-                    signal,
-                }),
-            ),
-            timer: systemTimer,
-            maxProcesses: null,
-        });
-        const codex = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
-            (options) =>
-                new ControlledAcpConnection(
-                    {
-                        id: "codex",
-                        adapterPath: process.execPath,
-                        arguments: [fakeAgentPath],
-                        environment: options.environment,
-                    },
-                    options,
-                ),
-        );
-        const claude = new AcpAgentDefinition(
-            "claude",
-            "Claude Code",
-            process.execPath,
-            (options) =>
-                new ControlledAcpConnection(
-                    {
-                        id: "claude",
-                        adapterPath: process.execPath,
-                        arguments: [fakeAgentPath],
-                        environment: options.environment,
-                    },
-                    options,
-                ),
-        );
-
-        try {
-            const target = await manager.createNativeSession({
-                agent: codex,
-                cwd: process.cwd(),
-                signal: AbortSignal.timeout(10_000),
-            });
-            await manager.runPrompt({
-                agent: codex,
-                commandId: "command-locked-first",
-                cwd: process.cwd(),
-                images: [],
-                prompt: "first",
-                resources: [],
-                target,
-                signal: new AbortController().signal,
-            });
-            await expect(
-                manager.runPrompt({
-                    agent: claude,
-                    commandId: "command-locked-second",
-                    cwd: process.cwd(),
-                    images: [],
-                    prompt: "second",
-                    resources: [],
-                    target,
-                    signal: new AbortController().signal,
-                }),
-            ).rejects.toMatchObject({ code: "session_identity_mismatch" });
-        } finally {
-            await manager.close();
-        }
-    });
-
     it("Given an ACP subprocess exits during shutdown, When its session manager closes, Then the stream failure is contained", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
@@ -1726,7 +1635,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "codex",
+                        harness: "codex",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--exit-after-session-creation"],
                         environment: options.environment,

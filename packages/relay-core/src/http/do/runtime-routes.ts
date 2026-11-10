@@ -1,25 +1,10 @@
 import { isIdentifier } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import { ComputerScope } from "../../entity/do/session.ts";
-import type { HostCredential } from "../../entity/pairing/pairing.ts";
 import type { RuntimeAdmission, RuntimeService } from "../../service/channel/runtime-service.ts";
 
 function unauthorized(message: string): Response {
     return Response.json({ error: { code: "unauthorized", message } }, { status: 401 });
-}
-
-function hostCredential(credentialId: string | null, kind: string | null): HostCredential | null {
-    if (credentialId === null) {
-        return null;
-    }
-    switch (kind) {
-        case "channel":
-            return { kind: "channel", credentialId };
-        case "project":
-            return { kind: "project", credentialId };
-        default:
-            return null;
-    }
 }
 
 export function createRuntimeRoutes(runtime: RuntimeService) {
@@ -42,13 +27,6 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
         const credentialId = request.headers.get("x-morty-host-credential-id");
         if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
             await runtime.revokeRuntime(scope, request.signal);
-            return new Response(null, { status: 204 });
-        }
-        if (request.method === "DELETE" && url.pathname.endsWith("/host-credentials/revoke")) {
-            if (credentialId === null) {
-                return unauthorized("Verified host credential access is required");
-            }
-            runtime.revokeHost(credentialId, scope);
             return new Response(null, { status: 204 });
         }
         if (request.method === "GET" && url.pathname.endsWith("/runtime-status")) {
@@ -86,8 +64,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return unreachable;
         }
         if (url.pathname.endsWith("/host")) {
-            const credential = hostCredential(credentialId, request.headers.get("x-morty-host-credential-kind"));
-            if (credential === null) {
+            if (credentialId === null) {
                 return unauthorized("Verified host credential access is required");
             }
             const nativeRequestId = url.searchParams.get("nativeRequestId");
@@ -104,7 +81,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
                 await runtime.acceptHost(
                     {
                         role: "host",
-                        credential,
+                        credential: { credentialId },
                         computerId,
                         ...(nativeRequestId === null ? {} : { nativeRequestId }),
                         ...(sessionFilter === undefined ? {} : { sessionFilter }),

@@ -1,10 +1,12 @@
-import { abortAllDurableObjects, runDurableObjectAlarm } from "cloudflare:test";
+import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
+import { DurableObjectDatabaseAdapter } from "@morty-build/relay-core";
 import * as v from "valibot";
 import { afterAll, expect, it } from "vitest";
 import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { revokeMortyCredential, seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
+import { SqlitePlatformProjectStore } from "../src/storage/sqlite-platform-project-store.ts";
 import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 
@@ -144,12 +146,13 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);
 
-    // The revocation commits, but its push never reaches this Runtime's Relay (or reached it before the view opened).
-    await env.PLATFORM_DIRECTORY_DATABASE.prepare(
-        "INSERT INTO machine_access_revocations (account_id, revoked_at) VALUES (?, ?)",
-    )
-        .bind(computerId, Date.now())
-        .run();
+    // The revocation commits, but its push never reaches the view (or reached it before the view opened).
+    await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
+        await new SqlitePlatformProjectStore(
+            computerId,
+            new DurableObjectDatabaseAdapter(state.storage),
+        ).revokeSessionAccess(Date.now(), AbortSignal.timeout(10_000));
+    });
     expect(await runDurableObjectAlarm(env.COMPUTER_RELAY.getByName(computerId))).toBe(true);
 
     expect(await viewInbox.closed.promise).toEqual({ code: 1008, reason: "Session access revoked" });

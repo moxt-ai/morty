@@ -64,9 +64,7 @@ test.each(["new", "imported"] as const)(
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "pi",
                     commandId,
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -162,7 +160,7 @@ test.each(["new", "imported"] as const)(
 async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promise<RealDaemonPeer["target"]> {
     const seedPrompt = "Save this native conversation for import";
     await agent.seedSession(peer.workspace, seedPrompt, peer.signal);
-    const identity = { agentId: "pi", directory: "." };
+    const identity = { harness: "pi", directory: "." };
     const listId = randomUUID();
     peer.send(
         encodeNativeSessionCommand({
@@ -220,9 +218,7 @@ function sendQuestionPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer[
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
-            agentId: "pi",
             commandId,
-            directory: ".",
             disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",

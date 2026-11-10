@@ -1,53 +1,14 @@
 import type { ComputerIdentityCredential } from "../entity/pairing/pairing-identity.ts";
 import type {
-    AuthorizedChannelRow,
-    ChannelCredentialIdentity,
-    CredentialMatch,
-    LinkedDeviceRow,
     PairingChannelRow,
     PairingClaimRow,
+    PairingScopeRow,
     RuntimeChannelRow,
     RuntimeCredentialRotation,
     RuntimeDirectoryRow,
     RuntimePairingRow,
 } from "../entity/pairing/pairing-records.ts";
 import type { ProjectStoragePlacement } from "./project-storage-directory.ts";
-
-export interface CreateAccessGrant {
-    readonly grantId: string;
-    readonly computerId: string;
-    readonly secretHash: string;
-    readonly ownerCredentialId: string;
-    readonly now: number;
-    readonly expiresAt: number;
-}
-
-export interface RedeemAccessGrant {
-    readonly computerId: string;
-    readonly grantId: string;
-    readonly secretHash: string;
-    readonly credentialId: string;
-    readonly tokenHash: string;
-    readonly now: number;
-}
-
-/** The outcome of redeeming an access grant; anything but `redeemed` issued no credential. */
-export type AccessGrantRedemption =
-    | { readonly kind: "redeemed"; readonly computerId: string }
-    | { readonly kind: "invalid" }
-    | { readonly kind: "already_redeemed" }
-    | { readonly kind: "runtime_revoked" }
-    | { readonly kind: "expired" }
-    | { readonly kind: "not_redeemed" }
-    | { readonly kind: "channel_missing" };
-
-export interface CreateBrowserCredential {
-    readonly credentialId: string;
-    readonly tokenHash: string;
-    readonly ownerCredentialId: string;
-    readonly now: number;
-    readonly expiresAt: number;
-}
 
 export interface RequestRuntimePairing {
     readonly computerId: string;
@@ -97,27 +58,6 @@ export interface RevokeRuntime {
  * tables. A null or false result means the precondition did not hold and nothing was written.
  */
 export interface ProjectStore {
-    /** Authenticates a host credential of a channel and records its use. */
-    readonly authenticateHost: (
-        computerId: string,
-        tokenHash: string,
-        now: number,
-        signal: AbortSignal,
-    ) => Promise<AuthorizedChannelRow | null>;
-    readonly isHostCredentialActive: (identity: ChannelCredentialIdentity, signal: AbortSignal) => Promise<boolean>;
-    readonly listLinkedDevices: (computerId: string, signal: AbortSignal) => Promise<readonly LinkedDeviceRow[]>;
-    /** Revokes a linked device; false when the channel has no such device. Repeating it succeeds. */
-    readonly revokeLinkedDevice: (
-        computerId: string,
-        credentialId: string,
-        now: number,
-        signal: AbortSignal,
-    ) => Promise<boolean>;
-    readonly createAccessGrant: (value: CreateAccessGrant, signal: AbortSignal) => Promise<boolean>;
-    readonly redeemAccessGrant: (value: RedeemAccessGrant, signal: AbortSignal) => Promise<AccessGrantRedemption>;
-    readonly createBrowserCredential: (value: CreateBrowserCredential, signal: AbortSignal) => Promise<boolean>;
-    /** Revokes a browser credential; false when the Project has no such credential. Repeating it succeeds. */
-    readonly revokeBrowserCredential: (credentialId: string, now: number, signal: AbortSignal) => Promise<boolean>;
     readonly updateAgentCatalog: (
         computerId: string,
         tokenHash: string,
@@ -127,7 +67,6 @@ export interface ProjectStore {
     readonly isRuntimeActive: (computerId: string, signal: AbortSignal) => Promise<boolean>;
     readonly readRuntime: (computerId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     readonly listRuntimes: (signal: AbortSignal) => Promise<readonly RuntimeChannelRow[]>;
-    readonly readChannel: (computerId: string, signal: AbortSignal) => Promise<RuntimeChannelRow | null>;
     /**
      * Returns the pairing request created under the idempotency key, or creates one within the Runtime quota. A
      * refused request is audited.
@@ -143,13 +82,20 @@ export interface ProjectStore {
      * unexpired; any other failed claim is audited and returns false.
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
-    /** Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. */
+    /**
+     * Revokes a Runtime, and with it the Session credentials issued until then, and returns its committed revocation;
+     * null when the Project has no such Runtime.
+     */
     readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
+    /** Revokes the Session credentials issued until `revokedAt`; returns the latest revocation, which never moves back. */
+    readonly revokeSessionAccess: (revokedAt: number, signal: AbortSignal) => Promise<number>;
+    /** The latest time the computer revoked its Session credentials, by either operation; null when it never did. */
+    readonly readSessionAccessRevocation: (signal: AbortSignal) => Promise<number | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
     readonly findCredential: (
         credential: ComputerIdentityCredential,
         signal: AbortSignal,
-    ) => Promise<readonly CredentialMatch[]>;
+    ) => Promise<readonly PairingScopeRow[]>;
     readonly rotateRuntimeCredential: (
         presentedHash: string,
         successorHash: string,

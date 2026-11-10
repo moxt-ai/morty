@@ -15,7 +15,7 @@ test("Given a slow Session creation, When I send text and an attachment and writ
     const app = await createTestApp({
         connectAgent: true,
         agent: {
-            id: "settings-test",
+            harness: "settings-test",
             label: "Settings Agent",
             beforeSessionCreated: async () => {
                 if (holding) {
@@ -82,7 +82,7 @@ test.each(["refused", "unknown"] as const)(
         const app = await createTestApp({
             connectAgent: true,
             agent: {
-                id: "settings-test",
+                harness: "settings-test",
                 label: "Settings Agent",
                 beforeSessionCreated: async () => {
                     if (holding) {

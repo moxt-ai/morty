@@ -13,7 +13,7 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test.each(["pi", "claude", "codex"] as const)(
     "Given real %s is replying, When a queued message is withdrawn and revised, Then only the revision executes and the original reply completes",
-    async (agentId) => {
+    async (harness) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
         const entered = Promise.withResolvers<void>();
@@ -45,8 +45,6 @@ test.each(["pi", "claude", "codex"] as const)(
                         kind: "session.prompt",
                         commandId,
                         target: peer.target,
-                        agentId,
-                        directory: ".",
                         attachments: [],
                         disposition: "append",
                         prompt: text,
@@ -130,7 +128,7 @@ test.each(["pi", "claude", "codex"] as const)(
             expect(replies).toContain("QUEUE_WITHDRAWAL_REPLY");
         };
         try {
-            if (agentId === "claude") {
+            if (harness === "claude") {
                 await using provider = await FakeAnthropicProvider.start(
                     "claude-sonnet-4-6",
                     "QUEUE_WITHDRAWAL_REPLY",
@@ -140,11 +138,11 @@ test.each(["pi", "claude", "codex"] as const)(
                 await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, scenario);
             } else {
                 await using provider = await FakeOpenAiProvider.start(
-                    agentId === "pi" ? "gpt-4.1" : "morty-test-model",
+                    harness === "pi" ? "gpt-4.1" : "morty-test-model",
                     "QUEUE_WITHDRAWAL_REPLY",
                     { beforeFirstText },
                 );
-                if (agentId === "pi") {
+                if (harness === "pi") {
                     await using agent = await PiFixture.create(provider);
                     await withRealDaemon(new PiAgentSpecification(), agent.environment, scenario);
                 } else {

@@ -2,7 +2,7 @@ import type { AuthenticationGuidance } from "../../components/chat/authenticatio
 
 export function authenticationGuidance(
     code: string,
-    agentRef: string,
+    harness: string,
     machineName: string,
 ): AuthenticationGuidance | null {
     if (code !== "authentication_required") {
@@ -14,7 +14,7 @@ export function authenticationGuidance(
             : `“${machineName}”`;
     const firstStep = `Open a terminal on ${computer}, using the same computer account that runs this agent.`;
     const lastStep = "Return here and send your message again when authentication is complete.";
-    switch (agentRef) {
+    switch (harness) {
         case "claude":
             return {
                 title: "Claude Code needs sign-in",

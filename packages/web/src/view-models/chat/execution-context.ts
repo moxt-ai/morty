@@ -16,7 +16,7 @@ export function pendingExecutionContext(
     const loading = home.selection.kind === "loading" || home.initialization.kind === "loading";
     const base: ExecutionContext = {
         ...connectionPresentation(home, null),
-        agentRef: "",
+        harness: "",
         machine: home.runtimeConfiguration?.runtime.machineName.trim() || (loading ? "Loading…" : "Unknown"),
         agent: loading ? "Loading…" : "Unknown",
         directory: null,
@@ -31,10 +31,10 @@ export function pendingExecutionContext(
         case "refreshing": {
             // The draft only chose which agent runs; its names come from the Runtime configuration the page follows.
             const runtime = home.runtimeConfiguration?.runtime;
-            const offered = runtime?.agents.find((agent) => agent.agentRef === settings.selectedAgent.agentRef);
+            const offered = runtime?.agents.find((agent) => agent.harness === settings.selectedAgent.harness);
             return {
                 ...base,
-                agentRef: settings.selectedAgent.agentRef,
+                harness: settings.selectedAgent.harness,
                 machine: runtime?.machineName.trim() || settings.selectedAgent.machineName.trim() || "Unknown",
                 agent: offered?.label.trim() || settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
@@ -54,10 +54,10 @@ export function pendingExecutionContext(
 function sessionHarnessIdentity(
     session: SelectedMortySession,
     configuration: BotRuntimeConfiguration | null,
-): { readonly agentRef: string; readonly agent: string } {
-    const agent = configuration?.runtime.agents.find((candidate) => candidate.agentRef === session.agentRef);
+): { readonly harness: string; readonly agent: string } {
+    const agent = configuration?.runtime.agents.find((candidate) => candidate.harness === session.harness);
     return {
-        agentRef: session.agentRef,
+        harness: session.harness,
         agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
     };
 }
@@ -65,13 +65,13 @@ function sessionHarnessIdentity(
 export function activeHarnessMark(
     home: BotChatHomeStore,
     settings: DraftControlsStore["settings"],
-): { readonly agentRef: string; readonly label: string } {
+): { readonly harness: string; readonly label: string } {
     if (home.selection.kind === "ready") {
         const identity = sessionHarnessIdentity(home.selection.session, home.runtimeConfiguration);
-        return { agentRef: identity.agentRef, label: identity.agent };
+        return { harness: identity.harness, label: identity.agent };
     }
     const context = pendingExecutionContext(home, settings);
-    return { agentRef: context.agentRef, label: context.agent };
+    return { harness: context.harness, label: context.agent };
 }
 
 export function sessionExecutionContext(
@@ -84,7 +84,7 @@ export function sessionExecutionContext(
 
     return {
         ...connectionPresentation(home, connection),
-        agentRef: identity.agentRef,
+        harness: identity.harness,
         machine: configuration?.runtime.machineName.trim() || "Unknown",
         agent: identity.agent,
         directory: session.result.ready.directoryLabel,

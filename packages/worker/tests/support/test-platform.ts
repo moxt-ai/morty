@@ -35,10 +35,12 @@ export async function startTestPlatform(
             appCredential: credential,
             attachments: bindings.env.R2_BUCKET_APAC,
             baseUrl: bindings.origin,
+            cloudflare: bindings.cloudflare,
+            configure: bindings.configure,
             service,
             connectAgent: async (
                 computerId: string,
-                agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],
+                agents: readonly ControlledAgent[] = [{ harness: "codex", label: "Codex" }],
                 sessionIds?: ReadonlySet<string>,
             ) => {
                 const runtime = await createControlledAgentRuntime({
@@ -46,10 +48,12 @@ export async function startTestPlatform(
                     behavior: {
                         reply: agents[0]?.reply ?? mortyReply,
                         files: mortyFiles,
-                        agentId: agents[0]?.id ?? "codex",
+                        harness: agents[0]?.harness ?? "codex",
                         agentName: agents[0]?.label ?? "Codex",
                         echoUserMessage: true,
-                        additionalAgents: agents.slice(1).map((agent) => ({ id: agent.id, name: agent.label })),
+                        additionalAgents: agents
+                            .slice(1)
+                            .map((agent) => ({ harness: agent.harness, name: agent.label })),
                         beforeSessionCreated: agents[0]?.beforeSessionCreated,
                         beforeCancellationApplied: agents[0]?.beforeCancellationApplied,
                         onBackgroundPermissionReady: agents[0]?.onBackgroundPermissionReady,

@@ -165,7 +165,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       kind: "session.create",
                                       requestId: crypto.randomUUID(),
                                       operationId: crypto.randomUUID(),
-                                      agentId: "codex",
+                                      harness: "codex",
                                       directory: ".",
                                       configurations: [],
                                   })
@@ -173,8 +173,6 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                                       kind: "session.prepare",
                                       requestId: crypto.randomUUID(),
                                       target,
-                                      agentId: "codex",
-                                      directory: ".",
                                   }),
                         );
                         expected.push({

@@ -3,8 +3,8 @@ import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
-import { sessionActivity } from "./session-current-turn.ts";
 import type { DeliveryState } from "./session-delivery-store.ts";
+import { type SessionExecutionState, sessionActivity } from "./session-execution.ts";
 import type { SessionPaneStore } from "./session-pane-store.ts";
 
 export type ConversationStatusStoreApi = ReturnType<typeof createConversationStatusStore>;
@@ -39,8 +39,8 @@ function settleIdle(
 }
 
 /**
- * What the sidebar shows for a Session. The open Session's pane owns its current turn and its delivery, including
- * submissions the Runtime never saw, so once the pane has reached the Runtime that Session's status is the pane's
+ * What the sidebar shows for a Session. The open Session's execution and delivery, including submissions the Runtime
+ * never saw, are followed by its pane, so once the pane has reached the Runtime that Session's status is their
  * activity. Every other Session shows what this store retained, or the status its directory entry was listed with.
  */
 export function conversationListStatus(
@@ -48,14 +48,15 @@ export function conversationListStatus(
     statuses: Pick<NativeSessionMap<ConversationListStatus>, "get">,
     open: {
         readonly sessionTarget: NativeSessionTarget;
-        readonly pane: Pick<SessionPaneStore, "connection" | "turn">;
+        readonly pane: Pick<SessionPaneStore, "connection">;
+        readonly execution: Pick<SessionExecutionState, "turn" | "commands">;
         readonly delivery: DeliveryState;
     } | null,
 ): ConversationListStatus {
     return open !== null &&
         sameNativeSession(open.sessionTarget, session.target) &&
         open.pane.connection.kind !== "first-loading"
-        ? sessionActivity(open.pane.turn, open.delivery)
+        ? sessionActivity(open.execution, open.delivery)
         : (statuses.get(session.target) ?? session.status);
 }
 

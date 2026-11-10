@@ -4,7 +4,6 @@ export const PROJECT_PERMISSION_NAMES = Object.freeze([
     "artifact:write",
     "identity-binding:manage",
     "interaction:respond",
-    "owner-credential:manage",
     "project:event:read",
     "project:read",
     "runtime:pair",

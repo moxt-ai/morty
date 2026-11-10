@@ -18,9 +18,9 @@ it("Given two harnesses create the same native ID, When I create and restore eac
         );
         const runtime = await platform.connectAgent(
             project.computerId,
-            ["claude", "codex"].map((id) => ({
-                id,
-                label: id,
+            ["claude", "codex"].map((harness) => ({
+                harness,
+                label: harness,
                 isolatedNativeStorage: true,
                 arguments: ["--persist-empty-sessions"],
             })),
@@ -29,7 +29,7 @@ it("Given two harnesses create the same native ID, When I create and restore eac
         for (const harness of ["claude", "codex"]) {
             const ready = await runtime.client.sessions.create(
                 {
-                    agentId: harness,
+                    harness: harness,
 
                     configurations: [],
                     directory: ".",
@@ -38,13 +38,13 @@ it("Given two harnesses create the same native ID, When I create and restore eac
                 },
                 signal,
             );
-            expect(ready.agentId).toBe(harness);
+            expect(ready.harness).toBe(harness);
             targets.push(ready.target);
         }
         expect(targets[0]?.sessionId).toBe(targets[1]?.sessionId);
         for (const target of targets) {
             await expect(runtime.client.sessions.restore(target, signal)).resolves.toMatchObject({
-                entry: { agentId: target.harness, sessionId: target.sessionId },
+                entry: { harness: target.harness, sessionId: target.sessionId },
             });
         }
     } finally {
@@ -69,14 +69,14 @@ it("Given a harness announces its title during creation, When the caller creates
         );
         const runtime = await platform.connectAgent(project.computerId, [
             {
-                id: "claude",
+                harness: "claude",
                 label: "Controlled ACP",
                 arguments: ["--announce-title-while-creating"],
             },
         ]);
         const ready = await runtime.client.sessions.create(
             {
-                agentId: "claude",
+                harness: "claude",
 
                 configurations: [],
                 directory: ".",
@@ -88,7 +88,7 @@ it("Given a harness announces its title during creation, When the caller creates
         const entries = await runtime.client.runtimes.querySessions([ready.target], signal);
         expect(entries).toMatchObject([
             {
-                agentId: "claude",
+                harness: "claude",
                 target: ready.target,
                 title: "Harness-created conversation",
             },
@@ -117,14 +117,14 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         const runtime = await platform.connectAgent(
             project.computerId,
             [
-                { id: "claude", label: "Claude Code" },
-                { id: "codex", label: "Codex" },
+                { harness: "claude", label: "Claude Code" },
+                { harness: "codex", label: "Codex" },
             ],
             new Set([sessionId]),
         );
         const imported = new Map<string, string>();
         for (const harness of ["claude", "codex"]) {
-            const workspace = { agentId: harness, directory: "." };
+            const workspace = { harness: harness, directory: "." };
             const opened = await runtime.client.runtimes.nativeSessions(
                 {
                     ...workspace,
@@ -142,8 +142,8 @@ it("Given two harnesses own the same native session ID without prior discovery, 
             const target = { harness, sessionId };
             await expect(runtime.client.sessions.restore(target, signal)).resolves.toMatchObject({
                 target,
-                entry: { agentId: harness, sessionId },
-                ready: { agentId: harness, target: { harness, sessionId: imported.get(harness) } },
+                entry: { harness: harness, sessionId },
+                ready: { harness: harness, target: { harness, sessionId: imported.get(harness) } },
             });
         }
         await expect(

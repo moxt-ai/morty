@@ -8,7 +8,7 @@ import { createForkLossProxy } from "./fixtures/fork-loss-proxy.ts";
 afterEach(() => vi.useRealTimers());
 
 test.each(["request", "result"] as const)(
-    "Given the Runtime Fork %s is lost, When the operation is retried after reconnect, Then only a committed target is recovered",
+    "Given the Runtime Fork %s is lost, When the operation is retried after reconnect, Then one Fork exists and every retry answers with it",
     async (loss) => {
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
         await using platform = await startTestPlatform();
@@ -53,7 +53,7 @@ test.each(["request", "result"] as const)(
         await runtime.client.runtimes.nativeSessions(
             {
                 action: "list",
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
                 cursor: null,
             },
@@ -62,31 +62,28 @@ test.each(["request", "result"] as const)(
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date", "setTimeout", "clearTimeout"] });
         const operationId = crypto.randomUUID();
         const input = {
-            agentId: "claude",
+            harness: "claude",
             directory: ".",
             sessionId: "native-fork-source",
         };
         const fork = () => runtime.client.runtimes.forkNativeSession(operationId, input, signal);
-        await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
-        const target = await proxy.lost;
+        await expect(fork()).rejects.toMatchObject({ code: "runtime_offline" });
+        const lost = await proxy.lost;
         await disconnected.promise;
         await vi.advanceTimersByTimeAsync(500);
         await reconnected.promise;
-        if (loss === "request") {
-            await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
-            await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
-            expect(await runtime.client.runtimes.listSessions(100, signal)).toEqual([]);
-        } else {
-            const [first, concurrent] = await Promise.all([fork(), fork()]);
-            expect(concurrent).toEqual(first);
-            expect(first.result.target).toEqual(target);
-            expect(first.result.ready).toMatchObject({ target, agentId: "claude", restored: true });
-            expect(first.entry.sessionId).toBe(input.sessionId);
-            expect(await fork()).toEqual(first);
-            const sessions = await runtime.client.runtimes.listSessions(100, signal);
-            expect(sessions).toHaveLength(1);
-            expect(sessions[0]?.target).toEqual(target);
+        // The Runtime answers a retry from the receipt it keeps under the operation, or forks once if the Fork never
+        // reached it.
+        const [first, concurrent] = await Promise.all([fork(), fork()]);
+        expect(concurrent).toEqual(first);
+        if (loss === "result") {
+            expect(first.target).toEqual(lost);
         }
+        expect(first.ready).toMatchObject({ target: first.target, harness: "claude", restored: true });
+        expect(await fork()).toEqual(first);
+        const sessions = await runtime.client.runtimes.listSessions(100, signal);
+        expect(sessions).toHaveLength(1);
+        expect(sessions[0]?.target).toEqual(first.target);
     },
 );
 
@@ -103,21 +100,15 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.computerId, undefined, new Set(["recovery-native-source"]));
-    const listingInput = {
-        action: "list" as const,
-        agentId: "claude",
-        cursor: null,
-        directory: ".",
-    };
-    const directory = await runtime.client.runtimes.nativeSessions(listingInput, signal);
-    if (directory.action !== "list" || directory.entries[0] === undefined) {
-        throw new Error("No native source");
-    }
+    const runtime = await platform.connectAgent(
+        project.computerId,
+        undefined,
+        new Set(["recovery-native-source", "another-native-source"]),
+    );
     const body = JSON.stringify({
-        agentId: "claude",
+        harness: "claude",
         directory: ".",
-        sessionId: directory.entries[0].sessionId,
+        sessionId: "recovery-native-source",
     });
     let loseNextResponse = true;
     let lostStatus: number | undefined;
@@ -173,9 +164,9 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
             method: "POST",
             headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
             body: JSON.stringify({
-                agentId: "claude",
+                harness: "claude",
                 directory: ".",
-                sessionId: "another-source",
+                sessionId: "another-native-source",
             }),
             signal,
         });

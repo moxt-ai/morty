@@ -26,12 +26,12 @@ const CATALOG_DISCOVERY_TIMEOUT_MILLISECONDS = 90_000;
 
 function discoveredEvent(
     command: AgentCatalogDiscoverCommand,
-    agents: readonly { readonly agentVersion: string; readonly id: string; readonly label: string }[],
+    agents: readonly { readonly agentVersion: string; readonly harness: string; readonly label: string }[],
 ): AgentCatalogDiscoveredEvent {
     return {
         agents: agents.map((agent) => ({
             agentVersion: agent.agentVersion,
-            id: agent.id,
+            harness: agent.harness,
             label: agent.label,
         })),
         kind: "agent.catalog.discovered",
@@ -85,7 +85,7 @@ export function createAgentCatalogDiscoveryHandler(dependencies: CatalogDiscover
                             command,
                             published.agents.map((agent) => ({
                                 agentVersion: agent.agentVersion,
-                                id: agent.id,
+                                harness: agent.harness,
                                 label: agent.label,
                             })),
                         ),

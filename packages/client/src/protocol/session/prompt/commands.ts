@@ -7,7 +7,6 @@ import {
     encodeZodMessage,
     ProtocolMessageError,
     parseJson,
-    readDirectoryPath,
     readIdentifier,
     readText,
 } from "../../shared/message-codec.ts";
@@ -40,11 +39,9 @@ type SessionPromptPlacement =
     | { readonly disposition: typeof SessionPromptDisposition.Append }
     | { readonly disposition: typeof SessionPromptDisposition.Steer; readonly targetCommandId: string };
 
+/** A prompt for an existing Session. The Runtime runs it with the Agent and directory of the Session it holds. */
 export type SessionPromptCommand = {
-    readonly agentId: string;
-
     readonly commandId: string;
-    readonly directory: string;
     readonly attachments: readonly PromptAttachment[];
     readonly kind: typeof SESSION_PROMPT_KIND;
     readonly prompt: string;
@@ -160,9 +157,7 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
     }
 
     return {
-        agentId: readIdentifier(value, "agentId"),
         commandId: readIdentifier(value, "commandId"),
-        directory: readDirectoryPath(value, "directory"),
         attachments,
         kind: SESSION_PROMPT_KIND,
         prompt,

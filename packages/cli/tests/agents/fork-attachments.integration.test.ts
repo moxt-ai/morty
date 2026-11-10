@@ -28,29 +28,29 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test.each(["pi", "claude", "codex"] as const)(
     "Given real %s saved uploaded text files and an image, When two independent forks reload their history, Then original downloads and images remain readable without changing the source",
-    async (agentId) => {
+    async (harness) => {
         await using provider =
-            agentId === "claude"
+            harness === "claude"
                 ? await FakeAnthropicProvider.start("claude-sonnet-4-6", "ATTACHMENTS_SAVED")
                 : await FakeOpenAiProvider.start(
-                      agentId === "pi" ? "gpt-4.1" : "morty-test-model",
+                      harness === "pi" ? "gpt-4.1" : "morty-test-model",
                       "ATTACHMENTS_SAVED",
                   );
         await using agent =
             provider instanceof FakeAnthropicProvider
                 ? await ClaudeFixture.create(provider)
-                : agentId === "pi"
+                : harness === "pi"
                   ? await PiFixture.create(provider)
                   : await CodexFixture.create(provider);
         const specification =
-            agentId === "pi"
+            harness === "pi"
                 ? new PiAgentSpecification()
-                : agentId === "claude"
+                : harness === "claude"
                   ? new ClaudeCodeAgentSpecification()
                   : new CodexAgentSpecification();
         await withRealDaemon(specification, agent.environment, async (peer) => {
             const identity = {
-                agentId,
+                harness,
                 directory: ".",
             };
             const image = imageFixture(32);
@@ -66,7 +66,6 @@ test.each(["pi", "claude", "codex"] as const)(
             }
             peer.send(
                 encodeSessionPromptCommand({
-                    ...identity,
                     kind: "session.prompt",
                     commandId: randomUUID(),
                     target: peer.target,
@@ -76,7 +75,7 @@ test.each(["pi", "claude", "codex"] as const)(
                 }),
             );
             await finish(peer);
-            const source = await nativeSource(peer, agentId, agent.environment["CLAUDE_CONFIG_DIR"]);
+            const source = await nativeSource(peer, harness, agent.environment["CLAUDE_CONFIG_DIR"]);
             for (let index = 0; index < 2; index++) {
                 const requestId = randomUUID();
                 peer.send(
@@ -130,7 +129,6 @@ test.each(["pi", "claude", "codex"] as const)(
                 }
                 peer.send(
                     encodeSessionPromptCommand({
-                        ...identity,
                         kind: "session.prompt",
                         commandId: randomUUID(),
                         target: childTarget,
@@ -184,7 +182,7 @@ async function nativeResult(peer: RealDaemonPeer, requestId: string) {
     }
 }
 
-async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirectory: string | undefined) {
+async function nativeSource(peer: RealDaemonPeer, harness: string, configDirectory: string | undefined) {
     // Claude flushes native history after live completion. Wait for its filesystem notification, not a polling delay.
     type NativeWrite = { readonly kind: "changed" } | { readonly kind: "failed"; readonly cause: Error };
     let changed = Promise.withResolvers<NativeWrite>();
@@ -201,7 +199,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
-                    agentId,
+                    harness,
                     directory: ".",
                     kind: "native.session.request",
                     requestId,

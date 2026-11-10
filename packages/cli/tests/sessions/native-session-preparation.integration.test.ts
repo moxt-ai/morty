@@ -23,7 +23,7 @@ describe("native session preparation", () => {
             const options = {
                 agent: f.agent,
                 cwd: f.workspace,
-                target: { harness: f.agent.id, sessionId },
+                target: { harness: f.agent.harness, sessionId },
                 signal: owner.signal,
             } as const;
             const paused = Promise.withResolvers<void>();
@@ -138,7 +138,7 @@ describe("native session preparation", () => {
             await external.close();
             expect(await f.service.execute(command, new AbortController().signal)).toMatchObject({
                 action: "import",
-                ready: { target: { harness: f.agent.id, sessionId: entry.sessionId } },
+                ready: { target: { harness: f.agent.harness, sessionId: entry.sessionId } },
             });
         } finally {
             await external.close();

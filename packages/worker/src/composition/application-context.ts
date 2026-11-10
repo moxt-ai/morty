@@ -1,7 +1,6 @@
 import { logger } from "@morty-build/relay-core/logging";
 import type { Logger } from "pino";
 import { ChatService } from "../components/chat/service/chat-service.ts";
-import { ManagedSessionStorage } from "../components/chat/storage/managed-session-storage.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
 import { ManagementService } from "../components/management/service/management-service.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
@@ -19,7 +18,6 @@ export interface ApplicationContext {
     readonly storages: {
         readonly identities: IdentityStorage;
         readonly managedBots: ManagedBotStorage;
-        readonly chatSessions: ManagedSessionStorage;
     };
     readonly services: {
         readonly authentication: AuthenticationService;
@@ -38,7 +36,6 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
     const storages = Object.freeze({
         identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_COMPUTER_ID ?? null),
         managedBots: new ManagedBotStorage(bindings.DATABASE),
-        chatSessions: new ManagedSessionStorage(bindings.DATABASE),
     });
     const cx = { ...infrastructure, storages };
     const authentication = new AuthenticationService(cx);

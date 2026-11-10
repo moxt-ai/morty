@@ -1,5 +1,4 @@
 import { createStore } from "zustand/vanilla";
-import type { OpenWindowsAfterDisconnect } from "../../services/identity/anonymous-identity-api.ts";
 
 /** What a disconnection reaches: one device, named as the list showed it, or every device but this browser and the computer. */
 export type DisconnectTarget =
@@ -12,9 +11,7 @@ type Disconnection =
     | { readonly kind: "confirming" | "disconnecting" | "failed"; readonly target: DisconnectTarget };
 
 /** What the last finished disconnection reached; a device's name is kept because it has left the list by then. */
-type Disconnected =
-    | { readonly kind: "device"; readonly name: string; readonly openWindows: OpenWindowsAfterDisconnect }
-    | { readonly kind: "others"; readonly openWindows: OpenWindowsAfterDisconnect };
+type Disconnected = { readonly kind: "device"; readonly name: string } | { readonly kind: "others" };
 
 type DeviceAccessState =
     | { readonly kind: "closed" }
@@ -37,8 +34,8 @@ export interface DeviceAccessStore {
  * asks it to read again, when the list opens and after a disconnection changed it.
  */
 export function createDeviceAccessStore(options: {
-    readonly endDeviceAccess: (deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
-    readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
+    readonly endDeviceAccess: (deviceId: string, signal: AbortSignal) => Promise<void>;
+    readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<void>;
     /** Reads the linked devices again. */
     readonly readDevices: () => void;
 }) {
@@ -82,18 +79,17 @@ export function createDeviceAccessStore(options: {
                 update((current) => ({ ...current, disconnection: { kind: "disconnecting", target } }));
                 const bounded = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
                 try {
-                    const openWindows =
-                        target.kind === "device"
-                            ? await options.endDeviceAccess(target.id, bounded)
-                            : await options.endOtherBrowserAccess(bounded);
+                    if (target.kind === "device") {
+                        await options.endDeviceAccess(target.id, bounded);
+                    } else {
+                        await options.endOtherBrowserAccess(bounded);
+                    }
                     signal.throwIfAborted();
                     update((current) => ({
                         ...current,
                         disconnection: { kind: "idle" },
                         disconnected:
-                            target.kind === "device"
-                                ? { kind: "device", name: target.name, openWindows }
-                                : { kind: "others", openWindows },
+                            target.kind === "device" ? { kind: "device", name: target.name } : { kind: "others" },
                     }));
                     options.readDevices();
                 } catch {

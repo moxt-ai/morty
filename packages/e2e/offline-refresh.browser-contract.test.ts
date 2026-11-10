@@ -1,4 +1,4 @@
-import { expect, test } from "./infra/test.ts";
+import { conversationLoaded, expect, test } from "./infra/test.ts";
 
 test.use({ browserName: "webkit" });
 test.setTimeout(120_000);
@@ -21,6 +21,7 @@ for (const layout of ["desktop", "mobile"] as const) {
             await page.goto(connected.url);
             const composer = page.getByRole("textbox", { name: "Message" });
             await expect(composer).toBeEnabled();
+            await conversationLoaded(page);
             await composer.fill("Remember this offline conversation");
             await page.getByRole("button", { name: "Send message", exact: true }).click();
             await expect(page.getByRole("article", { name: "Agent response" })).toContainText(

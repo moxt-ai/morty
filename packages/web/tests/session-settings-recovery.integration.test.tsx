@@ -25,7 +25,10 @@ async function openConfiguredConversation(app: TestApp, reply: string): Promise<
 test("Given a configured conversation, When the Agent explicitly removes every setting, Then the configuration clears", {
     timeout: 60_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, agent: { id: "settings-test", label: "Settings Agent" } });
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { harness: "settings-test", label: "Settings Agent" },
+    });
     await app.queryElementByTestId(
         dataTestId.agentConfiguration,
         (element) => element.textContent?.includes("Test Small") === true,
@@ -45,7 +48,7 @@ test("Given a configured conversation, When the user reopens it, Then the conver
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "settings-test", label: "Settings Agent" },
+        agent: { harness: "settings-test", label: "Settings Agent" },
     });
     await openConfiguredConversation(app, "Settings Agent: Keep my selected model");
 

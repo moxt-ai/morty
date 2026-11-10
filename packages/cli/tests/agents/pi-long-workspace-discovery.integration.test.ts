@@ -38,7 +38,10 @@ test("Given Pi's default workspace creates an oversized native session path, Whe
 
         expect(inventory.unavailable).toEqual([]);
         expect(inventory.available).toHaveLength(1);
-        expect(inventory.available[0]).toMatchObject({ specification: { id: "pi", label: "Pi" }, status: "ready" });
+        expect(inventory.available[0]).toMatchObject({
+            specification: { harness: "pi", label: "Pi" },
+            status: "ready",
+        });
         const workspaceHash = createHash("sha256").update(workspace).digest("hex").slice(0, 24);
         const mortySessionsRoot = join(stateDirectory, "agents", "pi", "sessions");
         const sessionsRoot = join(mortySessionsRoot, workspaceHash);

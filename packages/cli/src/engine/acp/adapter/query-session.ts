@@ -49,7 +49,7 @@ export class AcpQuerySession {
                 await runtime.closeProcess();
                 signal.throwIfAborted();
                 if (error instanceof RetryableAcpInitializationError && attempt === 1) {
-                    console.warn(`[${agent.id}-acp] ACP agent initialization failed; retrying once`);
+                    console.warn(`[${agent.harness}-acp] ACP agent initialization failed; retrying once`);
                     continue;
                 }
                 if (error instanceof AcpExecutionError) {
@@ -112,7 +112,7 @@ export class AcpQuerySession {
                 "native_history_unsupported",
             );
         }
-        const target = { harness: this.#options.agent.id, sessionId };
+        const target = { harness: this.#options.agent.harness, sessionId };
         this.#eventScope = { kind: "selected", target };
         this.#events.reset(target);
         this.#connection.events.select(sessionId);

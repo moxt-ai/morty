@@ -302,19 +302,6 @@ export class RuntimeService {
         }
     };
 
-    readonly revokeHost = (credentialId: string, scope: ComputerScope): void => {
-        for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
-            if (
-                identity.role === "host" &&
-                identity.computerId === scope.computerId &&
-                identity.credential.kind === "channel" &&
-                identity.credential.credentialId === credentialId
-            ) {
-                socket.close(1008, "Channel access revoked");
-            }
-        }
-    };
-
     readonly revokeRuntime = async (scope: ComputerScope, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         // The Project's Runtime authority committed the revocation before notifying; acceptance and every

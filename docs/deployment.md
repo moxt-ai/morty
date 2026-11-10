@@ -66,10 +66,11 @@ requests exercise the same gates without publication credentials, testing the
 archive on Linux across the supported Node versions; the merge queue adds macOS
 and Windows before anything reaches main.
 
-Release only the newest main commit, and only when it changes something other than
-Markdown since the production release. An older commit's changes ship with the
-newest one instead of queueing a release of their own, and a Markdown-only change
-publishes nothing. The release workflow publishes the archive the merge queue
+Release only the newest main commit, and only when it changes something that ships
+since the production release. Documentation, repository automation and tests never
+reach a release artifact, so a change confined to them publishes nothing. An older
+commit's changes ship with the newest one instead of queueing a release of their
+own. The release workflow publishes the archive the merge queue
 accepted instead of rebuilding and retesting the same source; a commit without an
 accepted archive is built and validated by the release workflow before
 publication.

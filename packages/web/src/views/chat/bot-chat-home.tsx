@@ -133,12 +133,12 @@ function DraftLandingDirectory({
 
 function NewSessionTitle({
     agentLabel,
-    agentRef,
+    harness,
     centered,
     loading,
 }: {
     readonly agentLabel: string;
-    readonly agentRef: string;
+    readonly harness: string;
     readonly centered: boolean;
     readonly loading: boolean;
 }) {
@@ -152,7 +152,7 @@ function NewSessionTitle({
         >
             {centered ? null : (
                 <HarnessMark
-                    agentRef={agentRef || agentLabel}
+                    harness={harness || agentLabel}
                     appearance="line"
                     className="text-copy-secondary"
                     label={agentLabel}
@@ -238,7 +238,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const pendingTitle = showNewSessionTitle ? (
         <NewSessionTitle
             agentLabel={newSessionHarness.label}
-            agentRef={newSessionHarness.agentRef}
+            harness={newSessionHarness.harness}
             centered={!desktop}
             loading={newSessionHarnessLoading}
         />

@@ -71,7 +71,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             );
             await entered.promise;
             const identity = {
-                agentId: "codex",
+                harness: "codex",
                 directory: ".",
                 kind: "native.session.request",
             } as const;
@@ -104,9 +104,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
-                    agentId: "codex",
                     commandId,
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

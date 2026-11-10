@@ -2,7 +2,6 @@ import { z } from "zod";
 import { DIRECTORY_PATH } from "../../shared/directory.ts";
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodValue } from "../../shared/message-codec.ts";
-import { nativeSessionTargetSchema } from "./native-session-target.ts";
 
 export { DIRECTORY_PATH } from "../../shared/directory.ts";
 export const SHORT_TEXT = z.string().max(500);
@@ -88,9 +87,3 @@ export const configValueSchema = z
     .readonly();
 
 export type SessionConfigValue = z.infer<typeof configValueSchema>;
-
-export const sessionIdentityFields = {
-    agentId: IDENTIFIER,
-    directory: DIRECTORY_PATH,
-    target: nativeSessionTargetSchema,
-};

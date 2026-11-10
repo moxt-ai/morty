@@ -20,8 +20,6 @@ test("Given Codex fails a turn with a reason, When a member's prompt runs throug
                 kind: "session.prompt",
                 commandId,
                 target: peer.target,
-                agentId: "codex",
-                directory: ".",
                 attachments: [],
                 prompt: "Do the work",
                 disposition: SessionPromptDisposition.Append,

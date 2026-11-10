@@ -37,8 +37,8 @@ export class SessionTurns {
     readonly get = (commandId: string, sessionTarget: NativeSessionTarget): ActiveRuntimeTurn | undefined =>
         this.#bySessionTarget.get(sessionTarget)?.get(commandId);
 
-    readonly start = (command: SessionPromptCommand, attemptId: string): ActiveRuntimeTurn => {
-        const turn = this.session(command.target).start(command, attemptId);
+    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
+        const turn = this.session(command.target).start(command, attemptId, onQueued);
         this.#activity.start(turn);
         return turn;
     };
@@ -64,52 +64,28 @@ export class SessionTurns {
         }
     };
 
-    /** Resolve identities first, then read every execution projection in one synchronous step. */
-    readonly executionSnapshot = async <T>(
+    /** The Session's running turn and the commands waiting behind it, as one synchronous read. */
+    readonly executionSnapshot = (
         sessionTarget: NativeSessionTarget,
-        matches: (command: SessionPromptCommand) => Promise<boolean>,
-        read: (snapshot: {
-            readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>;
-            readonly queued: QueuedTurnSnapshot;
-        }) => T,
-        signal: AbortSignal,
-    ): Promise<T> => {
-        const matched = new Map<ActiveRuntimeTurn, boolean>();
-        for (;;) {
-            signal.throwIfAborted();
-            const current = this.#bySessionTarget.get(sessionTarget)?.turns() ?? [];
-            const unresolved = current.filter((turn) => !matched.has(turn));
-            if (unresolved.length > 0) {
-                for (const turn of unresolved) {
-                    matched.set(turn, await matches(turn.command));
-                }
-                // A command may arrive or settle during directory resolution. Re-read the live index.
-                continue;
-            }
-            const matching = current.filter((turn) => matched.get(turn) === true);
-            const turn =
-                matching.map((candidate) => candidate.snapshot()).find((snapshot) => snapshot !== null) ?? null;
-            const queued = matching
-                .filter(
-                    (candidate) =>
-                        candidate.isQueued() &&
-                        !this.#operations.isTerminalExecution(candidate.command.commandId, sessionTarget),
-                )
-                .map((candidate) => ({
-                    commandId: candidate.command.commandId,
-                    prompt: candidate.command.prompt,
-                    attachments: candidate.command.attachments,
-                }));
-            // No await between reading the turns and the caller's receipts, interactions and event position.
-            return read({ turn, queued });
-        }
+    ): { readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>; readonly queued: QueuedTurnSnapshot } => {
+        const current = this.#bySessionTarget.get(sessionTarget)?.turns() ?? [];
+        const turn = current.map((candidate) => candidate.snapshot()).find((snapshot) => snapshot !== null) ?? null;
+        const queued = current
+            .filter(
+                (candidate) =>
+                    candidate.isQueued() &&
+                    !this.#operations.isTerminalExecution(candidate.command.commandId, sessionTarget),
+            )
+            .map((candidate) => ({
+                commandId: candidate.command.commandId,
+                prompt: candidate.command.prompt,
+                attachments: candidate.command.attachments,
+            }));
+        return { turn, queued };
     };
 
-    readonly admitAndWait = async (
-        turn: ActiveRuntimeTurn,
-        waitSignal: AbortSignal,
-        onQueued: () => void,
-    ): Promise<PromptDispatch> => this.session(turn.command.target).admitAndWait(turn, waitSignal, onQueued);
+    readonly admitAndWait = async (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<PromptDispatch> =>
+        this.session(turn.command.target).admitAndWait(turn, waitSignal);
 
     /** Discards empty session states so the index does not grow unboundedly. */
     readonly sweep = (): void => {

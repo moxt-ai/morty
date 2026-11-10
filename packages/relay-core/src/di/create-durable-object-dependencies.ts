@@ -12,7 +12,6 @@ import { LocalRuntimeRequests } from "../service/channel/local-runtime-requests.
 import { NativeSessionForks } from "../service/channel/native-session-forks.ts";
 import { RuntimeConnectionService } from "../service/channel/runtime-connection-service.ts";
 import { type RuntimeCredentials, type RuntimePeers, RuntimeService } from "../service/channel/runtime-service.ts";
-import { NativeSessionForkStorage } from "../storage/native-session-fork-storage.ts";
 import { RuntimeConnectionStorage } from "../storage/runtime-connection-storage.ts";
 
 function createRuntimeRelayDependencies(cx: {
@@ -48,40 +47,29 @@ function createRuntimeRelayDependencies(cx: {
             if (service === null) {
                 return "revoked";
             }
-            switch (identity.credential.kind) {
-                case "channel":
-                    return (await service.isActive(
-                        { ...identity, credentialId: identity.credential.credentialId },
-                        signal,
-                    ))
-                        ? "granted"
-                        : "revoked";
-                case "project": {
-                    const { credentialId } = identity.credential;
-                    if (
-                        !(await service.isRuntimeActive(identity, signal)) ||
-                        !(await cx.gateways.projectCredentials.grants(
-                            identity.computerId,
-                            credentialId,
-                            PROJECT_HOST_PERMISSIONS,
-                            signal,
-                        ))
-                    ) {
-                        return "revoked";
-                    }
-                    if (permission === null || PROJECT_HOST_PERMISSIONS.includes(permission)) {
-                        return "granted";
-                    }
-                    return (await cx.gateways.projectCredentials.grants(
-                        identity.computerId,
-                        credentialId,
-                        [permission],
-                        signal,
-                    ))
-                        ? "granted"
-                        : "denied";
-                }
+            const { credentialId } = identity.credential;
+            if (
+                !(await service.isRuntimeActive(identity, signal)) ||
+                !(await cx.gateways.projectCredentials.grants(
+                    identity.computerId,
+                    credentialId,
+                    PROJECT_HOST_PERMISSIONS,
+                    signal,
+                ))
+            ) {
+                return "revoked";
             }
+            if (permission === null || PROJECT_HOST_PERMISSIONS.includes(permission)) {
+                return "granted";
+            }
+            return (await cx.gateways.projectCredentials.grants(
+                identity.computerId,
+                credentialId,
+                [permission],
+                signal,
+            ))
+                ? "granted"
+                : "denied";
         },
         authorizeViewer: async (identity, signal) => {
             // A persisted view without complete authorization metadata must reconnect.
@@ -178,7 +166,7 @@ export function createDurableObjectDependencies(cx: {
         utilities: cx.utilities,
         services: {
             ...runtime.services,
-            nativeForks: new NativeSessionForks(new NativeSessionForkStorage(cx.doDatabase), cx.utilities.waitUntil),
+            nativeForks: new NativeSessionForks(cx.utilities.waitUntil),
         },
         applications: {
             runtime: createRuntimeRoutes(runtime.services.runtime),

@@ -32,7 +32,7 @@ async function assertSettled(app: TestApp) {
 async function start(prompt: string) {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        agent: { harness: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
         page: { kind: "bootstrap", identity: true },
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), prompt);

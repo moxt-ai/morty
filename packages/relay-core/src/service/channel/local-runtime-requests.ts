@@ -29,19 +29,19 @@ class LocalRuntimeRequest extends EventTarget implements RuntimeReplyConnection 
                 history = { kind, requestId };
             },
             matchesHistoryRequest: (kind, requestId) => history?.kind === kind && history.requestId === requestId,
-            trackAgentSettingsDiscovery: (requestId, agentId) => {
+            trackAgentSettingsDiscovery: (requestId, harness) => {
                 const existing = discoveries.get(requestId);
                 if (existing !== undefined) {
-                    return existing === agentId ? "duplicate" : "busy";
+                    return existing === harness ? "duplicate" : "busy";
                 }
                 if (discoveries.size >= 4) {
                     return "busy";
                 }
-                discoveries.set(requestId, agentId);
+                discoveries.set(requestId, harness);
                 return "tracked";
             },
-            consumeAgentSettingsDiscovery: (requestId, agentId) => {
-                if (discoveries.get(requestId) !== agentId) {
+            consumeAgentSettingsDiscovery: (requestId, harness) => {
+                if (discoveries.get(requestId) !== harness) {
                     return false;
                 }
                 return discoveries.delete(requestId);

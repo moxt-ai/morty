@@ -29,6 +29,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The migration check reads the source production runs.
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -36,6 +38,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:cli
       - run: pnpm lint
+      - name: Keep D1 migrations compatible with the Workers a failed release restores
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-migration-rollback.mjs
       - run: pnpm typecheck
       - run: pnpm knip
 
@@ -105,6 +111,11 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
+    # Playwright's image carries the browsers and their system libraries for exactly the suite's Playwright version,
+    # so no shard downloads them: an apt fetch of those libraries once took 18 minutes. Runs as the runner's user.
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-resolute@sha256:4d70b558dbaff71611b2f3e7a32aa2b4d42cfc892078ad368cb7ea229c2ffd1f
+      options: --user 1001
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,23 +129,18 @@ jobs:
       - run: pnpm build:cli
       - name: Install the accepted real Codex boundary dependency
         run: npm install --global @openai/codex@0.166.0
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-v1-${{ runner.os }}-${{ runner.arch }}-chromium-webkit-${{ hashFiles('pnpm-lock.yaml') }}
-      - name: Install Playwright system dependencies
-        run: pnpm --filter @morty-build/e2e exec playwright install-deps chromium webkit
-      - name: Install Playwright browsers on cache miss
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @morty-build/e2e exec playwright install chromium webkit
       - run: pnpm test:e2e --shard=${{ matrix.shard }}/8
+        env:
+          # A failed journey keeps its trace, page, screenshot and process logs here for the failure artifact. The path
+          # is relative to the suite in packages/e2e: in a container job, runner paths name the host, not the container.
+          MORTY_E2E_ARTIFACT_ROOT: e2e-diagnostics
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: browser-failure-${{ matrix.shard }}
-          path: packages/e2e/test-results
+          path: |
+            packages/e2e/test-results
+            packages/e2e/e2e-diagnostics
           if-no-files-found: ignore
 
   # Packing does not depend on test results, so the archive is built and accepted

@@ -15,11 +15,12 @@ import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 export { convertV4MiniflareOptions, Miniflare, miniflareDurableObjects, WebSocketPair, WorkerResponse };
 
 /** Prepare once per suite run; only immutable code is shared, never a runtime or its storage. */
-export async function prepareTestMortyPlatformBindings() {
+export async function prepareTestMortyPlatformBindings(workerEntryPoint?: string) {
     const bundle = await build({
-        entryPoints: [fileURLToPath(new NodeURL("./platform-worker-entry.ts", import.meta.url))],
+        entryPoints: [workerEntryPoint ?? fileURLToPath(new NodeURL("./platform-worker-entry.ts", import.meta.url))],
         bundle: true,
-        external: ["cloudflare:workers"],
+        external: ["cloudflare:*", "node:*"],
+        loader: { ".txt": "text", ".sql": "text" },
         format: "esm",
         platform: "browser",
         write: false,
@@ -35,21 +36,37 @@ export async function prepareTestMortyPlatformBindings() {
 /** Owns the real Cloudflare adapters for Runtime/Worker integration scenarios. */
 function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<string>) {
     const packageDirectory = new NodeURL("../../relay/", import.meta.url);
-    const runtime = new Miniflare(
-        convertV4MiniflareOptions({
-            modules: true,
-            script,
-            compatibilityDate: "2026-09-03",
-            d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
-            r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
-            bindings: {
-                MORTY_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
-                MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
-            },
-            durableObjects: miniflareDurableObjects(new NodeURL("wrangler.jsonc", packageDirectory)),
-        }),
-    );
-    return runtime;
+    const options = {
+        modules: true,
+        script,
+        compatibilityDate: "2026-09-07",
+        compatibilityFlags: ["nodejs_compat"],
+        d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
+        r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM", "CHAT_ATTACHMENTS_APAC"],
+        ratelimits: {
+            ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
+        },
+        bindings: {
+            MORTY_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
+            MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
+        },
+        durableObjects: miniflareDurableObjects(new NodeURL("wrangler.jsonc", packageDirectory)),
+    } satisfies Parameters<typeof convertV4MiniflareOptions>[0];
+    const runtime = new Miniflare(convertV4MiniflareOptions(options));
+    return {
+        runtime,
+        configure: async (bindings: Readonly<Record<string, string>>) => {
+            const origin = await runtime.ready;
+            await runtime.setOptions(
+                convertV4MiniflareOptions({
+                    ...options,
+                    host: origin.hostname,
+                    port: Number.parseInt(origin.port, 10),
+                    bindings: { ...options.bindings, ...bindings },
+                }),
+            );
+        },
+    };
 }
 
 async function migrate(database: D1Database, directory: NodeURL) {
@@ -64,7 +81,7 @@ export async function createTestMortyPlatformBindings(allowedOrigins: ReadonlySe
 }
 
 async function createPlatformBindings(script: string, allowedOrigins: ReadonlySet<string>) {
-    const runtime = createCloudflareRuntime(script, allowedOrigins);
+    const { runtime, configure } = createCloudflareRuntime(script, allowedOrigins);
     try {
         const ready = await runtime.ready;
         const env = await runtime.getBindings<TestPlatformBindings>();
@@ -83,7 +100,14 @@ async function createPlatformBindings(script: string, allowedOrigins: ReadonlySe
                 headers: Object.fromEntries(result.headers),
             });
         };
-        return { env, origin: ready.origin, request, [Symbol.asyncDispose]: () => runtime.dispose() };
+        return {
+            env,
+            origin: ready.origin,
+            request,
+            configure,
+            cloudflare: runtime,
+            [Symbol.asyncDispose]: () => runtime.dispose(),
+        };
     } catch (cause) {
         await runtime.dispose();
         throw cause;

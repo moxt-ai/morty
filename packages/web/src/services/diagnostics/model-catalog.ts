@@ -2,7 +2,7 @@ import type { SessionConfigOption } from "@morty-build/client/protocol";
 
 /** Evidence from the response that supplied the menu; never a new discovery made while reporting. */
 export interface AgentModelCatalog {
-    readonly agentId: string;
+    readonly harness: string;
     readonly agentVersion: string;
     readonly observedAt: string;
     readonly requestId: string;
@@ -118,7 +118,7 @@ export type ChatDiagnostics =
           readonly view: "draft" | "session";
           readonly computerId: string | null;
           readonly runtimeOnline: boolean;
-          readonly agent: { readonly id: string; readonly version: string | null };
+          readonly agent: { readonly harness: string; readonly version: string | null };
           readonly catalog: {
               readonly source: "agent-settings" | "session-ready";
               readonly observedAt: string;

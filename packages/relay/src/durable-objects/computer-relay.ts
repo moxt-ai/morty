@@ -1,24 +1,19 @@
 import { DurableObject } from "cloudflare:workers";
 import { RUNTIME_HEARTBEAT_ACK_MESSAGE, RUNTIME_HEARTBEAT_MESSAGE } from "@morty-build/client/protocol";
 import {
-    type AccessGrantRedemption,
     acceptWebSocketHttpTransport,
     type ClaimPairing,
-    type CreateAccessGrant,
-    type CreateBrowserCredential,
+    ComputerScope,
     createLocalSessionOperations,
     DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
-    type RedeemAccessGrant,
     RelaySockets,
     type RequestRuntimePairing,
     type RevokeRuntime,
     type RuntimePairingRequest,
-    runtimeConnectionDurableObjectMigrations,
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
-import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { logger } from "@morty-build/relay-core/logging";
 import { ComputerChat } from "../../../worker/src/components/project/computer-chat.ts";
 import { cloudComputerId } from "../../../worker/src/middleware/computer-context.ts";
@@ -26,8 +21,8 @@ import { decodeComputerDurableObjectPath } from "../entity/computer-durable-obje
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
+import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
-import { computerDurableObjectMigrations } from "../generated/project-do-migrations.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 import {
@@ -37,6 +32,7 @@ import {
     createPlatformWorker,
 } from "../platform-worker.ts";
 import { SqlitePlatformProjectStore } from "../storage/sqlite-platform-project-store.ts";
+import { migrateComputerStorage } from "./migrate-computer-storage.ts";
 import { createPlatformDurableObjectContext } from "./platform-durable-object-context.ts";
 
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
@@ -55,7 +51,11 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
     readonly #application = createPlatformWorker();
     #store: Store | null = null;
 
-    readonly #chat = new ComputerChat(this.ctx.storage, (id) => this.#owns(id));
+    readonly #chat = new ComputerChat(
+        this.ctx.storage,
+        (id) => this.#owns(id),
+        (computerId, change, signal) => this.#commitAccessRevocation(computerId, change, signal),
+    );
 
     readonly #uploads = new WebSocketUploadBudget();
     #connections: ReturnType<ComputerRelay["createConnections"]> | undefined;
@@ -68,6 +68,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
     }
 
     private createConnections() {
+        migrateComputerStorage(this.ctx.storage);
         const context = createPlatformDurableObjectContext(this.ctx, this.env, {
             database: new DurableObjectSqlDatabase(this.ctx.storage),
             storeFor: (computerId) => this.#operate(computerId),
@@ -97,8 +98,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
             return null;
         }
         if (this.#store === null) {
-            applyDurableObjectMigrations(this.ctx.storage, computerDurableObjectMigrations);
-            applyDurableObjectMigrations(this.ctx.storage, runtimeConnectionDurableObjectMigrations, "connections/");
+            migrateComputerStorage(this.ctx.storage);
             this.#store = new SqlitePlatformProjectStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),
@@ -173,41 +173,6 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         }
     }
 
-    async authenticateHost(computerId: string, tokenHash: string, now: number): Promise<Result<"authenticateHost">> {
-        return await this.#operate(computerId).authenticateHost(computerId, tokenHash, now, uncancelled);
-    }
-
-    async isHostCredentialActive(
-        computerId: string,
-        identity: Parameters<Store["isHostCredentialActive"]>[0],
-    ): Promise<boolean> {
-        return await this.#operate(computerId).isHostCredentialActive(identity, uncancelled);
-    }
-
-    async listLinkedDevices(computerId: string): Promise<Result<"listLinkedDevices">> {
-        return await this.#operate(computerId).listLinkedDevices(computerId, uncancelled);
-    }
-
-    async revokeLinkedDevice(computerId: string, credentialId: string, now: number): Promise<boolean> {
-        return await this.#operate(computerId).revokeLinkedDevice(computerId, credentialId, now, uncancelled);
-    }
-
-    async createAccessGrant(computerId: string, value: CreateAccessGrant): Promise<boolean> {
-        return await this.#operate(computerId).createAccessGrant(value, uncancelled);
-    }
-
-    async redeemAccessGrant(computerId: string, value: RedeemAccessGrant): Promise<AccessGrantRedemption> {
-        return await this.#operate(computerId).redeemAccessGrant(value, uncancelled);
-    }
-
-    async createBrowserCredential(computerId: string, value: CreateBrowserCredential): Promise<boolean> {
-        return await this.#operate(computerId).createBrowserCredential(value, uncancelled);
-    }
-
-    async revokeBrowserCredential(computerId: string, credentialId: string, now: number): Promise<boolean> {
-        return await this.#operate(computerId).revokeBrowserCredential(credentialId, now, uncancelled);
-    }
-
     async updateAgentCatalog(computerId: string, tokenHash: string, agents: string): Promise<boolean> {
         return await this.#operate(computerId).updateAgentCatalog(computerId, tokenHash, agents, uncancelled);
     }
@@ -222,10 +187,6 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
 
     async listRuntimes(computerId: string): Promise<Result<"listRuntimes">> {
         return await this.#operate(computerId).listRuntimes(uncancelled);
-    }
-
-    async readChannel(computerId: string): Promise<Result<"readChannel">> {
-        return await this.#operate(computerId).readChannel(computerId, uncancelled);
     }
 
     async requestRuntimePairing(computerId: string, value: RequestRuntimePairing): Promise<RuntimePairingRequest> {
@@ -263,8 +224,39 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         return await this.#operate(computerId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
     }
 
-    async lastDaemonRevocation(computerId: string): Promise<number | null> {
-        return this.#operate(computerId).lastDaemonRevocation(uncancelled);
+    async revokeSessionAccess(computerId: string, revokedAt: number): Promise<number> {
+        return await this.#operate(computerId).revokeSessionAccess(revokedAt, uncancelled);
+    }
+
+    /** Identity and Session authorization belong to this computer; neither can commit without the other. */
+    readonly #commitAccessRevocation = async (
+        computerId: string,
+        change: () => Promise<boolean>,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        const store = this.#operate(computerId);
+        const revokedAt = await this.ctx.storage.transaction(async () => {
+            signal.throwIfAborted();
+            if (!(await change())) {
+                return null;
+            }
+            const committed = await store.revokeSessionAccess(Date.now(), signal);
+            signal.throwIfAborted();
+            return committed;
+        });
+        if (revokedAt === null) {
+            return false;
+        }
+        // Authorization already observes the committed cutoff. Close existing local viewers without another RPC.
+        this.#connectionsForComputer.context.services.runtime.revokeSessionViewers(
+            new ComputerScope(computerId),
+            sessionAccessRevokedThrough(revokedAt),
+        );
+        return true;
+    };
+
+    async readSessionAccessRevocation(computerId: string): Promise<number | null> {
+        return await this.#operate(computerId).readSessionAccessRevocation(uncancelled);
     }
 
     async recordAudit(computerId: string, audit: PlatformAuditRecord): Promise<void> {

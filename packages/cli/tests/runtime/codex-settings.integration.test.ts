@@ -17,8 +17,6 @@ test("Given an owned Codex session, When Codex changes collaboration mode during
                 kind: "session.prompt",
                 commandId: randomUUID(),
                 target: peer.target,
-                agentId: "codex",
-                directory: ".",
                 attachments: [],
                 prompt: "Enter Plan mode",
                 disposition: SessionPromptDisposition.Append,

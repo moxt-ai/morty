@@ -13,6 +13,7 @@ import {
     encodeFileBeginEvent,
     encodeNativeSessionRequest,
     encodeNativeSessionResult,
+    encodeSessionArchivedEvent,
     encodeSessionClosedEvent,
     encodeSessionConfigReadResult,
     encodeSessionConfigUpdatedEvent,
@@ -95,7 +96,7 @@ const readyAgents = [
             steering: false,
             unstableForkSession: false,
         },
-        id: "codex",
+        harness: "codex",
         label: "Codex",
     },
 ];
@@ -177,35 +178,6 @@ const relaySigner: CredentialSigner = async (publicCredentialId) =>
 
 function credentialHeaders(credential: string): Headers {
     return new Headers({ authorization: `Bearer ${credential}`, "content-type": "application/json" });
-}
-
-class UnavailableProjectNamespace implements DurableObjectNamespace {
-    readonly #source: DurableObjectNamespace;
-    #accessCount = 0;
-
-    constructor(source: DurableObjectNamespace) {
-        this.#source = source;
-    }
-
-    get accessCount(): number {
-        return this.#accessCount;
-    }
-
-    readonly newUniqueId: DurableObjectNamespace["newUniqueId"] = (options) => this.#source.newUniqueId(options);
-
-    readonly idFromName: DurableObjectNamespace["idFromName"] = (name) => this.#source.idFromName(name);
-
-    readonly idFromString: DurableObjectNamespace["idFromString"] = (id) => this.#source.idFromString(id);
-
-    readonly get: DurableObjectNamespace["get"] = (id, options) => this.#source.get(id, options);
-
-    readonly getByName: DurableObjectNamespace["getByName"] = () => {
-        this.#accessCount += 1;
-        throw new Error("Project storage must not be accessed");
-    };
-
-    readonly jurisdiction: DurableObjectNamespace["jurisdiction"] = (jurisdiction) =>
-        new UnavailableProjectNamespace(this.#source.jurisdiction(jurisdiction));
 }
 
 class SocketMessages {
@@ -405,7 +377,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], computerId });
+        ).toMatchObject({ agents: [{ harness: "codex", label: "Codex" }], computerId });
         const sessionId = "local-codex-session";
         const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
@@ -483,13 +455,38 @@ describe.sequential("Platform Session-only boundary", () => {
                 requestId: closeCommand.requestId,
                 target: nativeTarget("session-to-close"),
             });
+            const archiveResponse = worker.fetch(
+                new Request(
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/session-to-close/archive`,
+                    {
+                        body: "{}",
+                        headers: credentialHeaders(appCredential),
+                        method: "POST",
+                    },
+                ),
+                environment,
+            );
+            const archiveCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
+            if (archiveCommand.kind !== "session.archive") {
+                throw new Error("Expected a Session archive command");
+            }
+            expect(archiveCommand.target).toEqual(nativeTarget("session-to-close"));
+            expect(decodeServiceToDaemonMessage(await hostMessages.next())).toMatchObject(archiveCommand);
+            const archived = {
+                kind: "session.archived",
+                requestId: archiveCommand.requestId,
+                target: nativeTarget("session-to-close"),
+            } as const;
+            daemon.send(encodeSessionArchivedEvent(archived));
+            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual(archived);
+            expect(await responseJson(await archiveResponse, 200)).toEqual(archived);
             // Native HTTP probes use request-reply connections, while this viewer keeps its live subscription.
             for (const outcome of ["idle", "busy"] as const) {
                 const activeTurnResponse = worker.fetch(
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/active-turn`,
                         {
-                            body: JSON.stringify({ agentId: "codex", directory: "root" }),
+                            body: JSON.stringify({}),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -511,6 +508,7 @@ describe.sequential("Platform Session-only boundary", () => {
                               turn: null,
                               queued: [],
                               queuedCancellation: "before-start",
+                              executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                               interactionState: null,
                           })
                         : encodeSessionOperationFailedEvent({
@@ -531,7 +529,7 @@ describe.sequential("Platform Session-only boundary", () => {
             // A Host can multiplex discovery, but routing must remain bounded and reject overload explicitly.
             const discoveryRequests = Array.from({ length: 4 }, (_, index) => ({
                 kind: "agent.settings.discover",
-                agentId: "a".repeat(128),
+                harness: "a".repeat(128),
                 requestId: `settings-${index}`.padEnd(128, "r"),
             }));
             const hostClosed = Promise.withResolvers<{ readonly kind: "host.closed"; readonly code: number }>();
@@ -545,7 +543,7 @@ describe.sequential("Platform Session-only boundary", () => {
             host.send(
                 JSON.stringify({
                     kind: "agent.settings.discover",
-                    agentId: "a".repeat(128),
+                    harness: "a".repeat(128),
                     requestId: "settings-overflow",
                 }),
             );
@@ -587,7 +585,7 @@ describe.sequential("Platform Session-only boundary", () => {
                 host.send(
                     encodeNativeSessionRequest({
                         action,
-                        agentId: "codex",
+                        harness: "codex",
                         directory,
                         sessionId: "native-entry",
                         kind: "native.session.request",
@@ -600,7 +598,7 @@ describe.sequential("Platform Session-only boundary", () => {
             host.send(
                 JSON.stringify({
                     kind: "agent.settings.discover",
-                    agentId: "codex",
+                    harness: "codex",
                     requestId: "settings-before-wake",
                 }),
             );
@@ -611,7 +609,7 @@ describe.sequential("Platform Session-only boundary", () => {
             host.send(
                 JSON.stringify({
                     kind: "agent.settings.discover",
-                    agentId: "codex",
+                    harness: "codex",
                     requestId: "settings-before-wake",
                 }),
             );
@@ -639,7 +637,7 @@ describe.sequential("Platform Session-only boundary", () => {
                     target: sessionTarget,
                     title: "Imported native session",
                     ready: {
-                        agentId: "codex",
+                        harness: "codex",
                         agentName: "Codex",
                         agentVersion: "1.0.0",
                         capabilities,
@@ -714,10 +712,8 @@ describe.sequential("Platform Session-only boundary", () => {
             );
             host.send(
                 encodeSessionConfigureCommand({
-                    agentId: "codex",
                     booleanValue: false,
                     configId: "model",
-                    directory: "root",
                     expectedConfigurationRevision: "configuration-revision",
                     kind: "session.configure",
                     requestId: "local-config-request",
@@ -746,9 +742,7 @@ describe.sequential("Platform Session-only boundary", () => {
             });
             host.send(
                 encodeSessionPromptCommand({
-                    agentId: "codex",
                     commandId: "local-codex-command",
-                    directory: "root",
                     disposition: "append",
                     attachments: [],
                     kind: "session.prompt",
@@ -919,7 +913,7 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(historyPage);
             const previewHistoryResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?agentId=codex&directory=root&eventLimit=50`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?directory=root&eventLimit=50`,
                     { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
                 ),
                 environment,
@@ -964,7 +958,7 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(previewHistoryPage);
             const failedPreviewHistoryResponse = worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?agentId=codex&directory=root&eventLimit=50`,
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?directory=root&eventLimit=50`,
                     { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
                 ),
                 environment,
@@ -1114,7 +1108,7 @@ describe.sequential("Platform Session-only boundary", () => {
             host.send(
                 JSON.stringify({
                     kind: "agent.settings.discover",
-                    agentId: "codex",
+                    harness: "codex",
                     requestId: "settings-before-disconnect",
                 }),
             );
@@ -1143,7 +1137,7 @@ describe.sequential("Platform Session-only boundary", () => {
             host.send(
                 JSON.stringify({
                     kind: "agent.settings.discover",
-                    agentId: "codex",
+                    harness: "codex",
                     requestId: "settings-before-replacement",
                 }),
             );
@@ -1615,7 +1609,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                         method: "POST",
                         headers: credentialHeaders(appCredential),
                         signal,
-                        body: JSON.stringify({ agentId: "codex", directory: "root" }),
+                        body: JSON.stringify({}),
                     },
                 ),
                 environment,
@@ -1641,9 +1635,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                         method: "POST",
                         headers: credentialHeaders(credentialTransform(text(sessionAccess, "credential"))),
                         body: JSON.stringify({
-                            agentId: "codex",
                             content: "Direct execution",
-                            directory: "root",
                             idempotencyKey,
                             attachments: [],
                         }),
@@ -1654,11 +1646,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             env.COMPUTER_RELAY.getByName(computerId).fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/active-turn?${new URLSearchParams(
-                        {
-                            agentId: "codex",
-                            directory: "root",
-                            ...(commandId === undefined ? {} : { commandId }),
-                        },
+                        commandId === undefined ? {} : { commandId },
                     ).toString()}`,
                     { headers: credentialHeaders(text(sessionAccess, "credential")) },
                 ),
@@ -1669,9 +1657,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                     {
                         body: JSON.stringify({
-                            agentId: "codex",
                             content: `Run ${idempotencyKey}`,
-                            directory: "root",
                             idempotencyKey,
                             attachments: [],
                         }),
@@ -1735,7 +1721,7 @@ it.each(["text", "binary"])(
             await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE ON runtime_connection_state
+                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF state ON computer
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
@@ -1806,6 +1792,7 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
                 queued: [],
                 command: { state: "completed", stopReason: "end_turn" },
                 queuedCancellation: "before-start",
+                executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                 interactionState: null,
             }),
         );
@@ -1844,6 +1831,7 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
+                executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                 interactionState: null,
                 lastTurn: {
                     code: "model_unavailable",
@@ -2107,7 +2095,7 @@ describe.sequential("Platform Turn submission", () => {
         }
     });
 
-    it("Given an AppCredential that reads and changes Sessions without Runtime read access, When it submits a Turn without naming the Session's binding and another credential that only reads Sessions reads the active Turn, Then both operations reach the Runtime and succeed", async () => {
+    it("Given an AppCredential that reads and changes Sessions without Runtime read access, When it submits a Turn and another credential that only reads Sessions reads the active Turn, Then both reach the Runtime naming only the Session and succeed", async () => {
         const runtime = await connectRuntimeDaemon("app-operation-permissions");
         try {
             const sessionWriter = await runtime.issueAppCredential(["session:read", "session:write"]);
@@ -2118,63 +2106,44 @@ describe.sequential("Platform Turn submission", () => {
                     attachments: [],
                     content: "Continue in the Session's own directory.",
                     disposition: "append",
-                    idempotencyKey: "binding-lookup-turn",
+                    idempotencyKey: "target-only-turn",
                     sessionConfigurations: [],
                 },
             });
-            const lookup = await Promise.race([
+            const prompting = await Promise.race([
                 runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
                 submitted.then((response) => ({ kind: "response" as const, response })),
             ]);
-            if (lookup.kind === "response") {
-                throw new Error(`Expected the binding lookup, received ${lookup.response.status}`);
+            if (prompting.kind === "response") {
+                throw new Error(`Expected the prompt, received ${prompting.response.status}`);
             }
-            const query = decodeServiceToDaemonMessage(lookup.message);
-            if (query.kind !== "session.query") {
-                throw new Error("Expected the Session's binding to be read");
-            }
-            runtime.daemon.send(
-                JSON.stringify({
-                    kind: "session.queried",
-                    requestId: query.requestId,
-                    entries: [
-                        {
-                            agentId: "codex",
-                            directory: "root",
-                            directoryLabel: "/workspace",
-                            prompted: true,
-                            status: { kind: "idle" },
-                            sessionId: runtime.sessionTarget.sessionId,
-                            target: runtime.sessionTarget,
-                            title: "",
-                            updatedAt: "2026-11-01T00:00:00.000Z",
-                        },
-                    ],
-                }),
-            );
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
-                agentId: "codex",
-                commandId: "binding-lookup-turn",
-                directory: "root",
+            // The Relay sends the Session's target alone; the Runtime resolves the rest from the Session it holds.
+            const prompt: unknown = JSON.parse(prompting.message);
+            expect(prompt).toMatchObject({
+                commandId: "target-only-turn",
                 kind: "session.prompt",
+                target: runtime.sessionTarget,
             });
-            runtime.startTurn("binding-lookup-turn", "1");
-            expect(await responseJson(await submitted, 200)).toMatchObject({ turnId: "binding-lookup-turn" });
+            expect(prompt).not.toHaveProperty("harness");
+            expect(prompt).not.toHaveProperty("directory");
+            runtime.startTurn("target-only-turn", "1");
+            expect(await responseJson(await submitted, 200)).toMatchObject({ turnId: "target-only-turn" });
 
             const sessionReader = await runtime.issueAppCredential(["session:read"]);
             const read = runtime.appSessionRequest("/active-turn", {
                 method: "POST",
                 credential: sessionReader,
-                body: { agentId: "codex", directory: "root" },
+                body: {},
             });
-            const first = await Promise.race([
+            const reading = await Promise.race([
                 runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
                 read.then((response) => ({ kind: "response" as const, response })),
             ]);
-            if (first.kind === "response") {
-                throw new Error(`Expected the active Turn read, received ${first.response.status}`);
+            if (reading.kind === "response") {
+                throw new Error(`Expected the active Turn read, received ${reading.response.status}`);
             }
-            const activeTurn = decodeServiceToDaemonMessage(first.message);
+            expect(JSON.parse(reading.message)).not.toHaveProperty("harness");
+            const activeTurn = decodeServiceToDaemonMessage(reading.message);
             if (activeTurn.kind !== "native.session.request" || activeTurn.action !== "active-turn") {
                 throw new Error("Expected the active Turn read to reach the daemon");
             }
@@ -2187,6 +2156,7 @@ describe.sequential("Platform Turn submission", () => {
                     turn: null,
                     queued: [],
                     queuedCancellation: "before-start",
+                    executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                     interactionState: null,
                 }),
             );
@@ -2277,10 +2247,8 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionPromptCommand(
                     decodeSessionPromptCommand(
                         JSON.stringify({
-                            agentId: "codex",
                             attachments: [],
                             commandId: "read-only-prompt",
-                            directory: "root",
                             disposition: "append",
                             kind: "session.prompt",
                             prompt: "Sent without Session write access",
@@ -2416,9 +2384,7 @@ describe.sequential("Platform Turn submission", () => {
             const response = runtime.appSessionRequest("/turns", {
                 method: "POST",
                 body: {
-                    agentId: "codex",
                     content: "Describe the pasted screenshot.",
-                    directory: "root",
                     disposition: "append",
                     idempotencyKey,
                     attachments: [attachment],
@@ -2486,6 +2452,7 @@ describe.sequential("Platform Turn submission", () => {
                     kind: "native.session.result",
                     queued: [],
                     queuedCancellation: "before-start",
+                    executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                     interactionState: null,
                     requestId: command.requestId,
                     target: runtime.sessionTarget,
@@ -2808,9 +2775,7 @@ describe.sequential("Platform Turn submission", () => {
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                         {
                             body: JSON.stringify({
-                                agentId: "codex",
                                 content,
-                                directory: "root",
                                 idempotencyKey,
                                 attachments,
                             }),
@@ -2910,9 +2875,7 @@ describe.sequential("Platform Turn submission", () => {
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
                     {
                         body: JSON.stringify({
-                            agentId: "codex",
                             content: "queue this follow-up",
-                            directory: "root",
                             idempotencyKey: "queued-follow-up",
                             attachments: [],
                         }),
@@ -2949,9 +2912,7 @@ describe.sequential("Platform Turn submission", () => {
                             `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/harnesses/codex/sessions/${sessionId}/turns`,
                             {
                                 body: JSON.stringify({
-                                    agentId: "codex",
                                     content: "describe this",
-                                    directory: "root",
                                     disposition: "append",
                                     idempotencyKey: "invalid-runtime-turn",
                                     attachments: [{ kind: "image" }],
@@ -3079,7 +3040,7 @@ describe.sequential("Platform Turn submission", () => {
                 ),
                 200,
             ),
-        ).toMatchObject({ agents: [{ id: "codex", label: "Codex" }], computerId });
+        ).toMatchObject({ agents: [{ harness: "codex", label: "Codex" }], computerId });
 
         // The Relay no longer decides from the catalog. It forwards the steer
         // to the Runtime, whose own rejection answers with the same
@@ -3310,114 +3271,80 @@ describe.sequential("Platform Turn submission", () => {
     });
 });
 
-it.each(["completed", "interrupted"] as const)(
-    "Given a %s Fork, When its request is replayed across Relay eviction, Then the recorded outcome prevents another execution",
-    async (outcome) => {
-        const runtime = await connectRuntimeDaemon(`fork-receipt-${outcome}`);
-        const input = {
-            agentId: "codex",
+function forkResult(requestId: string, target: NativeSessionTarget) {
+    return {
+        kind: "native.session.result",
+        action: "fork",
+        requestId,
+        target,
+        title: "Source (fork 1)",
+        ready: {
+            kind: "session.ready",
+            requestId,
+            target,
+            harness: "codex",
+            agentName: "Codex",
+            agentVersion: "1.0.0",
+            restored: true,
+            directory: ".",
+            directoryLabel: "Workspace",
+            configurationRevision: "revision-1",
+            capabilities: readyAgents[0]?.capabilities,
+            commands: [],
+            configOptions: [],
+        },
+    };
+}
+
+it("Given a Fork in flight, When it is requested again concurrently and after Relay eviction, Then each Runtime request carries the operation identity and the Relay keeps no outcome of its own", async () => {
+    const runtime = await connectRuntimeDaemon("fork-operation-identity");
+    const input = {
+        harness: "codex",
+        sessionId: "native-source",
+        directory: ".",
+    };
+    const operationId = "retained-fork-operation";
+    try {
+        const first = runtime.forkNative(operationId, input);
+        // The controlled daemon owns fork allocation; the request never carries a destination.
+        const fork = record(JSON.parse(await runtime.daemonMessages.next()));
+        expect(fork).toMatchObject({
+            kind: "native.session.request",
+            action: "fork",
+            requestId: operationId,
             sessionId: "native-source",
             directory: ".",
-        };
-        const operationId = "retained-fork-operation";
-        try {
-            const first = runtime.forkNative(operationId, input);
-            // The controlled daemon owns fork allocation; the request never carries a destination.
-            const find = record(JSON.parse(await runtime.daemonMessages.next()));
-            expect(find).toMatchObject({
-                kind: "native.session.request",
-                action: "find",
-                sessionId: "native-source",
-            });
-            const source = {
-                kind: "native.session.result",
-                action: "find",
-                requestId: text(find, "requestId"),
-                entry: {
-                    sessionId: "native-source",
-                    title: "Source",
-                    directory: ".",
-                    directoryLabel: "Workspace",
-                    updatedAt: null,
-                },
-            };
-            runtime.daemon.send(JSON.stringify(source));
-            const fork = record(JSON.parse(await runtime.daemonMessages.next()));
-            expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", sessionId: "native-source" });
-            expect(fork).not.toHaveProperty("targetSessionId");
-            const forkTarget = nativeTarget("harness-fork-destination");
-            const concurrent = runtime.forkNative(operationId, input);
-            if (outcome === "completed") {
-                runtime.daemon.send(
-                    JSON.stringify({
-                        kind: "native.session.result",
-                        action: "fork",
-                        requestId: text(fork, "requestId"),
-                        target: forkTarget,
-                        title: "Source (fork 1)",
-                        ready: {
-                            kind: "session.ready",
-                            requestId: text(fork, "requestId"),
-                            target: forkTarget,
-                            agentId: "codex",
-                            agentName: "Codex",
-                            agentVersion: "1.0.0",
-                            restored: true,
-                            directory: ".",
-                            directoryLabel: "Workspace",
-                            configurationRevision: "revision-1",
-                            capabilities: readyAgents[0]?.capabilities,
-                            commands: [],
-                            configOptions: [],
-                        },
-                    }),
-                );
-            } else {
-                runtime.daemon.close(1000, "Runtime stopped without returning the Fork outcome");
-            }
-            const expectedStatus = outcome === "completed" ? 200 : 409;
-            const original = await responseJson(await first, expectedStatus);
-            expect(await responseJson(await concurrent, expectedStatus)).toEqual(original);
-            if (outcome === "interrupted") {
-                expect(original).toMatchObject({ error: { code: "native_fork_outcome_unknown" } });
-            }
-            await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
-            expect(await responseJson(await runtime.forkNative(operationId, input), expectedStatus)).toEqual(original);
-        } finally {
-            runtime.daemon.close(1000, "Fork recovery scenario completed");
-        }
-    },
-);
+        });
+        expect(fork).not.toHaveProperty("targetSessionId");
+        const concurrent = runtime.forkNative(operationId, input);
+        const conflicting = await runtime.forkNative(operationId, { ...input, sessionId: "another-source" });
+        expect(await responseJson(conflicting, 409)).toMatchObject({ error: { code: "idempotency_conflict" } });
+        const forkTarget = nativeTarget("harness-fork-destination");
+        runtime.daemon.send(JSON.stringify(forkResult(operationId, forkTarget)));
+        const original = await responseJson(await first, 200);
+        expect(original).toMatchObject({ action: "fork", target: forkTarget });
+        expect(await responseJson(await concurrent, 200)).toEqual(original);
+
+        await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
+        const replayed = runtime.forkNative(operationId, input);
+        // The Runtime answers the retry from the receipt it keeps under the same operation identity.
+        expect(record(JSON.parse(await runtime.daemonMessages.next()))).toEqual(fork);
+        runtime.daemon.send(JSON.stringify(forkResult(operationId, forkTarget)));
+        expect(await responseJson(await replayed, 200)).toEqual(original);
+    } finally {
+        runtime.daemon.close(1000, "Fork recovery scenario completed");
+    }
+});
 
 it("Given the Runtime rejects a Fork, When the same operation is retried, Then the rejection is reported and the retry forks again", async () => {
     const runtime = await connectRuntimeDaemon("fork-rejected");
     const input = {
-        agentId: "codex",
+        harness: "codex",
         sessionId: "native-source",
         directory: ".",
     };
     const operationId = "rejected-fork-operation";
     const forkCommand = async () => {
-        const find = record(JSON.parse(await runtime.daemonMessages.next()));
-        expect(find).toMatchObject({
-            kind: "native.session.request",
-            action: "find",
-            sessionId: "native-source",
-        });
-        runtime.daemon.send(
-            JSON.stringify({
-                kind: "native.session.result",
-                action: "find",
-                requestId: text(find, "requestId"),
-                entry: {
-                    sessionId: "native-source",
-                    title: "Source",
-                    directory: ".",
-                    directoryLabel: "Workspace",
-                    updatedAt: null,
-                },
-            }),
-        );
         const fork = record(JSON.parse(await runtime.daemonMessages.next()));
         expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", sessionId: "native-source" });
         return fork;
@@ -3442,33 +3369,9 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
         expect(text(fork, "requestId")).toBe(text(rejected, "requestId"));
         expect(fork).not.toHaveProperty("targetSessionId");
         const forkTarget = nativeTarget("harness-fork-after-refusal");
-        runtime.daemon.send(
-            JSON.stringify({
-                kind: "native.session.result",
-                action: "fork",
-                requestId: text(fork, "requestId"),
-                target: forkTarget,
-                title: "Source (fork 1)",
-                ready: {
-                    kind: "session.ready",
-                    requestId: text(fork, "requestId"),
-                    target: forkTarget,
-                    agentId: "codex",
-                    agentName: "Codex",
-                    agentVersion: "1.0.0",
-                    restored: true,
-                    directory: ".",
-                    directoryLabel: "Workspace",
-                    configurationRevision: "revision-1",
-                    capabilities: readyAgents[0]?.capabilities,
-                    commands: [],
-                    configOptions: [],
-                },
-            }),
-        );
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         const forked = await responseJson(await retried, 200);
-        expect(forked).toMatchObject({ result: { action: "fork", target: forkTarget } });
-        expect(await responseJson(await runtime.forkNative(operationId, input), 200)).toEqual(forked);
+        expect(forked).toMatchObject({ action: "fork", target: forkTarget });
     } finally {
         runtime.daemon.close(1000, "Fork rejection scenario completed");
     }
@@ -3612,10 +3515,8 @@ describe("Runtime prompt acknowledgements", () => {
                             method: "POST",
                             headers: credentialHeaders(credential),
                             body: JSON.stringify({
-                                agentId: "codex",
                                 attachments: [],
                                 content: `queued ${idempotencyKey}`,
-                                directory: "root",
                                 idempotencyKey,
                             }),
                         },

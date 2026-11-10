@@ -78,10 +78,8 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
             { MORTY_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent"), PATH: executableDirectory },
             async (peer) => {
                 const original: SessionPromptCommand = {
-                    agentId: "controlled-acp",
                     attachments: [],
                     commandId: "a-original-execution",
-                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     kind: "session.prompt",
                     prompt: "Original operation",
@@ -107,9 +105,17 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                     { length: 1_026 },
                     (_, index) => `z-rejected-${String(index).padStart(4, "0")}`,
                 );
-                const unavailableDirectory = join(peer.workspace, "missing-directory");
+                // Content the Runtime never received fails each command before its Agent turn starts.
+                const unavailableAttachment = {
+                    byteLength: 1,
+                    contentKey: "0".repeat(64),
+                    kind: "resource",
+                    mimeType: "text/plain",
+                    name: "missing.txt",
+                    uri: "file:///missing.txt",
+                } as const;
                 for (const commandId of rejected) {
-                    send({ ...original, commandId, directory: unavailableDirectory });
+                    send({ ...original, attachments: [unavailableAttachment], commandId });
                 }
                 const failures = await observe(peer, rejected);
                 for (const outcome of failures.outcomes.values()) {

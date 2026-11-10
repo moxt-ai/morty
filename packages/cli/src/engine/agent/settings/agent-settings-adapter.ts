@@ -11,8 +11,8 @@ export {
 const genericAdapter = new AgentSettingsAdapter();
 const codexAdapter = new CodexSettingsAdapter();
 
-export function agentSettingsAdapterForAgent(agentId: string): AgentSettingsAdapter {
-    if (agentId === "codex") {
+export function agentSettingsAdapterForAgent(harness: string): AgentSettingsAdapter {
+    if (harness === "codex") {
         return codexAdapter;
     }
     return genericAdapter;
@@ -22,7 +22,7 @@ export function applyAgentLaunchSettings(
     agent: AcpAgentDefinition,
     selections: readonly SessionConfigurationSelection[],
 ): AppliedAgentLaunchSettings {
-    const adapter = agentSettingsAdapterForAgent(agent.id);
+    const adapter = agentSettingsAdapterForAgent(agent.harness);
     let selectedAgent = agent;
     const sessionConfigurations: SessionConfigurationSelection[] = [];
     for (const selection of selections) {

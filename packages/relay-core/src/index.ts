@@ -7,22 +7,14 @@ export * from "./entity/authentication/project-authentication.ts";
 export { ComputerScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { type HttpError, type HttpErrorJson, isHttpError, toHttpError } from "./entity/http-error.ts";
 export {
-    ACCESS_GRANT_LIFETIME_MILLISECONDS,
     type AgentDescriptor,
     ChannelDescriptor,
-    ChannelHostCredential,
     type ClaimedPairing,
-    CreatedBrowserCredential,
-    type CreatedChannelAccessGrant,
     CreatedRuntimePairing,
     createRandomPairingCode,
     createRandomToken,
     ExpiredPairingStatus,
     hashSecret,
-    LinkedChannelDevice,
-    MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    MAX_DAEMONS_PER_COMPUTER,
-    MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
     normalizePairingCode,
     PAIRING_LIFETIME_MILLISECONDS,
     PairedPairingStatus,
@@ -31,7 +23,6 @@ export {
     PairingStatus,
     PendingPairingStatus,
     parseAgents,
-    type RedeemedChannelAccessGrant,
     RevokedPairingStatus,
     RevokedProjectRuntime,
     VerifiedChannelAccess,
@@ -88,4 +79,4 @@ export {
 } from "./service/channel/local-session-operations.ts";
 export { RuntimeMessageScheduler } from "./service/channel/runtime-message-scheduler.ts";
 export type { RuntimePeers, RuntimeSocket, RuntimeSocketIdentity } from "./service/channel/runtime-service.ts";
-export { type SessionBindingRequest, SessionControl, type TurnAdmission } from "./service/pairing/session-control.ts";
+export { SessionControl, type TurnAdmission } from "./service/pairing/session-control.ts";

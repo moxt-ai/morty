@@ -28,7 +28,7 @@ function usageAgent(response: Readonly<Record<string, unknown>>, context?: typeo
         (options) =>
             new ControlledAcpConnection(
                 {
-                    id: "controlled-usage",
+                    harness: "controlled-usage",
                     adapterPath: process.execPath,
                     arguments: [fakeAgentPath],
                     environment: options.environment,

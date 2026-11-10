@@ -44,7 +44,16 @@ test("Given a background Session's failed status, When another viewer completes 
         throw new Error("Missing composer form");
     }
     const other = await first.openViewer();
-    await other.user.click(await other.waitForView(() => entry(other, "Established session")));
+    // A conversation opens only once its page is connected; the list can show it before that.
+    const established = await other.waitForView(() => {
+        const row = entry(other, "Established session");
+        expect(row).toHaveProperty("disabled", false);
+        return row;
+    });
+    await other.user.click(established);
+    await other.waitForView(() =>
+        expect(entry(other, "Established session").getAttribute("aria-current")).toBe("page"),
+    );
     const otherComposer = await other.queryElementByTestId(
         dataTestId.messageComposer,
         (e) => e instanceof HTMLTextAreaElement && !e.disabled,

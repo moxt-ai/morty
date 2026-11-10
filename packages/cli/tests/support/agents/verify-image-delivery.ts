@@ -42,7 +42,7 @@ function imageReferences(events: readonly (SessionEvent | SessionLiveEvent)[]): 
 export async function verifyImageDelivery(
     peer: RealDaemonPeer,
     input: {
-        readonly agentId: string;
+        readonly harness: string;
         readonly image: Uint8Array;
         readonly reference: string;
         readonly prompt: string;
@@ -53,9 +53,7 @@ export async function verifyImageDelivery(
     const sendPrompt = (commandId: string, prompt: string): void =>
         peer.send(
             encodeSessionPromptCommand({
-                agentId: input.agentId,
                 commandId,
-                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

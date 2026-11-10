@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { RuntimeConnectionIdentity } from "../entity/channel/runtime-connection.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import { DatabaseError } from "../infra/sql-database.ts";
-import { runtimeConnectionState } from "../schema/runtime-connection-do/index.ts";
+import { computer } from "../schema/project-do/index.ts";
 
 export class RuntimeConnectionStorage {
     readonly #database: DoSqlDatabase;
@@ -19,50 +19,52 @@ export class RuntimeConnectionStorage {
         | null => {
         const row = this.#database.orm
             .select({
-                computerId: runtimeConnectionState.computerId,
-                connectionEpoch: runtimeConnectionState.connectionEpoch,
-                connectionId: runtimeConnectionState.connectionId,
-                state: runtimeConnectionState.state,
-                connectedAt: runtimeConnectionState.connectedAt,
+                computerId: computer.computerId,
+                connectionEpoch: computer.connectionEpoch,
+                connectionId: computer.connectionId,
+                state: computer.state,
+                connectedAt: computer.connectedAt,
             })
-            .from(runtimeConnectionState)
-            .where(eq(runtimeConnectionState.singleton, 1))
+            .from(computer)
+            .limit(1)
             .get();
-        if (row === undefined) {
+        if (row === undefined || row.connectionId === null || row.connectedAt === null || row.state === null) {
             return null;
         }
         if (!Number.isSafeInteger(row.connectionEpoch) || row.connectionEpoch < 1) {
             throw new DatabaseError("database_unavailable", "The Runtime connection state is invalid");
         }
-        return row;
+        return { ...row, connectionId: row.connectionId, connectedAt: row.connectedAt, state: row.state };
     };
 
     readonly connect = (identity: RuntimeConnectionIdentity, now: number): void => {
         const connection = {
-            computerId: identity.computerId,
             connectionEpoch: identity.connectionEpoch,
             connectionId: identity.connectionId,
             state: "online",
             connectedAt: now,
             disconnectedAt: null,
         } as const;
-        this.#database.orm
-            .insert(runtimeConnectionState)
-            .values({ singleton: 1, ...connection })
-            .onConflictDoUpdate({ target: runtimeConnectionState.singleton, set: connection })
-            .run();
+        const result = this.#database.orm
+            .update(computer)
+            .set(connection)
+            .where(eq(computer.computerId, identity.computerId))
+            .returning({ computerId: computer.computerId })
+            .get();
+        if (!result) {
+            throw new DatabaseError("database_unavailable", "The computer connection could not be recorded");
+        }
     };
 
     readonly disconnect = (identity: RuntimeConnectionIdentity, now: number): void => {
         this.#database.orm
-            .update(runtimeConnectionState)
+            .update(computer)
             .set({ state: "offline", disconnectedAt: now })
             .where(
                 and(
-                    eq(runtimeConnectionState.singleton, 1),
-                    eq(runtimeConnectionState.computerId, identity.computerId),
-                    eq(runtimeConnectionState.connectionEpoch, identity.connectionEpoch),
-                    eq(runtimeConnectionState.connectionId, identity.connectionId),
+                    eq(computer.computerId, identity.computerId),
+                    eq(computer.connectionEpoch, identity.connectionEpoch),
+                    eq(computer.connectionId, identity.connectionId),
                 ),
             )
             .run();

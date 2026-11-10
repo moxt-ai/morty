@@ -37,7 +37,7 @@ const accessSchema = v.pipe(
         credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         ready: v.unknown(),
-        agentRef: identifier,
+        harness: identifier,
         workspaceRef: v.custom<string>(isDirectoryPath),
     }),
     v.readonly(),
@@ -56,19 +56,17 @@ const managedSessionStatusSchema = v.variant("kind", [
     ),
     v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
 ]);
+/** A Session the computer's Runtime holds, as the Runtime describes it. */
 const managedSessionSchema = v.pipe(
     v.object({
-        createdAt: v.pipe(v.string(), v.isoTimestamp()),
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
         directory: v.string(),
-        computerId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
         target: nativeSessionTargetSchema,
         status: managedSessionStatusSchema,
-        userId: identifier,
     }),
     v.readonly(),
 );
@@ -79,7 +77,7 @@ const chatRuntimeSchema = v.object({
     online: v.boolean(),
     agents: v.array(
         v.object({
-            agentRef: identifier,
+            harness: identifier,
             label: v.string(),
         }),
     ),
@@ -95,7 +93,7 @@ export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationS
 export type ChatAgentSelection = {
     readonly computerId: Identifier;
     readonly machineName: string;
-    readonly agentRef: Identifier;
+    readonly harness: Identifier;
     readonly label: string;
 };
 export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
@@ -108,7 +106,7 @@ export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatA
         : [];
 }
 export interface ChatDraftConfiguration {
-    readonly agentRef: string;
+    readonly harness: string;
     readonly workspaceRef: string;
     readonly workspaceLabel: string;
     readonly configurations: readonly SessionConfigurationSelection[];
@@ -135,12 +133,12 @@ const localSessionEntrySchema = v.object({
     updatedAt: v.nullable(v.string()),
 });
 const managedSdkSessionSchema = v.object({
-    agentRef: identifier,
+    harness: identifier,
     ready: v.unknown(),
     entry: localSessionEntrySchema,
 });
 const localSessionSchema = v.object({
-    agentRef: identifier,
+    harness: identifier,
     result: v.unknown(),
     entry: localSessionEntrySchema,
 });
@@ -307,7 +305,7 @@ export class BotChatApi {
             await this.#request(
                 "access",
                 {
-                    agentRef: settings.agentRef,
+                    harness: settings.harness,
                     configurations: settings.configurations,
                     conversationKey,
                     workspaceRef: settings.workspaceRef,
@@ -321,7 +319,7 @@ export class BotChatApi {
         directoryLabel = access.workspaceRef,
         title = "Untitled session",
     ) => ({
-        agentRef: access.agentRef,
+        harness: access.harness,
         result: {
             action: "conversation" as const,
             access,
@@ -342,22 +340,24 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request("managed-sessions", {}, signal),
         ).sessions;
-    readonly archiveManagedSession = async (target: NativeSessionTarget, signal: AbortSignal) =>
+    /** Resolves once the Runtime no longer holds the Session; otherwise rejects with the Runtime's failure. */
+    readonly archiveManagedSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> => {
         v.parse(
-            v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),
+            v.object({ target: nativeSessionTargetSchema }),
             await this.#request("managed-session/archive", v.parse(nativeSessionTargetSchema, target), signal),
         );
+    };
     readonly managedSession = async (target: NativeSessionTarget, signal: AbortSignal) => {
         const stored = v.parse(
             managedSdkSessionSchema,
             await this.#request("managed-session", v.parse(nativeSessionTargetSchema, target), signal),
         );
         const ready = decodeSessionReadyEvent(JSON.stringify(stored.ready));
-        if (ready.agentId !== target.harness || stored.entry.sessionId !== target.sessionId) {
+        if (ready.harness !== target.harness || stored.entry.sessionId !== target.sessionId) {
             throw new CloudApiError("INVALID_SESSION", "The saved Chat session is invalid.");
         }
         return {
-            agentRef: stored.agentRef,
+            harness: stored.harness,
             entry: stored.entry,
             result: {
                 action: "managed" as const,
@@ -371,20 +371,20 @@ export class BotChatApi {
         continuedSession(await this.#request("continue-native-session", { harness, sessionId }, signal));
     /** The settings a new Session of the Agent starts with in the directory. */
     readonly agentSettings = async (
-        agentRef: string,
+        harness: string,
         workspaceRef: string,
         signal: AbortSignal,
     ): Promise<AgentSettingsResult> => {
         signal.throwIfAborted();
-        const requestedAgentRef = v.parse(identifier, agentRef);
+        const requestedHarness = v.parse(identifier, harness);
         const result = v.parse(
             v.object({ settings: v.unknown() }),
-            await this.#request("agent-settings", { agentRef: requestedAgentRef, workspaceRef }, signal),
+            await this.#request("agent-settings", { harness: requestedHarness, workspaceRef }, signal),
         );
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         const settings = {
             catalog: {
-                agentId: discovered.agentId,
+                harness: discovered.harness,
                 agentVersion: discovered.agentVersion,
                 observedAt: new Date().toISOString(),
                 revision: discovered.settingsRevision,
@@ -488,7 +488,7 @@ export class BotChatApi {
     readonly nativeSession = async (
         computerId: string,
         input: {
-            readonly agentId: string;
+            readonly harness: string;
             readonly directory: string;
             readonly sessionId: string;
         },

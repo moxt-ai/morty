@@ -159,7 +159,7 @@ test("Given a device that shared links before and after renewing its credential,
 
     const removed = await request(`/identity/v1/devices/${device.id}`, owner.token, "DELETE");
     expect(removed.status).toBe(200);
-    expect(await removed.json()).toMatchObject({ sessionAccess: "revoked" });
+    expect(await removed.json()).toEqual({ status: "device_access_ended" });
     expect((await request("/session", renewed)).status).toBe(401);
     expect((await redeem(unusedBeforeRenewal)).status).toBe(410);
     expect((await redeem(unusedAfterRenewal)).status).toBe(410);
@@ -173,6 +173,47 @@ test("Given a device that shared links before and after renewing its credential,
     expect((await request("/session", rejoined)).status).toBe(200);
     expect((await redeem(unusedBeforeRenewal)).status).toBe(410);
     expect((await redeem(unusedAfterRenewal)).status).toBe(410);
+});
+
+test("Given links shared by a recovery credential and by the machine's own credential, When each sharing credential is revoked, Then its unused links add no device while links shared by access still held keep working", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, method = "GET", body?: object) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }),
+            environment,
+        );
+    const share = async (token: string) => {
+        const response = await request("/identity/transfers", token, "POST", { operationId: crypto.randomUUID() });
+        expect(response.status).toBe(201);
+        return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
+    };
+    const redeem = (code: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, redemptionKey: anonymousCreationKey() }),
+            }),
+            environment,
+        );
+    const recoveryResponse = await request("/identity/recovery-token", owner.token, "POST");
+    expect(recoveryResponse.status).toBe(201);
+    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
+    const sharedByRecovery = await share(recovery);
+    const sharedByLocal = await share(owner.token);
+
+    expect((await request("/identity/v1/recovery-credential", recovery, "DELETE")).status).toBe(204);
+    expect((await redeem(sharedByRecovery)).status).toBe(410);
+    expect((await redeem(sharedByLocal)).status).toBe(200);
+
+    const unusedLocalLink = await share(owner.token);
+    expect((await request("/identity/v1/local-credential", owner.token, "DELETE")).status).toBe(204);
+    expect((await redeem(unusedLocalLink)).status).toBe(410);
 });
 
 test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Platform preserves every placement", {

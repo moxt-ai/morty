@@ -3,7 +3,7 @@ import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
 export const acpSession = sqliteTable(
     "acp_session",
     {
-        agentId: text("agent_id").notNull(),
+        harness: text("agent_id").notNull(),
         sessionId: text("session_id").notNull(),
         cwd: text("cwd").notNull(),
         configurations: text("configurations").notNull().default("[]"),
@@ -11,5 +11,5 @@ export const acpSession = sqliteTable(
         title: text("title").notNull(),
         updatedAt: text("updated_at").notNull(),
     },
-    (table) => [primaryKey({ columns: [table.agentId, table.sessionId] })],
+    (table) => [primaryKey({ columns: [table.harness, table.sessionId] })],
 );

@@ -18,7 +18,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
         const runtime = await platform.connectAgent(project.computerId);
         const ready = await runtime.client.sessions.create(
             {
-                agentId: "claude",
+                harness: "claude",
                 configurations: [],
                 directory: ".",
                 computerId: runtime.computerId,
@@ -28,10 +28,8 @@ it("Given two clients holding one configuration revision, When they edit concurr
         );
         expect(ready.configurationRevision).toEqual(expect.any(String));
         const edit = {
-            agentId: "claude",
             booleanValue: false,
             configId: "model",
-            directory: ".",
             expectedConfigurationRevision: ready.configurationRevision,
             value: "test-large",
             valueType: "select" as const,

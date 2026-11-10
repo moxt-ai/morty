@@ -92,7 +92,7 @@ test.each(["owned", "borrowed"])(
                         await seeded.promise;
                     }
                     const identity = {
-                        agentId: "codex",
+                        harness: "codex",
                         directory: ".",
                         kind: "native.session.request",
                     } as const;
@@ -130,8 +130,6 @@ test.each(["owned", "borrowed"])(
                         kind: "session.prompt",
                         commandId,
                         target: sessionTarget,
-                        agentId: "codex",
-                        directory: ".",
                         attachments: [],
                         prompt: "Stream a concise proposed plan",
                         disposition: SessionPromptDisposition.Append,

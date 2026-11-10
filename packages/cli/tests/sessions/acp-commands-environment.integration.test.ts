@@ -43,7 +43,7 @@ describe("acp commands environment", () => {
             (options) =>
                 new ControlledAcpConnection(
                     {
-                        id: "controlled-acp",
+                        harness: "controlled-acp",
                         adapterPath: process.execPath,
                         arguments: [fakeAgentPath, "--agent-name", "Controlled ACP"],
                         environment: options.environment,
@@ -71,7 +71,7 @@ describe("acp commands environment", () => {
     });
 
     it("Given an ACP Agent advertises compact, When its commands update, Then Morty preserves the ACP command", async () => {
-        const agentId = "unknown-acp";
+        const harness = "unknown-acp";
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,
@@ -91,12 +91,12 @@ describe("acp commands environment", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = fakeAgent(["--advertise-compact-command"], {}, agentId);
+        const agent = fakeAgent(["--advertise-compact-command"], {}, harness);
 
         try {
             await manager.runPrompt({
                 agent,
-                commandId: `${agentId}-compact-command`,
+                commandId: `${harness}-compact-command`,
                 cwd: process.cwd(),
                 images: [],
                 prompt: "advertise commands",

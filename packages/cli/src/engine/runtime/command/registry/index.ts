@@ -1,7 +1,6 @@
 import { decodeContentChunkFrame, type ServiceToDaemonMessage } from "@morty-build/client/protocol";
 import type { CommandContext } from "../context.ts";
 import type { RuntimeCommand } from "../definition.ts";
-import { send } from "../transport.ts";
 import { createAgentCatalogCommands } from "./agent-catalog.ts";
 import { createAgentSettingsCommands } from "./agent-settings.ts";
 import { createContentWriteCommands } from "./content-write/index.ts";
@@ -11,6 +10,7 @@ import {
     elicitationRespondCommand,
     permissionRespondCommand,
     promptDispositionCommand,
+    sessionArchiveCommand,
     sessionCancelBeforeStartCommand,
     sessionCancelCommand,
     sessionCloseCommand,
@@ -48,6 +48,7 @@ export function createCommandRegistry(context: CommandContext): {
         sessionCancelBeforeStartCommand,
         sessionCancelCommand,
         sessionCloseCommand,
+        sessionArchiveCommand,
         promptDispositionCommand,
         workspaceListCommand,
         sessionPrepareCommand,
@@ -63,22 +64,6 @@ export function createCommandRegistry(context: CommandContext): {
     ];
     return {
         dispatch: (message): void => {
-            if ("target" in message && "agentId" in message && message.target.harness !== message.agentId) {
-                const requestId = "commandId" in message ? message.commandId : message.requestId;
-                send(context.socket, {
-                    kind: "session.operation.failed",
-                    code: "session_identity_mismatch",
-                    message: "The native Session belongs to a different harness",
-                    requestId,
-                    target: message.target,
-                });
-                context.diagnostics.daemonDiagnostic("session_target_rejected", requestId, {
-                    code: "session_identity_mismatch",
-                    harness: message.target.harness,
-                    agentId: message.agentId,
-                });
-                return;
-            }
             const command = commands.find((candidate) => candidate.kind === message.kind);
             if (command === undefined) {
                 throw new Error("Unsupported protocol message");

@@ -48,7 +48,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
         }
 
         const identity = {
-            agentId: "codex",
+            harness: "codex",
             directory: ".",
             kind: "native.session.request",
         } as const;
@@ -107,8 +107,6 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
                 kind: "session.prompt",
                 commandId,
                 target: imported.target,
-                agentId: "codex",
-                directory: ".",
                 attachments: [],
                 prompt: "Continue this conversation after installation",
                 disposition: SessionPromptDisposition.Append,

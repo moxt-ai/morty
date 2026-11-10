@@ -23,7 +23,7 @@ export async function restoreSession(
             ? new FoundStoredSession(
                   new StoredSession(
                       {
-                          harness: session.agentId,
+                          harness: session.harness,
                           sessionId: sessionIdSchema.parse(origin.sessionId),
                       },
                       session.cwd,
@@ -37,7 +37,7 @@ export async function restoreSession(
         throw new AcpExecutionError("The native Session was not found", {}, "session_not_found");
     }
     const conversation = stored.session;
-    if (conversation.agentId !== session.agentId || conversation.cwd !== session.cwd) {
+    if (conversation.cwd !== session.cwd) {
         throw new AcpExecutionError("The native Session workspace cannot change", {}, "session_identity_mismatch");
     }
     session.selectNativeSession(conversation.sessionId);

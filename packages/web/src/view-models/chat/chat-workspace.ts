@@ -2,12 +2,7 @@ import { NativeSessionMap, sameNativeSession } from "@morty-build/client/native-
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type {
-    IdentityTransfer,
-    LinkedDevice,
-    OpenWindowsAfterDisconnect,
-    SharingTerms,
-} from "../../services/identity/anonymous-identity-api.ts";
+import type { IdentityTransfer, LinkedDevice, SharingTerms } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -139,10 +134,8 @@ export function createChatWorkspace(options: {
     readonly accessExpiresAt?: ((signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly linkedDevices?: ((signal: AbortSignal) => Promise<readonly LinkedDevice[]>) | undefined;
     readonly waitForLinkedDevicesChange?: ((signal: AbortSignal) => Promise<void>) | undefined;
-    readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>) | undefined;
-    readonly endDeviceAccess?:
-        | ((deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>)
-        | undefined;
+    readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
+    readonly endDeviceAccess?: ((deviceId: string, signal: AbortSignal) => Promise<void>) | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserRelay: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
@@ -268,7 +261,7 @@ export function createChatWorkspace(options: {
             },
             onOpenSession: (session) => {
                 home.getState().openManaged({
-                    harness: session.result.ready.agentId,
+                    harness: session.result.ready.harness,
                     sessionId: session.entry.sessionId,
                 });
             },
@@ -403,6 +396,13 @@ export function createChatWorkspace(options: {
             computerId,
             sessionTarget,
             clock: options.clock,
+            refreshTitle: async (signal) => {
+                // Acknowledgements identify an operation, not the current title. Newer observations still win.
+                const startedWith = titles.getState().titles;
+                const sessions = await requests.managedSessions(signal);
+                signal.throwIfAborted();
+                titles.getState().directoryLoaded(sessions, startedWith);
+            },
             lifetime: operationsLifetime.signal,
         });
         sessionStates.set(sessionTarget, state);
@@ -428,7 +428,7 @@ export function createChatWorkspace(options: {
                 options.clock.now(),
                 {
                     kind: "session",
-                    harness: selection.session.result.ready.agentId,
+                    harness: selection.session.result.ready.harness,
                     sessionId: selection.session.entry.sessionId,
                 },
                 selection.session.result.ready.directoryLabel,
@@ -496,7 +496,7 @@ export function createChatWorkspace(options: {
                     selection.kind === "ready"
                         ? {
                               kind: "session" as const,
-                              harness: selection.session.result.ready.agentId,
+                              harness: selection.session.result.ready.harness,
                               sessionId: selection.session.entry.sessionId,
                           }
                         : selection.kind === "draft"

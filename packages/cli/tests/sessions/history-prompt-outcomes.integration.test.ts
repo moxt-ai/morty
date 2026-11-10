@@ -21,10 +21,8 @@ import { writeControlledAcpExecutable } from "../support/controlled-acp-executab
 const submit = (peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], commandId: string, prompt: string) =>
     peer.send(
         encodeSessionPromptCommand({
-            agentId: "controlled-acp",
             attachments: [],
             commandId,
-            directory: ".",
             disposition: "append",
             kind: "session.prompt",
             prompt,

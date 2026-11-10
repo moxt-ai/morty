@@ -986,12 +986,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Revokes every other credential, link and browser access, and replaces the local credential with a successor
-     * saved first. A run that lost the reply repeats the same request with whichever credential is still in force.
+     * Revokes every other credential, link and browser access, closes the chat windows open with them, and replaces
+     * the local credential with a successor saved first. A run that lost the reply or failed repeats the same request
+     * with whichever credential is still in force.
      */
-    async function revokeAllAccessWithRotation<Revoking extends Context>(
-        context: Revoking,
-    ): Promise<{ readonly context: Revoking; readonly sessionAccess: "revoked" | "unconfirmed" }> {
+    async function revokeAllAccessWithRotation<Revoking extends Context>(context: Revoking): Promise<Revoking> {
         const earlier = context.identity.rotation;
         const successor =
             earlier.kind === "requested"
@@ -1015,11 +1014,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
         }
-        const sessionAccess = revoked["sessionAccess"];
-        if (sessionAccess !== "revoked" && sessionAccess !== "unconfirmed") {
-            fail("INVALID_RESPONSE");
-        }
-        return { context: await commit(requested, rotatedIdentity(requested.identity, successor)), sessionAccess };
+        return await commit(requested, rotatedIdentity(requested.identity, successor));
     }
 
     /** Finishes revoking all access when an earlier run stopped before saving the replaced local credential. */
@@ -1028,7 +1023,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return context;
         }
         progress("identity", "Finishing the earlier revocation of all access.");
-        return (await revokeAllAccessWithRotation(context)).context;
+        return await revokeAllAccessWithRotation(context);
     }
 
     function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
@@ -1501,12 +1496,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         fail("RUNTIME_START_FAILED");
     }
 
-    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, computerId: string, agentRef: string): boolean {
+    function hasOnlineRuntimeAgent(runtime: Record<string, unknown>, computerId: string, harness: string): boolean {
         return (
             runtime["computerId"] === computerId &&
             runtime["online"] === true &&
             Array.isArray(runtime["agents"]) &&
-            runtime["agents"].some((agent) => object(agent)["agentRef"] === agentRef)
+            runtime["agents"].some((agent) => object(agent)["harness"] === harness)
         );
     }
 
@@ -1540,7 +1535,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (current === undefined || !Array.isArray(current["agents"])) {
             return null;
         }
-        return current["agents"].map((agent) => identifier(object(agent)["agentRef"]));
+        return current["agents"].map((agent) => identifier(object(agent)["harness"]));
     }
 
     async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
@@ -1576,7 +1571,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             const entry = [inventory["unavailable"], inventory["available"]]
                 .flatMap((agents) => (Array.isArray(agents) ? agents : []))
                 .map(object)
-                .find((agent) => agent["id"] === harness);
+                .find((agent) => agent["harness"] === harness);
             if (entry === undefined) {
                 return null;
             }
@@ -1619,14 +1614,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     if (status["computerId"] !== computerId || !Array.isArray(status["agents"])) {
                         fail("INVALID_RESPONSE");
                     }
-                    if (status["agents"].some((agent) => object(agent)["id"] === harness)) {
+                    if (status["agents"].some((agent) => object(agent)["harness"] === harness)) {
                         emit({ status: "runtime_paired", computerId, harness });
                         break;
                     }
                     await harnessUnavailable(
                         context,
                         harness,
-                        status["agents"].map((agent) => identifier(object(agent)["id"])),
+                        status["agents"].map((agent) => identifier(object(agent)["harness"])),
                         cwd,
                     );
                 }
@@ -1667,11 +1662,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function bindAgent(context: Context, runtime: RuntimeSelection, harness: string) {
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
         const computerId = runtime.computerId;
-        const agentRef = identifier(harness);
         try {
             await request(context, `/chat/computers/${context.identity.computerId}/setup`, {
                 computerId,
-                agentRef,
+                harness,
             });
         } catch (cause) {
             // Cancellation and the setup budget keep their own codes.
@@ -1694,8 +1688,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /** Waits until the bound Machine's Runtime is online and offers the harness this run bound. */
-    async function waitForReadiness(context: Context, runtime: RuntimeSelection, harness: string) {
-        const agentRef = identifier(harness);
+    async function waitForReadiness(context: Context, runtime: RuntimeSelection, requestedHarness: string) {
+        const harness = identifier(requestedHarness);
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
@@ -1704,7 +1698,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 `/chat/computers/${context.identity.computerId}/workspace`,
                 {},
             );
-            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.computerId, agentRef)) {
+            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.computerId, harness)) {
                 return;
             }
             if (attempts++ % 10 === 0) {
@@ -1826,12 +1820,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         emit({
             status: "access_revoked",
-            computerId: revoked.context.identity.computerId,
-            sessionAccess: revoked.sessionAccess,
+            computerId: revoked.identity.computerId,
             message:
-                revoked.sessionAccess === "revoked"
-                    ? "Previous sharing links and all other Morty credentials have been revoked, and chat windows opened with them have been closed. This computer's own credential was replaced, so copies of it no longer work."
-                    : "Previous sharing links and all other Morty credentials have been revoked, and this computer's own credential was replaced. Chat windows already open elsewhere could not be closed and may remain usable for up to 15 minutes; run this command again to retry closing them.",
+                "Previous sharing links and all other Morty credentials have been revoked, and chat windows opened with them have been closed. This computer's own credential was replaced, so copies of it no longer work.",
         });
     }
 

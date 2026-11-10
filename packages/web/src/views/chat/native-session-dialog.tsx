@@ -232,7 +232,7 @@ export function NativeSessionDialog({
     const model = nativeSessionPresentation(useExternalStore(store), sessions);
     const diagnostics: DaemonDiagnosticsSource = {
         ...daemonSource,
-        harness: model.directory.kind === "ready" ? model.directory.agentRef : null,
+        harness: model.directory.kind === "ready" ? model.directory.harness : null,
         sessionId: model.preview.kind === "empty" ? null : model.preview.entry.sessionId,
     };
     const reportButton = <BugReportButton appearance="icon" daemonSource={diagnostics} dialog={bugReportDialog} />;

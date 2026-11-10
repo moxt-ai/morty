@@ -127,7 +127,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
             }),
             await request(`/chat/computers/${owner.computerId}/setup`, token, "POST", {
                 computerId: "shared-runtime",
-                agentRef: "codex",
+                harness: "codex",
             }),
         ]) {
             expect(refused.status).toBe(403);

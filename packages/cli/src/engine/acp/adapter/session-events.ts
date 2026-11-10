@@ -144,7 +144,7 @@ export class AdapterSessionConnection {
             const externalized =
                 options.externalizeUpdate === undefined
                     ? await externalizer.update(
-                          { harness: options.agent.id, sessionId: notification.sessionId },
+                          { harness: options.agent.harness, sessionId: notification.sessionId },
                           notification.update,
                           signal,
                       )
@@ -304,14 +304,14 @@ export class AdapterSessionConnection {
     readonly commitLifecycle = (response: unknown): AdapterSessionSnapshot => {
         const state = this.#ready();
         const capabilities = restrictAcpSessionCapabilities(state.snapshot.capabilities, response);
-        this.commitConfiguration(sessionConfigProtocolForAgent(this.#agent.id).normalizeLifecycle(response));
+        this.commitConfiguration(sessionConfigProtocolForAgent(this.#agent.harness).normalizeLifecycle(response));
         this.#state = { ...this.#ready(), snapshot: { capabilities, configOptions: this.snapshot().configOptions } };
         return this.snapshot();
     };
 
     readonly #applyConfigurationUpdate = (value: unknown): void => {
         const state = this.#ready();
-        const protocol = sessionConfigProtocolForAgent(this.#agent.id);
+        const protocol = sessionConfigProtocolForAgent(this.#agent.harness);
         const configOptions = protocol.normalizeUpdate(state.snapshot.configOptions, value);
         const operation: ConfigurationOperation =
             state.operation.kind === "pending"
@@ -343,7 +343,7 @@ export class AdapterSessionConnection {
         if (this.#initialization.kind === "not-started") {
             this.#initialization = {
                 kind: "started",
-                result: initializeAgentConnection(this, this.#agent.id, this.#agent.agentVersion, signal).then(
+                result: initializeAgentConnection(this, this.#agent.harness, this.#agent.agentVersion, signal).then(
                     (agent) => {
                         this.#lifetime.signal.throwIfAborted();
                         this.#state = {

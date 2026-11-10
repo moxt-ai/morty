@@ -10,7 +10,7 @@ import { expect, test } from "vitest";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
 
 class HistoryAgentSpecification extends ControlledAcpSpecification {
-    readonly id = "claude";
+    readonly harness = "claude";
     readonly label = "Claude Code";
     readonly agentExecutable = "controlled-acp";
     readonly adapterVersion = "1.0.0";
@@ -81,7 +81,6 @@ if (process.argv.includes("--version")) {
                 async (peer) => {
                     peer.send(
                         encodeSessionPreviewHistoryPageLoad({
-                            agentId: "claude",
                             cursor: null,
                             directory: ".",
                             eventLimit: 10000,

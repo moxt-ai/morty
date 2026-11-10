@@ -25,6 +25,7 @@ import {
     decodeNativeSessionRequest,
     decodeRuntimeDiagnosticsRequest,
     decodeRuntimePingCommand,
+    decodeSessionArchiveCommand,
     decodeSessionCancelBeforeStartCommand,
     decodeSessionCancelCommand,
     decodeSessionCloseCommand,
@@ -62,6 +63,8 @@ import {
     RUNTIME_PONG_KIND,
     RUNTIME_STATUS_KIND,
     readNativeSessionTarget,
+    SESSION_ARCHIVE_KIND,
+    SESSION_ARCHIVED_KIND,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
     SESSION_CLOSE_KIND,
@@ -140,7 +143,7 @@ export type HistoryRequestKind = "live" | "preview";
 export interface ChannelSocket {
     readonly sessionFilter?: NativeSessionTarget | undefined;
     readonly close: (code: number, reason: string) => void;
-    readonly consumeAgentSettingsDiscovery: (requestId: string, agentId: string) => boolean;
+    readonly consumeAgentSettingsDiscovery: (requestId: string, harness: string) => boolean;
     readonly consumeAgentSettingsDiscoveryFailure: (requestId: string) => boolean;
     readonly takeAgentSettingsDiscoveries: () => readonly string[];
     readonly bindHistoryRequest: (kind: HistoryRequestKind, requestId: string) => void;
@@ -149,7 +152,7 @@ export interface ChannelSocket {
     readonly isSame: (socket: ChannelSocket) => boolean;
     readonly permitsSessionHistory: () => boolean;
     readonly send: (message: string | ArrayBuffer) => void;
-    readonly trackAgentSettingsDiscovery: (requestId: string, agentId: string) => "tracked" | "duplicate" | "busy";
+    readonly trackAgentSettingsDiscovery: (requestId: string, harness: string) => "tracked" | "duplicate" | "busy";
 }
 
 export interface ChannelPeers {
@@ -337,7 +340,7 @@ export class ChannelActor {
                 return;
             }
             if (kind === AGENT_SETTINGS_DISCOVERED_KIND) {
-                this.returnAgentSettingsDiscoveryResult(message.requestId, message.agentId, wire);
+                this.returnAgentSettingsDiscoveryResult(message.requestId, message.harness, wire);
                 return;
             }
             if (kind === AGENT_SETTINGS_DISCOVERY_FAILED_KIND) {
@@ -453,7 +456,7 @@ export class ChannelActor {
             }
             if (kind === AGENT_SETTINGS_DISCOVER_KIND) {
                 const command = decodeAgentSettingsDiscoverCommand(message);
-                this.forwardAgentSettingsDiscovery(socket, command, command.requestId, command.agentId, message);
+                this.forwardAgentSettingsDiscovery(socket, command, command.requestId, command.harness, message);
                 return;
             }
             if (kind === NATIVE_SESSION_REQUEST_KIND) {
@@ -536,6 +539,8 @@ export class ChannelActor {
                 return;
             case SESSION_CLOSED_KIND:
                 return;
+            case SESSION_ARCHIVED_KIND:
+                return;
             case SESSION_CLOSE_NOTICE_KIND:
                 return;
             case SESSION_LISTED_KIND:
@@ -613,6 +618,10 @@ export class ChannelActor {
             }
             case SESSION_CLOSE_KIND: {
                 const command = decodeSessionCloseCommand(message);
+                return { message: command, requestId: command.requestId, target: command.target };
+            }
+            case SESSION_ARCHIVE_KIND: {
+                const command = decodeSessionArchiveCommand(message);
                 return { message: command, requestId: command.requestId, target: command.target };
             }
             case SESSION_LIST_KIND: {
@@ -711,10 +720,10 @@ export class ChannelActor {
         socket: ChannelSocket,
         message: ServiceToDaemonMessage,
         requestId: string,
-        agentId: string,
+        harness: string,
         encoded?: string,
     ): void => {
-        const route = socket.trackAgentSettingsDiscovery(requestId, agentId);
+        const route = socket.trackAgentSettingsDiscovery(requestId, harness);
         if (route === "duplicate") {
             return;
         }
@@ -745,11 +754,11 @@ export class ChannelActor {
 
     private readonly returnAgentSettingsDiscoveryResult = (
         requestId: string,
-        agentId: string,
+        harness: string,
         message: string,
     ): void => {
         const recipient = [...this.#peers.hosts(), ...this.#peers.operations().map(({ socket }) => socket)].find(
-            (socket) => socket.consumeAgentSettingsDiscovery(requestId, agentId),
+            (socket) => socket.consumeAgentSettingsDiscovery(requestId, harness),
         );
         if (recipient?.isOpen()) {
             recipient.send(message);

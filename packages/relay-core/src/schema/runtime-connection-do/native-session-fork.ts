@@ -1,13 +1,12 @@
 import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/** A Fork's original result is a receipt, independent of the Session's current metadata. */
+/** Retained records of the Relay's former Fork receipts; nothing reads them. The Runtime keeps each Fork's receipt. */
 export const nativeSessionFork = sqliteTable(
     "native_session_forks",
     {
-        computerId: text("project_id").notNull(),
+        computerId: text("computer_id").notNull(),
         operationId: text("operation_id").notNull(),
         requestHash: text("request_hash").notNull(),
-        // The first attempt's identity survives losing the Runtime reply. Older rows remain unrecoverable.
         attemptJson: text("attempt_json"),
         resultJson: text("result_json"),
     },

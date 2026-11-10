@@ -21,12 +21,6 @@ type SettingsChange =
     | { readonly kind: "configuring"; readonly configId: string }
     | { readonly kind: "failed"; readonly message: string };
 
-/** The Session binding a settings change states, as the pane that opened the Session read it. */
-interface SessionBinding {
-    readonly agentId: string;
-    readonly directory: string;
-}
-
 export interface SessionSettingsStore {
     readonly openedAt: string;
     readonly observedAt: string;
@@ -53,7 +47,6 @@ export interface SessionSettingsStore {
      * neither ends it nor drops its result.
      */
     readonly configure: (
-        binding: SessionBinding,
         option: SessionConfigOption,
         value: string,
         booleanValue: boolean,
@@ -135,7 +128,7 @@ export function createSessionSettingsStore(options: {
                         }
                     });
             },
-            configure: async (binding, option, value, booleanValue, signal) => {
+            configure: async (option, value, booleanValue, signal) => {
                 set({ change: { configId: option.id, kind: "configuring" } });
                 try {
                     await options.connection.send(
@@ -143,7 +136,6 @@ export function createSessionSettingsStore(options: {
                             return await client.sessions.updateConfiguration(
                                 options.sessionTarget,
                                 {
-                                    ...binding,
                                     booleanValue,
                                     configId: option.id,
                                     expectedConfigurationRevision: get().configurationRevision,
@@ -158,7 +150,7 @@ export function createSessionSettingsStore(options: {
                     signal.throwIfAborted();
                     rememberAgentSettingChoice(
                         options.computerId,
-                        binding.agentId,
+                        options.sessionTarget.harness,
                         option.type === "boolean"
                             ? { configId: option.id, kind: "boolean", value: booleanValue }
                             : { configId: option.id, kind: "select", value },

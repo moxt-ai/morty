@@ -90,7 +90,7 @@ test("Given Codex publishes complete model settings and defaults to Full access,
             const launchesBeforeSettings = await launchCount(launches);
             const requestId = randomUUID();
             peer.send(
-                encodeAgentSettingsDiscoverCommand({ kind: "agent.settings.discover", agentId: "codex", requestId }),
+                encodeAgentSettingsDiscoverCommand({ kind: "agent.settings.discover", harness: "codex", requestId }),
             );
             let discovered: ReturnType<typeof decodeAgentSettingsDiscoveredEvent>;
             for (;;) {
@@ -123,8 +123,6 @@ test("Given Codex publishes complete model settings and defaults to Full access,
                     kind: "session.prompt",
                     commandId: randomUUID(),
                     target: peer.target,
-                    agentId: "codex",
-                    directory: ".",
                     attachments: [],
                     prompt: fakeProviderPrompts.successfulTool,
                     disposition: SessionPromptDisposition.Append,
@@ -184,7 +182,7 @@ test("Given Codex starts with a configured model outside its catalog, When Agent
 
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
         const requestId = randomUUID();
-        peer.send(encodeAgentSettingsDiscoverCommand({ kind: "agent.settings.discover", agentId: "codex", requestId }));
+        peer.send(encodeAgentSettingsDiscoverCommand({ kind: "agent.settings.discover", harness: "codex", requestId }));
 
         let discovered: ReturnType<typeof decodeAgentSettingsDiscoveredEvent>;
         for (;;) {

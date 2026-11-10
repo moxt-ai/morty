@@ -8,6 +8,6 @@ export function readLastHarnessPreference(computerId: string): string | null {
     return centralLocalStorage.read(lastHarnessEntry(computerId));
 }
 
-export function saveLastHarnessPreference(computerId: string, agentRef: string): void {
-    centralLocalStorage.write(lastHarnessEntry(computerId), agentRef);
+export function saveLastHarnessPreference(computerId: string, harness: string): void {
+    centralLocalStorage.write(lastHarnessEntry(computerId), harness);
 }

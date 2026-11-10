@@ -57,7 +57,7 @@ if (process.argv.includes("--version")) {
                 const requestId = "prepare-with-agent-initialization-failure";
                 peer.send(
                     encodeSessionCreateCommand({
-                        agentId: "controlled-acp",
+                        harness: "controlled-acp",
                         directory: ".",
                         kind: "session.create",
                         requestId,

@@ -17,9 +17,9 @@ an incident.
 
 **Please do not open a public issue for a security problem.**
 
-Send a private report to [acmerfight@gmail.com](mailto:acmerfight@gmail.com).
-This source repository is private, so GitHub public-repository vulnerability
-reporting is not available. Do not post a report in the retired product repository.
+Send a private report to [acmerfight@gmail.com](mailto:acmerfight@gmail.com), or,
+when this repository's **Security** tab offers **Report a vulnerability**, report it
+there. Do not post a report in the retired product repository.
 
 Helpful things to include:
 
@@ -39,6 +39,29 @@ report. Describe where they appear instead.
   **10 business days**.
 - We keep you updated while a fix is in progress, and we credit you in the advisory
   unless you ask us not to.
+
+## Trust model
+
+Morty is designed for one person reaching their own computer. Knowing what it
+trusts by design helps separate a vulnerability from intended behavior.
+
+- **A device with access controls the Agent.** Whoever holds an unused sharing
+  link, or a device that joined through one, can view and control the project's
+  sessions, and so can ask the Agent to do anything the Agent may do on that
+  computer. Codex sessions start in **Full access** (no approval prompts and no
+  sandbox) unless another mode is chosen. Claude Code follows the computer's own
+  Claude Code permission settings, and its approval requests are answered from the
+  browser.
+- **The computer's own credential stays on the computer.** Setup saves it in a
+  state file readable only by the operating-system account that ran setup. It does
+  not expire. Revoking all access replaces it and ends every other credential,
+  sharing link and browser device of the project.
+- **The relay is trusted.** Session traffic is not end-to-end encrypted; see
+  [What Morty does with your data](README.md#what-morty-does-with-your-data).
+
+A path that gives someone access they were never given, or keeps access after it
+was revoked or expired, is in scope. Using access that was given, including
+running commands through the Agent, is not.
 
 ## Scope
 

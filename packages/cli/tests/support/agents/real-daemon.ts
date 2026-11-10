@@ -98,7 +98,7 @@ export async function withRealDaemon(
         specification,
         environment,
         async (connection) => {
-            const target = await prepareNewRealSession(connection, specification.id);
+            const target = await prepareNewRealSession(connection, specification.harness);
             await scenario({ ...connection, target });
         },
         launch,
@@ -133,7 +133,7 @@ async function withDaemonConnection(
     timer: Timer,
     adapters: AdapterResolver,
 ): Promise<void> {
-    const directory = await mkdtemp(join(tmpdir(), `morty-real-${specification.id}-`));
+    const directory = await mkdtemp(join(tmpdir(), `morty-real-${specification.harness}-`));
     const workspace = workspaceDirectory ?? join(directory, "workspace");
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(90_000)]);
@@ -238,7 +238,7 @@ async function withDaemonConnection(
                           signal,
                           specifications: [specification],
                       });
-                      const agent = inventory.readyAgents().find((entry) => entry.id === specification.id);
+                      const agent = inventory.readyAgents().find((entry) => entry.harness === specification.harness);
                       if (agent === undefined) {
                           throw new Error(
                               `Real ${specification.label} unavailable: ${JSON.stringify(inventory.unavailable)}`,
@@ -399,12 +399,12 @@ async function withDaemonConnection(
 /** Opens an Agent-owned conversation through the same discovery and import boundary as the browser. */
 export async function importRealSession(
     peer: DaemonConnectionPeer,
-    agentId: string,
+    harness: string,
     sessionId: string,
 ): Promise<NativeSessionTarget> {
     const identity = {
         kind: "native.session.request",
-        agentId,
+        harness,
         directory: ".",
     } as const;
     const receive = async (requestId: string) => {
@@ -446,7 +446,7 @@ export async function importRealSession(
 }
 
 /** Opens a conversation through first-send creation; only the harness chooses its native ID. */
-export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId: string): Promise<NativeSessionTarget> {
+export async function prepareNewRealSession(peer: DaemonConnectionPeer, harness: string): Promise<NativeSessionTarget> {
     const requestId = randomUUID();
     peer.send(
         encodeSessionCreateCommand({
@@ -454,7 +454,7 @@ export async function prepareNewRealSession(peer: DaemonConnectionPeer, agentId:
             requestId,
             operationId: randomUUID(),
             configurations: [],
-            agentId,
+            harness,
             directory: ".",
         }),
     );

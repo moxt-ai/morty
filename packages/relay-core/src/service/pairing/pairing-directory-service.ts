@@ -5,19 +5,12 @@ import {
     ProjectAuthenticationError,
     ProjectPermission,
 } from "../../entity/authentication/project-authentication.ts";
-import { ComputerScope } from "../../entity/do/session.ts";
+import type { ComputerScope } from "../../entity/do/session.ts";
 import type { AgentDescriptor, ClaimedPairing } from "../../entity/pairing/pairing.ts";
 import {
-    ACCESS_GRANT_LIFETIME_MILLISECONDS,
     ChannelDescriptor,
-    ChannelHostCredential,
-    CreatedBrowserCredential,
     CreatedRuntimePairing,
-    createRandomToken,
     hashPairingCredential,
-    LinkedChannelDevice,
-    MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
-    MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
     normalizePairingCode,
     PAIRING_LIFETIME_MILLISECONDS,
     PairingDirectoryError,
@@ -29,7 +22,7 @@ import {
     validateToken,
 } from "../../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
-import type { AuthorizedChannelRow, RuntimePairingRow } from "../../entity/pairing/pairing-records.ts";
+import type { RuntimePairingRow } from "../../entity/pairing/pairing-records.ts";
 import { projectRuntimePairingStatus, runtimeRevokedAt } from "../../entity/pairing/runtime-pairing-state.ts";
 import type { ProjectAccessAuthorizer } from "../../gateway/project-access-authorizer.ts";
 import type { MachineAccountDirectory } from "../../infra/machine-account-directory.ts";
@@ -75,37 +68,6 @@ export class PairingDirectoryService implements PairingOperations {
         return this.#cx.storages.forProject(project);
     };
 
-    private readonly readAuthorizedHost = async (
-        computerId: string,
-        token: string,
-        signal: AbortSignal,
-    ): Promise<AuthorizedChannelRow> => {
-        signal.throwIfAborted();
-        const tokenHash = await hashPairingCredential(validateToken(token));
-        const storage = await this.identityStorage({ kind: "host", computerId, tokenHash }, signal);
-        const row = await storage.authenticateHost(
-            validateIdentifier(computerId, "computer_id"),
-            tokenHash,
-            Date.now(),
-            signal,
-        );
-        if (row === null) {
-            throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
-        }
-        return row;
-    };
-
-    private readonly readAuthorizedOwner = async (computerId: string, token: string, signal: AbortSignal) => {
-        const row = await this.readAuthorizedHost(computerId, token, signal);
-        if (row.authority !== "owner") {
-            throw new PairingDirectoryError(
-                "owner_access_required",
-                "Only the channel owner can manage linked devices",
-            );
-        }
-        return row;
-    };
-
     readonly rotateRuntimeCredential: PairingOperations["rotateRuntimeCredential"] = async (
         token,
         successor,
@@ -139,11 +101,6 @@ export class PairingDirectoryService implements PairingOperations {
             signal,
         );
         return rotation;
-    };
-
-    readonly authorizeHost: PairingOperations["authorizeHost"] = async (computerId, token, signal) => {
-        const row = await this.readAuthorizedHost(computerId, token, signal);
-        return new ChannelHostCredential(row.computer_id, row.credential_id);
     };
 
     readonly authorizeProject: PairingOperations["authorizeProject"] = async (computerId, token, permission, signal) =>
@@ -369,92 +326,6 @@ export class PairingDirectoryService implements PairingOperations {
             signal,
         );
 
-    readonly createChannelAccessGrant: PairingOperations["createChannelAccessGrant"] = async (
-        computerId,
-        token,
-        signal,
-    ) => {
-        const owner = await this.readAuthorizedOwner(computerId, token, signal);
-        const now = Date.now();
-        const grantId = `grt_${createRandomToken(18)}`;
-        const grantSecret = createRandomToken(32);
-        const expiresAt = now + ACCESS_GRANT_LIFETIME_MILLISECONDS;
-        const storage = await this.projectStorage(new ComputerScope(owner.computer_id), signal);
-        const created = await storage.createAccessGrant(
-            {
-                grantId,
-                computerId: owner.computer_id,
-                secretHash: await hashPairingCredential(grantSecret),
-                ownerCredentialId: owner.credential_id,
-                now,
-                expiresAt,
-            },
-            signal,
-        );
-        if (!created) {
-            throw new PairingDirectoryError("directory_unavailable", "The access grant was not stored");
-        }
-        return { expiresAt: new Date(expiresAt).toISOString(), grantId, grantSecret };
-    };
-
-    readonly createBrowserCredential: PairingOperations["createBrowserCredential"] = async (
-        computerId,
-        token,
-        lifetimeMilliseconds,
-        signal,
-    ) => {
-        if (
-            !Number.isSafeInteger(lifetimeMilliseconds) ||
-            lifetimeMilliseconds < MIN_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS ||
-            lifetimeMilliseconds > MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS
-        ) {
-            throw new PairingDirectoryError("invalid_request", "The browser credential lifetime is invalid");
-        }
-        const owner = await this.authorizeProject(computerId, token, ProjectPermission.OwnerCredentialsManage, signal);
-        const now = Date.now();
-        const expiresAt = now + lifetimeMilliseconds;
-        const credentialId = `bcr_${createRandomToken(18)}`;
-        const browserToken = createRandomToken(32);
-        const storage = await this.projectStorage(owner.scope, signal);
-        const created = await storage.createBrowserCredential(
-            {
-                credentialId,
-                tokenHash: await hashPairingCredential(browserToken),
-                ownerCredentialId: owner.credentialId,
-                now,
-                expiresAt,
-            },
-            signal,
-        );
-        if (!created) {
-            throw new PairingDirectoryError("directory_unavailable", "The browser credential was not stored");
-        }
-        return new CreatedBrowserCredential(
-            credentialId,
-            new Date(expiresAt).toISOString(),
-            owner.computerId,
-            browserToken,
-        );
-    };
-
-    readonly listLinkedChannelDevices: PairingOperations["listLinkedChannelDevices"] = async (
-        computerId,
-        token,
-        signal,
-    ) => {
-        const owner = await this.readAuthorizedOwner(computerId, token, signal);
-        const storage = await this.projectStorage(new ComputerScope(owner.computer_id), signal);
-        const devices = await storage.listLinkedDevices(owner.computer_id, signal);
-        return devices.map(
-            (row) =>
-                new LinkedChannelDevice(
-                    row.credential_id,
-                    new Date(row.created_at).toISOString(),
-                    new Date(row.last_used_at).toISOString(),
-                ),
-        );
-    };
-
     readonly listProjectRuntimes: PairingOperations["listProjectRuntimes"] = async (computerId, token, signal) => {
         const access = await this.authorizeProject(computerId, token, ProjectPermission.RuntimeRead, signal);
         const storage = await this.projectStorage(access.scope, signal);
@@ -479,99 +350,6 @@ export class PairingDirectoryService implements PairingOperations {
         const storage = await this.projectStorage(access.scope, signal);
         const row = await storage.readRuntime(validateIdentifier(computerId, "computer_id"), signal);
         return row !== null && runtimeRevokedAt(row.revoked_at) !== null;
-    };
-
-    readonly readChannel: PairingOperations["readChannel"] = async (computerId, token, signal) => {
-        const access = await this.readAuthorizedHost(computerId, token, signal);
-        const storage = await this.projectStorage(new ComputerScope(access.computer_id), signal);
-        const row = await storage.readChannel(access.computer_id, signal);
-        if (row === null) {
-            throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
-        }
-        if (row.computer_id !== computerId) {
-            throw new PairingDirectoryError("invalid_directory_record", "The channel directory is invalid");
-        }
-        return new ChannelDescriptor(
-            parseAgents(row.agents_json),
-            row.machine_name,
-            row.workspace_name,
-            row.computer_id,
-        );
-    };
-
-    readonly redeemChannelAccessGrant: PairingOperations["redeemChannelAccessGrant"] = async (
-        computerId,
-        grantId,
-        grantSecret,
-        signal,
-    ) => {
-        signal.throwIfAborted();
-        const normalizedComputerId = validateIdentifier(computerId, "computer_id");
-        const normalizedGrantId = validateIdentifier(grantId, "grant_id");
-        const secretHash = await hashPairingCredential(validateToken(grantSecret));
-        const now = Date.now();
-        const credentialId = `hcr_${createRandomToken(18)}`;
-        const hostToken = createRandomToken(32);
-        const storage = await this.identityStorage({ kind: "grant", computerId, grantId, secretHash }, signal);
-        const redemption = await storage.redeemAccessGrant(
-            {
-                computerId: normalizedComputerId,
-                grantId: normalizedGrantId,
-                secretHash,
-                credentialId,
-                tokenHash: await hashPairingCredential(hostToken),
-                now,
-            },
-            signal,
-        );
-        switch (redemption.kind) {
-            case "redeemed":
-                return { hostToken, computerId: redemption.computerId };
-            case "invalid":
-                throw new PairingDirectoryError("access_grant_invalid", "The access link is invalid");
-            case "already_redeemed":
-                throw new PairingDirectoryError("access_grant_redeemed", "The access link has already been used");
-            case "runtime_revoked":
-                throw new PairingDirectoryError("runtime_revoked", "The Runtime has been revoked");
-            case "expired":
-                throw new PairingDirectoryError("access_grant_expired", "The access link has expired");
-            case "not_redeemed":
-                throw new PairingDirectoryError("directory_unavailable", "The access grant could not be redeemed");
-            case "channel_missing":
-                throw new PairingDirectoryError(
-                    "invalid_directory_record",
-                    "The redeemed channel directory is invalid",
-                );
-        }
-    };
-
-    readonly revokeLinkedChannelDevice: PairingOperations["revokeLinkedChannelDevice"] = async (
-        computerId,
-        credentialId,
-        token,
-        signal,
-    ) => {
-        const owner = await this.readAuthorizedOwner(computerId, token, signal);
-        const normalizedCredentialId = validateIdentifier(credentialId, "credential_id");
-        const storage = await this.projectStorage(new ComputerScope(owner.computer_id), signal);
-        if (!(await storage.revokeLinkedDevice(owner.computer_id, normalizedCredentialId, Date.now(), signal))) {
-            throw new PairingDirectoryError("linked_device_not_found", "The linked device was not found");
-        }
-        return new ChannelHostCredential(owner.computer_id, normalizedCredentialId);
-    };
-
-    readonly revokeBrowserCredential: PairingOperations["revokeBrowserCredential"] = async (
-        computerId,
-        credentialId,
-        token,
-        signal,
-    ) => {
-        const owner = await this.authorizeProject(computerId, token, ProjectPermission.OwnerCredentialsManage, signal);
-        const normalizedCredentialId = validateIdentifier(credentialId, "credential_id");
-        const storage = await this.projectStorage(owner.scope, signal);
-        if (!(await storage.revokeBrowserCredential(normalizedCredentialId, Date.now(), signal))) {
-            throw new PairingDirectoryError("browser_credential_not_found", "The browser credential was not found");
-        }
     };
 
     readonly updateAgentCatalog: PairingOperations["updateAgentCatalog"] = async (
