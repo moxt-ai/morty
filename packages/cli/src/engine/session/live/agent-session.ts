@@ -15,7 +15,7 @@ import {
 } from "@morty-build/client/protocol";
 import { AcpExecutionError, AcpPromptExecutionError } from "../../acp/acp-error.ts";
 import { RetryableAcpInitializationError, validateAgentRuntime } from "../../acp/adapter/agent-initialization.ts";
-import type { AdapterSessionEvent, AdapterSessionSubscriber } from "../../acp/adapter/session-events.ts";
+import type { NativeSessionEvent, NativeSessionSubscriber } from "../../acp/adapter/native-session-event.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
 import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
 import { validatePromptContent } from "../../acp/client/prompt-content.ts";
@@ -137,7 +137,7 @@ export class AgentSession implements AgentSessionRestore {
     #delegableCommandId: string | null = null;
     #modelEffort: AgentModelEffort | null = null;
     readonly #scope: AdapterSessionScope;
-    readonly #subscriber: AdapterSessionSubscriber;
+    readonly #subscriber: NativeSessionSubscriber;
     #nativeIdentity: { readonly kind: "unbound" } | { readonly kind: "bound"; readonly sessionId: string } = {
         kind: "unbound",
     };
@@ -1049,7 +1049,7 @@ export class AgentSession implements AgentSessionRestore {
         this.#nativeHistoryOwnership = { kind: "agent-owned" };
     };
 
-    readonly #processEvent = async (event: AdapterSessionEvent): Promise<void> => {
+    readonly #processEvent = async (event: NativeSessionEvent): Promise<void> => {
         if (event.kind === "configuration" || event.kind === "mode") {
             this.#configOptions =
                 event.kind === "configuration"

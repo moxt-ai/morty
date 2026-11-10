@@ -19,17 +19,18 @@ import { IdentityStorage } from "../management/storage/identity-storage.ts";
 export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
-    readonly #accessEnded: () => Promise<void>;
+    readonly #endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>;
     readonly #runtime: (computerId: string) => ComputerBackendService;
+    /** Commits access changes with their connection checks inside the owning object. */
     constructor(
         storage: DurableObjectStorage,
         owns: (id: string) => boolean,
-        accessEnded: () => Promise<void>,
+        endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>,
         runtime: (computerId: string) => ComputerBackendService,
     ) {
         this.#storage = storage;
         this.#owns = owns;
-        this.#accessEnded = accessEnded;
+        this.#endAccess = endAccess;
         this.#runtime = runtime;
     }
 
@@ -133,7 +134,7 @@ export class ComputerChat {
             ...env,
             CHAT_COMPUTER_ID: computerId,
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
-            CHAT_ACCESS_ENDED: this.#accessEnded,
+            CHAT_END_ACCESS: this.#endAccess,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,
             DATABASE: this.#database,
         };

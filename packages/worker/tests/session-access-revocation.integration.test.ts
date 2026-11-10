@@ -1,4 +1,4 @@
-import { MortyClient, MortyPageRequest } from "@morty-build/client";
+import { MortyClient, MortyPageRequest, WsTransport } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
@@ -214,26 +214,35 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
             }),
             await opened.json(),
         );
+        const client = new MortyClient({
+            endpoint: window.endpoint,
+            computerId: window.computerId,
+            credentialProvider: { credential: async () => window.credential },
+            transport: new WsTransport(),
+        });
         const readConversation = () =>
-            new MortyClient({
-                endpoint: window.endpoint,
-                computerId: window.computerId,
-                credentialProvider: { credential: async () => window.credential },
-                transport: { fetch: cloud.relayRequest },
-            }).events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
+            client.events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
         await readConversation();
-        return { deviceId: device.id, token, readConversation };
+        /** Opens a live view of the conversation; its `completed` settles only once the view ends. */
+        const watchConversation = () =>
+            client.events.subscribeLive(
+                window.target,
+                { receive: async () => true, reconcile: async () => undefined },
+                AbortSignal.timeout(30_000),
+            );
+        return { deviceId: device.id, token, readConversation, watchConversation };
     };
     return { owner, runtime, request, project, joinBrowser };
 }
 
-test("Given two browsers reading their conversations, When the owner removes one of them, Then only the removed browser stops reading while the other keeps reading with the access it holds", async () => {
+test("Given two browsers reading their conversations, one watching it live, When the owner removes that one, Then its live view ends and it stops reading while the other keeps reading with the access it holds", async () => {
     const cloud = await createIdentityFixture();
     try {
         const { owner, runtime, request, project, joinBrowser } = await sharedComputer(cloud);
         await using _runtime = runtime;
         const removed = await joinBrowser("Removed browser");
         const kept = await joinBrowser("Kept browser");
+        const removedView = await removed.watchConversation();
 
         const ended = await request(
             `${project}/identity/v1/devices/${removed.deviceId}`,
@@ -243,6 +252,7 @@ test("Given two browsers reading their conversations, When the owner removes one
         );
 
         expect(await ended.json()).toEqual({ status: "device_access_ended" });
+        await expect(removedView.completed).rejects.toMatchObject({ code: "credential_revoked" });
         await expect(removed.readConversation()).rejects.toMatchObject({ code: "credential_revoked" });
         await expect(kept.readConversation()).resolves.toBeDefined();
     } finally {

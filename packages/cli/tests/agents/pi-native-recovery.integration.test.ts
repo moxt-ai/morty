@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
     decodeMessageKind,
@@ -21,109 +22,136 @@ import { PiFixture } from "../support/agents/pi.ts";
 import { prepareNewRealSession, type RealDaemonPeer, withRealDaemon } from "../support/agents/real-daemon.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
-test("Given a real pi native Session, When the active prompt is cancelled with a follow-up queued, Then the queued prompt restores that Session and completes", async () => {
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    let holdResponse = false;
-    await using provider = await FakeOpenAiProvider.start("gpt-4.1", "NATIVE_RECOVERY_REPLY", {
-        beforeFirstText: async () => {
-            if (holdResponse) {
-                entered.resolve();
-                await release.promise;
-            }
-        },
-    });
-    await using agent = await PiFixture.create(provider);
-    try {
-        await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
-            const nativeId = await prepareNewRealSession(peer, "pi");
-            const sendPrompt = (commandId: string): void =>
+function piChildProcesses(): readonly number[] {
+    return execFileSync("ps", ["-eo", "pid=,ppid=,comm="], { encoding: "utf8" })
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/u))
+        .filter(([, parent, command]) => Number(parent) === process.pid && command === "pi")
+        .map(([pid]) => Number(pid));
+}
+
+test.each(["responsive", "stalled"])(
+    "Given a %s real Pi native Session, When the active prompt is cancelled with a follow-up queued, Then the queued prompt restores that Session and completes",
+    async (state) => {
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let holdResponse = false;
+        await using provider = await FakeOpenAiProvider.start("gpt-4.1", "NATIVE_RECOVERY_REPLY", {
+            beforeFirstText: async () => {
+                if (holdResponse) {
+                    entered.resolve();
+                    await release.promise;
+                }
+            },
+        });
+        await using agent = await PiFixture.create(provider);
+        const stopped: number[] = [];
+        try {
+            await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
+                const nativeId = peer.target;
+                const sendPrompt = (commandId: string): void =>
+                    peer.send(
+                        encodeSessionPromptCommand({
+                            kind: "session.prompt",
+                            commandId,
+                            target: nativeId,
+                            attachments: [],
+                            prompt: "Reply with a short greeting, without using tools",
+                            disposition: SessionPromptDisposition.Append,
+                        }),
+                    );
+                const finish = async (commandId: string, reason: string): Promise<string> => {
+                    let text = "";
+                    for (;;) {
+                        const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
+                        if (
+                            event.type === "lifecycle-metadata" &&
+                            event.payload.kind === "prompt.failed" &&
+                            event.payload.commandId === commandId
+                        ) {
+                            throw new Error(JSON.stringify(event));
+                        }
+                        if (
+                            event.type === "acp" &&
+                            event.payload.sessionUpdate === "agent_message_chunk" &&
+                            event.payload.content.type === "text"
+                        ) {
+                            text += event.payload.content.text;
+                        }
+                        if (
+                            event.type === "lifecycle-metadata" &&
+                            event.payload.kind === "prompt.completed" &&
+                            event.payload.commandId === commandId
+                        ) {
+                            expect(event.payload.commandId).toBe(commandId);
+                            expect(event.target).toEqual(nativeId);
+                            expect(event.payload.stopReason).toBe(reason);
+                            return text;
+                        }
+                    }
+                };
+                const initial = randomUUID();
+                sendPrompt(initial);
+                expect(await finish(initial, "end_turn")).toContain("NATIVE_RECOVERY_REPLY");
+                holdResponse = true;
+                const active = randomUUID();
+                sendPrompt(active);
+                // Model output is held; the real Agent and daemon remain in control of cancellation.
+                await new Promise<void>((resolve, reject) => {
+                    const abort = (): void => reject(peer.signal.reason);
+                    peer.signal.addEventListener("abort", abort, { once: true });
+                    void entered.promise.then(() => {
+                        peer.signal.removeEventListener("abort", abort);
+                        resolve();
+                    });
+                });
+                if (state === "stalled") {
+                    stopped.push(...piChildProcesses());
+                    expect(stopped).toHaveLength(1);
+                    for (const pid of stopped) {
+                        process.kill(pid, "SIGSTOP");
+                    }
+                }
+                const queued = randomUUID();
+                sendPrompt(queued);
+                for (;;) {
+                    const message = await peer.nextMessage();
+                    if (
+                        decodeMessageKind(message) === SESSION_EVENT_KIND &&
+                        decodeSessionEventEnvelope(message).events.some(
+                            (event) =>
+                                event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed",
+                        )
+                    ) {
+                        break;
+                    }
+                }
                 peer.send(
-                    encodeSessionPromptCommand({
-                        kind: "session.prompt",
-                        commandId,
+                    encodeSessionCancelCommand({
+                        kind: "session.cancel",
+                        requestId: crypto.randomUUID(),
+                        commandId: active,
                         target: nativeId,
-                        attachments: [],
-                        prompt: "Reply with a short greeting, without using tools",
-                        disposition: SessionPromptDisposition.Append,
                     }),
                 );
-            const finish = async (commandId: string, reason: string): Promise<string> => {
-                let text = "";
-                for (;;) {
-                    const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
-                    if (
-                        event.type === "lifecycle-metadata" &&
-                        event.payload.kind === "prompt.failed" &&
-                        event.payload.commandId === commandId
-                    ) {
-                        throw new Error(JSON.stringify(event));
-                    }
-                    if (
-                        event.type === "acp" &&
-                        event.payload.sessionUpdate === "agent_message_chunk" &&
-                        event.payload.content.type === "text"
-                    ) {
-                        text += event.payload.content.text;
-                    }
-                    if (
-                        event.type === "lifecycle-metadata" &&
-                        event.payload.kind === "prompt.completed" &&
-                        event.payload.commandId === commandId
-                    ) {
-                        expect(event.payload.commandId).toBe(commandId);
-                        expect(event.target).toEqual(nativeId);
-                        expect(event.payload.stopReason).toBe(reason);
-                        return text;
-                    }
-                }
-            };
-            const initial = randomUUID();
-            sendPrompt(initial);
-            expect(await finish(initial, "end_turn")).toContain("NATIVE_RECOVERY_REPLY");
-            holdResponse = true;
-            const active = randomUUID();
-            sendPrompt(active);
-            // Model output is held; the real Agent and daemon remain in control of cancellation.
-            await new Promise<void>((resolve, reject) => {
-                const abort = (): void => reject(peer.signal.reason);
-                peer.signal.addEventListener("abort", abort, { once: true });
-                void entered.promise.then(() => {
-                    peer.signal.removeEventListener("abort", abort);
-                    resolve();
-                });
+                await finish(active, "cancelled");
+                holdResponse = false;
+                release.resolve();
+                expect(await finish(queued, "end_turn")).toContain("NATIVE_RECOVERY_REPLY");
+                expect(piChildProcesses().filter((pid) => stopped.includes(pid))).toEqual([]);
             });
-            const queued = randomUUID();
-            sendPrompt(queued);
-            for (;;) {
-                const message = await peer.nextMessage();
-                if (
-                    decodeMessageKind(message) === SESSION_EVENT_KIND &&
-                    decodeSessionEventEnvelope(message).events.some(
-                        (event) =>
-                            event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed",
-                    )
-                ) {
-                    break;
+        } finally {
+            release.resolve();
+            for (const pid of stopped) {
+                try {
+                    process.kill(pid, "SIGKILL");
+                } catch {
+                    // The daemon already retired the stalled process.
                 }
             }
-            peer.send(
-                encodeSessionCancelCommand({
-                    kind: "session.cancel",
-                    requestId: crypto.randomUUID(),
-                    commandId: active,
-                    target: nativeId,
-                }),
-            );
-            await finish(active, "cancelled");
-            holdResponse = false;
-            release.resolve();
-            expect(await finish(queued, "end_turn")).toContain("NATIVE_RECOVERY_REPLY");
-        });
-    } finally {
-        release.resolve();
-    }
-});
+        }
+    },
+);
 
 test("Given a real Pi native Session was previewed, When the user imports it, Then the daemon stays online and opens the Session", async () => {
     await using provider = await FakeOpenAiProvider.start("gpt-4.1", "PI_PREVIEW_IMPORT_REPLY");
