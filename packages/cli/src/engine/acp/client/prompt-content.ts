@@ -1,4 +1,4 @@
-import type { ContentBlock } from "@agentclientprotocol/sdk";
+import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../acp-error.ts";
 

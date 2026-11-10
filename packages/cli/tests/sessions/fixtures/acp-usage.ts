@@ -1,4 +1,4 @@
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { isRecord } from "../../support/acp-process.ts";
 export async function publishUsage(context: acp.AgentRequestContext<acp.PromptRequest>): Promise<void> {
     const configuredUsage = process.env["MORTY_FAKE_ACP_CONTEXT_USAGE"];

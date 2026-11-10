@@ -1,4 +1,4 @@
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import type { SessionConfigOption, SessionConfigValue } from "@morty-build/client/protocol";
 export const MAXIMUM_CONFIG_OPTIONS = 100;
 

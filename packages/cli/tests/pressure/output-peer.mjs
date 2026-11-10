@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { createConnection } from "node:net";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { readableWebStream, writableWebStream } from "../support/acp-process.ts";
 
 const control = process.env["MORTY_TEST_OUTPUT_CONTROL_PATH"];

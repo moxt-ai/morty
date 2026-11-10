@@ -38,9 +38,23 @@ if (configuration.VITE_SENTRY_DSN.length > 0) {
         dsn: configuration.VITE_SENTRY_DSN,
         environment: configuration.VITE_SENTRY_ENVIRONMENT,
         release: configuration.VITE_SENTRY_RELEASE,
-        sendDefaultPii: false,
-        integrations: [
-            breadcrumbsIntegration({ console: false, dom: false }),
+        // Collect nothing about the user, their requests or their queries beyond what the hooks below keep.
+        dataCollection: {
+            userInfo: false,
+            cookies: false,
+            httpHeaders: false,
+            httpBodies: [],
+            urlQueryParams: false,
+            graphQL: { document: false, variables: false },
+            genAI: { inputs: false, outputs: false },
+            mcp: { inputs: false, outputs: false },
+            databaseQueryData: false,
+            queues: false,
+        },
+        // Console output and DOM interactions are not recorded as breadcrumbs.
+        integrations: (defaults) => [
+            ...defaults.filter((integration) => integration.name !== "Console" && integration.name !== "Breadcrumbs"),
+            breadcrumbsIntegration({ dom: false }),
             browserTracingIntegration({
                 beforeStartSpan: (options) => ({ ...options, name: window.location.pathname }),
             }),
@@ -59,20 +73,20 @@ if (configuration.VITE_SENTRY_DSN.length > 0) {
             return breadcrumb;
         },
         beforeSend: sanitizeEvent,
-        beforeSendTransaction: sanitizeEvent,
         beforeSendSpan: (span) => {
             for (const key of ["url.full", "http.url"]) {
-                const value = span.data[key];
+                const value = span.attributes[key];
                 if (typeof value === "string") {
-                    span.data[key] = withoutQuery(value);
+                    span.attributes[key] = withoutQuery(value);
                 }
             }
-            if (span.description && /^https?:\/\//u.test(span.description)) {
-                span.description = withoutQuery(span.description);
-            } else if (span.description && span.op?.startsWith("http")) {
-                const parts = span.description.split(" ", 2);
-                span.description =
-                    parts.length === 2 ? `${parts[0]} ${withoutQuery(parts[1] ?? "")}` : withoutQuery(span.description);
+            const operation = span.attributes["sentry.op"];
+            if (/^https?:\/\//u.test(span.name)) {
+                span.name = withoutQuery(span.name);
+            } else if (typeof operation === "string" && operation.startsWith("http")) {
+                const parts = span.name.split(" ", 2);
+                span.name =
+                    parts.length === 2 ? `${parts[0]} ${withoutQuery(parts[1] ?? "")}` : withoutQuery(span.name);
             }
             return span;
         },

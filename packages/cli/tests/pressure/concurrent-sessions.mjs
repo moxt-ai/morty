@@ -13,7 +13,7 @@ import { setInterval } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { inspect } from "node:util";
 import { encodeSessionPromptCommand } from "../../../client/src/protocol/index.ts";
-import { seedMortyService } from "../../../platform-test-support/src/service-fixture.ts";
+import { seedMortyService } from "../../../relay-test-support/src/service-fixture.ts";
 
 // @no-uc: Performance; concurrent output must preserve transport and cancellation.
 // This opt-in E2E runner crosses the public Runtime, HTTP and WebSocket boundaries.
@@ -22,7 +22,7 @@ const repository = resolve(process.env["MORTY_PRESSURE_SOURCE_ROOT"] ?? resolve(
 const require = createRequire(join(repository, "packages/relay-test-support/package.json"));
 const { build } = require("esbuild");
 const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
-const pluginDirectory = join(repository, "packages/platform-test-support/node_modules/@cloudflare/vitest-plugin");
+const pluginDirectory = join(repository, "packages/relay-test-support/node_modules/@cloudflare/vitest-plugin");
 const pluginPackage = JSON.parse(await readFile(join(pluginDirectory, "package.json"), "utf8"));
 const { readD1Migrations } = await import(pathToFileURL(join(pluginDirectory, pluginPackage.main)));
 const { WebSocket } = require("ws");

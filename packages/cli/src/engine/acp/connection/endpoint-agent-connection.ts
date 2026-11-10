@@ -1,4 +1,4 @@
-import type { ClientConnection } from "@agentclientprotocol/sdk";
+import type { ClientConnection } from "@agentclientprotocol/sdk/unstable";
 import type { InProcessAcpEndpoint } from "../agent/in-process-endpoint.ts";
 import type { AgentConnection } from "./agent-connection.ts";
 import { raceAgentOperation } from "./agent-operation.ts";

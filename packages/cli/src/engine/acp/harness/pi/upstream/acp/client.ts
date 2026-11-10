@@ -5,7 +5,7 @@ import {
     methods,
     type RequestPermissionRequest,
     type RequestPermissionResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { PiSessionNotification } from "./session-update.js";
 
 export interface PiAcpClient {

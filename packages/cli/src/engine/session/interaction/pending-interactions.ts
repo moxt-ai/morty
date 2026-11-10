@@ -2,7 +2,7 @@ import type {
     CreateElicitationResponse,
     ElicitationContentValue,
     RequestPermissionResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 
 import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client/protocol";
 

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { isRecord, readAgentName, readAgentVersion } from "../../support/acp-process.ts";
 
 function failFirstRuntimeInitialization(clientCapabilities: unknown, selectedAgentName: string): void {

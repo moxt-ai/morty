@@ -1,4 +1,4 @@
-import type { ClientConnection, InitializeResponse } from "@agentclientprotocol/sdk";
+import type { ClientConnection, InitializeResponse } from "@agentclientprotocol/sdk/unstable";
 
 import type { AgentConnectionFactory } from "../../acp/connection/agent-connection.ts";
 import type { ResolvedExecutable } from "../../util/process/executable.ts";

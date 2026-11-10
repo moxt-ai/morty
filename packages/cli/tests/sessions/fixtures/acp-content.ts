@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 
 export async function publishContentScenario(
     context: acp.AgentRequestContext<acp.PromptRequest>,

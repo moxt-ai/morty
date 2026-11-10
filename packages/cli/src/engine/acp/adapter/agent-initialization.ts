@@ -1,4 +1,4 @@
-import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { revalidateExecutable } from "../../util/process/executable.ts";
 import { truncate } from "../../util/value-utils.ts";
 import { AcpExecutionError } from "../acp-error.ts";

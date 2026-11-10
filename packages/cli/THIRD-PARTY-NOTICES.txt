@@ -3,7 +3,7 @@ Each component retains its own license and terms.
 
 --------------------------------------------------------------------------------
 
-Component: @agentclientprotocol/sdk@1.4.0
+Component: @agentclientprotocol/sdk@2.4.0
 Declared license: Apache-2.0
 
 --- LICENSE ---
@@ -739,7 +739,7 @@ Declared license: Apache-2.0
 
 --------------------------------------------------------------------------------
 
-Component: semver@7.8.5
+Component: semver@7.8.6
 Declared license: ISC
 
 --- LICENSE ---

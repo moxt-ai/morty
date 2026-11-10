@@ -1,5 +1,10 @@
 import type { ChildProcess } from "node:child_process";
-import { type ClientConnection, methods, ndJsonStream, type SessionNotification } from "@agentclientprotocol/sdk";
+import {
+    type ClientConnection,
+    methods,
+    ndJsonStream,
+    type SessionNotification,
+} from "@agentclientprotocol/sdk/unstable";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
 import type { AcpEndpointTermination } from "../../../src/engine/acp/agent/in-process-endpoint.ts";
 import type { AgentConnection, AgentConnectionOptions } from "../../../src/engine/acp/connection/agent-connection.ts";

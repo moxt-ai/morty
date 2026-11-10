@@ -1,4 +1,4 @@
-import type { AgentApp } from "@agentclientprotocol/sdk";
+import type { AgentApp } from "@agentclientprotocol/sdk/unstable";
 import type { AgentModelEffort, LifecycleMetadata } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { IdentifiedSessionNotification } from "../connection/session-notification.ts";

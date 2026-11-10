@@ -5,7 +5,7 @@ import {
     agent as createAgentApp,
     methods,
     PROTOCOL_VERSION,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { captureProcessTree, type ProcessTreeIdentity, stopProcessTree } from "../../../util/process/executable.ts";
 import type {

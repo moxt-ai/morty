@@ -4,7 +4,7 @@ import {
     agent as createAgentApp,
     methods,
     type SessionNotification,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type {
     AcpEndpointTermination,
     InProcessAcpEndpoint,

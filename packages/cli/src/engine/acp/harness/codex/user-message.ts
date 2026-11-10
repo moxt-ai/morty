@@ -44,4 +44,4 @@ export function userMessageUpdates(
     });
 }
 
-import type { ContentBlock } from "@agentclientprotocol/sdk";
+import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
