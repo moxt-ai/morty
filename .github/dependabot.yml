@@ -8,12 +8,33 @@ updates:
       day: monday
       time: "09:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    # Each risk group and each major update holds its own pull request.
+    open-pull-requests-limit: 10
     ignore:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+    # Groups follow risk, so a breaking change in one area never holds back the others. A dependency joins the first
+    # group whose patterns match it.
     groups:
+      # Agent and protocol SDKs change behavior the Runtime adapts to.
+      agent-sdks:
+        patterns:
+          - "@anthropic-ai/*"
+          - "@agentclientprotocol/*"
+          - "@openai/*"
+        update-types:
+          - minor
+          - patch
+      # The Workers' build and runtime toolchain.
+      cloudflare:
+        patterns:
+          - "wrangler"
+          - "miniflare"
+          - "@cloudflare/*"
+        update-types:
+          - minor
+          - patch
       npm-minor-patch:
         patterns:
           - "*"
