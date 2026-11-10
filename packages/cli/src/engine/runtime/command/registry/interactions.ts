@@ -63,7 +63,7 @@ export const sessionCancelCommand: RuntimeCommand = {
                 }
             } else {
                 const cancellation = turn.requestCancellation();
-                if (cancellation.kind === "running") {
+                if (cancellation.kind === "execution") {
                     await sessions.cancelPrompt(target, cancellation.execution, signal);
                 }
                 await operations.settlement(commandId, target, signal);
@@ -80,7 +80,7 @@ export const sessionCancelCommand: RuntimeCommand = {
 
 export const sessionCancelBeforeStartCommand: RuntimeCommand = {
     kind: SESSION_CANCEL_BEFORE_START_KIND,
-    handle: ({ eventProjection, operations, sessionTurns, signal, socket }, message): void => {
+    handle: ({ eventProjection, operations, sessions, sessionTurns, signal, socket }, message): void => {
         if (message.kind !== SESSION_CANCEL_BEFORE_START_KIND) {
             throw new Error("Command kind mismatch");
         }
@@ -133,8 +133,15 @@ export const sessionCancelBeforeStartCommand: RuntimeCommand = {
             );
             return;
         }
-        // No await separates checking admission from requesting cancellation.
-        turn.requestCancellation();
+        // No await separates checking admission from requesting cancellation. A prompt the Session already began
+        // executing is withdrawn by cancelling that execution: the cancellation is recorded at once, so it never
+        // starts, and the reply below follows from the command's progress alone.
+        const cancellation = turn.requestCancellation();
+        if (cancellation.kind === "execution") {
+            void sessions.cancelPrompt(target, cancellation.execution, signal).catch((error: unknown) => {
+                console.error("Morty daemon could not stop a withdrawn prompt's execution", error);
+            });
+        }
         void operations
             .progress(commandId, target, signal)
             .then((progress) => {

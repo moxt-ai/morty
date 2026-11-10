@@ -7,6 +7,7 @@ import {
     type LastTurnOutcome,
     type LifecycleMetadata,
     type NativeSessionTarget,
+    type PromptTerminalLifecycle,
     promptCompletion,
     type SessionEventPayload,
     type SessionLiveEvent,
@@ -82,27 +83,18 @@ const isStarted = (fate: CommandFate): boolean => fate.kind === "started" || fat
 
 const isUnsettled = (fate: CommandFate): fate is UnsettledFate => fate.kind === "pending" || fate.kind === "started";
 
-const lifecyclePayload = (outcome: string) => {
-    const event = decodeKnownSessionEventPayload(JSON.parse(outcome));
-    return event?.type === "lifecycle-metadata" ? event.payload : undefined;
-};
-
-/** A restart failed the command before it started, so its identifier may run again. */
-function restartedBeforeStart(outcome: string): boolean {
-    const payload = lifecyclePayload(outcome);
-    return payload?.kind === "prompt.failed-before-start" && payload.code === "runtime_restarted";
-}
-
 type UnsettledFate = Extract<CommandFate, { readonly kind: "pending" | "started" }>;
 type SettledCommandFate = Exclude<CommandFate, UnsettledFate>;
 
-/** How an unsettled command settles with `outcome`: a completion as cancelled before it started is a cancellation. */
-function settledFate(fate: UnsettledFate, outcome: string): SettledCommandFate {
+/**
+ * How an unsettled command settles, from the terminal event it recorded: a completion as cancelled before it started
+ * is a cancellation. The stored outcome is that event's content-free form.
+ */
+function settledFate(fate: UnsettledFate, terminal: PromptTerminalLifecycle, outcome: string): SettledCommandFate {
     if (fate.kind === "started") {
         return { kind: "settled-after-start", startedAt: fate.startedAt, outcome };
     }
-    const payload = lifecyclePayload(outcome);
-    return payload?.kind === "prompt.completed" && promptCompletion(payload).kind === "cancelled"
+    return terminal.kind === "prompt.completed" && promptCompletion(terminal).kind === "cancelled"
         ? { kind: "cancelled", outcome }
         : { kind: "settled-before-start", outcome };
 }
@@ -136,8 +128,10 @@ function commandStanding(command: LedgerCommand | undefined, sessionTarget: Nati
             return { kind: "retained", command };
         case "cancelled":
             return fate.outcome === null ? { kind: "cancelled" } : { kind: "retained", command };
+        case "interrupted-before-start":
+            return { kind: "retryable" };
         case "settled-before-start":
-            return restartedBeforeStart(fate.outcome) ? { kind: "retryable" } : { kind: "retained", command };
+            return { kind: "retained", command };
         case "settled-after-start":
             return fate.outcome === null
                 ? { kind: "expired", commandHash: command.commandHash }
@@ -212,9 +206,16 @@ export class ExecutionReceipts {
     readonly #publishCount = (): void => {
         this.#onCount(this.#ledger.unsettled().filter((commandId) => !this.#shutdownSettlements.has(commandId)).length);
     };
-    /** Settles an unsettled command. `agentOutcome` is the outcome with the Agent's text, when it differs. */
-    readonly #settle = (commandId: string, fate: UnsettledFate, outcome: string, agentOutcome?: string): void => {
-        const settled = settledFate(fate, outcome);
+    /**
+     * Settles an unsettled command with `settled`, whose stored outcome is `outcome`. `agentOutcome` is the outcome with
+     * the Agent's text, when it differs.
+     */
+    readonly #settle = (
+        commandId: string,
+        settled: SettledCommandFate,
+        outcome: string,
+        agentOutcome?: string,
+    ): void => {
         if (agentOutcome !== undefined) {
             this.#agentOutcomes.set(commandId, agentOutcome);
         }
@@ -484,16 +485,15 @@ export class ExecutionReceipts {
         }
         const outcome = { type: "lifecycle-metadata", payload, recordedAt: event.recordedAt };
         if (payload.kind === "prompt.completed") {
-            this.#settle(payload.commandId, fate, JSON.stringify(outcome));
+            const stored = JSON.stringify(outcome);
+            this.#settle(payload.commandId, settledFate(fate, payload, stored), stored);
             return;
         }
-        const contentFree = { ...payload, message: "The local Agent could not complete the request" };
-        this.#settle(
-            payload.commandId,
-            fate,
-            JSON.stringify({ ...outcome, payload: contentFree }),
-            JSON.stringify(outcome),
-        );
+        const contentFree = JSON.stringify({
+            ...outcome,
+            payload: { ...payload, message: "The local Agent could not complete the request" },
+        });
+        this.#settle(payload.commandId, settledFate(fate, payload, contentFree), contentFree, JSON.stringify(outcome));
     };
     readonly recover = (): readonly RecoveredOutcome[] => {
         const recovered: RecoveredOutcome[] = [];
@@ -527,7 +527,15 @@ export class ExecutionReceipts {
             };
             const recordedAt = new Date().toISOString();
             recovered.push({ kind: "recorded", target: command.target, event, recordedAt });
-            this.#settle(command.commandId, fate, JSON.stringify({ ...event, recordedAt }));
+            const stored = JSON.stringify({ ...event, recordedAt });
+            // The restart, not the command, ended a command that had not started, so its identifier may run again.
+            this.#settle(
+                command.commandId,
+                fate.kind === "started"
+                    ? { kind: "settled-after-start", startedAt: fate.startedAt, outcome: stored }
+                    : { kind: "interrupted-before-start", outcome: stored },
+                stored,
+            );
         }
         return recovered;
     };
@@ -561,7 +569,6 @@ export class ExecutionReceipts {
             case "expired":
                 return standing.commandHash === commandHash ? { kind: "expired" } : { kind: "conflict" };
             case "retryable":
-            // A restart failed it before it started: the admission replaces that failure.
             case "unseen":
                 break;
             default:
@@ -571,7 +578,13 @@ export class ExecutionReceipts {
             return { kind: "refused" };
         }
         const attemptId = randomUUID();
-        this.#ledger.admit({ attemptId, commandHash, commandId, target: sessionTarget });
+        const identity = { attemptId, commandHash, commandId, target: sessionTarget };
+        if (standing.kind === "retryable") {
+            // A restart failed it before it started: the admission replaces that failure.
+            this.#ledger.readmitInterrupted(identity);
+        } else {
+            this.#ledger.admit(identity);
+        }
         this.#publishCount();
         return { attemptId, commandId, kind: "accepted" };
     };

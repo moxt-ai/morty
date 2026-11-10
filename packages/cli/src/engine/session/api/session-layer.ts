@@ -90,7 +90,11 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         throw error;
     }
     const sessionStore = new SqliteSessionStore(new AcpSessionTable(sessionDatabase), events);
-    const activeSessions = new SessionTurns(operations, options.turnActivity);
+    const activeSessions = new SessionTurns(
+        operations,
+        (target, commandId) => manager.executes(target, commandId),
+        options.turnActivity,
+    );
     const sessionCreations = new SessionCreations(new SessionCreationTable(sessionDatabase));
     const directories = new WorkspaceDirectoryService(defaultWorkspace);
     const manager = new SessionManager({

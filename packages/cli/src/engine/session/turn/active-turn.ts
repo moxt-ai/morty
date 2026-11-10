@@ -42,10 +42,26 @@ type TurnAdmission =
     | { readonly kind: "promoted" }
     | { readonly kind: "admitted"; readonly dispatch: PromptDispatch; readonly fromQueue: boolean };
 
+/**
+ * What cancelling a prompt asks for. Before the Session begins executing it, the prompt is withdrawn: its admission
+ * and preparation are aborted, and the abort reason is the record of that withdrawal. Once the Session executes it, or
+ * a steering prompt joined the execution it steers, the cancellation belongs to that execution.
+ */
 export type TurnCancellation =
-    | { readonly kind: "already-requested" }
-    | { readonly kind: "pending" }
-    | { readonly kind: "running"; readonly execution: string };
+    | { readonly kind: "withdrawn" }
+    | { readonly kind: "execution"; readonly execution: string };
+
+/** The reason a prompt's own signal is aborted when it is withdrawn before the Session began executing it. */
+class PromptWithdrawal extends Error {
+    constructor() {
+        super("The Agent turn was cancelled before it started");
+        this.name = "PromptWithdrawal";
+    }
+}
+
+/** Whether `signal` was aborted because its prompt was withdrawn, not because the Runtime stopped. */
+export const isWithdrawn = (signal: AbortSignal): boolean =>
+    signal.aborted && signal.reason instanceof PromptWithdrawal;
 
 export class ActiveRuntimeTurn {
     readonly attemptId: string;
@@ -55,7 +71,7 @@ export class ActiveRuntimeTurn {
     readonly #finished = Promise.withResolvers<void>();
     readonly #started: () => boolean;
     readonly #startedAt: () => string | undefined;
-    #cancellationRequested = false;
+    readonly #executing: () => boolean;
     #admission: TurnAdmission = { kind: "waiting" };
     #sequence = 0;
     #interaction: Extract<
@@ -65,19 +81,21 @@ export class ActiveRuntimeTurn {
 
     /**
      * `started` and `startedAt` read the command's execution receipt, the single owner of whether and when the command
-     * started.
+     * started. `executing` asks the Session whether it began executing the command.
      */
     constructor(
         command: SessionPromptCommand,
         attemptId: string,
         started: () => boolean,
         startedAt: () => string | undefined,
+        executing: () => boolean,
     ) {
         this.attemptId = attemptId;
         this.command = command;
         this.#controller = new AbortController();
         this.#started = started;
         this.#startedAt = startedAt;
+        this.#executing = executing;
     }
 
     readonly enqueue = (): void => {
@@ -210,22 +228,18 @@ export class ActiveRuntimeTurn {
         sameNativeSession(this.command.target, sessionTarget) && this.#interaction?.interactionId === interactionId;
 
     /**
-     * Before the command starts, cancellation withdraws it by aborting its own admission and preparation. Once it
-     * started, the Agent execution it belongs to must be asked to stop.
+     * Withdraws the prompt while the Session has not begun executing it; otherwise names the execution whose
+     * cancellation the caller requests. Withdrawing again, or after the Runtime stopped the prompt, changes nothing.
      */
     readonly requestCancellation = (): TurnCancellation => {
-        if (this.#cancellationRequested) {
-            return { kind: "already-requested" };
+        if (this.#started() || this.#executing()) {
+            return { kind: "execution", execution: this.execution() };
         }
-        this.#cancellationRequested = true;
-        if (!this.#started()) {
-            this.#controller.abort(new Error("The Agent turn was cancelled before it started"));
-            return { kind: "pending" };
+        if (!this.#controller.signal.aborted) {
+            this.#controller.abort(new PromptWithdrawal());
         }
-        return { kind: "running", execution: this.execution() };
+        return { kind: "withdrawn" };
     };
-
-    readonly cancellationRequested = (): boolean => this.#cancellationRequested;
 
     get signal(): AbortSignal {
         return this.#controller.signal;

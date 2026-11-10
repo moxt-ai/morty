@@ -647,14 +647,18 @@ export class SessionManager {
             }),
         );
 
-    /** Cancels the named command's Agent execution; a command that is not executing has nothing to stop. */
-    readonly cancelPrompt = async (
+    /**
+     * Cancels the named command's execution in whatever phase it is: a preparing execution never starts, a started
+     * one has its Agent stopped. The cancellation is recorded before this returns; a command that is not executing has
+     * nothing to stop.
+     */
+    readonly cancelPrompt = (
         target: NativeSessionTarget,
         commandId: string,
         signal: AbortSignal = AbortSignal.timeout(30_000),
     ): Promise<void> =>
-        this.#operations.run({ signal }, async ({ signal }) => {
-            await this.#executions.cancel(target, commandId, async () => {
+        this.#executions.cancel(target, commandId, () =>
+            this.#operations.run({ signal }, async ({ signal }) => {
                 const runtime = this.#executionProcesses.get(target);
                 if (runtime !== undefined) {
                     const outcome = await runtime.cancel(signal);
@@ -672,8 +676,12 @@ export class SessionManager {
                         }
                     }
                 }
-            });
-        });
+            }),
+        );
+
+    /** Whether the Session began executing the command and still holds it; its cancellation is then the Session's. */
+    readonly executes = (target: NativeSessionTarget, commandId: string): boolean =>
+        this.#executions.executes(target, commandId);
 
     /** Whether a steering prompt can join the named execution: the one rule every steering check asks. */
     readonly acceptsSteering = (target: NativeSessionTarget, targetCommandId: string): boolean =>
@@ -728,23 +736,22 @@ export class SessionManager {
         this.#operations.run(options, async (options) => {
             // A close can land after the prompt was prepared; fail before the Session is reported working.
             this.#admitNow(options.target, { kind: "prompt" });
-            this.#executions.begin(options.target, options.commandId);
-            // The command's own turn records a cancellation that arrives before its execution begins.
-            const cancelled = (): boolean =>
-                options.cancellationRequested?.() === true ||
-                this.#executions.cancellationRequested(options.target, options.commandId);
+            const preparation = AbortSignal.any([
+                options.signal,
+                this.#executions.begin(options.target, options.commandId),
+            ]);
+            // From here on the execution's cancellation is the only one: a cancellation before it began withdrew the
+            // prompt before this call.
+            const cancelled = (): boolean => this.#executions.cancellationRequested(options.target, options.commandId);
             try {
-                if (cancelled()) {
-                    return { stopReason: "cancelled" };
-                }
-                const runtime = await this.ensureSession(options);
+                const runtime = await this.ensureSession({ ...options, signal: preparation });
                 // An import, fork, or history read may have begun while the Agent process was readied.
                 this.#admitNow(options.target, { kind: "native-exclusive" });
                 if (cancelled()) {
                     return { stopReason: "cancelled" };
                 }
                 try {
-                    await runtime.preparePrompt(options.signal);
+                    await runtime.preparePrompt(preparation);
                     // Nothing awaits between this check and the Agent receiving the prompt.
                     if (cancelled()) {
                         return { stopReason: "cancelled" };
