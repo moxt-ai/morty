@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { BrandedType } from "../../util/branded-type.ts";
 
 const path = z
     .string()
@@ -6,10 +7,13 @@ const path = z
     .max(2_048)
     .refine((value) => !value.includes("\0"));
 const title = z.string().transform((value) => value.slice(0, 500));
-export const sessionIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/);
+/** The session identifier assigned by the harness provider. */
+export type SessionId = BrandedType<string, "SessionId">;
+const sessionIdValueSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/);
+export const sessionIdSchema = sessionIdValueSchema.brand<"SessionId">();
 const nativeSessionInfoSchema = z
     .object({
-        sessionId: sessionIdSchema,
+        sessionId: sessionIdValueSchema,
         cwd: path,
         title: title.nullish(),
         updatedAt: z.iso.datetime({ offset: true }).nullish(),
