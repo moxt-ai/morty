@@ -25,6 +25,6 @@ export const auditEvent = sqliteTable(
             "audit_event_computer_management",
             sql`${t.category} != 'computer_management' or (${t.actorRef} is not null and ${t.subjectId} is not null and ${t.outcome} is not null)`,
         ),
-        index("audit_events_category_time").on(t.category, sql`${t.recordedAt} desc`, sql`${t.auditId} desc`),
+        index("audit_events_category_time").on(t.category, t.recordedAt, t.auditId),
     ],
 );

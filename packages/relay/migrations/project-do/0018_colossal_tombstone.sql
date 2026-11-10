@@ -21,4 +21,4 @@ INSERT INTO `__new_audit_events`("category", "audit_id", "computer_id", "actor_k
 DROP TABLE `audit_events`;--> statement-breakpoint
 ALTER TABLE `__new_audit_events` RENAME TO `audit_events`;--> statement-breakpoint
 PRAGMA foreign_keys=ON;--> statement-breakpoint
-CREATE INDEX `audit_events_category_time` ON `audit_events` (`category`,`"recorded_at" desc`,`"audit_id" desc`);
+CREATE INDEX `audit_events_category_time` ON `audit_events` (`category`,`recorded_at`,`audit_id`);

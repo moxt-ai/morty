@@ -17,7 +17,6 @@ export class ComputerRelay extends ProductionComputerRelay {
             const computerId = await request.text();
             await this.revokeRuntime(computerId, {
                 computerId,
-                ownerId: null,
                 now: Date.now(),
                 actorKind: "system",
                 actorId: computerId,
