@@ -37,8 +37,8 @@ export class SessionTurns {
     readonly get = (commandId: string, sessionTarget: NativeSessionTarget): ActiveRuntimeTurn | undefined =>
         this.#bySessionTarget.get(sessionTarget)?.get(commandId);
 
-    readonly start = (command: SessionPromptCommand, attemptId: string): ActiveRuntimeTurn => {
-        const turn = this.session(command.target).start(command, attemptId);
+    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
+        const turn = this.session(command.target).start(command, attemptId, onQueued);
         this.#activity.start(turn);
         return turn;
     };
@@ -84,11 +84,8 @@ export class SessionTurns {
         return { turn, queued };
     };
 
-    readonly admitAndWait = async (
-        turn: ActiveRuntimeTurn,
-        waitSignal: AbortSignal,
-        onQueued: () => void,
-    ): Promise<PromptDispatch> => this.session(turn.command.target).admitAndWait(turn, waitSignal, onQueued);
+    readonly admitAndWait = async (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<PromptDispatch> =>
+        this.session(turn.command.target).admitAndWait(turn, waitSignal);
 
     /** Discards empty session states so the index does not grow unboundedly. */
     readonly sweep = (): void => {

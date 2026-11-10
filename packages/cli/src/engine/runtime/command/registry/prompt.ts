@@ -98,7 +98,6 @@ export const sessionPromptCommand: RuntimeCommand = {
             });
             return;
         }
-        const turn = context.sessionTurns.start(message, receipt.attemptId);
         context.eventProjection.requested(message, { harness: session.harness, directory: session.cwd });
         const { commandId, target } = message;
         // A prompt is answered once, at the first of: it entered the queue, it started, or it ended without starting.
@@ -109,6 +108,16 @@ export const sessionPromptCommand: RuntimeCommand = {
                 reply(context.socket, { kind: "session.prompt.accepted", requestId: commandId, target, state });
             }
         };
+        const queueChanged = (): void => {
+            void context.eventProjection.queueChanged(target, commandId).catch((error: unknown) => {
+                console.error("Could not record queue change", error);
+            });
+        };
+        // A prompt behind a running turn enters the queue as it arrives, so the queue follows arrival order.
+        const turn = context.sessionTurns.start(message, receipt.attemptId, () => {
+            queueChanged();
+            accepted("queued");
+        });
         const ended = (): void => {
             if (answered) {
                 return;
@@ -130,11 +139,6 @@ export const sessionPromptCommand: RuntimeCommand = {
                 }
             })
             .catch(() => undefined);
-        const queueChanged = (): void => {
-            void context.eventProjection.queueChanged(target, commandId).catch((error: unknown) => {
-                console.error("Could not record queue change", error);
-            });
-        };
         void executePrompt({
             eventProjection: context.eventProjection,
             command: message,
@@ -156,11 +160,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             sessions: context.sessions,
             attemptId: receipt.attemptId,
             epoch: turn.epoch,
-            waitForSessionAdmission: (signal) =>
-                context.sessionTurns.admitAndWait(turn, signal, () => {
-                    queueChanged();
-                    accepted("queued");
-                }),
+            waitForSessionAdmission: (signal) => context.sessionTurns.admitAndWait(turn, signal),
             signal: turn.signal,
             cancellationRequested: turn.cancellationRequested,
         })
