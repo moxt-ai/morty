@@ -1,4 +1,4 @@
-import { type NativeSessionMap, nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
+import { nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import {
     ArrowLeftRight,
@@ -52,16 +52,13 @@ import {
     conversationDirectorySessions,
 } from "../../view-models/chat/conversation-directory-store.ts";
 import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../view-models/chat/conversation-groups.ts";
-import {
-    type ConversationListStatus,
-    conversationListStatus,
-    hasUnreadConversation,
-} from "../../view-models/chat/conversation-status-store.ts";
+import { conversationListStatus, hasUnreadConversation } from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
 import { noSessionExecution } from "../../view-models/chat/session-execution.ts";
+import { noSessionPane } from "../../view-models/chat/session-pane-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { AccessTerm } from "./access-term.tsx";
 import {
@@ -232,7 +229,7 @@ function ManagedSessionDirectoryList({
     /** The phone sheet has no persistent selection elsewhere, so it marks the open Session with a check. */
     readonly showSelectedIndicator?: boolean;
     readonly connectionStatus: BotConnectionStatus;
-    readonly sessionStatuses: Pick<NativeSessionMap<ConversationListStatus>, "get">;
+    readonly sessionStatuses: Parameters<typeof conversationListStatus>[1];
     /** The open Session's pane, whose turn and delivery decide that Session's status. */
     readonly openPane: Parameters<typeof conversationListStatus>[2];
     readonly onConnectAgent: (() => void) | null;
@@ -459,12 +456,12 @@ export function ConversationSidebar({
     const home = useStore(workspace.home);
     const draftSettings = useStore(workspace.draftControls, (state) => state.settings);
     const pane = workspace.sessionPane();
-    const paneSource = useStore(pane?.store ?? workspace.home);
+    const paneConnection = useStore(pane?.store ?? noSessionPane, (state) => state.connection);
     const paneDelivery = useStore(pane?.delivery ?? noSessionDelivery, (state) => state.state);
     const paneExecution = useStore(pane?.execution ?? noSessionExecution, (state) => state.state);
     const executionContext =
-        home.selection.kind === "ready" && pane !== null && "connection" in paneSource
-            ? sessionExecutionContext(pane.session, home, paneSource.connection)
+        home.selection.kind === "ready" && pane !== null
+            ? sessionExecutionContext(pane.session, home, paneConnection)
             : pendingExecutionContext(home, draftSettings);
     const runtime = home.runtimeConfiguration?.runtime ?? null;
     const computerName = runtime?.machineName ?? "";
@@ -474,7 +471,7 @@ export function ConversationSidebar({
     const titles = useStore(workspace.titles, (state) => state.titles);
     const calendarDay = useStore(workspace.directory, (state) => state.calendarDay);
 
-    const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
+    const sessionStatuses = useStore(workspace.statuses, (state) => state.observations);
     const dialogState = useStore(dialogs);
     const mobileNavOpen = dialogState.mobileNavOpen;
     const mobileSessionsOpen = dialogState.mobileSessionsOpen;
@@ -513,10 +510,10 @@ export function ConversationSidebar({
         connectionStatus,
         sessionStatuses,
         openPane:
-            home.selection.kind === "ready" && pane !== null && "connection" in paneSource
+            home.selection.kind === "ready" && pane !== null
                 ? {
                       sessionTarget: pane.session.result.ready.target,
-                      pane: paneSource,
+                      connection: paneConnection,
                       execution: paneExecution,
                       delivery: paneDelivery,
                   }
