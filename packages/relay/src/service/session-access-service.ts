@@ -8,7 +8,7 @@ import {
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
-import type { PlatformControlPlaneService } from "./platform-control-plane-service.ts";
+import type { ComputerManagementService } from "./computer-management-service.ts";
 
 export type SessionAccessTarget =
     | { readonly kind: "session"; readonly computerId: string; readonly target: NativeSessionTarget }
@@ -56,12 +56,12 @@ function sessionScopedPermission(permission: ProjectPermission): ProjectPermissi
 
 export class SessionAccessService {
     readonly #applications: AppCredentialAuthenticationService;
-    readonly #control: PlatformControlPlaneService;
+    readonly #control: ComputerManagementService;
     readonly #signer: SessionAccessSigner;
 
     constructor(
         applications: AppCredentialAuthenticationService,
-        control: PlatformControlPlaneService,
+        control: ComputerManagementService,
         signer: SessionAccessSigner,
     ) {
         this.#applications = applications;
@@ -88,7 +88,7 @@ export class SessionAccessService {
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
-        const access = await this.#control.authorizePlatformCredential(
+        const access = await this.#control.authorizeRelayCredential(
             target.computerId,
             appCredential,
             ProjectPermission.SessionWrite,

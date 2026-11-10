@@ -1,12 +1,12 @@
 import { MortyApiError } from "@morty-build/client";
 import { expect, it } from "vitest";
-import { startTestPlatform } from "../support/platform.ts";
+import { startTestRelay } from "../support/relay.ts";
 
 it("Given two clients holding one configuration revision, When they edit concurrently, Then only one edit commits and a stale retry cannot overwrite it", async () => {
     const cancellation = new AbortController();
-    await using platform = await startTestPlatform();
+    await using relay = await startTestRelay();
     try {
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Session configuration authority",
@@ -15,7 +15,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
             },
             cancellation.signal,
         );
-        const runtime = await platform.connectAgent(project.computerId);
+        const runtime = await relay.connectAgent(project.computerId);
         const ready = await runtime.client.sessions.create(
             {
                 harness: "claude",

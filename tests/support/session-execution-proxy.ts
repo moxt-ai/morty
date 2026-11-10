@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, request } from "node:http";
 import { decodeNativeSessionResult } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 
-/** Forwards real traffic unchanged, with controllable ordering at the Platform transport boundary. */
+/** Forwards real traffic unchanged, with controllable ordering at the Relay transport boundary. */
 export async function createSessionExecutionProxy(upstream: string) {
     const responseHolds = new Map<string, (release: () => void) => void>();
     const takeResponseHold = (path: string) => {

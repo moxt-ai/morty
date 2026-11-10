@@ -36,7 +36,7 @@ export interface SetupRuntime {
 
 export interface SetupHost {
     /**
-     * Where this computer keeps Morty's private state. Empty selects the platform's local application data directory,
+     * Where this computer keeps Morty's private state. Empty selects the operating system's local application data directory,
      * which is not synced to the user's other computers.
      */
     readonly state: string;
@@ -459,8 +459,8 @@ function bindingNextStep(code: string, harness: string): string {
         case "authentication_required":
             return `Ask the user to sign in to ${harness} on this computer; you cannot sign in for them. When they confirm, rerun setup; it reuses this computer's Machine.`;
         case "TIMEOUT":
-        case "PLATFORM_TIMEOUT":
-        case "PLATFORM_UNAVAILABLE":
+        case "RELAY_TIMEOUT":
+        case "RELAY_UNAVAILABLE":
             return `Rerun setup without changing anything; it reuses this computer's Machine. The Morty service or ${harness} may have been briefly unavailable. If it fails the same way again, confirm ${harness} answers a prompt in the working directory.`;
         default:
             return `Confirm ${harness} answers a prompt in the working directory and fix what stops it, then rerun setup; it reuses this computer's Machine. If ${harness} answers and setup fails the same way again, report error.code to the user.`;

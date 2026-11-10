@@ -88,19 +88,19 @@ def verify(origin, app_credential, root_key, revision):
 
 
 def main():
-    # Releases verify production; the merge queue runs the same check against the release's local platform.
-    production = read(ROOT / 'deployment/targets.json')['environments']['production']['platform_origin']
+    # Releases verify production; the merge queue runs the same check against the release's local relay.
+    production = read(ROOT / 'deployment/targets.json')['environments']['production']['relay_origin']
     parser = argparse.ArgumentParser()
-    parser.add_argument('--platform-origin', default=production)
+    parser.add_argument('--relay-origin', default=production)
     parser.add_argument('--evidence', type=Path, default=ROOT / 'session-access-evidence.json')
     args = parser.parse_args()
-    # The credentials may only reach the pinned production platform or a local one.
-    origin = urllib.parse.urlsplit(args.platform_origin)
+    # The credentials may only reach the pinned production relay or a local one.
+    origin = urllib.parse.urlsplit(args.relay_origin)
     local = origin.scheme == 'http' and origin.hostname in {'127.0.0.1', 'localhost', '::1'}
-    if args.platform_origin != production and not (local and origin.path == '' and not origin.query and not origin.fragment and origin.username is None):
-        raise ValueError('Session access is verified only on the production platform or a local one')
+    if args.relay_origin != production and not (local and origin.path == '' and not origin.query and not origin.fragment and origin.username is None):
+        raise ValueError('Session access is verified only on the production relay or a local one')
     evidence = verify(
-        args.platform_origin + '/morty/api', os.environ['MORTY_SERVICE_SECRET'],
+        args.relay_origin + '/morty/api', os.environ['MORTY_SERVICE_SECRET'],
         os.environ['MORTY_SESSION_SIGNING_SECRET'].encode(), os.environ['EXPECTED_REVISION'],
     )
     args.evidence.write_text(json.dumps(evidence, indent=2) + '\n')

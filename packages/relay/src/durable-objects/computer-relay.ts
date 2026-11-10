@@ -19,25 +19,25 @@ import { ComputerChat } from "../../../worker/src/components/project/computer-ch
 import { cloudComputerId } from "../../../worker/src/middleware/computer-context.ts";
 import { decodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
+import type { ProjectAuditRow, RelayAuditRecord } from "../entity/relay-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
 import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
-import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
+import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
 import {
-    type ComputerPlatformRelayBindings,
-    type ConfiguredPlatformRelayBindings,
-    createPlatformAccessServices,
-    createPlatformWorker,
-} from "../platform-worker.ts";
-import { SqlitePlatformProjectStore } from "../storage/sqlite-platform-project-store.ts";
+    type ComputerRelayRelayBindings,
+    type ConfiguredRelayRelayBindings,
+    createRelayAccessServices,
+    createRelayWorker,
+} from "../relay-worker.ts";
+import { SqliteComputerManagementStore } from "../storage/sqlite-computer-management-store.ts";
 import { migrateComputerStorage } from "./migrate-computer-storage.ts";
-import { createPlatformDurableObjectContext } from "./platform-durable-object-context.ts";
+import { createRelayDurableObjectContext } from "./relay-durable-object-context.ts";
 
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
 
-type Store = PlatformProjectStore;
+type Store = ComputerManagementStore;
 type Result<Operation extends keyof Store> = Awaited<ReturnType<Store[Operation]>>;
 
 // Operations run to completion once delivered; a caller that gives up only stops waiting for the result.
@@ -47,8 +47,8 @@ const uncancelled = new AbortController().signal;
  * Owns one computer's storage. Requests routed to the computer run here against that storage, and every other
  * Worker or Durable Object reaches it only through the typed operations below, each executed here as one unit.
  */
-export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings> {
-    readonly #application = createPlatformWorker();
+export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
+    readonly #application = createRelayWorker();
     #store: Store | null = null;
 
     readonly #chat = new ComputerChat(
@@ -60,7 +60,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
     readonly #uploads = new WebSocketUploadBudget();
     #connections: ReturnType<ComputerRelay["createConnections"]> | undefined;
 
-    constructor(state: DurableObjectState, environment: ConfiguredPlatformRelayBindings) {
+    constructor(state: DurableObjectState, environment: ConfiguredRelayRelayBindings) {
         super(state, environment);
         state.setWebSocketAutoResponse(
             new WebSocketRequestResponsePair(RUNTIME_HEARTBEAT_MESSAGE, RUNTIME_HEARTBEAT_ACK_MESSAGE),
@@ -69,7 +69,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
 
     private createConnections() {
         migrateComputerStorage(this.ctx.storage);
-        const context = createPlatformDurableObjectContext(this.ctx, this.env, {
+        const context = createRelayDurableObjectContext(this.ctx, this.env, {
             database: new DurableObjectSqlDatabase(this.ctx.storage),
             storeFor: (computerId) => this.#operate(computerId),
         });
@@ -99,7 +99,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         }
         if (this.#store === null) {
             migrateComputerStorage(this.ctx.storage);
-            this.#store = new SqlitePlatformProjectStore(
+            this.#store = new SqliteComputerManagementStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),
             );
@@ -147,7 +147,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
             }
             requestUrl.pathname = computerPath.requestPathname;
             const routedRequest = new Request(requestUrl, request);
-            const environment: ConfiguredPlatformRelayBindings & ComputerPlatformRelayBindings = {
+            const environment: ConfiguredRelayRelayBindings & ComputerRelayRelayBindings = {
                 ...this.env,
                 MORTY_LOCAL_CHANNEL: this.#localChannel,
                 MORTY_COMPUTER_STORE: store,
@@ -259,7 +259,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
         return await this.#operate(computerId).readSessionAccessRevocation(uncancelled);
     }
 
-    async recordAudit(computerId: string, audit: PlatformAuditRecord): Promise<void> {
+    async recordAudit(computerId: string, audit: RelayAuditRecord): Promise<void> {
         await this.#operate(computerId).recordAudit(audit, uncancelled);
     }
 
@@ -287,7 +287,7 @@ export class ComputerRelay extends DurableObject<ConfiguredPlatformRelayBindings
                     {
                         uploads: this.#uploads,
                         authorizeUpload: async (operation) => {
-                            const { sessionAccess } = createPlatformAccessServices(this.env);
+                            const { sessionAccess } = createRelayAccessServices(this.env);
                             const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
                             return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
                         },

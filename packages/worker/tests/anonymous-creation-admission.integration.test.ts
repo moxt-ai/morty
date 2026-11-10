@@ -69,11 +69,11 @@ test("Given unavailable abuse protection, When a visitor asks for a new identity
     });
 });
 
-test("Given a rejected Platform credential, When a user tries to pair their Machine, Then the HTTP error keeps its code without echoing the upstream message", async () => {
+test("Given a rejected Relay credential, When a user tries to pair their Machine, Then the HTTP error keeps its code without echoing the upstream message", async () => {
     const identity = await fixture.createAnonymousUser();
     const original = fixture.baseConfiguration.MORTY_SERVICE_SECRET;
     try {
-        await fixture.changePlatformCredential(`${original.slice(0, -1)}${original.endsWith("A") ? "B" : "A"}`);
+        await fixture.changeRelayCredential(`${original.slice(0, -1)}${original.endsWith("A") ? "B" : "A"}`);
         const response = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/pairing`, {
                 method: "POST",
@@ -87,6 +87,6 @@ test("Given a rejected Platform credential, When a user tries to pair their Mach
             error: { message: "Morty could not complete Runtime setup." },
         });
     } finally {
-        await fixture.changePlatformCredential(original);
+        await fixture.changeRelayCredential(original);
     }
 });

@@ -21,26 +21,24 @@ export class RuntimeConnectionStorage {
             .select({
                 computerId: computer.computerId,
                 connectionEpoch: computer.connectionEpoch,
-                connectionId: computer.connectionId,
                 state: computer.state,
                 connectedAt: computer.connectedAt,
             })
             .from(computer)
             .limit(1)
             .get();
-        if (row === undefined || row.connectionId === null || row.connectedAt === null || row.state === null) {
+        if (row === undefined || row.connectedAt === null || row.state === null) {
             return null;
         }
         if (!Number.isSafeInteger(row.connectionEpoch) || row.connectionEpoch < 1) {
             throw new DatabaseError("database_unavailable", "The Runtime connection state is invalid");
         }
-        return { ...row, connectionId: row.connectionId, connectedAt: row.connectedAt, state: row.state };
+        return { ...row, connectedAt: row.connectedAt, state: row.state };
     };
 
     readonly connect = (identity: RuntimeConnectionIdentity, now: number): void => {
         const connection = {
             connectionEpoch: identity.connectionEpoch,
-            connectionId: identity.connectionId,
             state: "online",
             connectedAt: now,
             disconnectedAt: null,
@@ -64,7 +62,6 @@ export class RuntimeConnectionStorage {
                 and(
                     eq(computer.computerId, identity.computerId),
                     eq(computer.connectionEpoch, identity.connectionEpoch),
-                    eq(computer.connectionId, identity.connectionId),
                 ),
             )
             .run();

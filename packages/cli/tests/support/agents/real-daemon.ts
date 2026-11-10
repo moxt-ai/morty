@@ -19,7 +19,7 @@ import {
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type WebSocket, WebSocketServer } from "ws";
 import { collectLocalDaemonLogs } from "../../../src/cli/handler/logs/logic/collect-local-logs.ts";
 import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";

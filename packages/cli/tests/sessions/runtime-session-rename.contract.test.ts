@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
-import { startTestPlatform } from "../support/platform.ts";
+import { startTestRelay } from "../support/relay.ts";
 
 it("Given a prompted local conversation, When the Session is renamed, Then the directory and the controlled Agent show the new title", async () => {
     const cancellation = new AbortController();
-    await using platform = await startTestPlatform();
+    await using relay = await startTestRelay();
     try {
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Runtime Session rename",
@@ -14,7 +14,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             },
             cancellation.signal,
         );
-        const runtime = await platform.connectAgent(project.computerId);
+        const runtime = await relay.connectAgent(project.computerId);
         const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 harness: "claude",

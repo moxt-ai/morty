@@ -26,7 +26,7 @@ export const projectStorageBindingsSchema = v.pipe(
 
 export type ProjectStorageBindings = v.InferOutput<typeof projectStorageBindingsSchema>;
 
-export const platformEndpointBindingsSchema = v.pipe(
+export const relayEndpointBindingsSchema = v.pipe(
     v.object({
         MORTY_RELAY_URL: v.string(),
     }),
@@ -35,7 +35,7 @@ export const platformEndpointBindingsSchema = v.pipe(
 
 export const appOriginBindingSchema = v.pipe(v.object({ APP_ORIGIN: v.string() }), v.readonly());
 
-export const platformCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_SECRET: v.string() }), v.readonly());
+export const relayCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_SECRET: v.string() }), v.readonly());
 
 export interface CloudBindings {
     readonly COMPUTER_RELAY?: unknown;

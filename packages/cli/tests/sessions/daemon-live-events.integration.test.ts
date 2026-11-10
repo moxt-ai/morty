@@ -34,7 +34,7 @@ import {
     type SessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { listen, port, sendBinary, sendText } from "@morty-build/platform-test-support/websocket";
+import { listen, port, sendBinary, sendText } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";

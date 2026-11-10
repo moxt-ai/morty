@@ -298,9 +298,9 @@ importers:
       '@morty-build/local-state':
         specifier: workspace:*
         version: link:../local-state
-      '@morty-build/platform-test-support':
+      '@morty-build/relay-test-support':
         specifier: workspace:*
-        version: link:../platform-test-support
+        version: link:../relay-test-support
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.6
@@ -368,7 +368,7 @@ importers:
 
   packages/local-state: {}
 
-  packages/platform-test-support:
+  packages/relay-test-support:
     dependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.4.9
@@ -616,9 +616,9 @@ importers:
         specifier: 'catalog:'
         version: 1.5.0(typescript@7.0.2)
     devDependencies:
-      '@morty-build/platform-test-support':
+      '@morty-build/relay-test-support':
         specifier: workspace:*
-        version: link:../platform-test-support
+        version: link:../relay-test-support
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2

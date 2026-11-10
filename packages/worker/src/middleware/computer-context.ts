@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
+import { relayIdentifier } from "../components/management/entity/computer-management.ts";
 import { ManagementError } from "../components/management/entity/management-error.ts";
-import { platformIdentifier } from "../components/management/entity/platform-project.ts";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
 import { computerBindings } from "../composition/computer-bindings.ts";
@@ -32,14 +32,14 @@ export async function cloudComputerId(request: Request): Promise<string | null> 
         if (computerId === undefined || computerId === "") {
             throw new ManagementError("PROJECT_REQUIRED", "Morty context is required.", 400);
         }
-        return v.parse(platformIdentifier, computerId);
+        return v.parse(relayIdentifier, computerId);
     }
     if (path.startsWith("/morty/api/chat/computers/")) {
         const computerId = path.split("/")[5];
         if (computerId === undefined || computerId === "") {
             throw new ManagementError("PROJECT_REQUIRED", "Morty context is required.", 400);
         }
-        return v.parse(platformIdentifier, computerId);
+        return v.parse(relayIdentifier, computerId);
     }
     if (path === "/morty/api/identity/anonymous-users") {
         return null;

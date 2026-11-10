@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { PlatformProjectError } from "../components/management/entity/platform-project.ts";
+import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
 import {
     type CloudBindings,
     type ProjectStorageBindings,
@@ -13,11 +13,11 @@ export async function computerBindings(
 ): Promise<CloudBindings & ProjectStorageBindings> {
     signal.throwIfAborted();
     if (bindings.CHAT_COMPUTER_ID !== computerId) {
-        throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
+        throw new ComputerManagementError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
     }
     const parsed = v.safeParse(projectStorageBindingsSchema, bindings);
     if (!parsed.success) {
-        throw new PlatformProjectError("PROJECT_STORAGE_UNAVAILABLE", "Morty storage is unavailable.", 503);
+        throw new ComputerManagementError("PROJECT_STORAGE_UNAVAILABLE", "Morty storage is unavailable.", 503);
     }
     return { ...bindings, ...parsed.output };
 }

@@ -4,14 +4,14 @@ import { dirname, join } from "node:path";
 import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
 import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { expect, it } from "vitest";
-import { startTestPlatform } from "../support/platform.ts";
+import { startTestRelay } from "../support/relay.ts";
 
 for (const client of ["SDK", "HTTP"] as const) {
     it(`Given a new Session, When ${client} creates and prompts it, Then its conversation uses the Runtime title and workspace`, async () => {
         const cancellation = new AbortController();
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         try {
-            const project = await platform.service.createProject(
+            const project = await relay.service.createProject(
                 {
                     clientReference: `client-${crypto.randomUUID()}`,
                     displayName: "Runtime Session directory",
@@ -20,7 +20,7 @@ for (const client of ["SDK", "HTTP"] as const) {
                 },
                 cancellation.signal,
             );
-            const runtime = await platform.connectAgent(project.computerId);
+            const runtime = await relay.connectAgent(project.computerId);
             const request = {
                 harness: "claude",
                 configurations: [],
@@ -32,13 +32,13 @@ for (const client of ["SDK", "HTTP"] as const) {
                 client === "SDK"
                     ? await runtime.client.sessions.create(request, cancellation.signal)
                     : await (async () => {
-                          const response = await platform.app.request(
+                          const response = await relay.app.request(
                               new Request(
-                                  `${platform.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`,
+                                  `${relay.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`,
                                   {
                                       method: "POST",
                                       headers: {
-                                          authorization: `Bearer ${platform.appCredential}`,
+                                          authorization: `Bearer ${relay.appCredential}`,
                                           "content-type": "application/json",
                                       },
                                       body: JSON.stringify(request),
@@ -84,9 +84,9 @@ for (const client of ["SDK", "HTTP"] as const) {
 }
 
 it("Given long ASCII and multibyte directory references, When the SDK browses them, Then the local filesystem remains the authority for directory availability", async () => {
-    await using platform = await startTestPlatform();
+    await using relay = await startTestRelay();
     const signal = AbortSignal.timeout(30_000);
-    const project = await platform.service.createProject(
+    const project = await relay.service.createProject(
         {
             clientReference: `client-${crypto.randomUUID()}`,
             displayName: "Long directory references",
@@ -95,7 +95,7 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
         },
         signal,
     );
-    const runtime = await platform.connectAgent(project.computerId);
+    const runtime = await relay.connectAgent(project.computerId);
     for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         const path = join(
             tmpdir(),
@@ -120,9 +120,9 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         );
         await mkdir(path, { recursive: true });
         const canonical = await realpath(path);
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Long project",
@@ -131,7 +131,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.computerId);
+        const runtime = await relay.connectAgent(project.computerId);
         const directory = canonical;
         const listing = await runtime.client.runtimes.listWorkspace(directory, signal);
         expect(listing.directory).toBe(directory);
@@ -188,9 +188,9 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
     try {
         const directoryLabel = await realpath(workspace);
         const directory = directoryLabel;
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: `client-${crypto.randomUUID()}`,
                 displayName: "Session binding",
@@ -199,7 +199,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
             },
             signal,
         );
-        const runtime = await platform.connectAgent(project.computerId);
+        const runtime = await relay.connectAgent(project.computerId);
         const { target: sessionTarget } = await runtime.client.sessions.create(
             {
                 harness: "claude",
@@ -212,10 +212,10 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
         );
         const access = await runtime.client.sessions.createAccess(sessionTarget, 900, signal);
         const session = new MortyClient({
-            endpoint: platform.baseUrl,
+            endpoint: relay.baseUrl,
             computerId: project.computerId,
             credentialProvider: new StaticMortyCredentialProvider(access.credential),
-            transport: { fetch: async (request: Request) => await platform.app.request(request) },
+            transport: { fetch: async (request: Request) => await relay.app.request(request) },
         });
 
         const turn = await session.turns.submit(

@@ -4,11 +4,7 @@ import { createServer } from "node:http";
 import type { Duplex } from "node:stream";
 import { encodeRuntimeStatusEvent, RUNTIME_STATUS_KIND } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-    listen,
-    port as readPort,
-    sendText as writeServerTextFrame,
-} from "../../platform-test-support/src/websocket.ts";
+import { listen, port as readPort, sendText as writeServerTextFrame } from "../../relay-test-support/src/websocket.ts";
 import { connectMortyClient, type MortyClient } from "../src/client.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";

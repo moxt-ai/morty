@@ -19,7 +19,7 @@ import {
     RUNTIME_HEARTBEAT_MESSAGE,
     RUNTIME_LIVENESS_READY_KIND,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, expect, test, vi } from "vitest";
 import { WebSocketServer } from "ws";
 import { z } from "zod";

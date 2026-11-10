@@ -8,7 +8,7 @@ import {
     revokeMortyCredential,
     seedMortyCredential,
     seedMortyService,
-} from "../../platform-test-support/src/service-fixture.ts";
+} from "../../relay-test-support/src/service-fixture.ts";
 import { machineAccountGrant } from "../src/schema/d1/index.ts";
 import worker from "../src/worker.ts";
 
@@ -16,7 +16,7 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-07T
 afterEach(() => vi.useRealTimers());
 
 it("Given a scoped service credential, When its authoritative grant is removed, Then access is denied until explicitly granted again", async () => {
-    const service = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const service = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
     const created = await worker.fetch(
         new Request(`https://relay.test${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
             method: "POST",
@@ -37,7 +37,7 @@ it("Given a scoped service credential, When its authoritative grant is removed, 
     }
     const { computerId } = project;
     const scoped = await seedMortyCredential(
-        env.PLATFORM_DIRECTORY_DATABASE,
+        env.RELAY_DIRECTORY_DATABASE,
         service.appId,
         ["runtime:read"],
         [computerId],
@@ -50,7 +50,7 @@ it("Given a scoped service credential, When its authoritative grant is removed, 
             env,
         );
     expect((await read()).status).toBe(200);
-    const db = drizzle(env.PLATFORM_DIRECTORY_DATABASE);
+    const db = drizzle(env.RELAY_DIRECTORY_DATABASE);
     await db.delete(machineAccountGrant).where(eq(machineAccountGrant.credentialId, scoped.credentialId));
     expect((await read()).status).toBe(403);
     await db
@@ -60,8 +60,8 @@ it("Given a scoped service credential, When its authoritative grant is removed, 
 });
 
 describe("Morty-only relay", () => {
-    it("Given Morty service bindings, When a visitor requests the retired platform API, Then no management surface exists", async () => {
-        for (const path of ["/capabilities", "/v1/platform/tenants", "/v1/apps"]) {
+    it("Given Morty service bindings, When a visitor requests the retired relay API, Then no management surface exists", async () => {
+        for (const path of ["/capabilities", "/v1/relay/tenants", "/v1/apps"]) {
             const response = await worker.fetch(
                 new Request(`https://relay.test${MORTY_API_PREFIX}/dashboard${path}`),
                 env,
@@ -88,8 +88,8 @@ describe("Morty-only relay", () => {
 });
 
 it("Given separate production and benchmark service identities, When either credential is sent to the other environment, Then authorization fails and the owning environment remains usable", async () => {
-    await applyD1Migrations(env.TEST_UNINITIALIZED_SHARD, env.TEST_PLATFORM_MIGRATIONS);
-    const production = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    await applyD1Migrations(env.TEST_UNINITIALIZED_SHARD, env.TEST_RELAY_MIGRATIONS);
+    const production = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
     const benchmark = await seedMortyService(env.TEST_UNINITIALIZED_SHARD);
     const request = (credential: string) =>
         new Request(`https://relay.test${MORTY_API_PREFIX}/dashboard/v1/machine-accounts`, {
@@ -101,7 +101,7 @@ it("Given separate production and benchmark service identities, When either cred
                 locationHint: "wnam",
             }),
         });
-    const benchmarkBindings = { ...env, PLATFORM_DIRECTORY_DATABASE: env.TEST_UNINITIALIZED_SHARD };
+    const benchmarkBindings = { ...env, RELAY_DIRECTORY_DATABASE: env.TEST_UNINITIALIZED_SHARD };
     expect((await worker.fetch(request(production.credential), benchmarkBindings)).status).toBe(401);
     expect((await worker.fetch(request(benchmark.credential), env)).status).toBe(401);
     const accepted = await worker.fetch(request(production.credential), env);
@@ -110,7 +110,7 @@ it("Given separate production and benchmark service identities, When either cred
     const retried = await worker.fetch(request(production.credential), env);
     expect(retried.status).toBe(201);
     expect(await retried.json()).toEqual(project);
-    await revokeMortyCredential(env.PLATFORM_DIRECTORY_DATABASE, production.credentialId);
+    await revokeMortyCredential(env.RELAY_DIRECTORY_DATABASE, production.credentialId);
     expect((await worker.fetch(request(production.credential), env)).status).toBe(401);
     expect((await worker.fetch(request(benchmark.credential), benchmarkBindings)).status).toBe(201);
 });

@@ -26,11 +26,7 @@ import {
     WORKSPACE_ENTRIES_KIND,
     WORKSPACE_LIST_KIND,
 } from "@morty-build/client/protocol";
-import {
-    listen,
-    port as readPort,
-    sendText as writeServerTextFrame,
-} from "@morty-build/platform-test-support/websocket";
+import { listen, port as readPort, sendText as writeServerTextFrame } from "@morty-build/relay-test-support/websocket";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";

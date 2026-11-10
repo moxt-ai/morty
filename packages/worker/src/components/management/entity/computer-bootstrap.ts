@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { platformIdentifier, platformProjectSchema } from "./platform-project.ts";
+import { computerManagementSchema, relayIdentifier } from "./computer-management.ts";
 
 /** A client-held secret that names one anonymous user creation, so retrying it resumes the same identity. */
 export const anonymousCreationKey = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
@@ -11,7 +11,7 @@ const bootstrapOrigin = v.variant("kind", [
     v.pipe(
         v.object({
             kind: v.literal("replacement"),
-            previousComputerId: platformIdentifier,
+            previousComputerId: relayIdentifier,
             token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
         }),
         v.readonly(),
@@ -22,8 +22,8 @@ export type BootstrapOrigin = v.InferOutput<typeof bootstrapOrigin>;
 
 export const computerBootstrap = v.pipe(
     v.object({
-        computer: platformProjectSchema,
-        userId: platformIdentifier,
+        computer: computerManagementSchema,
+        userId: relayIdentifier,
         origin: bootstrapOrigin,
     }),
     v.readonly(),

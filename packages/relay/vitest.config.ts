@@ -4,10 +4,10 @@ import { defineConfig, type ViteUserConfig } from "vitest/config";
 
 const packageDirectory = fileURLToPath(new URL(".", import.meta.url));
 const wranglerConfigPath = fileURLToPath(new URL("./wrangler.jsonc", import.meta.url));
-const platformMigrationsPath = fileURLToPath(new URL("./migrations/d1", import.meta.url));
+const relayMigrationsPath = fileURLToPath(new URL("./migrations/d1", import.meta.url));
 
 export default defineConfig(async (): Promise<ViteUserConfig> => {
-    const platformMigrations = await readD1Migrations(platformMigrationsPath);
+    const relayMigrations = await readD1Migrations(relayMigrationsPath);
 
     return {
         root: packageDirectory,
@@ -19,7 +19,7 @@ export default defineConfig(async (): Promise<ViteUserConfig> => {
                     r2Buckets: ["R2_BUCKET_WNAM"],
                     bindings: {
                         MORTY_ALLOWED_ORIGINS: '["*"]',
-                        TEST_PLATFORM_MIGRATIONS: platformMigrations,
+                        TEST_RELAY_MIGRATIONS: relayMigrations,
                     },
                 },
             }),
@@ -34,7 +34,7 @@ export default defineConfig(async (): Promise<ViteUserConfig> => {
             coverage: {
                 provider: "istanbul",
                 reporter: ["text-summary", "json"],
-                reportsDirectory: "../../coverage/platform",
+                reportsDirectory: "../../coverage/relay",
                 reportOnFailure: true,
                 include: ["src/**/*.{ts,tsx}"],
                 exclude: ["**/*.d.ts", "**/testing/**"],
