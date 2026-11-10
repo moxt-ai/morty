@@ -136,15 +136,15 @@ function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbi
 
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
-    readonly #accessEnded: CloudBindings["CHAT_ACCESS_ENDED"];
+    readonly #commitAccessEnd: CloudBindings["CHAT_END_ACCESS"];
     readonly #computerId: string | null;
 
     constructor(cx: {
-        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_ACCESS_ENDED" | "CHAT_COMPUTER_ID"> };
+        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_END_ACCESS" | "CHAT_COMPUTER_ID"> };
         readonly storages: { readonly identities: IdentityStorage };
     }) {
         this.identities = cx.storages.identities;
-        this.#accessEnded = cx.config.bindings.CHAT_ACCESS_ENDED;
+        this.#commitAccessEnd = cx.config.bindings.CHAT_END_ACCESS;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID ?? null;
     }
 
@@ -429,17 +429,14 @@ export class AuthenticationService {
 
     /**
      * Applies an identity change that may end access to the computer. Every request reads the identities, so once the
-     * change commits nothing it ended is authorized again; the live connections it ended then close at once.
+     * change commits nothing it ended is authorized again; the result is the committed change alone, and the computer
+     * closes the live connections it ended.
      */
     readonly #endAccess = async (change: () => Promise<boolean>): Promise<boolean> => {
-        if (this.#accessEnded === undefined) {
+        if (this.#commitAccessEnd === undefined) {
             throw new ManagementError("IDENTITY_UNAVAILABLE", "Computer access storage is unavailable.", 503);
         }
-        if (!(await change())) {
-            return false;
-        }
-        await this.#accessEnded();
-        return true;
+        return await this.#commitAccessEnd(change);
     };
 
     readonly endBrowserAccess = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> => {

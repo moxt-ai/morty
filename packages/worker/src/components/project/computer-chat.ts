@@ -18,12 +18,16 @@ import { IdentityStorage } from "../management/storage/identity-storage.ts";
 export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
-    readonly #accessEnded: () => Promise<void>;
-    /** `accessEnded` closes at once the live connections an identity change no longer authorizes. */
-    constructor(storage: DurableObjectStorage, owns: (id: string) => boolean, accessEnded: () => Promise<void>) {
+    readonly #endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>;
+    /** `endAccess` commits an identity change that may end access, together with closing what it ended. */
+    constructor(
+        storage: DurableObjectStorage,
+        owns: (id: string) => boolean,
+        endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>,
+    ) {
         this.#storage = storage;
         this.#owns = owns;
-        this.#accessEnded = accessEnded;
+        this.#endAccess = endAccess;
     }
 
     /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
@@ -123,7 +127,7 @@ export class ComputerChat {
             ...env,
             CHAT_COMPUTER_ID: computerId,
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
-            CHAT_ACCESS_ENDED: this.#accessEnded,
+            CHAT_END_ACCESS: this.#endAccess,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,
             DATABASE: this.#database,
         };

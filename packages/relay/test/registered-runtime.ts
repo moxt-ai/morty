@@ -19,7 +19,7 @@ export function computerManagementStore(computerId: string, storage: DurableObje
     const chat = new ComputerChat(
         storage,
         (id) => id === computerId,
-        async () => {},
+        async (change) => await change(),
     );
     return new SqliteComputerManagementStore(computerId, new DurableObjectDatabaseAdapter(storage), (holder, signal) =>
         chat.holdsAccess(computerId, holder, signal),

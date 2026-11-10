@@ -56,7 +56,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
     readonly #chat = new ComputerChat(
         this.ctx.storage,
         (id) => this.#owns(id),
-        () => this.#accessEnded(),
+        (change) => this.#endAccess(change),
     );
 
     readonly #uploads = new WebSocketUploadBudget();
@@ -232,12 +232,18 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
     }
 
     /**
-     * Access to the computer ended. Every request reads that from the identities already; closing the live views and
-     * host connections it no longer authorizes only ends them at once rather than at their next reauthorization.
+     * Commits an identity change that may end access to the computer, and with it the connection check that closes the
+     * live views and host connections the change no longer authorizes. Requests read the identities, so the committed
+     * change is already in force; the check only ends the open connections, and the alarm retries it until it runs.
      */
-    readonly #accessEnded = async (): Promise<void> => {
-        await this.#connectionsForComputer.sockets.reauthorizeConnections();
-    };
+    readonly #endAccess = async (change: () => Promise<boolean>): Promise<boolean> =>
+        await this.ctx.storage.transaction(async (transaction) => {
+            if (!(await change())) {
+                return false;
+            }
+            await transaction.setAlarm(Date.now());
+            return true;
+        });
 
     async recordAudit(computerId: string, audit: RelayAuditRecord): Promise<void> {
         await this.#operate(computerId).recordAudit(audit, uncancelled);
