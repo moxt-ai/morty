@@ -19,7 +19,7 @@ import {
 import type { HeldRuntimeCredentials, RuntimeCredentials } from "./runtime-credentials.ts";
 
 const PAIRING_RECORD_VERSION = 9;
-const PAIRING_GENERATION_PATTERN = /^mpg_[a-f0-9]{32}$/;
+const PAIRING_GENERATION_PATTERN = /^mcn_[a-f0-9]{32}$/;
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
@@ -53,10 +53,7 @@ function hasExactKeys(value: Readonly<Record<string, unknown>>, expectedKeys: re
 
 function validatePairingGeneration(value: string): string {
     if (!PAIRING_GENERATION_PATTERN.test(value)) {
-        throw new RuntimeInstallationStoreError(
-            "invalid_pairing_generation",
-            "The local pairing generation is invalid",
-        );
+        throw new RuntimeInstallationStoreError("invalid_connection_id", "The local pairing generation is invalid");
     }
     return value;
 }
@@ -99,19 +96,22 @@ function parseRelayOrigin(value: string): URL {
 }
 
 function pairingGeneration(): string {
-    return `mpg_${randomUUID().replaceAll("-", "")}`;
+    return `mcn_${randomUUID().replaceAll("-", "")}`;
 }
 
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedRuntimeConnection {
+    // Normalize the version-8 field at the storage boundary; all writers use the current representation.
+    const generationKey = value["version"] === 8 ? "connectionId" : "pairingGeneration";
+    const expectedKeys = VERIFIED_CONNECTION_KEYS.map((key) => (key === "pairingGeneration" ? generationKey : key));
     if (
-        !hasExactKeys(value, VERIFIED_CONNECTION_KEYS) ||
-        value["version"] !== PAIRING_RECORD_VERSION ||
+        !hasExactKeys(value, expectedKeys) ||
+        (value["version"] !== 8 && value["version"] !== PAIRING_RECORD_VERSION) ||
         value["kind"] !== "verified"
     ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
-    const pairingGeneration = value["pairingGeneration"];
+    const pairingGeneration = value[generationKey];
     const defaultWorkspace = value["defaultWorkspace"];
     const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];
