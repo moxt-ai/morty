@@ -12,6 +12,7 @@ import type {
     SessionConfigUpdatedEvent,
     SessionElicitationRequestedEvent,
     SessionElicitationResolvedEvent,
+    SessionEventPayload,
     SessionInfoUpdatedEvent,
     SessionLiveEvent,
     SessionPermissionRequestedEvent,
@@ -40,6 +41,9 @@ export interface SessionPrepareOptions extends SessionCreationOptions {
     /** The prompt's native-history behavior when this preparation starts a Session. */
     readonly recovery?: SessionRecovery;
 }
+
+/** An event the Runtime itself records in a Session's history, beside the Agent's own updates. */
+export type SessionLifecycleEvent = Extract<SessionEventPayload, { readonly type: "lifecycle-metadata" }>;
 
 export type SessionRecovery = { readonly kind: "history-required" } | { readonly kind: "interactive-only" };
 
