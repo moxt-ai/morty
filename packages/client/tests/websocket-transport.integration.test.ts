@@ -16,7 +16,7 @@ const sessionClaims = btoa(
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
         computerId: "project-1",
-        runtimeId: "runtime-1",
+        holder: { kind: "credential", credentialId: "owner-1" },
         target: { harness: "claude", sessionId: "session-1" },
     }),
 )
