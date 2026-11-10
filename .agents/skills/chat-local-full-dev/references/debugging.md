@@ -15,11 +15,9 @@ Durable Objects, so most deployed failure modes reproduce locally.
 
 | Evidence | Location |
 | --- | --- |
-| Chat Worker output | `chatLog` from `prepare` |
-| Platform fixture output | `platformLog` from `prepare` |
+| Morty Worker output | `chatLog` from `prepare` |
 | Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`) and the manager's `daemon.log` at a versioned installation path under `<stateDir>/morty` (`find <stateDir>/morty -name daemon.log`) |
-| Chat D1 / Durable Objects / R2 / KV | `chatPersist` |
-| Platform D1 / Durable Objects / R2 / KV | `platformPersist` |
+| D1 / Durable Objects / R2 | `chatPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
 
 Read logs with `node scripts/local-dev.cjs logs --state-dir <stateDir> ...` rather
@@ -33,7 +31,7 @@ than opening files directly, so filtering and following stay consistent.
 2. Find the matching one-line JSON event in the Chat log (`chat-request-timing`)
    and read its `timings` object. A phase that dominates the total points at the
    boundary to inspect next.
-3. If the request crossed into Platform, follow the same path in the Platform log.
+3. Follow relay and Runtime connection events in the same Worker log.
 4. For failures, read the JSON error object: `err.code` is the stable code, and
    `err.stack` shows the originating module.
 
@@ -52,7 +50,7 @@ Errors are logged as an object with `err.code`, `httpStatus`, and a sanitized
 
 ## Inspecting persisted state
 
-Chat D1 tables live under `<chatPersist>/v3/d1/<hash>/`. Durable Object SQLite
+Directory D1 tables live under `<chatPersist>/v3/d1/<hash>/`. Durable Object SQLite
 lives under `<chatPersist>/v3/do/<class-name>/<id>.sqlite`. Inspect either with
 the `sqlite3` CLI:
 
@@ -60,13 +58,6 @@ the `sqlite3` CLI:
 sqlite3 <path.sqlite> '.tables'
 sqlite3 -header -column <path.sqlite> 'select * from chat_managed_session limit 5;'
 sqlite3 -header -column <path.sqlite> 'select * from project_migrations order by id;'
-```
-
-Platform control-plane tables live under `<platformPersist>/v3/d1/<hash>/`:
-
-```sh
-sqlite3 -header -column <platform-d1.sqlite> \
-  'select app_id, display_name, lifecycle from platform_apps;'
 ```
 
 Durable Object and D1 files are WAL-backed. If a value looks stale, the Worker is
@@ -78,8 +69,8 @@ part of the live state.
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
 | Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | The running Runtime and local relay use different release contracts | Rebuild the checkout CLI and start a fresh isolated stack through `scripts/local-dev`; check `morty status` |
-| Relay exits after `Can't call WebSocket send() after close()` | A replaced or closing daemon socket received a send | Correlate `platformLog` and Runtime diagnostics; fix the relay boundary |
-| `PLATFORM_UNAVAILABLE` (502) on first request | Local relay storage is not ready or its schema does not match | Inspect `platformLog`; recreate only the disposable local stack |
+| Relay exits after `Can't call WebSocket send() after close()` | A replaced or closing daemon socket received a send | Correlate `chatLog` and Runtime diagnostics; fix the relay boundary |
+| `RELAY_UNAVAILABLE` (502) on first request | Local relay storage is not ready or its schema does not match | Inspect `chatLog`; recreate only the disposable local stack |
 | `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | The local R2 seed is missing | Recreate the stack with the current helper and verify its seed step |
 | `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Read the logged typed error and validation issue path in `chatLog` |
 | `NOT_FOUND` on a Session or Conversation | Wrong Project or local state directory | Compare the requested identity with the stack record |
@@ -92,9 +83,8 @@ When a request fails validation, compare every boundary in order:
 
 1. Browser request construction and serialized body size.
 2. Chat Worker global body limit, route body limit, and schema.
-3. Platform gateway request construction.
-4. Platform Worker body parser and schema.
-5. Runtime or agent protocol validation.
+3. ComputerRelay authorization and local relay operations.
+4. Runtime or Agent protocol validation.
 
 ## Reproduce with a narrow API call
 

@@ -18,23 +18,30 @@ Moxt resources, credentials, local state and release channels remain independent
 
 ## Cloud deployment
 
+Production is one `morty-production` Worker at `morty.build`. It serves the website,
+identity and computer management APIs, pairing and Session traffic. Each computer
+owns its state and Runtime connection in a `ComputerRelay` Durable Object. Relay
+is an internal responsibility of this deployment, not a separately deployed
+service. D1 holds the computer directory; R2 holds attachments and immutable web
+assets. Local and CI stacks use the same topology with isolated storage.
+
 The release pipeline builds the checksummed portable cloud artifact together with
 the CLI archive, validates its source revision and pinned destination, then
 archives it. Pull requests build without deployment secrets. Ordinary production
 publication is owned by the Morty CLI workflow after a merge to main; a separate
 cloud workflow must never automatically deploy a competing build. The Morty Cloud
-workflow only runs manual cloud operations: service credential provisioning and
-recovery of an accepted archived release.
+workflow only recovers an accepted archived release.
 
 The `morty-production` deployment environment supplies `CLOUDFLARE_API_TOKEN` and
-`MORTY_SERVICE_SECRET` individually. The latter authenticates Morty's internal
-service and is stored only as a digest in the relay database. Runtime secret
-values are assembled in a private short-lived file and removed after deployment.
+`MORTY_SESSION_SIGNING_SECRET` individually. The signing secret authorizes short-lived
+Session credentials and never enters browser code or stored account records.
+Internal calls need no separate service credential. Secret values are assembled
+in a private short-lived file and removed after deployment.
 
 Use a Cloudflare Account API Token for CI/CD so deployment authority belongs to
 the Morty account independently of its creator's user membership. Limit it to the
 account's required Workers, D1 and R2 write permissions and set an expiration.
-Deployment, restore and service provisioning verify account ownership and active
+Deployment and restore verify account ownership and active
 status before making changes. Rotate the environment secret before expiry and
 verify a deployment before revoking the replaced token; never use a personal
 User API Token or a Global API key as a fallback.
@@ -45,16 +52,17 @@ console are retired. Morty's anonymous identity, sharing, pairing and authorizat
 remain enforced. Removing unused authentication surfaces must not remove project
 or Agent data. Historical database migrations are immutable.
 
-Deployment checks the selected service credential against its destination before
-writes. Production additionally refuses to activate an installer until the exact
-Morty npm version exists with the accepted archive integrity. Upload assets and setup before changing the Worker.
+Deployment checks account authority, artifact identity, required secrets and the
+destination resources before writes. Production refuses to activate an installer until the exact
+Morty npm version exists with the accepted archive integrity. Upload immutable assets before changing the Worker.
 A restore uses the archived bytes and source revision, validates current Durable
 Object migration history, and never rolls persistent data backwards.
 
 Wrangler updates supplied secrets additively. Remove retired Clerk/OIDC/webhook
 secrets explicitly only after replacing their consumers and verifying the target
 service. Cloudflare cannot return stored secret plaintext; obtain it from its
-owner or rotate the environment's service credential through storage operations.
+owner or replace it with a new signing secret. Rotating the signing secret ends
+existing Session access; Runtime and owner credentials have separate lifetimes.
 
 ## Automatic release sequence
 
@@ -75,17 +83,18 @@ accepted instead of rebuilding and retesting the same source; a commit without a
 accepted archive is built and validated by the release workflow before
 publication.
 
-Expose a release only after production verified it. The release deploys the cloud
-Workers first and verifies production health, assets and Session access. If any
-check fails, it restores the Workers to the versions that served before the
-release and stops, leaving npm `latest` and the hosted setup unchanged. Only a
-verified cloud deployment allows npm publication, which moves `latest`. The hosted
-setup installs `latest`, so it is replaced only after the registry serves the
-accepted archive. Only the completed chain allows creation of the source tag and
-GitHub Release. Until publication completes, the new Workers serve the previous
-CLI and setup, which the compatibility contract already requires. Database
-migrations are applied before the Workers and are never reversed, so a migration
-must remain compatible with the Workers a failed release restores.
+The sequence is production preflight, npm publication and integrity verification,
+cloud deployment and verification, then source tag and GitHub Release. Publication
+must pass the exact-archive acceptance gates first. Keep the existing installer
+available until the accepted npm archive exists; then activate the matching cloud
+artifact and verify health, assets, pairing and Session access.
+
+D1 migrations run before Worker activation and are never reversed. For ordinary
+updates, a failed deployment restores the previous Worker only when Durable
+Object lifecycle history permits it. Creation or deletion of a DO namespace
+requires forward repair; do not claim an ordinary version rollback restored it.
+A failure after npm publication leaves an incomplete release: npm publication
+cannot be undone by restoring a Worker.
 
 Release versions are derived from a committed stable-version baseline and the
 number of first-parent main commits since its recorded source revision. The same
@@ -106,7 +115,7 @@ Actions artifact retention.
 
 Every failed gate stops dependent stages. When the automatic Worker restoration
 itself fails, the job reports it and production keeps the unverified Workers until
-recovery; npm and the hosted setup remain unchanged. npm and Cloudflare are
+recovery. npm and Cloudflare are
 independent systems, so a failure after npm publication cannot undo publication;
 it leaves an incomplete release with no final GitHub Release. Inspect the failing
 job, correct the operational cause, and rerun failed jobs with the original
@@ -116,8 +125,7 @@ complete before a failure; use the recorded component versions and migration
 checks for recovery, never reverse database migrations automatically.
 
 Manual recovery accepts only an archived main-branch run that completed the full
-publication/deployment chain, or a legacy cloud archive with a successful CLI
-publication for the same source revision. It uses
+publication/deployment chain and contains the consolidated single-Worker format. It uses
 that run's exact cloud artifact and independently verifies the published CLI
 integrity. Recovery intentionally changes the deployed version; it does not
 republish npm or rewrite the existing GitHub Release. Release automation and
@@ -148,11 +156,12 @@ and CLI release together, then verify fresh installation, pairing, conversation,
 attachments and reconnect. Earlier Morty credentials, local state and browser
 links are unsupported; no legacy reader or forwarding service is required.
 
-Release 0.3.0 completes this reset by rejecting retired Morty messages and saved
-formats instead of filling missing fields, converting old pairings, or rebuilding
-old projections. Retained production records remain untouched. Use fresh
-installation and pairing for the current release; do not assume a preserved
-historical record can be read by the launch services.
+The November 10 single-Worker consolidation is an explicitly authorized pre-launch
+reset. It creates an independent D1 directory and a new ComputerRelay namespace.
+Historical DO and D1 records must be archived and verified before their live
+resources are retired. Remove the separate Relay Worker, old domain binding, old
+directory, empty Relay R2 buckets and service secrets after production verifies
+the new release. Archived history does not require an active legacy reader.
 
 Preserve release archives and retained data for recovery. Do not roll a new
 installation back into an earlier state generation or replay old writers against
