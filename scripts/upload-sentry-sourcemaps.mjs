@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import SentryCli from "@sentry/cli";
 
 const directory = resolve(process.argv[2] ?? ".release/cloud");
 const manifest = JSON.parse(await readFile(resolve(directory, "release.json"), "utf8"));
@@ -45,7 +46,7 @@ if (!process.env.SENTRY_AUTH_TOKEN) {
     throw new Error("SENTRY_AUTH_TOKEN is required before activating a monitored release");
 }
 function sentryCli(args) {
-    execFileSync(process.execPath, [resolve("node_modules/@sentry/cli/bin/sentry-cli"), ...args], {
+    execFileSync(SentryCli.getPath(), args, {
         stdio: "inherit",
         timeout: 180_000,
         env: {
