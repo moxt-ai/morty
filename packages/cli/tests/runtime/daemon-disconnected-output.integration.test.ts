@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentConnection, agent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { type AgentConnection, agent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,

@@ -1,4 +1,4 @@
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { waitForFile } from "../../support/acp-process.ts";
 
 export async function runInteractionScenario(

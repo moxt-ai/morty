@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join } from "node:path";
-import { agent as acpAgent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { agent as acpAgent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import {
     AGENT_SETTINGS_DISCOVERED_KIND,
     encodeAgentSettingsDiscoverCommand,

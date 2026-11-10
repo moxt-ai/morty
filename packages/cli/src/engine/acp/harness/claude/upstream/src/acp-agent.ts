@@ -65,7 +65,7 @@ import {
     type StopReason,
     type WriteTextFileRequest,
     type WriteTextFileResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import {
     type AgentInfo,
     type CanUseTool,

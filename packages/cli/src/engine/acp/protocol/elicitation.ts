@@ -1,4 +1,4 @@
-import type { ElicitationContentValue } from "@agentclientprotocol/sdk";
+import type { ElicitationContentValue } from "@agentclientprotocol/sdk/unstable";
 import type { SessionElicitationField, SessionElicitationOption } from "@morty-build/client/protocol";
 import { isRecord, readString, truncate } from "../../util/value-utils.ts";
 import { AcpExecutionError } from "../acp-error.ts";

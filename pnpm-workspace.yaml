@@ -10,12 +10,12 @@ overrides:
   body-parser@>=2.0.0 <2.4.0: 2.4.0
   fast-uri@>=3.0.0 <3.1.9: 3.1.9
   qs@>=6.7.0 <=6.16.0: 6.16.2
-  "@agentclientprotocol/sdk": 1.4.0
   "@esbuild-kit/core-utils@3.3.2>esbuild": 0.25.12
   katex@<0.18.2: 0.18.2
   "glob@13.0.6": 14.0.3
   "minimatch@10.2.6": 11.0.1
 catalog:
+  "@agentclientprotocol/sdk": 2.4.0
   "@biomejs/biome": 2.6.6
   "@cloudflare/vite-plugin": 1.65.0
   "@playwright/test": 1.65.0

@@ -4,7 +4,7 @@ import type {
     CreateElicitationResponse,
     RequestPermissionRequest,
     RequestPermissionResponse,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import {
     type NativeSessionTarget,
     SESSION_ELICITATION_REQUESTED_KIND,

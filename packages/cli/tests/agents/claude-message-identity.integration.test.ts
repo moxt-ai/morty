@@ -2,7 +2,7 @@ import { addAbortListener } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";

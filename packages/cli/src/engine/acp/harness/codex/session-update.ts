@@ -1,4 +1,4 @@
-import type { SessionNotification, SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionNotification, SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { InProcessAcpEndpointOptions } from "../../agent/in-process-endpoint.ts";
 
 type MessageUpdate = Extract<
@@ -16,7 +16,7 @@ export interface CodexEndpointOptions extends Omit<InProcessAcpEndpointOptions, 
     readonly onSessionUpdate: (notification: CodexSessionNotification) => Promise<void>;
 }
 
-import { type PromptResponse, RequestError } from "@agentclientprotocol/sdk";
+import { type PromptResponse, RequestError } from "@agentclientprotocol/sdk/unstable";
 import { OperationError } from "../../../infra/operation-error.ts";
 
 export async function promptResultWithMessageId(

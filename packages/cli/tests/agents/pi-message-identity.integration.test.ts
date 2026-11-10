@@ -2,7 +2,7 @@ import { addAbortListener } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ContentBlock, methods, PROTOCOL_VERSION, type SessionUpdate } from "@agentclientprotocol/sdk";
+import { type ContentBlock, methods, PROTOCOL_VERSION, type SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { PiAgentConnection } from "../../src/engine/acp/adapter/pi/agent-connection.ts";

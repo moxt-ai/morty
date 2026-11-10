@@ -8,7 +8,7 @@ import {
     agent as createAgentApp,
     methods,
     PROTOCOL_VERSION,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,

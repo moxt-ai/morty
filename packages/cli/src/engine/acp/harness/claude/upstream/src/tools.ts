@@ -2,7 +2,13 @@
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
 import path from "node:path";
-import type { ContentBlock, PlanEntry, ToolCallContent, ToolCallLocation, ToolKind } from "@agentclientprotocol/sdk";
+import type {
+    ContentBlock,
+    PlanEntry,
+    ToolCallContent,
+    ToolCallLocation,
+    ToolKind,
+} from "@agentclientprotocol/sdk/unstable";
 import type { HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import type {
     AgentInput,

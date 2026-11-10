@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import type { AgentConnection, ContentBlock, PermissionOption, PromptResponse } from "@agentclientprotocol/sdk";
-import { methods } from "@agentclientprotocol/sdk";
+import type {
+    AgentConnection,
+    ContentBlock,
+    PermissionOption,
+    PromptResponse,
+} from "@agentclientprotocol/sdk/unstable";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import type { AgentQuestion } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp-error.ts";
 import {

@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { countPromptBlock, isRecord, readAgentName, readPromptText, waitForAbort } from "../../support/acp-process.ts";
 import { publishContentScenario } from "./acp-content.ts";
 import { runInteractionScenario } from "./acp-interactions.ts";

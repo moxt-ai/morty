@@ -1,4 +1,4 @@
-import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk";
+import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk/unstable";
 import type { AcpEndpointTermination } from "../../agent/in-process-endpoint.ts";
 import type { CodexAppServerServerRequest } from "./app-server-client.ts";
 

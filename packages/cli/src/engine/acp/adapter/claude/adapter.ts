@@ -122,4 +122,4 @@ export class ClaudeAdapter implements Adapter {
         );
 }
 
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";

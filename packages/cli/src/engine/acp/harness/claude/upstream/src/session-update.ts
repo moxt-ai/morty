@@ -1,8 +1,8 @@
 // Modified and maintained by Moxt for Morty.
 // Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
 
-import type { SessionNotification, SessionUpdate } from "@agentclientprotocol/sdk";
-import { type PromptResponse, RequestError } from "@agentclientprotocol/sdk";
+import type { SessionNotification, SessionUpdate } from "@agentclientprotocol/sdk/unstable";
+import { type PromptResponse, RequestError } from "@agentclientprotocol/sdk/unstable";
 
 export async function promptResultWithMessageId(
     result: Promise<PromptResponse>,

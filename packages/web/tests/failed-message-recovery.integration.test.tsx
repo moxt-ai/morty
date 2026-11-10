@@ -240,4 +240,4 @@ test("Given I left a new conversation while it was being created, When I attach 
     await app.waitForView(() => getByRole(document.body, "button", { name: "Remove kept.json" }));
 });
 
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";

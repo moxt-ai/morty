@@ -8,8 +8,8 @@ import type {
     ElicitationPropertySchema,
     ElicitationSchema,
     EnumOption,
-} from "@agentclientprotocol/sdk";
-import { CreateElicitationResponse } from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
+import { CreateElicitationResponse } from "@agentclientprotocol/sdk/unstable";
 import type { ElicitationRequest, ElicitationResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AskUserQuestionInput, AskUserQuestionOutput } from "@anthropic-ai/claude-agent-sdk/sdk-tools.js";
 

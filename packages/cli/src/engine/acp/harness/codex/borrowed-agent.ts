@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk";
+import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { systemTimer, type Timer } from "../../../util/timer.ts";
 import { AcpExecutionError } from "../../acp-error.ts";

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { readAgentName } from "../../support/acp-process.ts";
 import { sessionConfiguration } from "./acp-session-settings.ts";
 import { acquireWriter, nativeHistory, readRecoveredState, sessions } from "./acp-session-state.ts";

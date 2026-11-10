@@ -1,4 +1,4 @@
-import type { ClientConnection } from "@agentclientprotocol/sdk";
+import type { ClientConnection } from "@agentclientprotocol/sdk/unstable";
 import type { AgentModelEffort } from "@morty-build/client/protocol";
 import type {
     AcpEndpointTermination,

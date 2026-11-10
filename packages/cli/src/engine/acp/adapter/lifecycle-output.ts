@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { AdapterSessionOpened, AdapterSessionScope } from "../native-history/preview-contract.ts";

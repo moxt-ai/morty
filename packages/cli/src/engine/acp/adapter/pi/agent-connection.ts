@@ -46,4 +46,4 @@ export class PiAgentConnection extends EndpointAgentConnection {
 }
 
 import { randomUUID } from "node:crypto";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";

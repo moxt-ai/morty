@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { methods, PROTOCOL_VERSION, RequestError, type SessionNotification } from "@agentclientprotocol/sdk";
+import { methods, PROTOCOL_VERSION, RequestError, type SessionNotification } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";
 import { PiAcpEndpoint } from "../../src/engine/acp/harness/pi/endpoint.ts";

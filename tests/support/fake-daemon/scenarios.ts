@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type { HarnessOutput, HarnessReplyPlan } from "@morty-build/runtime-test-support/fake-daemon";
 import { interactiveHtml } from "./html-preview.ts";
 

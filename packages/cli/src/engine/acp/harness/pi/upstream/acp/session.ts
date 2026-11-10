@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve as resolvePath } from "node:path";
-import type { ContentBlock, McpServer, ToolCallContent, ToolCallLocation, ToolKind } from "@agentclientprotocol/sdk";
-import { RequestError } from "@agentclientprotocol/sdk";
+import type {
+    ContentBlock,
+    McpServer,
+    ToolCallContent,
+    ToolCallLocation,
+    ToolKind,
+} from "@agentclientprotocol/sdk/unstable";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import {
     type PiRpcEvent,

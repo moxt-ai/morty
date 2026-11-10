@@ -1,4 +1,4 @@
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { registerInitialization } from "../../runtime/fixtures/acp-initialize.ts";
 import { readableWebStream, writableWebStream } from "../../support/acp-process.ts";
 import { registerHistory } from "./acp-native-history.ts";
