@@ -55,7 +55,7 @@ catalog:
   react: 19.3.1
   react-dom: 19.3.1
   simple-git-hooks: ^2.13.1
-  shiki: 3.23.0
+  shiki: 4.6.0
   streamdown: 2.7.1
   tailwind-merge: ^3.7.0
   tailwindcss: 4.3.5
