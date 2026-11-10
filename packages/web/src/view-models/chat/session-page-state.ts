@@ -36,7 +36,7 @@ import { createSessionTaskControlsStore, type SessionTaskControlsStore } from ".
 export interface SessionPageState {
     /** The Session's operations lifetime on this page; only its end cancels what the user asked the Session to do. */
     readonly lifetime: AbortSignal;
-    /** The connection the pane following the Session lends to its operations. */
+    /** How the Session's operations reach the Runtime through the connection of the pane following the Session. */
     readonly connection: SessionOperationConnection;
     readonly composer: StoreApi<SessionComposerStore>;
     readonly delivery: StoreApi<SessionDeliveryStore>;

@@ -26,7 +26,6 @@ import { type SessionActivityState, workingCommandId } from "./session-activity-
 import type { SessionComposerStore } from "./session-composer-store.ts";
 import {
     connectionFailure,
-    connectionReadiness,
     connectionWaitsForRuntime,
     disconnectedConnection,
     type SessionConnection,
@@ -251,7 +250,7 @@ export function sessionPanePresentation(
     const unknownDelivery = delivery.state.kind === "delivery-unknown" ? journalMessage(delivery.state.journal) : null;
     const deliveryUnknownCommandId = unknownDelivery?.commandId ?? null;
     const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
-    const deliveries = sessionDeliveryPresentation(timeline.messages, execution.queued, delivery, queue);
+    const deliveries = sessionDeliveryPresentation(timeline.messages, execution, delivery, queue);
     const pendingMessage = deliveries.pendingDelivery?.message ?? null;
     const pendingDelivery = deliveries.pendingDelivery;
     const hasFailureCard =
@@ -463,44 +462,42 @@ export function createSessionPaneModel(options: {
     let attempt: AbortController | null = null;
     // Lets the connect loop go on once the user has reopened the closed Session.
     let resumeAfterReopen: (() => void) | null = null;
-    // Counts the times the user reopened the Session. A `session_closed` failure from an operation that began
-    // before a reopening describes the Session as it was, so it must not close the reopened Session again.
-    let reopenings = 0;
     // The pane's lifetime: its owner starts it once and stops it once, so at most one connection loop ever runs for
     // the pane. React attaching or detaching its view is not part of it.
     const lifetime = new AbortController();
     let phase: "created" | "started" | "stopped" = "created";
-    // This pane's lending of its connection to the Session's operations, from `start` until `stop`.
+    // This pane's following of the Session for its operations, from `start` until `stop`.
     let follower: SessionConnectionFollower | null = null;
-    /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
-    const closedNow = (cause: unknown, reopeningsAtStart: number): cause is MortyError =>
-        isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
-    /** Wraps an operation on the Session so that failing because the Session closed also closes this pane. */
-    const noticingClosure =
-        <Arguments extends readonly unknown[], Result>(operation: (...args: Arguments) => Promise<Result>) =>
-        async (...args: Arguments): Promise<Result> => {
-            const reopeningsAtStart = reopenings;
-            try {
-                return await operation(...args);
-            } catch (cause) {
-                if (closedNow(cause, reopeningsAtStart)) {
-                    store.getState().sessionClosed(cause.message);
-                }
-                throw cause;
-            }
-        };
+    /**
+     * Whether a failure through `connected` says the Session is closed now. A client that a reopening or reconnection
+     * replaced describes the Session as it was, so its failure must not close the Session this pane follows now.
+     */
+    const closedThrough = (connected: MortyClient, cause: unknown): cause is MortyError =>
+        isSessionClosedFailure(cause) && connected === client;
+    /** Closes this pane when an operation through `connected` found the Session closed now. */
+    const failedThrough = (connected: MortyClient, cause: unknown): void => {
+        if (closedThrough(connected, cause)) {
+            store.getState().sessionClosed(cause.message);
+        }
+    };
     /**
      * Submits through the client the attempt started with. Closing a client ends only its live subscriptions, so the
      * attempt keeps its requests when this pane reconnects or stops.
      */
-    const submitTurn = (connected: MortyClient | null): SubmitTurn =>
-        noticingClosure(async (request, signal) => {
+    const submitTurn =
+        (connected: MortyClient | null): SubmitTurn =>
+        async (request, signal) => {
             if (connected === null) {
                 throw new Error("The Session is not connected.");
             }
-            const turn = await connected.turns.submit(sessionTarget, request, signal);
-            return { turnId: turn.turnId, queued: turn.state.kind === "queued" };
-        });
+            try {
+                const turn = await connected.turns.submit(sessionTarget, request, signal);
+                return { turnId: turn.turnId, queued: turn.state.kind === "queued" };
+            } catch (cause) {
+                failedThrough(connected, cause);
+                throw cause;
+            }
+        };
     /** The messages the timeline shows now. */
     const timelineMessages = (): readonly SessionExecutionMessage[] =>
         sessionProjectionTimeline(store.getState().projection).messages;
@@ -510,19 +507,6 @@ export function createSessionPaneModel(options: {
             messageQueue.getState(),
             deliveryMessages(delivery.getState()),
         ).find((message) => message.commandId === commandId) ?? null;
-    /**
-     * Lends the Session's operations this pane's connection as it is now. A failure an operation meets through it
-     * closes this pane when it says the Session is closed now, not as it was before a reopening since the lending.
-     */
-    const lendConnection = (connection: SessionConnection): void => {
-        const reopeningsAtLending = reopenings;
-        follower?.changed(connectionReadiness(connection), (cause) => {
-            if (closedNow(cause, reopeningsAtLending)) {
-                store.getState().sessionClosed(cause.message);
-            }
-        });
-    };
-
     const store = createStore<SessionPaneState>()((set, get) => {
         const operationFacts = (): SessionOperationFacts =>
             sessionOperationFacts(
@@ -564,7 +548,7 @@ export function createSessionPaneModel(options: {
                 });
                 connectionChangedAt = now;
             }
-            lendConnection(connection);
+            follower?.changed();
         };
         /**
          * Submits `commandId` through `connected`. The service's acceptance is a fact about the Session's execution: a
@@ -897,7 +881,6 @@ export function createSessionPaneModel(options: {
             const connected = client;
             const { revision } = pagination;
             commitProjection({ kind: "older-page-requested", revision });
-            const reopeningsAtStart = reopenings;
             try {
                 const page = await readSessionHistory(
                     connected,
@@ -912,7 +895,7 @@ export function createSessionPaneModel(options: {
                 if (lifetime.signal.aborted) {
                     return;
                 }
-                if (closedNow(cause, reopeningsAtStart)) {
+                if (closedThrough(connected, cause)) {
                     commitProjection({ kind: "older-page-failed", revision, message: null });
                     get().sessionClosed(cause.message);
                     return;
@@ -1255,7 +1238,6 @@ export function createSessionPaneModel(options: {
                 // Failures the closing caused say nothing about the reopened Session.
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
-                reopenings += 1;
                 resumeAfterReopen?.();
             },
             setDraft: (draft) => {
@@ -1399,7 +1381,7 @@ export function createSessionPaneModel(options: {
             return true;
         },
     });
-    /** This pane's connection once ready; the pane lends it to the Session while it runs, so the Session's is this one. */
+    /** This pane's connection once ready; the pane follows the Session while it runs, so the Session's is this one. */
     const waitForConnectionReady = (signal: AbortSignal): Promise<MortyClient> =>
         options.sessionPage.connection.ready(signal);
     const readFile = async (path: string, signal: AbortSignal) => {
@@ -1432,11 +1414,13 @@ export function createSessionPaneModel(options: {
         }
         phase = "started";
         // This pane now follows the Session for the page: it shows the settings and the running turn the Session was
-        // opened with, and lends the Session's operations its connection. What the user asked the Session stays.
+        // opened with, and carries the Session's operations on its connection. What the user asked the Session stays.
         settings.getState().opened(session.result.ready);
         execution.getState().apply({ kind: "opened", running: openedRunning, openedAt });
-        follower = options.sessionPage.connection.follow();
-        lendConnection(store.getState().connection);
+        follower = options.sessionPage.connection.follow({
+            connection: () => store.getState().connection,
+            failedThrough,
+        });
         const unregisterDebug = registerMortyDebugSession({
             target: sessionTarget,
             blocks: () => sessionDebugBlocks({ messages: timelineMessages() }),

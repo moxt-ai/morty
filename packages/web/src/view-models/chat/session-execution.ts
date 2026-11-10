@@ -115,7 +115,10 @@ export type SessionExecutionFact =
 
 /** What the Runtime has shown this page about one of the Session's commands. */
 interface RuntimeCommand {
-    /** When this page learned the Runtime holds the command, in the order `SessionExecutionState.learned` counts. */
+    /**
+     * When this page learned the Runtime holds the command: how many commands it had learned of before. Commands are
+     * never forgotten, so this orders them in the order they were learned.
+     */
     readonly learnedAt: number;
     /** The timeline showed the command's own message. */
     readonly shown: boolean;
@@ -144,8 +147,6 @@ export interface SessionExecutionState {
     /** The Agent's requests in arrival order, each with its latest resolution. */
     readonly interactions: readonly SessionInteraction[];
     readonly commands: ReadonlyMap<string, RuntimeCommand>;
-    /** How many commands this page has learned the Runtime holds. */
-    readonly learned: number;
 }
 
 type SessionExecutionEffect =
@@ -166,7 +167,6 @@ const initialSessionExecution: SessionExecutionState = {
     listing: null,
     interactions: [],
     commands: new Map(),
-    learned: 0,
 };
 
 const readEffect: SessionExecutionEffect = { kind: "read" };
@@ -182,21 +182,18 @@ function learn(
     fact: "holds" | "shows" | "ended",
 ): SessionExecutionState {
     let commands: Map<string, RuntimeCommand> | null = null;
-    let learned = state.learned;
     for (const commandId of commandIds) {
-        const known = (commands ?? state.commands).get(commandId);
-        const base = known ?? { learnedAt: learned, shown: false, ended: false };
+        const current = commands ?? state.commands;
+        const known = current.get(commandId);
+        const base = known ?? { learnedAt: current.size, shown: false, ended: false };
         const next = fact === "shows" ? { ...base, shown: true } : fact === "ended" ? { ...base, ended: true } : base;
         if (known !== undefined && next.shown === known.shown && next.ended === known.ended) {
             continue;
         }
         commands ??= new Map(state.commands);
         commands.set(commandId, next);
-        if (known === undefined) {
-            learned += 1;
-        }
     }
-    return commands === null ? state : { ...state, commands, learned };
+    return commands === null ? state : { ...state, commands };
 }
 
 function commandEnded(state: Pick<SessionExecutionState, "commands">, commandId: string): boolean {
@@ -542,7 +539,7 @@ function applyExecutionFact(state: SessionExecutionState, fact: SessionExecution
 
 /** What a read that begins now passes back as its `basis`: the commands it can know of are those learned before. */
 export function executionReadBasis(state: SessionExecutionState): number {
-    return state.learned;
+    return state.commands.size;
 }
 
 /** Whether the Runtime has shown it holds the command: listed, running, ended, recorded or confirmed by a receipt. */
