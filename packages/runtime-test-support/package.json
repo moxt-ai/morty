@@ -13,7 +13,7 @@
         "./fake-daemon/fake-harness/model": "./src/fake-daemon/fake-harness/model.ts"
     },
     "dependencies": {
-        "@agentclientprotocol/sdk": "1.4.0",
+        "@agentclientprotocol/sdk": "2.4.0",
         "@morty-build/client": "workspace:*"
     },
     "devDependencies": {
