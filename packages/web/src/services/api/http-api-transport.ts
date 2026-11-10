@@ -11,7 +11,7 @@ const mortyHealthSchema = v.strictObject({ service: v.literal("morty-relay"), st
 function isWatchable(method: string, pathname: string): boolean {
     return (
         (method === "POST" && pathname.endsWith("/workspace")) ||
-        (method === "GET" && pathname.endsWith("/runtime-binding")) ||
+        (method === "GET" && pathname.endsWith("/management/machine")) ||
         (method === "GET" && pathname.endsWith("/identity/devices"))
     );
 }

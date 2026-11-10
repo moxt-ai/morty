@@ -9,7 +9,7 @@ const files = import.meta.glob<string>("../migrations/project-do/*.sql", {
 const ordered = Object.keys(files).sort();
 const materialization = ordered.findIndex((path) => path.endsWith("/0037_materialize_paired_bots.sql"));
 
-test("Given a user with a configured bot and a bot created by a consumed pairing ticket, When every migration runs, Then the owner keeps the one Machine bound to a Runtime", () => {
+test("Given a user with a configured bot and a bot created by a consumed pairing ticket, When every migration runs, Then the owner keeps one Machine and its conversation", () => {
     using database = new DatabaseSync(":memory:");
     for (const path of ordered.slice(0, materialization)) {
         database.exec(files[path] ?? "");
@@ -33,20 +33,8 @@ test("Given a user with a configured bot and a bot created by a consumed pairing
         database.exec(files[path] ?? "");
     }
 
-    expect(
-        database
-            .prepare(
-                "SELECT user_id, display_name, computer_id, created_at, updated_at FROM managed_bot ORDER BY user_id",
-            )
-            .all(),
-    ).toEqual([
-        {
-            user_id: "usr_owner",
-            display_name: "Laptop",
-            computer_id: "rt_laptop",
-            created_at: 1,
-            updated_at: 2,
-        },
+    expect(database.prepare("SELECT user_id, created_at FROM managed_bot ORDER BY user_id").all()).toEqual([
+        { user_id: "usr_owner", created_at: 1 },
     ]);
     expect(
         database

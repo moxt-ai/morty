@@ -218,13 +218,13 @@ export class AnonymousIdentityApi {
             },
         });
         try {
-            await management.readBot(signal);
+            const computer = await management.readProject(signal);
             signal.throwIfAborted();
-        } catch (cause) {
-            signal.throwIfAborted();
-            if (cause instanceof CloudApiError && cause.code === "BOT_NOT_FOUND") {
+            if (computer === null) {
                 return { kind: "gone" };
             }
+        } catch (cause) {
+            signal.throwIfAborted();
             if (cause instanceof CloudApiError && (cause.status === 401 || cause.status === 403)) {
                 // The session answered before the computer refused this access: access ended in between is reported
                 // as ended, not as a link that does not open the computer.

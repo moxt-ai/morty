@@ -80,13 +80,12 @@ function PreSessionFailure({
 type BotChatHomeProps = {
     readonly requests: Pick<
         BotChatApi,
-        | "readBot"
         | "access"
         | "archiveManagedSession"
         | "runtimeConfiguration"
         | "directory"
-        | "readRuntimeBinding"
-        | "waitForRuntimeBindingChange"
+        | "readRuntimePairing"
+        | "waitForRuntimePairingChange"
         | "waitForRuntimeConfigurationChange"
         | "nativeSessions"
         | "nativeSession"

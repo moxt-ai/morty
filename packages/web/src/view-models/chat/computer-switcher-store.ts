@@ -99,9 +99,9 @@ export function createComputerSwitcher(options: {
                             }
                             const requests = options.requests(identity);
                             try {
-                                const bot = await requests.readBot(signal);
+                                const pairing = await requests.readRuntimePairing(signal);
                                 signal.throwIfAborted();
-                                if (!bot.configured) {
+                                if (pairing !== "paired") {
                                     return choice;
                                 }
                                 const configuration = await requests.runtimeConfiguration(signal);
