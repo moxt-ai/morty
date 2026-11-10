@@ -59,9 +59,11 @@
         "@agentclientprotocol/sdk": "catalog:",
         "@biomejs/biome": "catalog:",
         "@cloudflare/vite-plugin": "catalog:",
+        "@electron/asar": "4.3.1",
         "@morty-build/cli": "workspace:*",
         "@morty-build/client": "workspace:*",
         "@morty-build/runtime-test-support": "workspace:*",
+        "@sentry/cli": "2.58.6",
         "@sentry/vite-plugin": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@types/node": "catalog:",
@@ -70,6 +72,7 @@
         "@vitest/coverage-istanbul": "catalog:",
         "dependency-cruiser": "catalog:",
         "drizzle-kit": "catalog:",
+        "drizzle-orm": "catalog:",
         "esbuild": "catalog:",
         "happy-dom": "catalog:",
         "istanbul-lib-coverage": "catalog:",
@@ -82,9 +85,7 @@
         "vite": "catalog:",
         "vitest": "catalog:",
         "wrangler": "catalog:",
-        "ws": "^8.22.1",
-        "@electron/asar": "4.3.1",
-        "drizzle-orm": "catalog:"
+        "ws": "^8.22.1"
     },
     "dependencies": {
         "valibot": "catalog:"

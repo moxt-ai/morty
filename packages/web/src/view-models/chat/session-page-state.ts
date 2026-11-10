@@ -6,7 +6,6 @@ import {
 } from "@morty-build/client";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
-import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
     centralSessionStorage,
     elicitationAnswerDraftsEntry,
@@ -36,7 +35,7 @@ import { createSessionTaskControlsStore, type SessionTaskControlsStore } from ".
 export interface SessionPageState {
     /** The Session's operations lifetime on this page; only its end cancels what the user asked the Session to do. */
     readonly lifetime: AbortSignal;
-    /** The connection the pane following the Session lends to its operations. */
+    /** How the Session's operations reach the Runtime through the connection of the pane following the Session. */
     readonly connection: SessionOperationConnection;
     readonly composer: StoreApi<SessionComposerStore>;
     readonly delivery: StoreApi<SessionDeliveryStore>;
@@ -99,11 +98,8 @@ export function createSessionPageState(options: {
                 .returnMessage(
                     message.prompt,
                     message.attachments.kind === "unrestorable" && message.attachments.count > 0,
+                    message.attachments.kind === "restorable" ? message.attachments.values : [],
                 );
-            const attachments = composer.getState().attachments;
-            const restored: readonly ComposerAttachment[] =
-                message.attachments.kind === "restorable" ? message.attachments.values : [];
-            attachments.getState().restore([...restored, ...attachments.getState().attachments]);
         },
     });
     /** Answers the Agent through whichever pane follows the Session, within the answer's own budget. */

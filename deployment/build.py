@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -56,12 +57,45 @@ def main():
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_SETUP_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
     env.update(MORTY_WORKER_CONFIG=str(generated / 'morty.json'), MORTY_APP_ORIGIN=spec['morty_origin'], MORTY_ASSET_ORIGIN=spec['asset_origin'])
+    sentry = read(ROOT / 'deployment/sentry.json')
+    sentry_release = 'morty@' + env['MORTY_SETUP_REVISION']
+    env.update(VITE_SENTRY_DSN=sentry['dsn'], VITE_SENTRY_ENVIRONMENT=environment,
+               VITE_SENTRY_RELEASE=sentry_release, VITE_SENTRY_ORIGIN=spec['morty_origin'])
+    # Source-map credentials belong only to the deployment job, never a PR build.
+    env.pop('SENTRY_AUTH_TOKEN', None)
     env.pop('CLOUDFLARE_ENV', None)
     env.pop('CLOUDFLARE_API_TOKEN', None)
     run(['pnpm', 'build:setup'], env=env)
     run(['pnpm', 'exec', 'vite', 'build', '--outDir', str(release)], env=env)
+    if (release / 'sourcemaps').exists():
+        shutil.rmtree(release / 'sourcemaps')
+    maps = sorted((release / 'client').rglob('*.js.map'))
+    if not maps:
+        raise ValueError('The production browser build must include source maps')
+    for source_map in maps:
+        script = source_map.with_suffix('')
+        source = script.read_text()
+        debug_ids = set(re.findall(r'sentry-dbid-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', source))
+        if len(debug_ids) != 1:
+            raise ValueError('Browser script must have exactly one bundler-injected debug ID')
+        debug_id = next(iter(debug_ids))
+        target = release / 'sourcemaps' / source_map.relative_to(release / 'client')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Match Sentry's upload preparation: annotate private copies with the ID
+        # already injected before chunk hashing. Never mutate public asset bytes.
+        target.with_suffix('').write_text(source + '\n//# debugId=' + debug_id + '\n')
+        write(target, {**read(source_map), 'debug_id': debug_id})
+        source_map.unlink()
+    # No source maps may remain under the Worker-served or CDN-served assets.
+    if list((release / 'client').rglob('*.map')):
+        raise ValueError('Public browser assets contain source maps')
+    write(release / 'sentry.json', {
+        'organization': sentry['organization'], 'project': sentry['project'],
+        'release': sentry_release, 'environment': environment,
+    })
     relay = overlay(ROOT / 'packages/relay/wrangler.jsonc', environment)
     relay.update(name=spec['relay'], main=str(ROOT / 'deployment/relay-entry.mjs'))
+
     # These production-only tags shipped immediately after the runtime browser transport.
     insert_at = next(i for i, migration in enumerate(relay['migrations']) if migration['tag'] == 'platform-runtime-browser-transport') + 1
     relay['migrations'][insert_at:insert_at] = [

@@ -11,6 +11,8 @@ import {
     decodeSessionEventEnvelope,
     decodeSessionHistoryPageLoaded,
     decodeSessionInfoUpdatedEvent,
+    decodeSessionInteractionAnsweredEvent,
+    decodeSessionOperationFailedEvent,
     decodeSessionPermissionRequestedEvent,
     decodeSessionPromptAcceptedEvent,
     decodeSessionReadyEvent,
@@ -224,6 +226,39 @@ test("Given a newly created native Session, When its first Turn resolves interac
         expect(await snapshot("resolved_permission_snapshot")).toMatchObject({
             action: "active-turn",
             turn: { interaction: null },
+        });
+        // A caller that lost the first reply can repeat its answer, but cannot overwrite it.
+        const repeatedAnswer = {
+            interactionId: permission.interactionId,
+            kind: "session.permission.respond" as const,
+            requestId: "repeat-permission",
+            optionId: "allow-once",
+            outcome: "selected" as const,
+            target: sessionTarget,
+        };
+        socket.send(encodeSessionPermissionRespondCommand(repeatedAnswer));
+        expect(
+            decodeSessionInteractionAnsweredEvent(await messages.nextKind("session.interaction.answered")),
+        ).toMatchObject({
+            requestId: "repeat-permission",
+            interactionId: permission.interactionId,
+        });
+        socket.send(
+            encodeSessionPermissionRespondCommand({
+                ...repeatedAnswer,
+                requestId: "conflicting-permission",
+                outcome: "cancelled",
+            }),
+        );
+        expect(decodeSessionOperationFailedEvent(await messages.nextKind("session.operation.failed"))).toMatchObject({
+            requestId: "conflicting-permission",
+            code: "permission_response_conflict",
+        });
+        socket.send(
+            encodeSessionQueryCommand({ kind: "session.query", requestId: "metadata-time", targets: [sessionTarget] }),
+        );
+        expect(decodeSessionsQueriedEvent(await messages.nextKind(SESSION_QUERIED_KIND))).toMatchObject({
+            entries: [expect.objectContaining({ target: sessionTarget, updatedAt: "2026-09-04T00:01:00.000Z" })],
         });
         await writeFile(join(stateDirectory, "agent", "resume-after-permission"), "");
         const elicitation = decodeSessionElicitationRequestedEvent(

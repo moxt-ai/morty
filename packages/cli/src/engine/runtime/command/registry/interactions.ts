@@ -197,6 +197,16 @@ export const promptDispositionCommand: RuntimeCommand = {
         }
         const { commandId, requestId, target } = message;
         const turn = sessionTurns.get(commandId, target);
+        // The ledger's terminal outcome distinguishes a completed steer from a message that ran on its own.
+        const outcome = operations.hasStarted(commandId, target) ? operations.outcome(commandId) : undefined;
+        if (
+            outcome?.type === "lifecycle-metadata" &&
+            outcome.payload.kind === "prompt.completed" &&
+            promptCompletion(outcome.payload).kind === "steered"
+        ) {
+            reply(socket, { commandId, kind: SESSION_PROMPT_STEERED_KIND, requestId, target });
+            return;
+        }
         const result = turn?.promoteQueuedPrompt(message) ?? "unavailable";
         if (result === "accepted") {
             // The steered prompt is answered once it starts inside the running Turn.

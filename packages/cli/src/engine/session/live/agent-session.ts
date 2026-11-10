@@ -418,7 +418,8 @@ export class AgentSession implements AgentSessionRestore {
                 this.#cwd,
                 this.#prompted,
                 this.#sessionTitle ?? "",
-                updatedAt,
+                // Agent metadata owns modification time; local activity is only a fallback until it reports one.
+                this.#sessionUpdatedAt || updatedAt,
                 this.#sessionConfigurations.stored(),
             ),
         );
@@ -1080,7 +1081,7 @@ export class AgentSession implements AgentSessionRestore {
             case "mode":
                 await this.emitConfigUpdate();
                 return;
-            case "info":
+            case "info": {
                 for (const change of event.changes) {
                     switch (change.kind) {
                         case "title":
@@ -1091,16 +1092,18 @@ export class AgentSession implements AgentSessionRestore {
                             break;
                     }
                 }
+                const updatedAt = this.#sessionUpdatedAt || new Date().toISOString();
                 if (this.#sessionId.length > 0) {
-                    this.writeStoredSession(new Date().toISOString());
+                    this.writeStoredSession(updatedAt);
                 }
                 await this.#getObserver().onInfo({
                     kind: SESSION_INFO_UPDATED_KIND,
                     target: this.target,
                     title: this.#sessionTitle,
-                    updatedAt: this.#sessionUpdatedAt,
+                    updatedAt,
                 });
                 return;
+            }
         }
     };
 

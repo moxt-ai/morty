@@ -147,8 +147,8 @@ export function deliveryMessages(
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     /**
-     * Messages the service accepted that the Runtime's account does not show yet: shown locally, with their files for
-     * editing.
+     * Messages the service accepted, with their files for editing, until the Runtime's account covers them. Whether
+     * the page shows one is the presentation's decision, from the Runtime's account as it stands.
      */
     readonly accepted: readonly SubmittedMessage[];
     readonly discardUnknown: () => void;
@@ -157,7 +157,7 @@ export interface SessionDeliveryStore {
     readonly takeFailedMessage: () => SubmittedMessage | null;
     /**
      * Follows the Runtime's account of the Session's execution as it now stands: an unknown delivery the Runtime holds
-     * is delivered, and accepted messages its account now shows are retired.
+     * is delivered, and accepted messages its account now covers release their files.
      */
     readonly observe: () => void;
     /** The user withdrew an accepted message from the Runtime's queue, which confirmed it. */
@@ -225,18 +225,21 @@ export const createSessionDeliveryStore = (options: {
         readonly state: DeliveryState;
         readonly accepted?: readonly SubmittedMessage[];
     };
-    /** The accepted messages the Runtime's account does not show yet, which the page keeps showing itself. */
-    const unshown = (accepted: readonly SubmittedMessage[]): readonly SubmittedMessage[] => {
+    /**
+     * The accepted messages the Runtime's account does not cover yet. The presentation decides what the page shows;
+     * dropping covered messages only releases their files, which nothing reads once the Runtime's account shows them.
+     */
+    const uncovered = (accepted: readonly SubmittedMessage[]): readonly SubmittedMessage[] => {
         const runtime = options.runtime();
         return accepted.filter((message) => !runtimeCoversMessage(runtime, message));
     };
-    /** The service accepted the journal's message, which the page keeps until the Runtime's account shows it. */
+    /** The service accepted the journal's message, which the page keeps until the Runtime's account covers it. */
     const accept = (journal: Journal, placement: DeliveryPlacement, current: SessionDeliveryStore): Update => ({
         state: { kind: "idle" },
-        accepted: unshown([
+        accepted: [
             ...current.accepted.filter((message) => message.commandId !== journal.commandId),
             { ...journalMessage(journal), placement },
-        ]),
+        ],
     });
     const confirm = (
         journal: Journal,
@@ -343,7 +346,7 @@ export const createSessionDeliveryStore = (options: {
                             ? accept(state.journal, state.journal.placement, current)
                             : { state: { kind: "idle" } }
                         : { state };
-                const accepted = unshown(confirmed.accepted ?? current.accepted);
+                const accepted = uncovered(confirmed.accepted ?? current.accepted);
                 if (confirmed.state === state && accepted.length === current.accepted.length) {
                     return;
                 }

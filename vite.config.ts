@@ -9,10 +9,8 @@ import { bundleLicenses } from "./scripts/bundle-licenses.ts";
 
 const sentry = v.parse(
     v.object({
-        SENTRY_AUTH_TOKEN: v.optional(v.string()),
-        SENTRY_ORG: v.optional(v.string()),
-        SENTRY_PROJECT: v.optional(v.string()),
-        VITE_SENTRY_RELEASE: v.optional(v.string()),
+        VITE_SENTRY_DSN: v.optional(v.string()),
+        VITE_SENTRY_RELEASE: v.optional(v.string(), "morty@development"),
     }),
     process.env,
 );
@@ -45,19 +43,16 @@ export default defineConfig({
         react(),
         tailwindcss(),
         cloudflare(workerConfig === undefined ? {} : { configPath: workerConfig }),
-        ...(sentry.SENTRY_AUTH_TOKEN
+        ...(sentry.VITE_SENTRY_DSN
             ? sentryVitePlugin({
-                  org: v.parse(v.string(), sentry.SENTRY_ORG),
-                  project: v.parse(v.string(), sentry.SENTRY_PROJECT),
-                  authToken: sentry.SENTRY_AUTH_TOKEN,
                   telemetry: false,
                   errorHandler: (error) => {
                       throw error;
                   },
-                  release: sentry.VITE_SENTRY_RELEASE ? { name: sentry.VITE_SENTRY_RELEASE } : {},
+                  // Forks and merge-queue builds need no credentials. Production uploads the exact accepted maps.
+                  release: { name: sentry.VITE_SENTRY_RELEASE, create: false, finalize: false },
                   sourcemaps: {
-                      assets: "./dist/client/**",
-                      filesToDeleteAfterUpload: "./dist/client/**/*.map",
+                      disable: "disable-upload",
                   },
               }).map((plugin) => ({
                   ...plugin,

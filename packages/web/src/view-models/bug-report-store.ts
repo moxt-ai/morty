@@ -1,4 +1,4 @@
-import { getClient, lastEventId } from "@sentry/react";
+import { getClient } from "@sentry/react";
 import { createStore } from "zustand/vanilla";
 import {
     browserDiagnosticsSnapshot,
@@ -7,6 +7,7 @@ import {
 import { type BugReport, BugReportError, type BugReportSink } from "../services/diagnostics/bug-report.ts";
 import type { ChatDiagnostics } from "../services/diagnostics/model-catalog.ts";
 import type { BrowserNetworkOperations } from "../services/diagnostics/network-diagnostics.ts";
+import { lastErrorEventId } from "../services/diagnostics/sentry-monitoring.ts";
 import { collectNetworkDiagnostics } from "./bug-report-network.ts";
 
 export type BugReportStoreApi = ReturnType<typeof createBugReportStore>;
@@ -180,7 +181,7 @@ async function collectBugReport(
         createdAt: new Date().toISOString(),
         description: description.trim().slice(0, 2000),
         page: window.location.pathname.slice(0, 512),
-        relatedEventId: lastEventId() ?? null,
+        relatedEventId: lastErrorEventId(),
         browser: navigator.userAgent.slice(0, 512),
         release: (getClient()?.getOptions().release ?? "development").slice(0, 128),
         computerId: source?.computerId ?? null,

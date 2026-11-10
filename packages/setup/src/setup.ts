@@ -87,10 +87,7 @@ interface CreatingIdentity {
     readonly creationKey: string;
 }
 
-type PairingIntent =
-    | { readonly kind: "none" }
-    | { readonly kind: "requesting"; readonly requestKey: string }
-    | { readonly kind: "paired"; readonly computerId: string };
+type PairingIntent = { readonly kind: "none" } | { readonly kind: "requesting"; readonly requestKey: string };
 
 /**
  * Revoking all access also replaces the local credential, so a copy of it stops working too. Setup saves the successor
@@ -119,7 +116,7 @@ interface SavedState {
 }
 
 /** Version of the saved state's representation; any other representation is refused, never converted. */
-const SAVED_STATE_VERSION = 2;
+const SAVED_STATE_VERSION = 3;
 
 function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
     return {
@@ -129,10 +126,6 @@ function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
         replacement: { kind: "unchanged" },
         rotation: { kind: "none" },
     };
-}
-
-function withPairedRuntime(identity: ReadyIdentity, computerId: string): ReadyIdentity {
-    return { ...identity, pairing: { kind: "paired", computerId } };
 }
 
 function withoutPairingIntent(identity: ReadyIdentity): ReadyIdentity {
@@ -775,10 +768,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     const fields = exactly(value, ["kind", "requestKey"]);
                     return { kind: "requesting", requestKey: savedIdentifier(fields["requestKey"]) };
                 }
-                case "paired": {
-                    const fields = exactly(value, ["kind", "computerId"]);
-                    return { kind: "paired", computerId: savedIdentifier(fields["computerId"]) };
-                }
                 default:
                     return invalid();
             }
@@ -1379,22 +1368,21 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "pairing",
                 "Morty disconnected this computer because its connection key was used somewhere else. Pairing it again.",
             );
+            // The connection list can retain the revoked credential. Only a new pairing can replace it.
+            return await pairRuntime(context);
         }
-        // The Machine is unbound or its Runtime was revoked. A Runtime an earlier run paired for it still holds one of
+        // The Machine is unbound. A Runtime an earlier run paired for it still holds one of
         // the Project's Runtime slots, so continue on it while this machine still manages its connection.
-        const pairing = context.identity.pairing;
-        if (pairing.kind === "paired") {
-            const { existing } = await reusable(pairing.computerId);
-            if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing, bound: false } };
-            }
+        const { existing } = await reusable(context.identity.computerId);
+        if (existing !== undefined) {
+            return { context, runtime: { kind: "existing", ...existing, bound: false } };
         }
         return await pairRuntime(context);
     }
 
     /**
      * Saves the operation identity before sending it. A lost reply resumes the same pairing; a confirmed expired
-     * reservation permits one fresh request. Once answered, the Runtime replaces the request in the saved intent.
+     * reservation permits one fresh request. Once answered, Runtime connections supply the pairing fact and the saved intent is cleared.
      */
     async function pairRuntime(
         context: Context,
@@ -1416,7 +1404,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 continue;
             }
             return {
-                context: await commit(requesting, withPairedRuntime(requesting.identity, runtime.computerId)),
+                context: await commit(requesting, withoutPairingIntent(requesting.identity)),
                 runtime,
             };
         }

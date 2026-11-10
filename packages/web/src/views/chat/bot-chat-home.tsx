@@ -204,7 +204,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
         draftControls.settings,
         executionContext.available,
     );
-    const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
+    const pairingNotice = useStore(model.pairingDialog, (state) => state.open);
 
     const newSessionHarness = activeHarnessMark(model, draftControls.settings);
     const newSessionHarnessLoading =
@@ -260,7 +260,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 workspace={workspace}
                 activeTarget={activeConversationTarget}
                 connectionStatus={connectionStatus}
-                onConnectAgent={model.pairing.kind === "unpaired" ? store.getState().showPairingDialog : null}
+                onConnectAgent={model.pairing.kind === "unpaired" ? model.pairingDialog.getState().show : null}
                 requests={requests}
                 onOpen={(session) => openManaged(session.target)}
                 onNewConversation={newConversation}
@@ -464,10 +464,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     variant="connectAgentPairing"
                     title="Connect agent"
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
-                    onClose={() => {
-                        store.getState().closePairingDialog();
-                        store.getState().dismissNotice();
-                    }}
+                    onClose={model.pairingDialog.getState().dismiss}
                 >
                     <PairingInstruction actionPresentation="dialog" />
                 </Dialog>
