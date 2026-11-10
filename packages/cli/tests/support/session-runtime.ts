@@ -11,7 +11,8 @@ import type {
     SessionSteerOptions,
     SessionTurnOptions,
 } from "../../src/engine/session/api/session-api.ts";
-import { type ClosedSessionHandling, SessionManager } from "../../src/engine/session/manager/session-manager.ts";
+import type { ClosedSessionHandling } from "../../src/engine/session/manager/session-lifecycle.ts";
+import { SessionManager } from "../../src/engine/session/manager/session-manager.ts";
 import { nativeSessionQuery } from "../../src/engine/session/native/native-query.ts";
 import { AgentProcessPool } from "../../src/engine/session/process/agent-process-pool.ts";
 
