@@ -1,3 +1,4 @@
+import { logger } from "@morty-build/relay-core/logging";
 import * as v from "valibot";
 import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
 import { projectRegion } from "../components/management/entity/project-region.ts";
@@ -26,6 +27,19 @@ export async function forwardComputerObject(
         );
     } catch (cause) {
         request.signal.throwIfAborted();
+        logger.error(
+            {
+                event: "project_relay_request_failed",
+                durableObjectClass: "ComputerRelay",
+                durableObjectId: stub.id.toString(),
+                computerId,
+                cfRay: request.headers.get("cf-ray")?.slice(0, 128) ?? null,
+                method: request.method,
+                path: new URL(request.url).pathname,
+                err: cause,
+            },
+            "Computer request failed",
+        );
         throw new ComputerManagementError(
             deadline.signal.aborted ? "PROJECT_OBJECT_TIMEOUT" : "PROJECT_OBJECT_UNAVAILABLE",
             "Morty storage is unavailable.",
