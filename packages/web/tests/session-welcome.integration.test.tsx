@@ -55,6 +55,34 @@ test("Given a dismissed welcome tip, When its chat URL requests the welcome mock
     await preview.close();
 });
 
+test("Given an offline Runtime, When the chat URL requests the welcome mock, Then the card remains available for styling", {
+    timeout: 30_000,
+}, async () => {
+    const sessionId = "offline-welcome-preview";
+    const opened = await createTestApp({
+        agent: { harness: "pi", label: "Pi" },
+        connectAgent: true,
+        sessionIds: new Set([sessionId]),
+        page: { harness: "pi", kind: "continue", sessionId },
+    });
+    await opened.waitForView(() => expect(window.location.pathname).toBe("/chat"));
+    const app = await opened.reload();
+    if (opened.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    await opened.daemon.disconnect();
+    const url = new URL(window.location.href);
+    url.searchParams.set("mockSessionWelcome", "1");
+    window.history.replaceState(null, "", url);
+
+    const preview = await app.reload();
+    const card = await preview.waitForView(() =>
+        getByRole(document.body, "region", { name: "Continue your work here" }),
+    );
+    getByRole(card, "button", { name: "Ask for a progress update" });
+    await preview.close();
+});
+
 test("Given the first-session tip, When I choose a progress question, Then it becomes an editable draft and is sent only after I press Send", {
     timeout: 30_000,
 }, async () => {

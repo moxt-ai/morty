@@ -2,6 +2,27 @@ import { ArrowUpRight, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/cloud-button";
 import { MortyAlert } from "@/components/ui/morty-alert";
+import { chatSessionMessageColumnClassName } from "./chat-session-layout.ts";
+
+function welcomeMockRequested(): boolean {
+    return new URLSearchParams(window.location.search).get("mockSessionWelcome") === "1";
+}
+
+export function SessionWelcomeMock() {
+    const [visible, setVisible] = useState(welcomeMockRequested);
+    if (!visible) {
+        return null;
+    }
+    return (
+        <div className={chatSessionMessageColumnClassName}>
+            <SessionWelcome
+                canSuggestProgress
+                onDismiss={() => setVisible(false)}
+                onSuggestProgress={() => setVisible(false)}
+            />
+        </div>
+    );
+}
 
 export function SessionWelcomeInChat({
     canSuggestProgress,
@@ -16,9 +37,7 @@ export function SessionWelcomeInChat({
     readonly onSuggestProgress: () => void;
     readonly visible: boolean;
 }) {
-    const [showMock, setShowMock] = useState(
-        () => new URLSearchParams(window.location.search).get("mockSessionWelcome") === "1",
-    );
+    const [showMock, setShowMock] = useState(welcomeMockRequested);
     if (!visible && !showMock) {
         return null;
     }
