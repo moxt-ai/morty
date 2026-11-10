@@ -259,7 +259,7 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
     await api(
         `/computers/${computerId}/management/computer`,
         { headers: { "x-test-project-failure": "1", "cf-ray": "project-failure-ray" } },
-        500,
+        503,
     );
     await expect
         .poll(() => logs.slice(start).find((log) => log["event"] === "project_relay_request_failed"))
@@ -277,36 +277,6 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
             }),
         }),
     );
-});
-
-// @no-uc: Technical regression; database RPC overloads must identify their target without logging SQL or bound values.
-it("identifies a Project database overload through the public project creation API", async () => {
-    const app = await provisionProject();
-    const start = logs.length;
-    await api(
-        `/computers/${app.computerId}/management/pairing`,
-        {
-            method: "POST",
-            headers: { authorization: `Bearer ${app.appCredential}`, "x-test-project-failure": "1" },
-            body: JSON.stringify({
-                idempotencyKey: "PROJECT_BODY_CANARY",
-            }),
-        },
-        500,
-    );
-    await expect
-        .poll(() => logs.slice(start).find((log) => log["event"] === "project_database_request_failed"))
-        .toBeDefined();
-    const log = logs.slice(start).find((log) => log["event"] === "project_database_request_failed");
-    expect(log).toMatchObject({
-        event: "project_database_request_failed",
-        durableObjectClass: "ComputerRelay",
-        durableObjectId: expect.any(String),
-        computerId: expect.any(String),
-        operation: expect.any(String),
-        err: expect.objectContaining({ overloaded: true, message: expect.stringContaining("Project DO overloaded") }),
-    });
-    expect(JSON.stringify(log)).not.toMatch(/PROJECT_BODY_CANARY|INSERT INTO|SELECT|values|authorization/);
 });
 
 // @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.

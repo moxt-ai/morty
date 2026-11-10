@@ -29,8 +29,5 @@
     "durable_objects": {
         "bindings": [{ "name": "COMPUTER_RELAY", "class_name": "ComputerRelay" }]
     },
-    "migrations": [
-        { "tag": "v1", "new_sqlite_classes": ["ProjectDurableObject"] },
-        { "tag": "v2-consolidated-computer-relay", "new_sqlite_classes": ["ComputerRelay"] }
-    ]
+    "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ComputerRelay"] }]
 }
