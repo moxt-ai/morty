@@ -5,10 +5,8 @@ import {
     type Identifier,
     isDirectoryPath,
     isIdentifier,
-    isSessionAccessHolder,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
-    type SessionAccessHolder,
     type TurnState,
 } from "@morty-build/client/protocol";
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";

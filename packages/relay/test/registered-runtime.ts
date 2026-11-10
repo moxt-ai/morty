@@ -4,9 +4,9 @@ import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
 import { runtimePairing, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
+import { holdsAccess } from "../../worker/src/components/management/service/authentication-service.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../../worker/src/components/management/storage/managed-bot-storage.ts";
-import { ComputerChat } from "../../worker/src/components/project/computer-chat.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { migrateComputerStorage } from "../src/durable-objects/migrate-computer-storage.ts";
 import { machineAccount } from "../src/schema/d1/index.ts";
@@ -15,13 +15,8 @@ import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-ma
 
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
-    const chat = new ComputerChat(
-        storage,
-        (id) => id === computerId,
-        async () => {},
-    );
     return new SqliteComputerManagementStore(computerId, new DurableObjectDatabaseAdapter(storage), (holder, signal) =>
-        chat.holdsAccess(computerId, holder, signal),
+        holdsAccess(new IdentityStorage(new DurableObjectDatabase(storage), computerId), holder, signal),
     );
 }
 

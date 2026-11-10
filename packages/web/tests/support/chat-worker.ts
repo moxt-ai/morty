@@ -146,17 +146,7 @@ export async function createChatWorkerEnvironment(
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
                 /** Revokes the Runtime through the Relay, as the Relay does when its credential was reused. */
-                revoke: async (): Promise<void> => {
-                    const response = await cloud.relayRequest(
-                        new Request(`${origin}/morty/api/computers/${identity.computerId}/management/pairing`, {
-                            method: "DELETE",
-                            headers: { authorization: `Bearer ${identity.token}` },
-                        }),
-                    );
-                    if (response.status !== 204) {
-                        throw new Error(`Could not revoke the test Runtime: ${response.status}`);
-                    }
-                },
+                revoke: async (): Promise<void> => await cloud.revokeRuntime(identity.computerId),
                 writeFiles: runtime.writeFiles,
             };
         };

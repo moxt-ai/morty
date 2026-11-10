@@ -5,6 +5,7 @@
         ".": {
             "entry": [
                 "drizzle/*.config.ts",
+                "drizzle/retained-relay-*.ts",
                 "vite.web-dev.config.ts",
                 ".agents/skills/*/scripts/*.{ts,cjs}",
                 "deployment/verify-session-access.ts",

@@ -48,23 +48,6 @@ export type NewChatSessionInput = {
     }[];
 };
 
-function runtimeSetupMessage(code: string): string {
-    switch (code) {
-        case "native_session_not_found":
-            return "Morty could not complete Runtime setup. Cause: The native session was not found.";
-        case "session_not_found":
-            return "Morty could not complete Runtime setup. Cause: The session was not found.";
-        case "local_authorization_failed":
-            return "Morty could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
-        case "session_configuration_conflict":
-            return "The selected Agent settings could not all be applied. Review the settings and try again.";
-        case "session_close_timeout":
-            return "The agent did not stop in time, so the session is still open. Try again.";
-        default:
-            return "Morty could not complete Runtime setup.";
-    }
-}
-
 /** Application use cases call the services in their own ComputerRelay, not an HTTP client or another Worker. */
 export class LocalComputerService {
     readonly bindings: CloudBindings;
@@ -113,17 +96,8 @@ export class LocalComputerService {
             if (deadline.signal.aborted) {
                 throw new ComputerManagementError("RELAY_TIMEOUT", "Morty did not respond in time.", 504, { cause });
             }
-            if (cause instanceof ComputerManagementError) {
+            if (cause instanceof ComputerManagementError || isHttpError(cause)) {
                 throw cause;
-            }
-            if (isHttpError(cause)) {
-                const error = cause.toHttpJson();
-                throw new ComputerManagementError(
-                    error.body.error.code,
-                    runtimeSetupMessage(error.body.error.code),
-                    error.status,
-                    { cause },
-                );
             }
             throw new ComputerManagementError("RELAY_UNAVAILABLE", "Morty could not complete Runtime setup.", 502, {
                 cause,

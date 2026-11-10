@@ -1,7 +1,7 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "d858dc22-2b77-48bb-b012-1b305a5793d1",
+    "id": "6535f7b6-fb46-48af-9210-d637d80dee0f",
     "prevId": "aad7acbd-c840-460a-b973-f4f853d3f753",
     "tables": {
         "machine_access_revocations": {
@@ -28,8 +28,8 @@
             "uniqueConstraints": {},
             "checkConstraints": {}
         },
-        "machine_accounts": {
-            "name": "machine_accounts",
+        "computer_accounts": {
+            "name": "computer_accounts",
             "columns": {
                 "computer_id": {
                     "name": "computer_id",
@@ -104,18 +104,18 @@
                 }
             },
             "indexes": {
-                "machine_accounts_user": {
-                    "name": "machine_accounts_user",
+                "computer_accounts_user": {
+                    "name": "computer_accounts_user",
                     "columns": ["user_id", "lifecycle", "created_at", "computer_id"],
                     "isUnique": false
                 },
-                "machine_accounts_user_id_idempotency_key_unique": {
-                    "name": "machine_accounts_user_id_idempotency_key_unique",
+                "computer_accounts_user_id_idempotency_key_unique": {
+                    "name": "computer_accounts_user_id_idempotency_key_unique",
                     "columns": ["user_id", "idempotency_key"],
                     "isUnique": true
                 },
-                "machine_accounts_user_id_client_reference_unique": {
-                    "name": "machine_accounts_user_id_client_reference_unique",
+                "computer_accounts_user_id_client_reference_unique": {
+                    "name": "computer_accounts_user_id_client_reference_unique",
                     "columns": ["user_id", "client_reference"],
                     "isUnique": true
                 }
@@ -124,13 +124,13 @@
             "compositePrimaryKeys": {},
             "uniqueConstraints": {},
             "checkConstraints": {
-                "machine_accounts_lifecycle_check": {
-                    "name": "machine_accounts_lifecycle_check",
-                    "value": "\"machine_accounts\".\"lifecycle\" in ('active', 'deleted')"
+                "computer_accounts_lifecycle_check": {
+                    "name": "computer_accounts_lifecycle_check",
+                    "value": "\"computer_accounts\".\"lifecycle\" in ('active', 'deleted')"
                 },
-                "machine_accounts_location_hint_check": {
-                    "name": "machine_accounts_location_hint_check",
-                    "value": "\"machine_accounts\".\"location_hint\" in ('wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me')"
+                "computer_accounts_location_hint_check": {
+                    "name": "computer_accounts_location_hint_check",
+                    "value": "\"computer_accounts\".\"location_hint\" in ('wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me')"
                 }
             }
         },
@@ -272,6 +272,112 @@
             "uniqueConstraints": {},
             "checkConstraints": {}
         },
+        "machine_accounts": {
+            "name": "machine_accounts",
+            "columns": {
+                "computer_id": {
+                    "name": "computer_id",
+                    "type": "text",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "service_id": {
+                    "name": "service_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "display_name": {
+                    "name": "display_name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "client_reference": {
+                    "name": "client_reference",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "idempotency_key": {
+                    "name": "idempotency_key",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "lifecycle": {
+                    "name": "lifecycle",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false
+                },
+                "deleted_at": {
+                    "name": "deleted_at",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "autoincrement": false
+                },
+                "location_hint": {
+                    "name": "location_hint",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "autoincrement": false,
+                    "default": "'apac'"
+                }
+            },
+            "indexes": {
+                "machine_accounts_service": {
+                    "name": "machine_accounts_service",
+                    "columns": ["service_id", "lifecycle", "created_at", "computer_id"],
+                    "isUnique": false
+                },
+                "machine_accounts_service_id_idempotency_key_unique": {
+                    "name": "machine_accounts_service_id_idempotency_key_unique",
+                    "columns": ["service_id", "idempotency_key"],
+                    "isUnique": true
+                },
+                "machine_accounts_service_id_client_reference_unique": {
+                    "name": "machine_accounts_service_id_client_reference_unique",
+                    "columns": ["service_id", "client_reference"],
+                    "isUnique": true
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "checkConstraints": {
+                "machine_accounts_lifecycle_check": {
+                    "name": "machine_accounts_lifecycle_check",
+                    "value": "\"machine_accounts\".\"lifecycle\" in ('active', 'deleted')"
+                },
+                "machine_accounts_location_hint_check": {
+                    "name": "machine_accounts_location_hint_check",
+                    "value": "\"machine_accounts\".\"location_hint\" in ('wnam', 'enam', 'sam', 'weur', 'eeur', 'apac', 'apac-ne', 'apac-se', 'oc', 'afr', 'me')"
+                }
+            }
+        },
         "service_credentials": {
             "name": "service_credentials",
             "columns": {
@@ -379,9 +485,7 @@
     "_meta": {
         "schemas": {},
         "tables": {},
-        "columns": {
-            "\"machine_accounts\".\"service_id\"": "\"machine_accounts\".\"user_id\""
-        }
+        "columns": {}
     },
     "internal": {
         "indexes": {}
