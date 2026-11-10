@@ -38,6 +38,7 @@ import { sessionDeliveryPresentation } from "./session-delivery-presentation.ts"
 import {
     awaitingMessage,
     type DeliveryPlacement,
+    type DeliveryState,
     deliveryMessages,
     journalMessage,
     type SessionDeliveryStore,
@@ -129,6 +130,23 @@ export function sessionTitleEdit(draft: string | null, rename: SessionRename): T
 }
 
 export type { SessionConnection } from "./session-connection.ts";
+
+/**
+ * The pane's account of its Session's work, including submissions the Runtime never saw; none until its connection
+ * first reaches the Runtime, as the Session's execution state has nothing of the Runtime's yet.
+ */
+export function paneActivity(
+    connection: SessionConnection,
+    execution: Pick<SessionExecutionState, "turn" | "commands">,
+    delivery: DeliveryState,
+): SessionActivityState | null {
+    return connection.kind === "first-loading" ? null : sessionActivity(execution, delivery);
+}
+
+/** The connection of no pane, for a view that follows the open pane's connection when none is open. */
+export const noSessionPane = createStore<Pick<SessionPaneStore, "connection">>()(() => ({
+    connection: { kind: "first-loading" },
+}));
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
@@ -427,10 +445,10 @@ export function createSessionPaneModel(options: {
         "connectSession" | "managedSession" | "runtimeConfiguration" | "resetSessionConnections"
     >;
     /**
-     * Hands the owner this pane's last account of the Session's work when the pane stops. While it runs, the owner
-     * derives the Session's status from the Session's execution state instead.
+     * Hands the owner this pane's last account of the Session's work when the pane stops, or null when it had none.
+     * While it runs, the owner derives the Session's status from the pane's account instead.
      */
-    readonly onReleased?: ((activity: SessionActivityState) => void) | undefined;
+    readonly onReleased?: ((activity: SessionActivityState | null) => void) | undefined;
     readonly titles: SessionTitlesStore;
     /** Whether the connection header reports this Session's connection available, network and Machine included. */
     readonly connectionAvailable: (connection: SessionConnection) => boolean;
@@ -1454,7 +1472,9 @@ export function createSessionPaneModel(options: {
         follower = null;
         filePreview.getState().close();
         lifetime.abort(new Error("The session pane stopped."));
-        options.onReleased?.(sessionActivity(execution.getState().state, delivery.getState().state));
+        options.onReleased?.(
+            paneActivity(store.getState().connection, execution.getState().state, delivery.getState().state),
+        );
     };
     // Views read the pane's state and invoke the user's actions; the connection loop stays with `start`.
     const paneStore: StoreApi<SessionPaneStore> = store;
