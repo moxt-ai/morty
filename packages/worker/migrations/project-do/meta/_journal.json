@@ -344,6 +344,27 @@
             "when": 1794223385438,
             "tag": "0060_computer_storage",
             "breakpoints": true
+        },
+        {
+            "idx": 61,
+            "version": "6",
+            "when": 1794297359994,
+            "tag": "0061_owner_and_browser_credentials",
+            "breakpoints": true
+        },
+        {
+            "idx": 62,
+            "version": "6",
+            "when": 1794297364615,
+            "tag": "0062_move_credentials",
+            "breakpoints": true
+        },
+        {
+            "idx": 63,
+            "version": "6",
+            "when": 1794297376347,
+            "tag": "0063_drop_anonymous_credential",
+            "breakpoints": true
         }
     ]
 }
