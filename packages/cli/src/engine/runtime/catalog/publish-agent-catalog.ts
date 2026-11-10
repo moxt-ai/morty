@@ -1,3 +1,4 @@
+import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { fetch } from "undici";
 import { environmentProxyDispatcher } from "../../util/network/environment-proxy.ts";
 import type { RuntimeConfig } from "../config.ts";
@@ -61,16 +62,8 @@ async function rejectedCatalogError(response: FetchResponse): Promise<AgentCatal
 
 function catalogEndpoint(config: RuntimeConfig): URL {
     const endpoint = relayHttpEndpoint(config.relayUrl);
-    if (endpoint.pathname.endsWith("/daemon")) {
-        endpoint.pathname = `${endpoint.pathname.slice(0, -"/daemon".length)}/catalog`;
-        return endpoint;
-    }
-    const runtimePath = "/v1/runtimes/connect";
-    if (endpoint.pathname.endsWith(runtimePath)) {
-        endpoint.pathname = `${endpoint.pathname.slice(0, -runtimePath.length)}/channels/${encodeURIComponent(config.computerId)}/catalog`;
-        return endpoint;
-    }
-    throw new AgentCatalogPublishError("The Relay URL is invalid");
+    endpoint.pathname = `${MORTY_API_PREFIX}/channels/${encodeURIComponent(config.computerId)}/catalog`;
+    return endpoint;
 }
 
 export async function publishAgentCatalog(config: RuntimeConfig, signal: AbortSignal): Promise<void> {

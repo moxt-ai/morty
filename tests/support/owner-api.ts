@@ -1,5 +1,4 @@
-import type { CreateMortySessionRequest } from "@morty-build/client";
-import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
+import { decodeSessionReadyEvent, type SessionConfigurationSelection } from "@morty-build/client/protocol";
 import { HttpApiTransport } from "../../packages/web/src/services/api/http-api-transport.ts";
 import { BotChatApi } from "../../packages/web/src/services/chat/bot-chat-api.ts";
 
@@ -23,7 +22,16 @@ export function createOwnerApi(options: {
     });
     return {
         api,
-        createSession: async (input: CreateMortySessionRequest, signal: AbortSignal) => {
+        createSession: async (
+            input: {
+                readonly harness: string;
+                readonly configurations: readonly SessionConfigurationSelection[];
+                readonly directory: string;
+                readonly computerId: string;
+                readonly operationId: string;
+            },
+            signal: AbortSignal,
+        ) => {
             const setup = await options.request(
                 new Request(`${options.origin}/morty/api/chat/computers/${options.computerId}/setup`, {
                     method: "POST",

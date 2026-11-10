@@ -113,6 +113,14 @@ for (const path of [
 ]) {
     await request(path, 404);
 }
+const successor = `morty_anon_v1_${randomBytes(32).toString("base64url")}`;
+await request(`/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.token, { successor });
+await request(`${sessionPath}/live-event-subscription-target`, 401, access.credential);
+const renewed = v.parse(
+    v.object({ credential: v.string() }),
+    await request(`${chat}/session-access`, 200, successor, access.target),
+);
+await request(`${sessionPath}/live-event-subscription-target`, 200, renewed.credential);
 await writeFile(
     values.evidence,
     `${JSON.stringify(
@@ -124,6 +132,8 @@ await writeFile(
             runtimeVerificationStatus: 200,
             forgeryStatus: 401,
             retiredEndpointsStatus: 404,
+            endedHolderStatus: 401,
+            successorHolderStatus: 200,
             agent: "controlled ACP harness; not vendor-Agent compatibility evidence",
         },
         null,
