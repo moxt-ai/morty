@@ -161,6 +161,13 @@ export const PLAYGROUND_ENTRIES = [
     },
     {
         group: "Chat",
+        id: "session-welcome",
+        source: "components/chat/session-welcome.tsx",
+        summary: "First-session guidance with a suggested progress action. Reopen the card after dismissing it.",
+        title: "Session welcome",
+    },
+    {
+        group: "Chat",
         id: "session-interactions",
         source: "components/chat/session-interactions.tsx",
         summary:

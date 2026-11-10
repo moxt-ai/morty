@@ -35,7 +35,7 @@ export function AgentQuestions({
     return (
         <section
             aria-label="Agent question"
-            className="min-w-0 w-full rounded-[20px] border-[0.5px] border-border bg-surface-elevated px-4 py-4 text-13 [overflow-wrap:anywhere]"
+            className="mt-2 min-w-0 w-full rounded-[20px] border-[0.5px] border-border bg-surface-elevated px-4 py-4 text-13 [overflow-wrap:anywhere]"
         >
             <div className="flex items-start gap-2">
                 <HelpCircle aria-hidden="true" className="mt-[3px] size-4 shrink-0 text-muted-foreground" />

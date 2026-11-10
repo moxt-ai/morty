@@ -33,6 +33,28 @@ test("Given a first session handoff, When the original session opens, Then a dis
     expect(queryByRole(document.body, "region", { name: "Continue your work here" })).toBeNull();
 });
 
+test("Given a dismissed welcome tip, When its chat URL requests the welcome mock, Then the card appears without sending a message", async () => {
+    const app = await openFirstSession();
+    const original = await app.waitForView(() =>
+        getByRole(document.body, "region", { name: "Continue your work here" }),
+    );
+    await app.user.click(getByRole(original, "button", { name: "Dismiss getting started tip" }));
+    expect(queryByRole(document.body, "region", { name: "Continue your work here" })).toBeNull();
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("mockSessionWelcome", "1");
+    window.history.replaceState(null, "", url);
+    const preview = await app.reload();
+    const card = await preview.waitForView(() =>
+        getByRole(document.body, "region", { name: "Continue your work here" }),
+    );
+    getByRole(card, "button", { name: "Ask for a progress update" });
+    expect(preview.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
+    await preview.user.click(getByRole(card, "button", { name: "Dismiss getting started tip" }));
+    expect(queryByRole(document.body, "region", { name: "Continue your work here" })).toBeNull();
+    await preview.close();
+});
+
 test("Given the first-session tip, When I choose a progress question, Then it becomes an editable draft and is sent only after I press Send", {
     timeout: 30_000,
 }, async () => {
