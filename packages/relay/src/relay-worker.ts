@@ -81,7 +81,6 @@ type RelayApplicationBindings = RelayRelayBindings | ComputerRelayRelayBindings 
 
 export interface ConfiguredRelayRelayBindings extends RelayRelayBindings, RelayAuthenticationEnvironment {
     readonly APP_ORIGIN?: string;
-    readonly MORTY_RELAY_URL?: string;
 }
 
 // A request a Session credential authorizes is routed to its ComputerRelay before any Session route runs.
@@ -99,7 +98,6 @@ function nativeTarget(request: { readonly param: (name: string) => string | unde
     };
 }
 
-/** Session operations on the Runtime a Session credential authorized. */
 /** Session operations through a Session credential, each authorized for its own permission on that Session. */
 function authorizedSessionControl(
     context: {
