@@ -44,7 +44,7 @@ import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
 import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
 import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/relay-worker.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { computerManagementStore } from "./registered-runtime.ts";
 
@@ -212,7 +212,7 @@ afterAll(async () => {
 });
 
 describe.sequential("Relay Session-only boundary", () => {
-    it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Relay permits the request", async () => {
+    it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Relay permits Session authorization without advertising retired identity providers", async () => {
         const browserOrigin = "https://chat.test";
         const worker = createTestMortyRelayApp(
             new RelayAuthenticationConfiguration(new Set([browserOrigin])),
@@ -239,6 +239,7 @@ describe.sequential("Relay Session-only boundary", () => {
         expect(response.headers.get("access-control-allow-origin")).toBe(browserOrigin);
         expect(response.headers.get("access-control-allow-methods")).toContain("GET");
         expect(response.headers.get("access-control-allow-headers")).toContain("authorization");
+        expect(response.headers.get("access-control-allow-headers")).not.toContain("x-morty-oidc-provider");
     });
 
     it("Given a Session route the Relay no longer serves, When an app requests pending interactions, Then the Relay answers with a typed JSON not_found error", async () => {

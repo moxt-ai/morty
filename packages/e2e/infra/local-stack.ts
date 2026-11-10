@@ -5,14 +5,12 @@ import { fileURLToPath } from "node:url";
 import type { E2EHarness } from "./harness.ts";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const mortyRepository = repository;
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
 const wranglerExecutable = join(repository, "node_modules", ".bin", "wrangler");
 
-// The Workers learn each other's origins before either starts, so the stack chooses their ports instead of binding
-// port 0. It chooses below every relay's ephemeral range (Linux from 32768, macOS and Windows from 49152): a port
-// the system assigns to any other socket meanwhile, an outbound connection or a Worker's inspector, cannot take it.
+// Choose the Worker port below the ephemeral range (Linux from 32768, macOS and Windows from 49152), so an
+// outbound connection or inspector cannot take it between allocation and startup.
 const STACK_PORTS = { first: 20_000, last: 32_767 } as const;
 
 async function bindable(port: number): Promise<boolean> {
@@ -61,7 +59,6 @@ const sessionSigningSecret = "local-development-only-session-signing-secret";
 export class LocalStack {
     readonly harness: E2EHarness;
     readonly directories: Readonly<Record<"chat" | "workspace", string>>;
-    readonly relayOrigin: string;
     readonly chatOrigin: string;
     readonly chatPort: number;
 
@@ -79,12 +76,11 @@ export class LocalStack {
         this.harness = harness;
         this.directories = directories;
         this.chatOrigin = `http://127.0.0.1:${chatPort}`;
-        this.relayOrigin = this.chatOrigin;
         this.chatPort = chatPort;
     }
 
     async start() {
-        const revision = (await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: mortyRepository })).stdout.trim();
+        const revision = (await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: repository })).stdout.trim();
         this.harness.record("mortyRevision", revision);
         await this.harness.stage("migrate-morty", async () => {
             await migrate(
@@ -92,7 +88,7 @@ export class LocalStack {
                 chatConfiguration,
                 "RELAY_DIRECTORY_DATABASE",
                 this.directories.chat,
-                mortyRepository,
+                repository,
             );
         });
         const variables = {

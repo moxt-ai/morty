@@ -33,7 +33,6 @@ export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
 
 /** Owns the real Cloudflare adapters for Runtime/Worker integration scenarios. */
 function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<string>) {
-    const packageDirectory = new NodeURL("../../relay/", import.meta.url);
     const options = {
         name: "morty-test-relay",
         modules: true,
@@ -49,7 +48,7 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
             MORTY_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
             MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
         },
-        durableObjects: miniflareDurableObjects(new NodeURL("wrangler.jsonc", packageDirectory)),
+        durableObjects: miniflareDurableObjects(new NodeURL("../wrangler.test.jsonc", import.meta.url)),
     } satisfies Parameters<typeof convertV4MiniflareOptions>[0];
     const runtime = new Miniflare(convertV4MiniflareOptions(options));
     return {

@@ -7,7 +7,7 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/relay-worker.ts";
 import { createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const relayOrigin = "https://relay.test";

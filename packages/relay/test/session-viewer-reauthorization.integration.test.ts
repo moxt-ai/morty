@@ -5,7 +5,7 @@ import { afterAll, expect, it } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/relay-worker.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 

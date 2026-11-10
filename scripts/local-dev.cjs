@@ -436,13 +436,11 @@ async function prepare(options) {
     const chatPersist = path.join(stateDir, "chat");
     const chatLog = path.join(stateDir, "chat.log");
     const chatOrigin = `http://localhost:${chatPort}`;
-    const relayOrigin = chatOrigin;
     let stack = {
         mode: options.mode,
         chatLog,
         chatOrigin,
         chatPersist,
-        relayOrigin,
         ready: false,
         stateDir,
     };
@@ -520,7 +518,6 @@ async function prepare(options) {
             chatOrigin,
             chatPersist,
             chatPid,
-            relayOrigin,
             ready: true,
             stateDir,
         };

@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { hashPairingCredential } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/relay-worker.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
