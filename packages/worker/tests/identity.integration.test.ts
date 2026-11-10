@@ -1097,3 +1097,40 @@ test("Given a browser whose credential a later link replaced, When a stale tab o
     expect((await request("/session", rejoined)).status).toBe(200);
     expect(await devices(phone)).toEqual([{ id: expect.not.stringMatching(laptopId), label: "macOS · Chrome" }]);
 });
+
+test("Given a browser that shared a link nobody opened yet, When it disconnects every other browser, Then that link adds no device while the browser keeps its own access", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const share = async (token: string) => {
+        const shared = await request("/identity/transfers", token, sharingRequest());
+        return new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    };
+    const open = (code: string, device: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device }),
+            }),
+            environment,
+        );
+    const phone = v.parse(
+        v.object({ token: v.string() }),
+        await (await open(await share(owner.token), "iPhone · Safari")).json(),
+    ).token;
+    const pending = await share(phone);
+
+    const ended = await request("/identity/v1/other-browser-access", phone, { method: "DELETE" });
+
+    expect(ended.status).toBe(200);
+    expect((await open(pending, "macOS · Chrome")).status).toBe(410);
+    expect((await request("/session", phone)).status).toBe(200);
+});
