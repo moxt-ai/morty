@@ -123,7 +123,11 @@ export async function createTestApp(
                 userId: current.userId,
             });
             destination.searchParams.set("identity", encodeIdentityScope(scope));
-            saveAccess(scope, await current.identity.getToken(new AbortController().signal));
+            await saveAccess(
+                scope,
+                await current.identity.getToken(new AbortController().signal),
+                new AbortController().signal,
+            );
         }
         window.location.href = destination.href;
     } else if (options.application === undefined) {
@@ -140,7 +144,11 @@ export async function createTestApp(
             userId: current.userId,
         });
         destination.searchParams.set("identity", encodeIdentityScope(scope));
-        saveAccess(scope, await current.identity.getToken(new AbortController().signal));
+        await saveAccess(
+            scope,
+            await current.identity.getToken(new AbortController().signal),
+            new AbortController().signal,
+        );
         window.location.href = destination.href;
     }
     let container = document.createElement("div");

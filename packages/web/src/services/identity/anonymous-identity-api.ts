@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import type { ApiTransport } from "../api/api-transport.ts";
-import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
+import { browserAccessEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { centralSessionStorage, transferRedemptionEntry } from "../session-storage/central-session-storage.ts";
 import { describeBrowser } from "./device-label.ts";
@@ -11,10 +11,7 @@ import {
     writeIdentityScope,
 } from "./identity-scope-url.ts";
 import {
-    forgetComputer,
-    forgetComputerAccess,
-    rememberComputer,
-    saveAccess,
+    type StoredAccessWriter,
     storedToken,
     storedTokenForProject,
     withStoredAccessLock,
@@ -45,7 +42,7 @@ export function transferCodeProject(code: string): string | null {
 }
 
 /** Stored key name of the anonymous credential map, shared with browser tests. */
-export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialsEntry.key;
+export const ANONYMOUS_CREDENTIAL_KEY_NAME = browserAccessEntry.key;
 
 const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
@@ -182,12 +179,10 @@ export class AnonymousIdentityApi {
             signal.throwIfAborted();
             const token = storedToken(scope.userId);
             if (token === null) {
-                forgetComputer(scope);
                 return { kind: "gone" };
             }
             const checked = await this.#checkAccess({ ...scope, token }, signal);
             if (checked.kind === "open") {
-                rememberComputer(scope);
                 return checked;
             }
             // A tab replacing this access holds the lock until it saves the replacement, so forgetting waits for it
@@ -195,7 +190,7 @@ export class AnonymousIdentityApi {
             if (
                 await withStoredAccessLock(
                     signal,
-                    async () => forgetComputerAccess(scope, token) || storedToken(scope.userId) === null,
+                    async (access) => access.forgetRejected(scope, token) || storedToken(scope.userId) === null,
                 )
             ) {
                 return checked;
@@ -272,9 +267,13 @@ export class AnonymousIdentityApi {
      * Project is replaced by the new one, which also takes over the links it came from.
      */
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> =>
-        await withStoredAccessLock(signal, () => this.#redeemTransfer(code, signal));
+        await withStoredAccessLock(signal, (access) => this.#redeemTransfer(code, signal, access));
 
-    readonly #redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
+    readonly #redeemTransfer = async (
+        code: string,
+        signal: AbortSignal,
+        access: StoredAccessWriter,
+    ): Promise<AnonymousIdentity> => {
         const computerId = transferCodeProject(code);
         const replaces = computerId === null ? null : storedTokenForProject(computerId);
         const redemptionKey = transferRedemptionKey(code);
@@ -295,7 +294,7 @@ export class AnonymousIdentityApi {
                 signal,
             ),
         );
-        this.#saveIdentity(identity);
+        this.#saveIdentity(identity, access);
         centralSessionStorage.remove(transferRedemptionEntry);
         return identity;
     };
@@ -363,7 +362,11 @@ export class AnonymousIdentityApi {
         );
     };
 
-    readonly endRemoteAccess = async (token: string, signal: AbortSignal): Promise<void> => {
+    readonly endRemoteAccess = async (
+        token: string,
+        signal: AbortSignal,
+        access: StoredAccessWriter,
+    ): Promise<void> => {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };
         const session = await this.#response("/session", { method: "GET", headers }, signal);
         await session.body?.cancel();
@@ -372,7 +375,7 @@ export class AnonymousIdentityApi {
         await this.#request(path, { method: "DELETE", headers }, signal);
         const scope = readIdentityScope();
         if (scope !== null) {
-            forgetComputer(scope);
+            access.forget(scope);
         }
         leaveComputerAddress();
     };
@@ -393,12 +396,12 @@ export class AnonymousIdentityApi {
         return result.token;
     };
 
-    readonly saveIdentity = (identity: AnonymousIdentity): void =>
-        this.#saveIdentity(v.parse(identitySchema, identity));
+    readonly saveIdentity = async (identity: AnonymousIdentity, signal: AbortSignal): Promise<void> =>
+        withStoredAccessLock(signal, async (access) => this.#saveIdentity(v.parse(identitySchema, identity), access));
 
-    readonly #saveIdentity = (identity: AnonymousIdentity) => {
+    readonly #saveIdentity = (identity: AnonymousIdentity, access: StoredAccessWriter) => {
         const scope = { computerId: identity.computerId, userId: identity.userId };
-        saveAccess(scope, identity.token);
+        access.save(scope, identity.token);
         writeIdentityScope(scope);
     };
 

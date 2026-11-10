@@ -62,10 +62,11 @@ export function createRemoteAccessOperations(options: {
             // Another tab may have replaced the access while the user confirmed; end the one held now. The Worker
             // checks it, so it is read without validating it again, which would wait for this same lock.
             try {
-                await withStoredAccessLock(signal, async () =>
+                await withStoredAccessLock(signal, async (access) =>
                     api.endRemoteAccess(
                         storedTokenForProject(options.identity.computerId) ?? (await options.identity.getToken(signal)),
                         signal,
+                        access,
                     ),
                 );
             } catch (cause) {
