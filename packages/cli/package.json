@@ -56,7 +56,7 @@
         "pack:test": "node scripts/pack-test-release.ts"
     },
     "dependencies": {
-        "undici": "8.12.2"
+        "undici": "8.12.4"
     },
     "devDependencies": {
         "@agentclientprotocol/sdk": "^1.4.0",
@@ -66,14 +66,14 @@
         "@morty-build/platform-test-support": "workspace:*",
         "@types/node": "catalog:",
         "@types/semver": "^7.8.0",
-        "@types/ws": "^8.18.1",
+        "@types/ws": "^8.18.2",
         "commander": "15.0.0",
         "drizzle-kit": "1.0.0-rc.4",
         "drizzle-orm": "1.0.0-rc.4",
         "esbuild": "catalog:",
-        "semver": "^7.8.5",
+        "semver": "^7.8.6",
         "valibot": "catalog:",
-        "ws": "^8.21.3",
+        "ws": "^8.22.1",
         "zod": "^4.6.7",
         "@morty-build/local-state": "workspace:*",
         "miniflare": "catalog:"

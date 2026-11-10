@@ -20,13 +20,13 @@
         "@morty-build/relay": "workspace:*",
         "@morty-build/relay-core": "workspace:*",
         "@morty-build/client": "workspace:*",
-        "@types/ws": "^8.18.1",
+        "@types/ws": "^8.18.2",
         "drizzle-orm": "catalog:",
         "esbuild": "catalog:",
         "hono": "catalog:",
         "miniflare": "catalog:",
         "valibot": "catalog:",
         "wrangler": "catalog:",
-        "ws": "^8.21.3"
+        "ws": "^8.22.1"
     }
 }

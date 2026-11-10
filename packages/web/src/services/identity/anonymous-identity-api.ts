@@ -115,10 +115,10 @@ export interface SharingTerms {
  * What checking access this browser stores found. Access that no longer opens its computer is forgotten either way;
  * `revoked` is the Worker reporting that the access was ended, `gone` is any other access that stopped opening it.
  */
-export type AccessCheck =
-    | { readonly kind: "open"; readonly identity: AnonymousIdentity }
-    | { readonly kind: "revoked" }
-    | { readonly kind: "gone" };
+export type AccessCheck = { readonly kind: "open"; readonly identity: AnonymousIdentity } | LostAccess;
+
+/** An access check that found the access no longer opens its computer. */
+export type LostAccess = { readonly kind: "revoked" } | { readonly kind: "gone" };
 
 /** The reason the Worker gives, beside UNAUTHENTICATED, for a credential whose access was ended. */
 const ACCESS_REVOKED = "ACCESS_REVOKED";

@@ -180,35 +180,6 @@ function credentialHeaders(credential: string): Headers {
     return new Headers({ authorization: `Bearer ${credential}`, "content-type": "application/json" });
 }
 
-class UnavailableProjectNamespace implements DurableObjectNamespace {
-    readonly #source: DurableObjectNamespace;
-    #accessCount = 0;
-
-    constructor(source: DurableObjectNamespace) {
-        this.#source = source;
-    }
-
-    get accessCount(): number {
-        return this.#accessCount;
-    }
-
-    readonly newUniqueId: DurableObjectNamespace["newUniqueId"] = (options) => this.#source.newUniqueId(options);
-
-    readonly idFromName: DurableObjectNamespace["idFromName"] = (name) => this.#source.idFromName(name);
-
-    readonly idFromString: DurableObjectNamespace["idFromString"] = (id) => this.#source.idFromString(id);
-
-    readonly get: DurableObjectNamespace["get"] = (id, options) => this.#source.get(id, options);
-
-    readonly getByName: DurableObjectNamespace["getByName"] = () => {
-        this.#accessCount += 1;
-        throw new Error("Project storage must not be accessed");
-    };
-
-    readonly jurisdiction: DurableObjectNamespace["jurisdiction"] = (jurisdiction) =>
-        new UnavailableProjectNamespace(this.#source.jurisdiction(jurisdiction));
-}
-
 class SocketMessages {
     readonly #messages: unknown[] = [];
     readonly #resolvers: Array<(message: unknown) => void> = [];

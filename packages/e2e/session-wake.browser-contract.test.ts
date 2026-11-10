@@ -9,19 +9,30 @@ test("Given a conversation recovering after suspension, when its history read ti
     const historyHeld = Promise.withResolvers<() => void>();
     let holdHistory = false;
     const connections = new Set<WebSocketRoute>();
+    let heartbeat: PromiseWithResolvers<void> | null = null;
     // Forward to the real Platform. Delay one real history request while
     // keeping subscription acknowledgements and heartbeats flowing.
     await page.routeWebSocket("**/morty/api/v1/computers/*/transport", (socket) => {
         const server = socket.connectToServer();
         connections.add(socket);
+        server.onMessage((message) => {
+            socket.send(message);
+            if (message === '{"kind":"pong"}') {
+                heartbeat?.resolve();
+            }
+        });
         socket.onClose(async (code, reason) => {
             connections.delete(socket);
+            heartbeat?.resolve();
             await server.close({
                 ...(code === undefined ? {} : { code }),
                 ...(reason === undefined ? {} : { reason }),
             });
         });
         socket.onMessage((message) => {
+            if (message === '{"kind":"ping"}') {
+                heartbeat = Promise.withResolvers();
+            }
             const frame: unknown = typeof message === "string" ? JSON.parse(message) : null;
             if (
                 holdHistory &&
@@ -42,6 +53,15 @@ test("Given a conversation recovering after suspension, when its history read ti
             server.send(message);
         });
     });
+    // Virtual time fires due timers back to back, while each heartbeat's pong is
+    // real I/O. A live connection therefore advances in steps shorter than the
+    // ten-second heartbeat deadline, each ending once the ping is answered.
+    const stayConnectedFor = async (milliseconds: number) => {
+        for (let elapsed = 0; elapsed < milliseconds; elapsed += 5_000) {
+            await page.clock.runFor(Math.min(5_000, milliseconds - elapsed));
+            await heartbeat?.promise;
+        }
+    };
     await page.clock.install({ time: new Date("2026-10-28T08:00:00Z") });
     await page.clock.pauseAt(new Date("2026-10-28T08:01:00Z"));
     await runtime.openPairedChat();
@@ -60,13 +80,13 @@ test("Given a conversation recovering after suspension, when its history read ti
     });
     await page.evaluate(() => document.dispatchEvent(new Event("resume")));
     const releaseHistory = await historyHeld.promise;
-    await page.clock.runFor(45_000);
+    await stayConnectedFor(45_000);
     // A read deadline is recoverable; it must not become a terminal cancellation.
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toContainText("Retrying in");
     await expect(page.getByRole("alert")).toHaveCount(0);
     // The disconnect and the read timeout consume two attempts: the second
     // bounded backoff is at most ten seconds, driven entirely by virtual time.
-    await page.clock.runFor(10_000);
+    await stayConnectedFor(10_000);
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     releaseHistory();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
