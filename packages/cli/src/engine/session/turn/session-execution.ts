@@ -51,7 +51,11 @@ export class SessionExecutionState {
 
     readonly isEmpty = (): boolean => this.#turnsByCommandId.size === 0;
 
-    readonly start = (command: SessionPromptCommand, attemptId: string): ActiveRuntimeTurn => {
+    /**
+     * Places the prompt in arrival order. An appended prompt behind an earlier turn that owns an execution enters the
+     * queue as it arrives, so the queue and its announcements follow arrival order whatever its preparation awaits.
+     */
+    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
         const turn = new ActiveRuntimeTurn(
             command,
             attemptId,
@@ -59,8 +63,16 @@ export class SessionExecutionState {
             () => this.#operations.startedAt(command.commandId, this.#sessionTarget),
         );
         this.#turnsByCommandId.set(command.commandId, turn);
+        if (command.disposition !== SessionPromptDisposition.Steer && this.#head() !== turn) {
+            turn.enqueue();
+            onQueued();
+        }
         return turn;
     };
+
+    /** The earliest turn that owns an execution: a promoted prompt steers instead and holds no place. */
+    readonly #head = (): ActiveRuntimeTurn | undefined =>
+        [...this.#turnsByCommandId.values()].find((candidate) => !candidate.isSteering());
 
     readonly get = (commandId: string): ActiveRuntimeTurn | undefined => this.#turnsByCommandId.get(commandId);
 
@@ -98,29 +110,18 @@ export class SessionExecutionState {
 
     /**
      * Admits the turn in arrival order. A steering prompt joins the running turn it names. An appended prompt runs
-     * when no earlier turn owns an execution, and otherwise waits in the queue until every earlier one ended or the
-     * user promotes it to steer the turn it waits behind. Admission never refuses an appended prompt.
+     * when no earlier turn owns an execution, and otherwise waits in the queue it entered on arrival until every earlier
+     * one ended or the user promotes it to steer the turn it waits behind. Admission never refuses an appended prompt.
      */
-    readonly admitAndWait = async (
-        turn: ActiveRuntimeTurn,
-        waitSignal: AbortSignal,
-        onQueued: () => void,
-    ): Promise<PromptDispatch> => {
+    readonly admitAndWait = async (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<PromptDispatch> => {
         const command = turn.command;
         waitSignal.throwIfAborted();
         if (command.disposition === SessionPromptDisposition.Steer) {
             return turn.admit({ kind: "steer", targetCommandId: command.targetCommandId });
         }
-        // The earliest turn that owns an execution: a promoted prompt steers instead and holds no place.
-        const head = (): ActiveRuntimeTurn | undefined =>
-            [...this.#turnsByCommandId.values()].find((candidate) => !candidate.isSteering());
-        if (head() !== turn) {
-            turn.enqueue();
-            onQueued();
-        }
         for (;;) {
             waitSignal.throwIfAborted();
-            const first = head();
+            const first = this.#head();
             if (first === undefined || first === turn) {
                 return turn.admit({ kind: "own" });
             }
