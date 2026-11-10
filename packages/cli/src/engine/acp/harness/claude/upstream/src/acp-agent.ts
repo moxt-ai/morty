@@ -5213,7 +5213,12 @@ export class ClaudeAcpAgent {
             return;
         }
         if (graceful) {
-            await this.cancel({ sessionId });
+            try {
+                // Let Claude persist interrupted background work, but never wait on a wedged SDK.
+                await raceWithAbort(this.cancel({ sessionId }), AbortSignal.timeout(1_000));
+            } catch (cause) {
+                this.logger.error("Claude did not acknowledge session teardown; forcing closure", cause);
+            }
         }
         // cancel() arms the force-cancel floor and interrupts gracefully, but a
         // wedged consumer only wakes when `cancelController` aborts — closeQueryStream
@@ -5234,7 +5239,7 @@ export class ClaudeAcpAgent {
     }
 
     /** Tear down all active sessions. Called when the ACP connection closes. */
-    async dispose(): Promise<void> {
+    async dispose(mode?: "force"): Promise<void> {
         if (this.closing === null) {
             this.lifetime.abort(new DOMException("The Claude client closed", "AbortError"));
             for (const controller of this.creationControllers) {
@@ -5242,7 +5247,7 @@ export class ClaudeAcpAgent {
             }
             this.closing = (async () => {
                 await Promise.allSettled([...this.creating]);
-                await Promise.all(Object.keys(this.sessions).map((id) => this.teardownSession(id, false)));
+                await Promise.all(Object.keys(this.sessions).map((id) => this.teardownSession(id, mode !== "force")));
             })();
         }
         return await this.closing;

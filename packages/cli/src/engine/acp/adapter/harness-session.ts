@@ -7,7 +7,7 @@ export interface HarnessClient {
     readonly signal: AbortSignal;
     readonly prompt: (request: PromptRequest) => Promise<PromptResponse>;
     readonly cancel: (request: { readonly sessionId: string }) => Promise<void>;
-    readonly dispose: () => Promise<void>;
+    readonly dispose: (mode?: "force") => Promise<void>;
 }
 
 export interface HarnessLifetime {
@@ -132,15 +132,23 @@ export class HarnessSession<Client extends HarnessClient> {
             if (!deadline.aborted) {
                 throw cause;
             }
-            await this.dispose();
+            await this.dispose("force");
             return "closed";
         }
     };
 
-    readonly dispose = (): Promise<void> => {
+    readonly dispose = (mode?: "force"): Promise<void> => {
         if (this.#closing === null) {
-            this.#closing = this.agent.dispose();
-            this.#lifetime.abort(new DOMException("The harness session was released", "AbortError"));
+            this.#closing = this.agent
+                .dispose(mode)
+                .then(async () => {
+                    if (mode !== "force") {
+                        await this.#drained();
+                    }
+                })
+                .finally(() => {
+                    this.#lifetime.abort(new DOMException("The harness session was released", "AbortError"));
+                });
         }
         return this.#closing;
     };
