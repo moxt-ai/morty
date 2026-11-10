@@ -1,9 +1,8 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { computer } from "../schema/project-do/index.ts";
+import { activeGeneration } from "./runtime-generation.ts";
 
-/** Whether a Runtime is still active in the Project's own storage. */
+/** Which pairing generation of a Runtime is active in the Project's own storage. */
 export class ChannelCredentialStorage {
     readonly #database: SqlDatabase;
 
@@ -11,22 +10,15 @@ export class ChannelCredentialStorage {
         this.#database = database;
     }
 
-    readonly readActiveRuntime = async (
+    readonly readActiveGeneration = async (
         identity: { readonly computerId: string },
         signal: AbortSignal,
-    ): Promise<boolean> => {
-        const database = relayDrizzle(this.#database, signal);
-        const runtimes = await database
-            .select({ computerId: computer.computerId })
-            .from(computer)
-            .where(
-                and(
-                    eq(computer.computerId, identity.computerId),
-                    isNotNull(computer.claimedAt),
-                    isNull(computer.revokedAt),
-                ),
-            )
+    ): Promise<number | null> => {
+        const active = activeGeneration(identity.computerId).as("active_generation");
+        const rows = await relayDrizzle(this.#database, signal)
+            .select({ generation: active.generation })
+            .from(active)
             .limit(1);
-        return runtimes.length === 1;
+        return rows[0]?.generation ?? null;
     };
 }

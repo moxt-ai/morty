@@ -49,7 +49,7 @@ function createRuntimeRelayDependencies(cx: {
             }
             const { credentialId } = identity.credential;
             if (
-                !(await service.isRuntimeActive(identity, signal)) ||
+                (await service.activeGeneration(identity, signal)) === null ||
                 !(await cx.gateways.projectCredentials.grants(
                     identity.computerId,
                     credentialId,
@@ -82,9 +82,9 @@ function createRuntimeRelayDependencies(cx: {
                 ? "granted"
                 : "revoked";
         },
-        isRuntimeActive: async (identity, signal) => {
+        activeGeneration: async (identity, signal) => {
             const service = await credentialService(new ComputerScope(identity.computerId), signal);
-            return service !== null && (await service.isRuntimeActive(identity, signal));
+            return service === null ? null : await service.activeGeneration(identity, signal);
         },
     };
     const services = {

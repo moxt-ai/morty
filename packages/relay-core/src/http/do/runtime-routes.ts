@@ -35,25 +35,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return new Response("WebSocket upgrade required", { status: 426 });
         }
         if (url.pathname.endsWith("/daemon")) {
-            const result = await runtime.acceptDaemon(scope, request.signal);
-            switch (result.kind) {
-                case "accepted":
-                    return result.response;
-                case "revoked":
-                    return revoked();
-                case "conflict":
-                    return Response.json(
-                        {
-                            error: {
-                                code: "computer_identity_conflict",
-                                message: "The Channel is already assigned to another Runtime",
-                            },
-                        },
-                        { status: 409 },
-                    );
-            }
-            const unreachable: never = result;
-            return unreachable;
+            return admitted(await runtime.acceptDaemon(scope, request.signal));
         }
         if (url.pathname.endsWith("/host")) {
             if (credentialId === null) {

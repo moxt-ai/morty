@@ -7,7 +7,7 @@ import {
     runtimeConnectionDurableObjectMigrations,
 } from "@morty-build/relay-core";
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import { daemonCredential } from "@morty-build/relay-core/schema/project-do";
+import { daemonCredential, runtimeRegistration } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -144,7 +144,8 @@ it("Given pending reservations at capacity, When their deadline passes without e
     expect(await responseJson(await app.status(first), 200)).toEqual({ status: "expired" });
     expect(await responseJson(await app.claim(first), 400)).toMatchObject({ error: { code: "invalid_pairing_code" } });
     expect(await app.pair("replacement")).toMatchObject({ computerId: app.computerId });
-    expect((await app.create("reservation-0")).status).toBe(429);
+    // A retry of the first request still names that request's generation, which a newer one replaced.
+    expect(await app.pair("reservation-0")).toEqual(first);
 });
 
 it("Given simultaneous retries of one creation, When they commit, Then they share one reservation and occupy the single daemon slot", async () => {
@@ -385,7 +386,7 @@ it.each(["", "morty-pairing-v1\0"])(
             database.orm
                 .update(daemonCredential)
                 .set({ tokenHash: await hashSecret(`${retiredDomain}${old.runtimeCredential}`) })
-                .where(eq(daemonCredential.computerId, oldPairing.computerId))
+                .where(eq(daemonCredential.tokenHash, await hashPairingCredential(old.runtimeCredential)))
                 .run();
         });
         expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);
@@ -400,7 +401,7 @@ it.each(["", "morty-pairing-v1\0"])(
     },
 );
 
-it("migrates the registered computer and independent audit IDs together", async () => {
+it("migrates independent audit IDs of every category together", async () => {
     const app = await project();
     await app.storage(async (storage) => {
         await storage.deleteAll();
@@ -420,14 +421,6 @@ it("migrates the registered computer and independent audit IDs together", async 
                 VALUES ('same','machine','service','application','owner','owner','project.created','machine','succeeded','{}',10);
         `);
         applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
-        const migrated = storage.sql.exec("SELECT * FROM computer").one();
-        expect(migrated).toMatchObject({
-            computer_id: "machine",
-            claimed_at: 11,
-            machine_name: "laptop",
-            workspace_name: "work",
-            agents_json: "[]",
-        });
         expect(
             storage.sql.exec("SELECT category FROM audit_events WHERE audit_id='same' ORDER BY category").toArray(),
         ).toEqual([{ category: "computer_management" }, { category: "pairing" }]);
@@ -443,23 +436,22 @@ it("keeps the newer epoch online when the previous daemon closes after reconnect
         const { RuntimeConnectionService } = await import(
             "../../relay-core/src/service/channel/runtime-connection-service.ts"
         );
-        const database = new RuntimeConnectionStorage(new DurableObjectSqlDatabase(storage));
-        const connections = new RuntimeConnectionService(database);
-        const first = connections.prepare(paired.computerId);
-        expect(first.kind).toBe("ready");
-        if (first.kind !== "ready") {
-            throw new Error("Connection was refused");
+        const sql = new DurableObjectSqlDatabase(storage);
+        const connections = new RuntimeConnectionService(new RuntimeConnectionStorage(sql));
+        const registration = sql.orm
+            .select({ generation: runtimeRegistration.generation })
+            .from(runtimeRegistration)
+            .get();
+        if (registration === undefined) {
+            throw new Error("Expected the claimed generation");
         }
-        connections.connected(first.identity, 100);
-        const second = connections.prepare(paired.computerId);
-        if (second.kind !== "ready") {
-            throw new Error("Reconnect was refused");
-        }
-        expect(second.identity.connectionEpoch).toBe(first.identity.connectionEpoch + 1);
-        connections.connected(second.identity, 200);
-        connections.disconnected(first.identity, 300);
-        expect(connections.isCurrent(first.identity)).toBe(false);
-        expect(connections.isCurrent(second.identity)).toBe(true);
-        expect(connections.current()?.state).toBe("online");
+        const first = connections.next(paired.computerId);
+        connections.connected(first, registration.generation, 100);
+        const second = connections.next(paired.computerId);
+        expect(second.connectionEpoch).toBe(first.connectionEpoch + 1);
+        connections.connected(second, registration.generation, 200);
+        connections.disconnected(first, 300);
+        expect(connections.isCurrent(first)).toBe(false);
+        expect(connections.isCurrent(second)).toBe(true);
     });
 });

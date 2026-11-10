@@ -54,8 +54,8 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
 
 export function createLocalSessionOperations(cx: DurableObjectContext, computerId: string): LocalSessionOperations {
     const checkTarget = (requestedComputer: string) => {
-        const current = cx.services.connections.current();
-        if (requestedComputer !== computerId || current?.computerId !== computerId) {
+        const latest = cx.services.connections.latest();
+        if (requestedComputer !== computerId || latest?.computerId !== computerId) {
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
         const daemon = cx.gateways.peers.sockets().find(({ identity }) => identity.role === "daemon");

@@ -87,8 +87,8 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
         signal,
     ) => this.call("updateAgentCatalog", (stub) => stub.updateAgentCatalog(computerId, tokenHash, agents), signal);
 
-    readonly isRuntimeActive: ComputerManagementStore["isRuntimeActive"] = (computerId, signal) =>
-        this.call("isRuntimeActive", (stub) => stub.isRuntimeActive(computerId), signal);
+    readonly readActiveGeneration: ComputerManagementStore["readActiveGeneration"] = (computerId, signal) =>
+        this.call("readActiveGeneration", (stub) => stub.readActiveGeneration(computerId), signal);
 
     readonly readRuntime: ComputerManagementStore["readRuntime"] = (computerId, signal) =>
         this.call("readRuntime", (stub) => stub.readRuntime(computerId), signal);

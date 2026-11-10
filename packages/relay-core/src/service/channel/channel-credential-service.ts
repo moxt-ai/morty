@@ -7,12 +7,13 @@ export class ChannelCredentialService {
         this.#store = store;
     }
 
-    readonly isRuntimeActive = async (
+    /** The Runtime's active pairing generation; null while none is. */
+    readonly activeGeneration = async (
         identity: { readonly computerId: string },
         signal: AbortSignal,
-    ): Promise<boolean> => {
-        const active = await this.#store.isRuntimeActive(identity.computerId, signal);
+    ): Promise<number | null> => {
+        const generation = await this.#store.readActiveGeneration(identity.computerId, signal);
         signal.throwIfAborted();
-        return active;
+        return generation;
     };
 }

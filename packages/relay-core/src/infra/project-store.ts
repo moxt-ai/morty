@@ -44,8 +44,6 @@ export interface ClaimPairing {
 
 export interface RevokeRuntime {
     readonly computerId: string;
-    /** The owner credential that revoked the Runtime; null when the Relay revoked it for a reused credential. */
-    readonly ownerId: string | null;
     readonly now: number;
     readonly actorKind: string;
     readonly actorId: string;
@@ -64,7 +62,8 @@ export interface ProjectStore {
         agents: string,
         signal: AbortSignal,
     ) => Promise<boolean>;
-    readonly isRuntimeActive: (computerId: string, signal: AbortSignal) => Promise<boolean>;
+    /** The pairing generation whose daemon may act for the computer now; null while none may. */
+    readonly readActiveGeneration: (computerId: string, signal: AbortSignal) => Promise<number | null>;
     readonly readRuntime: (computerId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     readonly listRuntimes: (signal: AbortSignal) => Promise<readonly RuntimeChannelRow[]>;
     /**

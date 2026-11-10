@@ -180,8 +180,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).updateAgentCatalog(computerId, tokenHash, agents, uncancelled);
     }
 
-    async isRuntimeActive(computerId: string): Promise<boolean> {
-        return await this.#operate(computerId).isRuntimeActive(computerId, uncancelled);
+    async readActiveGeneration(computerId: string): Promise<number | null> {
+        return await this.#operate(computerId).readActiveGeneration(computerId, uncancelled);
     }
 
     async readRuntime(computerId: string): Promise<Result<"readRuntime">> {
