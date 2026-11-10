@@ -10,7 +10,7 @@ import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
-import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
+import { ComputerManagementError, relayIdentifier } from "../../management/entity/computer-management.ts";
 import { authenticatedSession, credentialRejected, localSession } from "../../management/http/authenticated-session.ts";
 import {
     type ChatScope,
@@ -21,27 +21,27 @@ import {
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
-    computerId: platformIdentifier,
-    harness: platformIdentifier,
+    computerId: relayIdentifier,
+    harness: relayIdentifier,
 });
 const nativeDirectory = v.custom<string>(isDirectoryPath);
 const nativeIdentity = {
-    computerId: platformIdentifier,
-    harness: platformIdentifier,
+    computerId: relayIdentifier,
+    harness: relayIdentifier,
     directory: nativeDirectory,
 };
 const nativeListInput = v.strictObject({
     ...nativeIdentity,
     action: v.literal("list"),
-    cursor: v.nullable(platformIdentifier),
+    cursor: v.nullable(relayIdentifier),
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity });
-const nativePreviewInput = v.strictObject({ ...nativeIdentity, sessionId: platformIdentifier });
+const nativePreviewInput = v.strictObject({ ...nativeIdentity, sessionId: relayIdentifier });
 const directoryInput = v.strictObject({ directory: nativeDirectory });
-const nativeContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
+const nativeContinuationInput = v.strictObject({ harness: relayIdentifier, sessionId: relayIdentifier });
 const sessionConfiguration = v.strictObject({
     booleanValue: v.boolean(),
-    configId: platformIdentifier,
+    configId: relayIdentifier,
     value: v.pipe(v.string(), v.maxLength(500)),
     valueType: v.picklist(["select", "boolean"]),
 });
@@ -55,15 +55,15 @@ const sessionConfigurations = v.pipe(
 );
 // A page loaded before drafts named their directory omits `workspaceRef`; its settings are the default directory's.
 const agentSettingsInput = v.strictObject({
-    harness: platformIdentifier,
+    harness: relayIdentifier,
     workspaceRef: v.optional(nativeDirectory),
 });
-const nativeSessionTargetInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
+const nativeSessionTargetInput = v.strictObject({ harness: relayIdentifier, sessionId: relayIdentifier });
 const accessInput = v.union([
     nativeSessionTargetInput,
     v.strictObject({
-        harness: platformIdentifier,
-        conversationKey: platformIdentifier,
+        harness: relayIdentifier,
+        conversationKey: relayIdentifier,
         configurations: sessionConfigurations,
         workspaceRef: nativeDirectory,
     }),
@@ -79,13 +79,13 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
 
 async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeout = 45000) {
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
-    const computerId = v.parse(platformIdentifier, context.req.param("computerId"));
+    const computerId = v.parse(relayIdentifier, context.req.param("computerId"));
     const requester = { userId: context.get("session").userId, accessExpiresAt: context.get("accessExpiresAt") };
     return await context.env.services.chat.authorize(requester, computerId, signal);
 }
 
 /**
- * Guards issuing a Session credential, which lives on at the Platform after this response. Access ending sooner than
+ * Guards issuing a Session credential, which lives on at the Relay after this response. Access ending sooner than
  * the shortest Session credential is refused rather than outlived, and access that ended while the credential was
  * issued does not receive it.
  */
@@ -179,7 +179,7 @@ export function createBotChatRoutes() {
             bodyLimit({
                 maxSize: 6500000,
                 onError: () => {
-                    throw new PlatformProjectError("INVALID_REQUEST", "The message is too large.", 413);
+                    throw new ComputerManagementError("INVALID_REQUEST", "The message is too large.", 413);
                 },
             }),
         )
@@ -306,7 +306,7 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
-                const sessionId = v.parse(platformIdentifier, context.req.param("id"));
+                const sessionId = v.parse(relayIdentifier, context.req.param("id"));
                 const { computerId, ...input } = context.req.valid("json");
                 return privateJson(
                     await context.env.services.chat.previewNativeSession(context.get("chatScope"), computerId, {
@@ -322,7 +322,7 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
             async (context) => {
-                const sessionId = v.parse(platformIdentifier, context.req.param("id"));
+                const sessionId = v.parse(relayIdentifier, context.req.param("id"));
                 const { computerId, ...input } = context.req.valid("json");
                 return privateJson(
                     await context.env.services.chat.importNativeSession(
@@ -340,7 +340,7 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
             async (context) => {
-                const operationId = v.parse(platformIdentifier, context.req.param("operationId"));
+                const operationId = v.parse(relayIdentifier, context.req.param("operationId"));
                 const { computerId, ...input } = context.req.valid("json");
                 return privateJson(
                     await context.env.services.chat.recoverableNativeFork(

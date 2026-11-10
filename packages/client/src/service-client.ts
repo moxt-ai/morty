@@ -962,7 +962,7 @@ export class MortySessionResources {
         );
 
     /**
-     * Has the Platform issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
+     * Has the Relay issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
      * revocation, it is never covered by that revocation.
      */
     readonly createAccess = async (sessionTarget: NativeSessionTarget, expiresInSeconds: number, signal: AbortSignal) =>
@@ -1381,8 +1381,8 @@ export class MortyInteractionResources {
         this.#computerId = computerId;
     }
 
-    // The Platform serves no interaction read routes: pending interactions come from the Session's lifecycle events and
-    // its execution snapshot. Only the response submission crosses the Platform API.
+    // The Relay serves no interaction read routes: pending interactions come from the Session's lifecycle events and
+    // its execution snapshot. Only the response submission crosses the Relay API.
     readonly respond = async (
         sessionTarget: NativeSessionTarget,
         interactionId: string,

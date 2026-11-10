@@ -12,16 +12,16 @@ await writeFile("packages/cli/package.json", `${JSON.stringify(metadata, null, 4
 await runE2E("accepted-release", async (harness) => {
     await buildLocalStack(harness);
     const stack = await LocalStack.create(harness);
-    const application = await stack.startPlatform();
+    const application = await stack.startRelay();
     // A release verifies production with this check after activation; run it on this
-    // revision's platform first, so a route or contract change fails before merging.
+    // revision's relay first, so a route or contract change fails before merging.
     await harness.stage("verify-deployment-checks", () =>
         harness.run(
             "python3",
             [
                 resolve("deployment/verify-session-access.py"),
-                "--platform-origin",
-                stack.platformOrigin,
+                "--relay-origin",
+                stack.relayOrigin,
                 "--evidence",
                 join(harness.workDirectory, "session-access-evidence.json"),
             ],

@@ -8,12 +8,12 @@ import type { E2EHarness } from "./harness.ts";
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const mortyRepository = repository;
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
-const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
+const relayConfiguration = join(fixtureDirectory, "wrangler.relay.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
 const wranglerExecutable = join(repository, "node_modules", ".bin", "wrangler");
 
 // The Workers learn each other's origins before either starts, so the stack chooses their ports instead of binding
-// port 0. It chooses below every platform's ephemeral range (Linux from 32768, macOS and Windows from 49152): a port
+// port 0. It chooses below every relay's ephemeral range (Linux from 32768, macOS and Windows from 49152): a port
 // the system assigns to any other socket meanwhile, an outbound connection or a Worker's inspector, cannot take it.
 const STACK_PORTS = { first: 20_000, last: 32_767 } as const;
 
@@ -57,70 +57,70 @@ async function migrate(
     );
 }
 
-// The local platform's Session signing secret; production supplies its own as a deployment secret.
+// The local relay's Session signing secret; production supplies its own as a deployment secret.
 const sessionSigningSecret = "local-development-only-session-signing-secret";
 
 export class LocalStack {
     readonly harness: E2EHarness;
-    readonly directories: Readonly<Record<"platform" | "chat" | "workspace", string>>;
-    readonly platformOrigin: string;
+    readonly directories: Readonly<Record<"relay" | "chat" | "workspace", string>>;
+    readonly relayOrigin: string;
     readonly chatOrigin: string;
-    readonly platformPort: number;
+    readonly relayPort: number;
     readonly chatPort: number;
 
     static async create(harness: E2EHarness) {
-        const platformPort = await freePort();
-        const chatPort = await freePort(new Set([platformPort]));
+        const relayPort = await freePort();
+        const chatPort = await freePort(new Set([relayPort]));
         const directories = {
-            platform: join(harness.workDirectory, "platform"),
+            relay: join(harness.workDirectory, "relay"),
             chat: join(harness.workDirectory, "chat"),
             workspace: join(harness.workDirectory, "workspace"),
         };
         await Promise.all(Object.values(directories).map((path) => mkdir(path, { recursive: true })));
-        return new LocalStack(harness, directories, platformPort, chatPort);
+        return new LocalStack(harness, directories, relayPort, chatPort);
     }
 
     constructor(
         harness: E2EHarness,
-        directories: Readonly<Record<"platform" | "chat" | "workspace", string>>,
-        platformPort: number,
+        directories: Readonly<Record<"relay" | "chat" | "workspace", string>>,
+        relayPort: number,
         chatPort: number,
     ) {
         this.harness = harness;
         this.directories = directories;
-        this.platformOrigin = `http://127.0.0.1:${platformPort}`;
+        this.relayOrigin = `http://127.0.0.1:${relayPort}`;
         this.chatOrigin = `http://127.0.0.1:${chatPort}`;
-        this.platformPort = platformPort;
+        this.relayPort = relayPort;
         this.chatPort = chatPort;
     }
 
-    async startPlatform() {
+    async startRelay() {
         const revision = (await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: mortyRepository })).stdout.trim();
         this.harness.record("mortyRevision", revision);
-        await this.harness.stage("migrate-platform", async () => {
+        await this.harness.stage("migrate-relay", async () => {
             await migrate(
                 this.harness,
-                platformConfiguration,
-                "PLATFORM_DIRECTORY_DATABASE",
-                this.directories.platform,
+                relayConfiguration,
+                "RELAY_DIRECTORY_DATABASE",
+                this.directories.relay,
                 mortyRepository,
             );
         });
         const application = await this.harness.stage("provision-morty-service", () =>
-            provisionLocalService(platformConfiguration, this.directories.platform, this.harness.signal),
+            provisionLocalService(relayConfiguration, this.directories.relay, this.harness.signal),
         );
-        await this.harness.stage("start-platform", async () => {
+        await this.harness.stage("start-relay", async () => {
             await this.harness.startWorker(
-                "morty-platform",
+                "morty-relay",
                 wranglerExecutable,
                 [
                     "dev",
                     "--config",
-                    platformConfiguration,
+                    relayConfiguration,
                     "--var",
                     `APP_ORIGIN:${this.chatOrigin}`,
                     "--var",
-                    `MORTY_RELAY_URL:${this.platformOrigin}`,
+                    `MORTY_RELAY_URL:${this.relayOrigin}`,
                     "--var",
                     `MORTY_SERVICE_SECRET:${application.appSecret}`,
                     "--var",
@@ -128,15 +128,15 @@ export class LocalStack {
                     "--ip",
                     "127.0.0.1",
                     "--port",
-                    String(this.platformPort),
+                    String(this.relayPort),
                     "--inspector-port",
                     "0",
                     "--persist-to",
-                    this.directories.platform,
+                    this.directories.relay,
                 ],
                 { cwd: mortyRepository },
             );
-            await this.harness.checkHttp(`${this.platformOrigin}/morty/api/dashboard/health`, "morty-platform health");
+            await this.harness.checkHttp(`${this.relayOrigin}/morty/api/dashboard/health`, "morty-relay health");
         });
         return { ...application, sessionSigningSecret };
     }
@@ -145,7 +145,7 @@ export class LocalStack {
         const variables = {
             APP_ORIGIN: this.chatOrigin,
             MORTY_SERVICE_SECRET: application.appSecret,
-            MORTY_RELAY_URL: this.platformOrigin,
+            MORTY_RELAY_URL: this.relayOrigin,
         };
         await this.harness.run(wranglerExecutable, [
             "r2",

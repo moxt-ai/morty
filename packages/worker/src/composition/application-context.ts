@@ -5,7 +5,7 @@ import { AuthenticationService } from "../components/management/service/authenti
 import { ManagementService } from "../components/management/service/management-service.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import { ManagedBotStorage } from "../components/management/storage/managed-bot-storage.ts";
-import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
+import { ComputerManagementGateway } from "../gateway/computer-management-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 // One logger, whose error serializer keeps credentials and request input out of the logs.
@@ -13,7 +13,7 @@ export { logger };
 
 export interface ApplicationContext {
     readonly config: { readonly bindings: CloudBindings };
-    readonly gateways: { readonly platformProjects: PlatformProjectGateway };
+    readonly gateways: { readonly computerManagements: ComputerManagementGateway };
     readonly logger: Logger;
     readonly storages: {
         readonly identities: IdentityStorage;
@@ -30,7 +30,7 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
     const infrastructure = {
         config: { bindings },
         sessionOperations: bindings.CHAT_SESSION_OPERATIONS,
-        gateways: { platformProjects: new PlatformProjectGateway(bindings) },
+        gateways: { computerManagements: new ComputerManagementGateway(bindings) },
         logger,
     };
     const storages = Object.freeze({

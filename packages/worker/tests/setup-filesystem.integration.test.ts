@@ -31,7 +31,7 @@ async function writeNpxFixture(bin: string, body: string): Promise<void> {
 }
 
 // Budgets for the scenarios that run Setup as a child process. CI also runs some of them on Windows, the slowest
-// platform: there each run checks path permissions through PowerShell, which Morty bounds at 30 s per check, and a
+// relay: there each run checks path permissions through PowerShell, which Morty bounds at 30 s per check, and a
 // fixture's first workerd start has taken over 10 s. The child's deadline leaves room for one check to reach that
 // bound and for the run to finish and report. The test's timeout adds room to start the fixture and to clean up.
 const SETUP_PROCESS_TIMEOUT_MS = 60_000;
@@ -439,7 +439,7 @@ test("Given a junction replaces the private Morty directory, When setup validate
 });
 
 test.runIf(process.platform !== "win32")(
-    "Given HOME and no overrides, When a user runs the setup CLI, Then identity is saved in the platform's local state directory and cancellation releases setup",
+    "Given HOME and no overrides, When a user runs the setup CLI, Then identity is saved in the relay's local state directory and cancellation releases setup",
     { timeout: SETUP_PROCESS_TEST_TIMEOUT_MS },
     async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
@@ -664,7 +664,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                             "utf8",
                         ),
                     );
-                    // An exited child its new parent has not reaped yet is a zombie; the platform rule counts it as gone.
+                    // An exited child its new parent has not reaped yet is a zombie; the relay rule counts it as gone.
                     const running = processPlatformSupportFor(process.platform).processExists(download);
                     if (running) {
                         process.kill(download, "SIGKILL");

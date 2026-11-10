@@ -13,16 +13,16 @@ import { setInterval } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { inspect } from "node:util";
 import { encodeSessionPromptCommand } from "../../../client/src/protocol/index.ts";
-import { seedMortyService } from "../../../platform-test-support/src/service-fixture.ts";
+import { seedMortyService } from "../../../relay-test-support/src/service-fixture.ts";
 
 // @no-uc: Performance; concurrent output must preserve transport and cancellation.
 // This opt-in E2E runner crosses the public Runtime, HTTP and WebSocket boundaries.
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(process.env["MORTY_PRESSURE_SOURCE_ROOT"] ?? resolve(here, "../../../.."));
-const require = createRequire(join(repository, "packages/platform-test-support/package.json"));
+const require = createRequire(join(repository, "packages/relay-test-support/package.json"));
 const { build } = require("esbuild");
 const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
-const pluginDirectory = join(repository, "packages/platform-test-support/node_modules/@cloudflare/vitest-plugin");
+const pluginDirectory = join(repository, "packages/relay-test-support/node_modules/@cloudflare/vitest-plugin");
 const pluginPackage = JSON.parse(await readFile(join(pluginDirectory, "package.json"), "utf8"));
 const { readD1Migrations } = await import(pathToFileURL(join(pluginDirectory, pluginPackage.main)));
 const { WebSocket } = require("ws");
@@ -182,12 +182,12 @@ async function exercise(count) {
                 {
                     name: "platform",
                     modules: true,
-                    script: await bundle("packages/platform-test-support/src/platform-worker-entry.ts"),
+                    script: await bundle("packages/relay-test-support/src/relay-worker-entry.ts"),
                     compatibilityDate: "2026-09-03",
                     durableObjects: {
                         COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                     },
-                    d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
+                    d1Databases: ["RELAY_DIRECTORY_DATABASE"],
                     r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
                     bindings: {
                         MORTY_ALLOWED_ORIGINS: '["*"]',
@@ -210,8 +210,8 @@ async function exercise(count) {
         stage("initializing D1");
         const env = await runtime.getBindings("platform");
         for (const migration of await readD1Migrations(join(repository, "packages/relay/migrations/d1"))) {
-            await env.PLATFORM_DIRECTORY_DATABASE.batch(
-                migration.queries.map((sql) => env.PLATFORM_DIRECTORY_DATABASE.prepare(sql)),
+            await env.RELAY_DIRECTORY_DATABASE.batch(
+                migration.queries.map((sql) => env.RELAY_DIRECTORY_DATABASE.prepare(sql)),
             );
         }
         const api = async (path, method = "GET", body, token, status = 200) => {
@@ -228,7 +228,7 @@ async function exercise(count) {
             return response.value;
         };
         stage("seeding Morty service identity");
-        const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+        const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
         const credential = app.defaultCredential.credential;
         const project = await api(
             `/dashboard/v1/machine-accounts`,

@@ -64,7 +64,6 @@ export type RuntimeSocketIdentity =
     | {
           readonly role: "daemon" | "replaced-daemon";
           readonly connectionEpoch: number;
-          readonly connectionId: string;
           readonly computerId: string;
       };
 
@@ -601,7 +600,7 @@ export class RuntimeService {
         }
         for (const attachment of this.#attachments) {
             if (
-                attachment.identity.connectionId === identity.connectionId &&
+                attachment.identity.computerId === identity.computerId &&
                 attachment.identity.connectionEpoch === identity.connectionEpoch
             ) {
                 attachment.controller.abort(new DOMException("Runtime connection closed", "AbortError"));

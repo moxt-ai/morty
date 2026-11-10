@@ -54,7 +54,7 @@ async function writeMigrationModule(
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli");
 const relayCore = join(root, "packages/relay-core");
-const platform = join(root, "packages/relay");
+const relay = join(root, "packages/relay");
 const worker = join(root, "packages/worker");
 
 await writeMigrationModule(
@@ -73,9 +73,9 @@ await writeMigrationModule(
     await sqlFiles(join(relayCore, "migrations/runtime-connection-do")),
 );
 await writeMigrationModule(
-    join(platform, "src/generated/project-do-migrations.ts"),
+    join(relay, "src/generated/project-do-migrations.ts"),
     "computerDurableObjectMigrations",
-    await sqlFiles(join(platform, "migrations/project-do")),
+    await sqlFiles(join(relay, "migrations/project-do")),
 );
 await writeMigrationModule(
     join(worker, "src/generated/project-do-migrations.ts"),

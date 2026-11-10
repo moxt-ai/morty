@@ -38,7 +38,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
     let success = false;
     try {
         const stack = await LocalStack.create(harness);
-        const application = await stack.startPlatform();
+        const application = await stack.startRelay();
         await stack.startChat(application);
         const environment = codex.environment;
         const completed = Promise.withResolvers<void>();

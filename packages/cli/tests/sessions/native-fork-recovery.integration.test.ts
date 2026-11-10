@@ -1,8 +1,8 @@
 import { createServer, request } from "node:http";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, expect, test, vi } from "vitest";
-import { startTestPlatform } from "../support/platform.ts";
-import { createFakeAgentHarnessRuntime } from "../support/platform-agent-harness.ts";
+import { startTestRelay } from "../support/relay.ts";
+import { createFakeAgentHarnessRuntime } from "../support/relay-agent-harness.ts";
 import { createForkLossProxy } from "./fixtures/fork-loss-proxy.ts";
 
 afterEach(() => vi.useRealTimers());
@@ -11,9 +11,9 @@ test.each(["request", "result"] as const)(
     "Given the Runtime Fork %s is lost, When the operation is retried after reconnect, Then one Fork exists and a completed Fork remains recoverable without its source",
     async (loss) => {
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
-        await using platform = await startTestPlatform();
+        await using relay = await startTestRelay();
         const signal = new AbortController().signal;
-        const project = await platform.service.createProject(
+        const project = await relay.service.createProject(
             {
                 clientReference: crypto.randomUUID(),
                 displayName: "Runtime Fork loss",
@@ -22,17 +22,17 @@ test.each(["request", "result"] as const)(
             },
             signal,
         );
-        await using proxy = await createForkLossProxy(platform.baseUrl, loss);
+        await using proxy = await createForkLossProxy(relay.baseUrl, loss);
         const disconnected = Promise.withResolvers<void>();
         const connected = Promise.withResolvers<void>();
         const reconnected = Promise.withResolvers<void>();
         let wasDisconnected = false;
         await using runtime = await createFakeAgentHarnessRuntime({
-            credential: platform.appCredential,
-            origin: platform.baseUrl,
+            credential: relay.appCredential,
+            origin: relay.baseUrl,
             relayOrigin: proxy.origin,
             computerId: project.computerId,
-            server: platform.app,
+            server: relay.app,
             signal,
             sessionIds: new Set(["native-fork-source"]),
             runtimeOptions: {
@@ -92,9 +92,9 @@ test.each(["request", "result"] as const)(
 
 test("Given a Fork succeeds but its response is lost, When the same operation is retried, Then its original Session is returned", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-27T12:00:00Z"), toFake: ["Date"] });
-    await using platform = await startTestPlatform();
+    await using relay = await startTestRelay();
     const signal = new AbortController().signal;
-    const project = await platform.service.createProject(
+    const project = await relay.service.createProject(
         {
             clientReference: crypto.randomUUID(),
             displayName: "Fork recovery",
@@ -103,7 +103,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         },
         signal,
     );
-    const runtime = await platform.connectAgent(
+    const runtime = await relay.connectAgent(
         project.computerId,
         undefined,
         new Set(["recovery-native-source", "another-native-source"]),
@@ -117,10 +117,10 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     let lostStatus: number | undefined;
     const proxy = createServer((incoming, outgoing) => {
         const forwarded = request(
-            new URL(incoming.url ?? "/", platform.baseUrl),
+            new URL(incoming.url ?? "/", relay.baseUrl),
             {
                 method: incoming.method,
-                headers: { ...incoming.headers, host: new URL(platform.baseUrl).host },
+                headers: { ...incoming.headers, host: new URL(relay.baseUrl).host },
             },
             (response) => {
                 if (loseNextResponse) {
@@ -143,7 +143,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         const send = () =>
             fetch(url, {
                 method: "POST",
-                headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
+                headers: { authorization: `Bearer ${relay.appCredential}`, "content-type": "application/json" },
                 body,
                 signal,
             });
@@ -165,7 +165,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         }
         const conflict = await fetch(url, {
             method: "POST",
-            headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
+            headers: { authorization: `Bearer ${relay.appCredential}`, "content-type": "application/json" },
             body: JSON.stringify({
                 harness: "claude",
                 directory: ".",

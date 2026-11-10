@@ -1,7 +1,7 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import { PlatformControlPlaneError, type PlatformProjectPlacement } from "./platform-control-plane.ts";
+import { ComputerManagementError, type ComputerManagementPlacement } from "./computer-management.ts";
 
-const placements: ReadonlyMap<string, PlatformProjectPlacement> = new Map([
+const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([
     ["wn", { locationHint: "wnam" }],
     ["en", { locationHint: "enam" }],
     ["sa", { locationHint: "sam" }],
@@ -15,21 +15,21 @@ const placements: ReadonlyMap<string, PlatformProjectPlacement> = new Map([
     ["me", { locationHint: "me" }],
 ]);
 
-/** Platform IDs contain a locally mapped shard code followed by a 144-bit local identifier. */
-export function encodePlatformComputerId(placement: PlatformProjectPlacement, localId: string): string {
+/** Relay IDs contain a locally mapped shard code followed by a 144-bit local identifier. */
+export function encodeRelayComputerId(placement: ComputerManagementPlacement, localId: string): string {
     for (const [code, candidate] of placements) {
         if (candidate.locationHint === placement.locationHint) {
             return `prj_${code}_01_${localId}`;
         }
     }
-    throw new PlatformControlPlaneError(
+    throw new ComputerManagementError(
         "storage_location_unavailable",
         "The requested storage location is unavailable",
         400,
     );
 }
 
-export function decodeComputerPlacement(computerId: string): PlatformProjectPlacement | null {
+export function decodeComputerPlacement(computerId: string): ComputerManagementPlacement | null {
     const match = /^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_([A-Za-z0-9_-]{24})$/.exec(computerId);
     const code = match?.[1];
     if (match?.[0] !== computerId || code === undefined) {

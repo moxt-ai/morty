@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { PlatformControlPlaneError } from "../entity/platform-control-plane.ts";
+import { ComputerManagementError } from "../entity/computer-management.ts";
 
 function decodeStorageRecord<TSchema extends v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>>(
     schema: TSchema,
@@ -7,9 +7,9 @@ function decodeStorageRecord<TSchema extends v.BaseSchema<unknown, unknown, v.Ba
 ): v.InferOutput<TSchema> {
     const result = v.safeParse(schema, record);
     if (!result.success) {
-        throw new PlatformControlPlaneError(
-            "platform_record_invalid",
-            "The Platform database returned an invalid record",
+        throw new ComputerManagementError(
+            "relay_record_invalid",
+            "The Relay database returned an invalid record",
             500,
             { cause: new v.ValiError(result.issues) },
         );

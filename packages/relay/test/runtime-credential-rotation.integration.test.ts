@@ -6,19 +6,15 @@ import {
     runtimeCredentialSuccessor,
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
-import { seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
-import {
-    createPlatformGateways,
-    PlatformAuthenticationConfiguration,
-    type PlatformRelayBindings,
-} from "../src/worker.ts";
+import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
+import { seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
 
-const relayOrigin = "https://platform.test";
+const relayOrigin = "https://relay.test";
 
-function bindings(): PlatformRelayBindings {
+function bindings(): RelayRelayBindings {
     return {
-        PLATFORM_DIRECTORY_DATABASE: env.PLATFORM_DIRECTORY_DATABASE,
+        RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
         R2_BUCKET_APAC: env.R2_BUCKET_APAC,
         R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
@@ -45,9 +41,9 @@ async function responseJson(response: Response, status: number): Promise<Readonl
 
 /** Pairs a Runtime through the public pairing API and returns how its daemon connects. */
 async function pairedRuntime(name: string) {
-    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
     const environment = bindings();
-    const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const app = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
     const appCredential = app.defaultCredential.credential;
     const headers = new Headers({ authorization: `Bearer ${appCredential}`, "content-type": "application/json" });
     const project = await responseJson(

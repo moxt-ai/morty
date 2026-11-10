@@ -4,7 +4,7 @@ import type { ComponentProps, UIEventHandler } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Product scrollports use this instead of a platform scrollbar.
+ * Product scrollports use this instead of a relay scrollbar.
  * The bar is as tall as the scrollport. `overflow-hidden` on the root clips it
  * to the container's border radius without shortening the bar.
  */

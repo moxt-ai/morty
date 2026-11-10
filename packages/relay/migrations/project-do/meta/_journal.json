@@ -106,6 +106,13 @@
             "when": 1794231753368,
             "tag": "0014_session_access_revocations",
             "breakpoints": true
+        },
+        {
+            "idx": 15,
+            "version": "6",
+            "when": 1794280012113,
+            "tag": "0015_computer_management_audit",
+            "breakpoints": true
         }
     ]
 }

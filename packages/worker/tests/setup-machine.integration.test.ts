@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
+import { createResponseLossProxy } from "@morty-build/relay-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
@@ -276,8 +276,8 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     };
     const first = await run();
     const before = await machineRuntime();
-    const revoked = await fixture.platformRequest(
-        new Request(`https://platform.test/morty/api/v1/computers/${before.identity.project_id}/pairing`, {
+    const revoked = await fixture.relayRequest(
+        new Request(`https://relay.test/morty/api/v1/computers/${before.identity.project_id}/pairing`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${fixture.baseConfiguration.MORTY_SERVICE_SECRET}` },
         }),

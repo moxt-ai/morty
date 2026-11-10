@@ -105,10 +105,10 @@ export function createAuthenticationRoutes() {
             signal.throwIfAborted();
             await admitAnonymousCreation(request, context.env.config.bindings);
             signal.throwIfAborted();
-            // Retrying the same creation key names the same user, whose Platform Project creation is idempotent and
+            // Retrying the same creation key names the same user, whose Relay Project creation is idempotent and
             // whose bootstrap returns the identity an earlier attempt issued.
             const userId = await anonymousUserId(input.creationKey);
-            const project = await context.env.gateways.platformProjects.create(
+            const project = await context.env.gateways.computerManagements.create(
                 userId,
                 "Morty",
                 signal,

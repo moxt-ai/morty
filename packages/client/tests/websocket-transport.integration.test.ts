@@ -2,7 +2,7 @@
 
 import { afterEach, expect, it, vi } from "vitest";
 import { MortyClient, MortyConnectionError, StaticMortyCredentialProvider } from "../src/index.ts";
-import { type MortyWebSocketConnector, WsTransport } from "../src/platform.ts";
+import { type MortyWebSocketConnector, WsTransport } from "../src/relay.ts";
 
 // The transport routes by the claims it decodes; only the Relay verifies the signature.
 const sessionClaims = btoa(

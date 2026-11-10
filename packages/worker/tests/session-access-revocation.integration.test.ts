@@ -156,7 +156,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
         }
 
         await runtime.disconnect();
-        await cloud.changePlatformOrigin(`http://127.0.0.1:${address.port}`);
+        await cloud.changeRelayOrigin(`http://127.0.0.1:${address.port}`);
         await runtime.reconnect();
         const failed = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
 
@@ -165,7 +165,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
         expect((await request(`${project}/session`, browser)).status).toBe(401);
 
         await runtime.disconnect();
-        await cloud.changePlatformOrigin(relay);
+        await cloud.changeRelayOrigin(relay);
         await runtime.reconnect();
         const remaining = await request(`${project}/identity/devices`, owner.token);
         expect(await remaining.json()).toMatchObject({ devices: [] });

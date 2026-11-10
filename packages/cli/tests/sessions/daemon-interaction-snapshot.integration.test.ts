@@ -43,7 +43,7 @@ import {
     SESSION_STATUS_CHANGED_KIND,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { listen, port } from "@morty-build/platform-test-support/websocket";
+import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
@@ -620,7 +620,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     }
 }, 30_000);
 
-test("Given a real daemon prepared a Session, When Platform queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
+test("Given a real daemon prepared a Session, When Relay queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-query-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
@@ -708,7 +708,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
     }
 }, 30_000);
 
-test("Given a real daemon persisted a Session, When Platform restores it by identifier, Then history is loaded once and remains available for paging", async () => {
+test("Given a real daemon persisted a Session, When Relay restores it by identifier, Then history is loaded once and remains available for paging", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-restore-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);

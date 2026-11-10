@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { PlatformControlPlaneError } from "../entity/platform-control-plane.ts";
+import { ComputerManagementError } from "../entity/computer-management.ts";
 
 interface BrowserCorsEnvironment {
     readonly Bindings: { readonly allowedOrigins?: ReadonlySet<string> };
@@ -26,11 +26,11 @@ export function createBrowserCors(
         const origin = context.req.header("origin") ?? "";
         const allowedOrigins = configuredOrigins ?? context.env.allowedOrigins ?? new Set<string>();
         if (origin.length > 0 && !allowedOrigins.has("*") && !allowedOrigins.has(origin)) {
-            throw new PlatformControlPlaneError("browser_origin_denied", "The browser origin is not allowed", 403);
+            throw new ComputerManagementError("browser_origin_denied", "The browser origin is not allowed", 403);
         }
         if (context.req.method === "OPTIONS") {
             if (origin.length === 0) {
-                throw new PlatformControlPlaneError("browser_origin_denied", "The browser origin is not allowed", 403);
+                throw new ComputerManagementError("browser_origin_denied", "The browser origin is not allowed", 403);
             }
             const requestedMethod = context.req.header("access-control-request-method") ?? "";
             const requestedHeaders = (context.req.header("access-control-request-headers") ?? "")
@@ -38,7 +38,7 @@ export function createBrowserCors(
                 .map((header) => header.trim().toLowerCase())
                 .filter((header) => header.length > 0);
             if (!methods.includes(requestedMethod) || requestedHeaders.some((header) => !headers.includes(header))) {
-                throw new PlatformControlPlaneError(
+                throw new ComputerManagementError(
                     "browser_preflight_denied",
                     "The browser preflight request is not allowed",
                     403,

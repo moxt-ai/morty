@@ -7,10 +7,10 @@ import {
     type ProjectCredentialAuthority,
     type ProjectPermission,
 } from "@morty-build/relay-core";
-import { PlatformAuditActorKind } from "../entity/platform-control-plane.ts";
-import type { CredentialRow } from "../entity/platform-records.ts";
+import { RelayAuditActorKind } from "../entity/computer-management.ts";
+import type { CredentialRow } from "../entity/relay-records.ts";
 import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
-import type { PlatformControlPlaneStorage } from "../storage/platform-control-plane-storage.ts";
+import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { appCredentialActive, credentialPermissions } from "./app-credential-authentication-service.ts";
 
 /**
@@ -19,13 +19,13 @@ import { appCredentialActive, credentialPermissions } from "./app-credential-aut
  */
 export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     readonly #storage: Pick<
-        PlatformControlPlaneStorage,
+        ComputerManagementStorage,
         "readActiveComputerScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
     >;
 
     constructor(
         storage: Pick<
-            PlatformControlPlaneStorage,
+            ComputerManagementStorage,
             "readActiveComputerScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
         >,
     ) {
@@ -65,7 +65,7 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
         return new ProjectAccessContext(
             new ComputerScope(project.project_id),
             granted,
-            new AuditActor(PlatformAuditActorKind.Application, row.app_id),
+            new AuditActor(RelayAuditActorKind.Application, row.app_id),
             row.credential_id,
             Date.now(),
             new PerpetualProjectAccessLifetime(),

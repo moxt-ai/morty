@@ -35,9 +35,9 @@ function nextMessage(socket: WebSocket): Promise<string> {
     });
 }
 
-it("Given a browser connection, When it heartbeats through the public Platform transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
+it("Given a browser connection, When it heartbeats through the public Relay transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
+        "https://relay.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -75,7 +75,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
 
 it("Given a Runtime-bound browser, When it addresses another computer, Then the request is rejected without closing the browser connection", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
+        "https://relay.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -117,7 +117,7 @@ it("Given two browser connections to one Runtime, When their pending uploads exc
     const daemon = new TextDaemonBoundary("uploaded");
     const connect = () =>
         acceptWebSocketHttpTransport(
-            new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+            new Request("https://relay.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
             daemon.fetch,
             standardWebSocketHost,
             { uploads, validateTarget: () => true },
@@ -182,7 +182,7 @@ it.each([
             headers.set("Authorization", authorization);
         }
         const response = await SELF.fetch(
-            "https://platform.test/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/harnesses/claude/sessions/session-unauthorized/events-v2",
+            "https://relay.test/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/harnesses/claude/sessions/session-unauthorized/events-v2",
             { headers },
         );
         expect(response.status).toBe(401);
@@ -219,7 +219,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
     vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
     const daemon = new MultipleSubscriptionDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", {
+        new Request("https://relay.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -296,7 +296,7 @@ it("Given a Unicode JSON request and response, When the relay carries them over 
     const responseBody = JSON.stringify({ message: "Olá, Morty" });
     const daemon = new TextDaemonBoundary(responseBody);
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", {
+        new Request("https://relay.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -334,7 +334,7 @@ it("Given a Unicode JSON request and response, When the relay carries them over 
 it("Given an invalid binary declaration, When the request ID is reused for a valid upload, Then validation happens before buffering", async () => {
     const daemon = new TextDaemonBoundary("uploaded");
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+        new Request("https://relay.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
         daemon.fetch,
         standardWebSocketHost,
     );
@@ -385,7 +385,7 @@ it("Given an invalid binary declaration, When the request ID is reused for a val
 it("Given a binary upload sends an invalid chunk, When it retries the same request ID, Then the failed buffer was released", async () => {
     const daemon = new TextDaemonBoundary("uploaded");
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+        new Request("https://relay.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
         daemon.fetch,
         standardWebSocketHost,
     );
@@ -424,7 +424,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
     try {
         const daemon = new TextDaemonBoundary("uploaded");
         const response = acceptWebSocketHttpTransport(
-            new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+            new Request("https://relay.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
             daemon.fetch,
             standardWebSocketHost,
         );
@@ -499,7 +499,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
 it("Given many incomplete binary uploads, When their count reaches the pending limit, Then another declaration is rejected", async () => {
     const daemon = new TextDaemonBoundary("unused");
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+        new Request("https://relay.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
         daemon.fetch,
         standardWebSocketHost,
     );
@@ -544,7 +544,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
 it("Given a daemon request fails with a 5XX error, When the WebSocket transport reports it, Then the client receives its detailed code and message", async () => {
     const daemon = new FailingDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", {
+        new Request("https://relay.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -582,7 +582,7 @@ it("Given a daemon request fails with a 5XX error, When the WebSocket transport 
 it("Given an established event subscription, When the browser transport closes, Then the downstream socket closes without aborting its upgraded request", async () => {
     const daemon = new SubscriptionDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", {
+        new Request("https://relay.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -624,7 +624,7 @@ it("Given an established event subscription, When the browser transport closes, 
 it("Given two live subscriptions, When each receives event batches, Then delivery sequence IDs start at one and advance per subscription", async () => {
     const daemon = new MultipleSubscriptionDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", {
+        new Request("https://relay.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -689,7 +689,7 @@ it("Given an established event subscription is quiet, When the transport idle de
     try {
         const daemon = new SubscriptionDaemonBoundary();
         const response = acceptWebSocketHttpTransport(
-            new Request("https://platform.test/morty/api/v1/transport", {
+            new Request("https://relay.test/morty/api/v1/transport", {
                 headers: { Upgrade: "websocket" },
             }),
             daemon.fetch,
@@ -730,7 +730,7 @@ it("Given an established event subscription is quiet, When the transport idle de
 it("Given a finite request is in flight, When the browser transport closes, Then the dispatched request can finish without disconnecting its downstream transport", async () => {
     const daemon = new PendingDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/morty/api/v1/transport", {
+        new Request("https://relay.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,

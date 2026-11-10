@@ -3,7 +3,7 @@ import { logger } from "@morty-build/relay-core/logging";
 import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
 import { encodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
 import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
+import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
 
 export interface ComputerWorkerRoutingBindings {
     readonly COMPUTER_RELAY: DurableObjectNamespace<ComputerRelay>;
@@ -12,7 +12,7 @@ export interface ComputerWorkerRoutingBindings {
 /** A request executing inside the Account Durable Object, beside the Project's own store. */
 export interface ComputerDurableObjectExecutionBindings extends ComputerWorkerRoutingBindings {
     readonly MORTY_LOCAL_CHANNEL?: (computerId: string, request: Request) => Promise<Response>;
-    readonly MORTY_COMPUTER_STORE: PlatformProjectStore;
+    readonly MORTY_COMPUTER_STORE: ComputerManagementStore;
     readonly MORTY_COMPUTER_ID: string;
 }
 

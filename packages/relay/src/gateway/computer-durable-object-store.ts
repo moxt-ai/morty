@@ -4,7 +4,7 @@ import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
 import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { PlatformProjectStore, PlatformProjectStores } from "../infra/platform-project-store.ts";
+import type { ComputerManagementStore, ComputerManagementStores } from "../infra/computer-management-store.ts";
 
 const OPERATION_TIMEOUT_MILLISECONDS = 15_000;
 
@@ -14,7 +14,7 @@ type ProjectStub = DurableObjectStub<ComputerRelay>;
  * A Project's store reached through its Account Durable Object. Every operation executes there as one unit;
  * cancelling or timing out here stops waiting for the result but cannot undo an operation already delivered.
  */
-class ComputerDurableObjectStore implements PlatformProjectStore {
+class ComputerDurableObjectStore implements ComputerManagementStore {
     readonly #namespace: DurableObjectNamespace<ComputerRelay>;
     readonly #computerId: string;
     readonly #locationHint: ProjectLocationHint;
@@ -80,19 +80,23 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
         }
     };
 
-    readonly updateAgentCatalog: PlatformProjectStore["updateAgentCatalog"] = (computerId, tokenHash, agents, signal) =>
-        this.call("updateAgentCatalog", (stub) => stub.updateAgentCatalog(computerId, tokenHash, agents), signal);
+    readonly updateAgentCatalog: ComputerManagementStore["updateAgentCatalog"] = (
+        computerId,
+        tokenHash,
+        agents,
+        signal,
+    ) => this.call("updateAgentCatalog", (stub) => stub.updateAgentCatalog(computerId, tokenHash, agents), signal);
 
-    readonly isRuntimeActive: PlatformProjectStore["isRuntimeActive"] = (computerId, signal) =>
+    readonly isRuntimeActive: ComputerManagementStore["isRuntimeActive"] = (computerId, signal) =>
         this.call("isRuntimeActive", (stub) => stub.isRuntimeActive(computerId), signal);
 
-    readonly readRuntime: PlatformProjectStore["readRuntime"] = (computerId, signal) =>
+    readonly readRuntime: ComputerManagementStore["readRuntime"] = (computerId, signal) =>
         this.call("readRuntime", (stub) => stub.readRuntime(computerId), signal);
 
-    readonly listRuntimes: PlatformProjectStore["listRuntimes"] = (signal) =>
+    readonly listRuntimes: ComputerManagementStore["listRuntimes"] = (signal) =>
         this.call("listRuntimes", (stub, computerId) => stub.listRuntimes(computerId), signal);
 
-    readonly requestRuntimePairing: PlatformProjectStore["requestRuntimePairing"] = (value, signal) =>
+    readonly requestRuntimePairing: ComputerManagementStore["requestRuntimePairing"] = (value, signal) =>
         this.call(
             "requestRuntimePairing",
             async (stub, computerId): Promise<RuntimePairingRequest> =>
@@ -100,46 +104,46 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
             signal,
         );
 
-    readonly readRuntimePairing: PlatformProjectStore["readRuntimePairing"] = (computerId, signal) =>
+    readonly readRuntimePairing: ComputerManagementStore["readRuntimePairing"] = (computerId, signal) =>
         this.call("readRuntimePairing", (stub) => stub.readRuntimePairing(computerId), signal);
 
-    readonly readPairingCode: PlatformProjectStore["readPairingCode"] = (codeHash, signal) =>
+    readonly readPairingCode: ComputerManagementStore["readPairingCode"] = (codeHash, signal) =>
         this.call("readPairingCode", (stub, computerId) => stub.readPairingCode(computerId, codeHash), signal);
 
-    readonly claimPairing: PlatformProjectStore["claimPairing"] = (value, signal) =>
+    readonly claimPairing: ComputerManagementStore["claimPairing"] = (value, signal) =>
         this.call("claimPairing", (stub, computerId) => stub.claimPairing(computerId, value), signal);
 
-    readonly revokeRuntime: PlatformProjectStore["revokeRuntime"] = (value, signal) =>
+    readonly revokeRuntime: ComputerManagementStore["revokeRuntime"] = (value, signal) =>
         this.call("revokeRuntime", (stub, computerId) => stub.revokeRuntime(computerId, value), signal);
 
-    readonly findCredential: PlatformProjectStore["findCredential"] = (credential, signal) =>
+    readonly findCredential: ComputerManagementStore["findCredential"] = (credential, signal) =>
         this.call("findCredential", (stub, computerId) => stub.findCredential(computerId, credential), signal);
 
-    readonly rotateRuntimeCredential: PlatformProjectStore["rotateRuntimeCredential"] = (
+    readonly rotateRuntimeCredential: ComputerManagementStore["rotateRuntimeCredential"] = (
         presentedHash,
         successorHash,
         signal,
     ) =>
-        this.call<Awaited<ReturnType<PlatformProjectStore["rotateRuntimeCredential"]>>>(
+        this.call<Awaited<ReturnType<ComputerManagementStore["rotateRuntimeCredential"]>>>(
             "rotateRuntimeCredential",
             (stub, computerId) => stub.rotateRuntimeCredential(computerId, presentedHash, successorHash),
             signal,
         );
 
-    readonly revokeSessionAccess: PlatformProjectStore["revokeSessionAccess"] = (revokedAt, signal) =>
+    readonly revokeSessionAccess: ComputerManagementStore["revokeSessionAccess"] = (revokedAt, signal) =>
         this.call("revokeSessionAccess", (stub, computerId) => stub.revokeSessionAccess(computerId, revokedAt), signal);
 
-    readonly readSessionAccessRevocation: PlatformProjectStore["readSessionAccessRevocation"] = (signal) =>
+    readonly readSessionAccessRevocation: ComputerManagementStore["readSessionAccessRevocation"] = (signal) =>
         this.call(
             "readSessionAccessRevocation",
             (stub, computerId) => stub.readSessionAccessRevocation(computerId),
             signal,
         );
 
-    readonly recordAudit: PlatformProjectStore["recordAudit"] = (audit, signal) =>
+    readonly recordAudit: ComputerManagementStore["recordAudit"] = (audit, signal) =>
         this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);
 
-    readonly listAuditEvents: PlatformProjectStore["listAuditEvents"] = (limit, signal) =>
+    readonly listAuditEvents: ComputerManagementStore["listAuditEvents"] = (limit, signal) =>
         this.call("listAuditEvents", (stub, computerId) => stub.listAuditEvents(computerId, limit), signal);
 }
 
@@ -147,20 +151,20 @@ class ComputerDurableObjectStore implements PlatformProjectStore {
  * Locates Project stores. Inside a Account Durable Object its own Project resolves to the local store; every other
  * Project resolves to its own Durable Object.
  */
-export class ComputerDurableObjectStores implements PlatformProjectStores {
+export class ComputerDurableObjectStores implements ComputerManagementStores {
     readonly #namespace: DurableObjectNamespace<ComputerRelay>;
-    readonly #local: { readonly computerId: string; readonly store: PlatformProjectStore } | null;
-    readonly #remote = new Map<string, PlatformProjectStore>();
+    readonly #local: { readonly computerId: string; readonly store: ComputerManagementStore } | null;
+    readonly #remote = new Map<string, ComputerManagementStore>();
 
     constructor(
         namespace: DurableObjectNamespace<ComputerRelay>,
-        local: { readonly computerId: string; readonly store: PlatformProjectStore } | null = null,
+        local: { readonly computerId: string; readonly store: ComputerManagementStore } | null = null,
     ) {
         this.#namespace = namespace;
         this.#local = local;
     }
 
-    readonly forProject: PlatformProjectStores["forProject"] = (computerId) => {
+    readonly forProject: ComputerManagementStores["forProject"] = (computerId) => {
         if (this.#local?.computerId === computerId) {
             return this.#local.store;
         }
@@ -177,7 +181,7 @@ export class ComputerDurableObjectStores implements PlatformProjectStores {
         return store;
     };
 
-    readonly resolve: PlatformProjectStores["resolve"] = (placement) => {
+    readonly resolve: ComputerManagementStores["resolve"] = (placement) => {
         if (!placement.hasShard) {
             throw new PairingDirectoryError("directory_unavailable", "Project storage is unavailable");
         }

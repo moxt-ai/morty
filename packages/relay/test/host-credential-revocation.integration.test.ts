@@ -3,12 +3,12 @@ import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { afterAll, expect, it } from "vitest";
-import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
-import { revokeMortyCredential, seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
-import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
+import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
+import { revokeMortyCredential, seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
+import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 
-const origin = `https://platform.test${MORTY_API_PREFIX}`;
+const origin = `https://relay.test${MORTY_API_PREFIX}`;
 
 afterAll(async () => await abortAllDurableObjects());
 
@@ -50,8 +50,8 @@ class Inbox {
 }
 
 it("Given a quiet /host connection opened with an AppCredential, When the AppCredential is revoked, Then the Relay's next connection check closes it", async () => {
-    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
-    const { defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const { defaultCredential } = await seedMortyService(env.RELAY_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
         "content-type": "application/json",
@@ -119,7 +119,7 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
     host.accept();
     expect(await hostInbox.next()).toMatchObject({ kind: "runtime.status", online: true });
 
-    await revokeMortyCredential(env.PLATFORM_DIRECTORY_DATABASE, defaultCredential.credentialId);
+    await revokeMortyCredential(env.RELAY_DIRECTORY_DATABASE, defaultCredential.credentialId);
 
     // The same credential is refused on HTTP right away.
     const http = await worker.fetch(

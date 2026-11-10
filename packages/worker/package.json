@@ -17,7 +17,7 @@
         "test:watch": "vitest --config vitest.config.ts"
     },
     "devDependencies": {
-        "@morty-build/platform-test-support": "workspace:*",
+        "@morty-build/relay-test-support": "workspace:*",
         "esbuild": "catalog:",
         "miniflare": "catalog:"
     },

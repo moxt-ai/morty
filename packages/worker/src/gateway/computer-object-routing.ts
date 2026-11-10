@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { PlatformProjectError } from "../components/management/entity/platform-project.ts";
+import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
 import { projectRegion } from "../components/management/entity/project-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
@@ -13,7 +13,7 @@ export async function routeComputerObject(
     }
     if (bindings.CHAT_COMPUTER_ID !== undefined) {
         if (bindings.CHAT_COMPUTER_ID !== computerId) {
-            throw new PlatformProjectError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
+            throw new ComputerManagementError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
         }
         return null;
     }
@@ -35,7 +35,7 @@ export async function routeComputerObject(
         );
     } catch (cause) {
         request.signal.throwIfAborted();
-        throw new PlatformProjectError(
+        throw new ComputerManagementError(
             deadline.signal.aborted ? "PROJECT_OBJECT_TIMEOUT" : "PROJECT_OBJECT_UNAVAILABLE",
             "Morty storage is unavailable.",
             deadline.signal.aborted ? 504 : 503,
@@ -49,7 +49,7 @@ export async function routeComputerObject(
 export function computerObject(bindings: CloudBindings, computerId: string) {
     const parsed = v.safeParse(durableObjectNamespaceBindingSchema(), bindings.COMPUTER_RELAY);
     if (!parsed.success) {
-        throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
+        throw new ComputerManagementError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
     }
     const namespace = parsed.output;
     return namespace.get(namespace.idFromName(computerId), { locationHint: projectRegion(computerId) });

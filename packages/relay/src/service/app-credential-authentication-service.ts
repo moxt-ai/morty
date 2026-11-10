@@ -6,18 +6,18 @@ import {
 } from "@morty-build/relay-core";
 import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
-import { type PlatformApplicationIdentity, PlatformControlPlaneError } from "../entity/platform-control-plane.ts";
-import type { CredentialRow } from "../entity/platform-records.ts";
-import type { PlatformControlPlaneStorage } from "../storage/platform-control-plane-storage.ts";
+import { ComputerManagementError, type RelayApplicationIdentity } from "../entity/computer-management.ts";
+import type { CredentialRow } from "../entity/relay-records.ts";
+import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 
 export class AppCredentialAuthenticationService {
-    readonly #storage: Pick<PlatformControlPlaneStorage, "readCredentialByPublicId">;
+    readonly #storage: Pick<ComputerManagementStorage, "readCredentialByPublicId">;
 
-    constructor(storage: Pick<PlatformControlPlaneStorage, "readCredentialByPublicId">) {
+    constructor(storage: Pick<ComputerManagementStorage, "readCredentialByPublicId">) {
         this.#storage = storage;
     }
 
-    readonly authenticate = async (credential: string, signal: AbortSignal): Promise<PlatformApplicationIdentity> => {
+    readonly authenticate = async (credential: string, signal: AbortSignal): Promise<RelayApplicationIdentity> => {
         try {
             const row = await this.verify(credential, signal);
             const permissions = credentialPermissions(row).granted;
@@ -32,7 +32,7 @@ export class AppCredentialAuthenticationService {
         } catch (cause) {
             signal.throwIfAborted();
             if (cause instanceof ProjectAuthenticationError) {
-                throw new PlatformControlPlaneError(cause.code, "App authentication failed", 401, { cause });
+                throw new ComputerManagementError(cause.code, "App authentication failed", 401, { cause });
             }
             throw cause;
         }
@@ -85,7 +85,7 @@ export class AppCredentialAuthenticationService {
                 cause instanceof DatabaseError &&
                 (cause.code === "database_unavailable" || cause.code === "database_timeout")
             ) {
-                throw new PlatformControlPlaneError(cause.code, "App authentication is unavailable", 503, { cause });
+                throw new ComputerManagementError(cause.code, "App authentication is unavailable", 503, { cause });
             }
             throw cause;
         }

@@ -50,7 +50,7 @@ def served_versions(deployment):
 
 def restore_workers(expected, previous):
     """Return each Worker to the deployment that served before this release. Database migrations stay applied."""
-    for component in ['morty', 'platform']:
+    for component in ['morty', 'relay']:
         path = '/workers/scripts/' + expected[component] + '/deployments'
         before = previous[component]
         if served_versions(cloud(path)['deployments'][0]) == served_versions(before):
@@ -83,25 +83,25 @@ def main():
         if release not in file.parents or file.is_symlink() or hashlib.sha256(file.read_bytes()).hexdigest() != checksum:
             raise ValueError('Release checksum failed')
     configs = {key: release / value for key, value in manifest['configs'].items()}
-    if set(configs) != {'platform', 'morty'}:
-        raise ValueError('Release must carry only the Platform and Morty Workers; rebuild older archives before restoring')
+    if set(configs) != {'relay', 'morty'}:
+        raise ValueError('Release must carry only the Relay and Morty Workers; rebuild older archives before restoring')
     for component, file in configs.items():
         config = read(file)
         if config['account_id'] != ACCOUNT or config['name'] != expected[component] or config.get('routes'):
             raise ValueError('Deployment escaped the independent target')
-    platform, morty = read(configs['platform']), read(configs['morty'])
-    if 'MORTY_SESSION_SIGNING_SECRET' not in platform.get('secrets', {}).get('required', []) or 'MORTY_SESSION_SIGNING_SECRET' in platform.get('vars', {}):
+    relay, morty = read(configs['relay']), read(configs['morty'])
+    if 'MORTY_SESSION_SIGNING_SECRET' not in relay.get('secrets', {}).get('required', []) or 'MORTY_SESSION_SIGNING_SECRET' in relay.get('vars', {}):
         raise ValueError('Release must use a dedicated Session signing secret; rebuild older archives before restoring')
     retirement = {'tag': 'morty-retire-migration-control-20261106', 'deleted_classes': ['MigrationControl']}
-    if retirement not in platform.get('migrations', []) or any(binding['name'] == 'MIGRATION_CONTROL' for binding in platform.get('durable_objects', {}).get('bindings', [])):
+    if retirement not in relay.get('migrations', []) or any(binding['name'] == 'MIGRATION_CONTROL' for binding in relay.get('durable_objects', {}).get('bindings', [])):
         raise ValueError('Release must retire migration control; rebuild older archives before restoring')
-    assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
-    assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
-    assert not platform.get('services')
-    assert morty['vars']['MORTY_RELAY_URL'] == expected['platform_origin']
+    assert relay['d1_databases'][0]['database_id'] == expected['d1_id']
+    assert {x['bucket_name'] for x in relay['r2_buckets']} == {expected['buckets']['relay_apac'], expected['buckets']['relay_wnam']}
+    assert not relay.get('services')
+    assert morty['vars']['MORTY_RELAY_URL'] == expected['relay_origin']
     assert morty['r2_buckets'] == [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': expected['buckets']['attachments']}]
     assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
-    assert json.loads(platform['vars']['MORTY_ALLOWED_ORIGINS']) == expected['allowed_origins']
+    assert json.loads(relay['vars']['MORTY_ALLOWED_ORIGINS']) == expected['allowed_origins']
     if args.verify_release_only:
         print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
         return
@@ -157,14 +157,14 @@ def main():
     # Check lifecycle history before uploading assets, applying D1 migrations,
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
-    for component, config in [('platform', platform), ('morty', morty)]:
+    for component, config in [('relay', relay), ('morty', morty)]:
         current = cloud('/workers/services/' + expected[component])['default_environment']['script'].get('migration_tag')
         if current and current not in {item['tag'] for item in config.get('migrations', [])}:
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
-    secrets_by_component = {'platform': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET'], 'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
-    if len(secrets_by_component['platform']['MORTY_SESSION_SIGNING_SECRET']) < 32:
+    secrets_by_component = {'relay': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET'], 'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    if len(secrets_by_component['relay']['MORTY_SESSION_SIGNING_SECRET']) < 32:
         raise ValueError('The Session credential signing secret must be at least 32 characters')
     app_secret = secrets_by_component['morty'].get('MORTY_SERVICE_SECRET')
     if not isinstance(app_secret, str) or not app_secret:
@@ -203,10 +203,10 @@ def main():
             upload.write_text(json.dumps(entries))
             # Assets are content-addressed and immutable, so uploading one again writes the same bytes.
             upload_objects(WRANGLER + ['r2', 'bulk', 'put', expected['buckets']['web_assets'], '--filename', str(upload), '--content-type', types[extension], '--cache-control', 'public, max-age=31536000, immutable', '--concurrency', '10', '--remote', '--force', '--config', str(configs['morty'])], env)
-        run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['platform'])], env)
+        run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['relay'])], env)
         # From the first Worker activation on, a failed check restores the Workers that served before this release.
         try:
-            for component in ['platform', 'morty']:
+            for component in ['relay', 'morty']:
                 command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'morty ' + manifest['revision']]
                 if secrets_by_component.get(component):
                     secrets = secrets_by_component[component]
@@ -218,7 +218,7 @@ def main():
                     command += ['--secrets-file', str(secret_file)]
                 run(command, env)
             checks = []
-            for url, content in [(expected['platform_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty')]:
+            for url, content in [(expected['relay_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty')]:
                 with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                     body = response.read()
                     if response.status != 200 or content and content not in body.decode():
@@ -246,8 +246,8 @@ def main():
                 if deployment.get('annotations', {}).get('workers/message') != 'morty ' + manifest['revision']:
                     raise ValueError('Active Worker deployment does not match the accepted source')
                 deployed[component] = deployment
-            platform_secrets = cloud('/workers/scripts/' + expected['platform'] + '/secrets')
-            if not secrets_by_component['platform'].keys() <= {item['name'] for item in platform_secrets}:
+            relay_secrets = cloud('/workers/scripts/' + expected['relay'] + '/secrets')
+            if not secrets_by_component['relay'].keys() <= {item['name'] for item in relay_secrets}:
                 raise ValueError('The deployed Session signing secret binding is missing')
             run(['python3', str(ROOT / 'deployment/verify-session-access.py')], env)
         except Exception:

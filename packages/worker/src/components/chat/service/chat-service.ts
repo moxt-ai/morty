@@ -10,8 +10,8 @@ import {
     type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
-import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
-import { PlatformProjectError } from "../../management/entity/platform-project.ts";
+import type { ComputerManagementGateway } from "../../../gateway/computer-management-gateway.ts";
+import { ComputerManagementError } from "../../management/entity/computer-management.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
@@ -21,7 +21,7 @@ const OPENED_SESSION_CREDENTIAL_SECONDS = 900;
 /** The most Sessions one Session list read returns: the Runtime's own bound. */
 const LISTED_SESSION_LIMIT = 500;
 const RENEWED_SESSION_CREDENTIAL_SECONDS = 600;
-/** The Platform issues no Session credential that lasts less than this. */
+/** The Relay issues no Session credential that lasts less than this. */
 export const MINIMUM_SESSION_CREDENTIAL_SECONDS = 60;
 
 /**
@@ -106,7 +106,7 @@ async function scopedNativeForkOperationId(computerId: string, key: string): Pro
 }
 
 function notInRecentSessions(): never {
-    throw new PlatformProjectError(
+    throw new ComputerManagementError(
         "NOT_FOUND",
         'This session is not in Morty Recent sessions. If you closed it in Morty, use "Open Session" to import or fork it again.',
         404,
@@ -121,12 +121,12 @@ function notInRecentSessions(): never {
 export class ChatService {
     readonly #identities: IdentityStorage;
     readonly #managedBots: ManagedBotStorage;
-    readonly #platform: PlatformProjectGateway;
+    readonly #relay: ComputerManagementGateway;
     readonly #sessionOperations: ManagedSessionOperations | undefined;
 
     constructor(cx: {
         readonly sessionOperations: ManagedSessionOperations | undefined;
-        readonly gateways: { readonly platformProjects: PlatformProjectGateway };
+        readonly gateways: { readonly computerManagements: ComputerManagementGateway };
         readonly storages: {
             readonly identities: IdentityStorage;
             readonly managedBots: ManagedBotStorage;
@@ -134,7 +134,7 @@ export class ChatService {
     }) {
         this.#identities = cx.storages.identities;
         this.#managedBots = cx.storages.managedBots;
-        this.#platform = cx.gateways.platformProjects;
+        this.#relay = cx.gateways.computerManagements;
         this.#sessionOperations = cx.sessionOperations;
     }
 
@@ -146,7 +146,7 @@ export class ChatService {
         const { userId, accessExpiresAt } = requester;
         const ownsProject = await this.#identities.ownsProject(userId, computerId, signal);
         if (!ownsProject) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Morty data was not found.", 404);
+            throw new ComputerManagementError("NOT_FOUND", "Your Morty data was not found.", 404);
         }
         return { userId, accessExpiresAt, computerId, signal };
     };
@@ -154,23 +154,23 @@ export class ChatService {
     readonly runtimeConfiguration = async (scope: ChatScope) => {
         await this.localRuntime(scope);
         return {
-            runtime: await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal),
+            runtime: await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal),
         };
     };
 
     readonly daemonDiagnostics = async (scope: ChatScope) => {
         const _runtime = await this.localRuntime(scope);
-        return await this.#platform.readRuntimeDiagnostics(scope.computerId, scope.signal);
+        return await this.#relay.readRuntimeDiagnostics(scope.computerId, scope.signal);
     };
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
         const _runtime = await this.localRuntime(scope);
         const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
-            this.#platform.measureRelayLatency(scope.computerId, scope.signal),
-            this.#platform.measureRuntimeLatency(scope.computerId, scope.signal),
+            this.#relay.measureRelayLatency(scope.computerId, scope.signal),
+            this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
         ]);
         return {
-            relayOrigin: this.#platform.configuration().origin,
+            relayOrigin: this.#relay.configuration().origin,
             relayRuntimeLatencyMs,
             mortyRelayLatencyMs,
         };
@@ -178,22 +178,22 @@ export class ChatService {
 
     readonly setupRuntimes = async (scope: ChatScope) => {
         await this.#bot(scope);
-        return { runtimes: await this.#platform.chatRuntimes(scope.computerId, scope.signal) };
+        return { runtimes: await this.#relay.chatRuntimes(scope.computerId, scope.signal) };
     };
 
     readonly listDirectory = async (scope: ChatScope, directory: string) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
-            throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+            throw new ComputerManagementError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        const listing = await this.#platform.listChatDirectory(scope.computerId, directory, scope.signal);
+        const listing = await this.#relay.listChatDirectory(scope.computerId, directory, scope.signal);
         return listing;
     };
 
     readonly #bot = async (scope: ChatScope) => {
         const bot = await this.#managedBots.readBot(scope.userId, scope.signal);
         if (bot === null) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
+            throw new ComputerManagementError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         return bot;
     };
@@ -201,7 +201,7 @@ export class ChatService {
     readonly localRuntime = async (scope: ChatScope) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
-            throw new PlatformProjectError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
+            throw new ComputerManagementError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
         }
         return bot.configuration;
     };
@@ -218,7 +218,7 @@ export class ChatService {
 
     /** The Runtime's description of a Session it holds; a Session it does not hold is not in Recent sessions. */
     readonly #heldSession = async (scope: ChatScope, target: NativeSessionTarget) =>
-        (await this.#platform.queryChatSessions(scope.computerId, [target], scope.signal)).find((session) =>
+        (await this.#relay.queryChatSessions(scope.computerId, [target], scope.signal)).find((session) =>
             sameNativeSession(session.target, target),
         ) ?? notInRecentSessions();
 
@@ -229,7 +229,7 @@ export class ChatService {
         operation: () => Promise<Result>,
     ): Promise<Result> => {
         if (this.#sessionOperations === undefined) {
-            throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
+            throw new ComputerManagementError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
         }
         return this.#sessionOperations.run(sessionKey, signal, operation);
     };
@@ -239,15 +239,19 @@ export class ChatService {
         // The client names the Runtime its native-session identity came from. Discovery and entry identifiers belong to
         // that Runtime and must not be silently redirected to another one.
         if (requestedComputerId !== runtime.computerId) {
-            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine is bound to a different Runtime.", 409);
+            throw new ComputerManagementError(
+                "BOT_RUNTIME_FIXED",
+                "This Machine is bound to a different Runtime.",
+                409,
+            );
         }
         return runtime;
     };
 
     readonly #requireRuntimeAgent = async (scope: ChatScope, harness: string) => {
-        const runtime = await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
+        const runtime = await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal);
         if (!runtime.agents.some((agent) => agent.harness === harness)) {
-            throw new PlatformProjectError(
+            throw new ComputerManagementError(
                 "AGENT_UNAVAILABLE",
                 "Choose an agent provided by this Machine's Runtime.",
                 409,
@@ -258,7 +262,7 @@ export class ChatService {
     /** The Sessions the Runtime holds, most recently updated first. */
     readonly managedSessions = async (scope: ChatScope) => {
         const _runtime = await this.localRuntime(scope);
-        const sessions = await this.#platform.listChatSessions(scope.computerId, LISTED_SESSION_LIMIT, scope.signal);
+        const sessions = await this.#relay.listChatSessions(scope.computerId, LISTED_SESSION_LIMIT, scope.signal);
         return {
             sessions: sessions.map((session) => ({
                 directory: session.directory,
@@ -284,7 +288,7 @@ export class ChatService {
     ): Promise<void> => {
         const _runtime = await this.localRuntime(scope);
         scope.signal.throwIfAborted();
-        const socket = await this.#platform.openChatRuntimeHost(scope.computerId, signal);
+        const socket = await this.#relay.openChatRuntimeHost(scope.computerId, signal);
         // The authorization deadline bounds opening the stream, not the reads made while it runs.
         const following: ChatScope = { ...scope, signal };
         await new Promise<void>((_resolve, reject) => {
@@ -319,18 +323,18 @@ export class ChatService {
                 clearTimeout(liveness);
                 liveness = setTimeout(
                     () =>
-                        finish(new PlatformProjectError("PLATFORM_TIMEOUT", "Session status updates timed out.", 504)),
+                        finish(new ComputerManagementError("RELAY_TIMEOUT", "Session status updates timed out.", 504)),
                     STATUS_LIVENESS_MILLISECONDS,
                 );
             };
             const aborted = (): void => finish(signal.reason);
             const closed = (): void =>
-                finish(new PlatformProjectError("RUNTIME_UNAVAILABLE", "The local Runtime disconnected.", 503));
+                finish(new ComputerManagementError("RUNTIME_UNAVAILABLE", "The local Runtime disconnected.", 503));
             const message = (event: MessageEvent): void => {
                 try {
                     if (typeof event.data !== "string") {
-                        throw new PlatformProjectError(
-                            "PLATFORM_INVALID_RESPONSE",
+                        throw new ComputerManagementError(
+                            "RELAY_INVALID_RESPONSE",
                             "Morty returned an invalid Session status event.",
                             502,
                         );
@@ -352,10 +356,10 @@ export class ChatService {
                     }
                 } catch (cause) {
                     finish(
-                        cause instanceof PlatformProjectError
+                        cause instanceof ComputerManagementError
                             ? cause
-                            : new PlatformProjectError(
-                                  "PLATFORM_INVALID_RESPONSE",
+                            : new ComputerManagementError(
+                                  "RELAY_INVALID_RESPONSE",
                                   "Morty returned an invalid Session status event.",
                                   502,
                                   { cause },
@@ -394,10 +398,10 @@ export class ChatService {
     ) => {
         const bot = await this.#bot(scope);
         if (bot?.configuration === null || bot === null) {
-            throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
+            throw new ComputerManagementError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
         await this.#requireRuntimeAgent(scope, draft.harness);
-        const discovered = await this.#platform.discoverChatAgentSettings(
+        const discovered = await this.#relay.discoverChatAgentSettings(
             scope.computerId,
             { computerId: bot.configuration.computerId, ...draft },
             scope.signal,
@@ -408,7 +412,7 @@ export class ChatService {
     readonly openChat = async (scope: ChatScope, input: OpenChatInput) => {
         const bot = await this.#bot(scope);
         if (bot.configuration === null) {
-            throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
+            throw new ComputerManagementError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
         }
         const access =
             "conversationKey" in input
@@ -431,12 +435,12 @@ export class ChatService {
             harness: input.harness,
             workspaceRef: input.workspaceRef,
         };
-        const ready = await this.#platform.createChatSession(
+        const ready = await this.#relay.createChatSession(
             scope.computerId,
             { ...session, configurations: input.configurations },
             scope.signal,
         );
-        return await this.#platform.createdChatSessionAccess(
+        return await this.#relay.createdChatSessionAccess(
             scope.computerId,
             { ...session, target: ready.target },
             ready,
@@ -447,7 +451,7 @@ export class ChatService {
 
     readonly #reopenManagedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
         const metadata = await this.#heldSession(scope, target);
-        return await this.#platform.openChatSession(
+        return await this.#relay.openChatSession(
             scope.computerId,
             {
                 target,
@@ -465,7 +469,7 @@ export class ChatService {
     readonly nativeSessionAccess = async (scope: ChatScope, target: NativeSessionTarget) => {
         const _runtime = await this.localRuntime(scope);
         const session = await this.#heldSession(scope, target);
-        return await this.#platform.nativeSessionAccess(
+        return await this.#relay.nativeSessionAccess(
             scope.computerId,
             session.target,
             sessionCredentialLifetime(RENEWED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
@@ -478,10 +482,10 @@ export class ChatService {
         return await this.#withSession(scope, target, async () => {
             const runtime = await this.localRuntime(scope);
             const session = await this.#heldSession(scope, target);
-            const restored = await this.#platform.readChatSession(scope.computerId, runtime, target, scope.signal);
+            const restored = await this.#relay.readChatSession(scope.computerId, runtime, target, scope.signal);
             if (!sameNativeSession(restored.ready.target, session.target)) {
-                throw new PlatformProjectError(
-                    "PLATFORM_INVALID_RESPONSE",
+                throw new ComputerManagementError(
+                    "RELAY_INVALID_RESPONSE",
                     "Morty restored a different managed Session.",
                     502,
                 );
@@ -498,16 +502,16 @@ export class ChatService {
     readonly archiveManagedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
         const _runtime = await this.localRuntime(scope);
         return await this.#withSession(scope, target, async () => ({
-            target: await this.#platform.archiveChatSession(scope.computerId, target, scope.signal),
+            target: await this.#relay.archiveChatSession(scope.computerId, target, scope.signal),
         }));
     };
 
     readonly nativeSessions = async (scope: ChatScope, requestedComputerId: string, input: NativeListInput) => {
         const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
-        const result = await this.#platform.nativeSessions(scope.computerId, input, scope.signal);
+        const result = await this.#relay.nativeSessions(scope.computerId, input, scope.signal);
         if (result.action !== "list") {
-            throw new PlatformProjectError(
-                "PLATFORM_INVALID_RESPONSE",
+            throw new ComputerManagementError(
+                "RELAY_INVALID_RESPONSE",
                 "The agent returned an invalid session directory.",
                 502,
             );
@@ -521,12 +525,12 @@ export class ChatService {
         const runtime =
             bot.configuration === null
                 ? undefined
-                : await this.#platform.getChatRuntimeAgents(scope.computerId, scope.signal);
+                : await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal);
         const agent = runtime?.agents.find((item) => item.harness === harness);
         if (runtime === undefined || agent === undefined) {
-            throw new PlatformProjectError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
+            throw new ComputerManagementError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
         }
-        const found = await this.#platform.findNativeSessionBySessionId(
+        const found = await this.#relay.findNativeSessionBySessionId(
             scope.computerId,
             {
                 harness: agent.harness,
@@ -536,7 +540,7 @@ export class ChatService {
             scope.signal,
         );
         const entry = found.entry;
-        const result = await this.#platform.nativeSessions(
+        const result = await this.#relay.nativeSessions(
             scope.computerId,
             {
                 action: "import",
@@ -547,7 +551,7 @@ export class ChatService {
             scope.signal,
         );
         if (result.action !== "import") {
-            throw new PlatformProjectError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
+            throw new ComputerManagementError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
         }
         return { harness: agent.harness, result, entry };
     };
@@ -558,7 +562,7 @@ export class ChatService {
         input: NativePreviewInput,
     ) => {
         const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
-        const events = await this.#platform.previewRuntimeNativeEvents(
+        const events = await this.#relay.previewRuntimeNativeEvents(
             scope.computerId,
             { harness: input.harness, sessionId: input.sessionId },
             input.directory,
@@ -575,13 +579,13 @@ export class ChatService {
         input: NativeEntryInput,
     ) => {
         const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
-        const result = await this.#platform.nativeSessions(
+        const result = await this.#relay.nativeSessions(
             scope.computerId,
             { ...input, sessionId, action: "import" },
             scope.signal,
         );
         if (result.action !== "import") {
-            throw new PlatformProjectError(
+            throw new ComputerManagementError(
                 "IMPORT_UNAVAILABLE",
                 "This agent cannot import the selected local session.",
                 409,
@@ -597,21 +601,21 @@ export class ChatService {
         input: NativePreviewInput,
     ) => {
         const _runtime = await this.#nativeSessionRuntime(scope, requestedComputerId);
-        // Operation identity belongs to this user and Machine, even when they share a Platform Project.
+        // Operation identity belongs to this user and Machine, even when they share a Relay Project.
         const scopedOperationId = await scopedNativeForkOperationId(
             scope.computerId,
             `${scope.userId}\u0000fork\u0000${operationId}`,
         );
-        return await this.#platform.forkNativeSession(scope.computerId, scopedOperationId, input, scope.signal);
+        return await this.#relay.forkNativeSession(scope.computerId, scopedOperationId, input, scope.signal);
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
         await this.#bot(scope);
         if (input.computerId !== scope.computerId) {
-            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This chat belongs to a different computer.", 409);
+            throw new ComputerManagementError("BOT_RUNTIME_FIXED", "This chat belongs to a different computer.", 409);
         }
         await this.#requireRuntimeAgent(scope, input.harness);
-        await this.#platform.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
+        await this.#relay.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
         const result = await this.#managedBots.configureBot(
             scope.userId,
             { computerId: decodeIdentifier(input.computerId) },
@@ -620,13 +624,13 @@ export class ChatService {
         );
         if (result !== "configured") {
             if (result === "runtime-mismatch") {
-                throw new PlatformProjectError(
+                throw new ComputerManagementError(
                     "BOT_RUNTIME_FIXED",
                     "Create a new Machine to pair a different Runtime.",
                     409,
                 );
             }
-            throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
+            throw new ComputerManagementError("NOT_FOUND", "Your Machine was not found.", 404);
         }
         return { status: "active" };
     };

@@ -7,7 +7,7 @@
     "exports": {
         ".": "./src/index.ts",
         "./channel": "./src/channel.ts",
-        "./platform": "./src/platform.ts",
+        "./relay": "./src/relay.ts",
         "./server": "./src/server.ts",
         "./protocol": "./src/protocol/index.ts",
         "./native-session": "./src/native-session.ts"
