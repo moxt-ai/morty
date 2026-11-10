@@ -96,6 +96,16 @@ export type ChatAgentSelection = {
     readonly harness: Identifier;
     readonly label: string;
 };
+/**
+ * Whether the Runtime can take a new conversation now. The setup notice and the draft's settings both follow this one
+ * rule, so they never disagree about why a draft cannot start.
+ */
+export function runtimeAgentAvailability(runtime: ChatRuntime): "no-agent" | "offline" | "available" {
+    if (runtime.agents.length === 0) {
+        return "no-agent";
+    }
+    return runtime.online ? "available" : "offline";
+}
 export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
     return runtime.online
         ? runtime.agents.map((agent) => ({
