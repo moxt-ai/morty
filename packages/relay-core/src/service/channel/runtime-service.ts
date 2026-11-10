@@ -15,7 +15,7 @@ import {
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import type { RuntimeConnectionIdentity } from "../../entity/channel/runtime-connection.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
-import { type HostCredential, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
+import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import { logger } from "../../infra/logger.ts";
 import { runtimeCommandPermission } from "../pairing/runtime-control-registry.ts";
 import type { ChannelActor, ChannelPeers, ChannelSocket } from "./channel-actor.ts";
@@ -41,7 +41,6 @@ export type RuntimeSocketIdentity =
           readonly expiresAt: number;
           /** The verified Session credential's authority, signing generation and whose access it carries. */
           readonly credential: {
-              readonly credentialId: string;
               readonly signingKeyId: string;
               readonly holder: SessionAccessHolder;
           };
@@ -55,7 +54,6 @@ export type RuntimeSocketIdentity =
       }
     | {
           readonly role: "host";
-          readonly credential: HostCredential;
           readonly nativeRequestId?: string;
           readonly sessionFilter?: NativeSessionTarget;
 

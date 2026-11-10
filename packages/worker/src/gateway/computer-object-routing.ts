@@ -3,20 +3,11 @@ import { ComputerManagementError } from "../components/management/entity/compute
 import { projectRegion } from "../components/management/entity/project-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
-export async function routeComputerObject(
+export async function forwardComputerObject(
     request: Request,
     bindings: CloudBindings,
-    computerId: string | null,
-): Promise<Response | null> {
-    if (computerId === null) {
-        return null;
-    }
-    if (bindings.CHAT_COMPUTER_ID !== undefined) {
-        if (bindings.CHAT_COMPUTER_ID !== computerId) {
-            throw new ComputerManagementError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
-        }
-        return null;
-    }
+    computerId: string,
+): Promise<Response> {
     const stub = computerObject(bindings, computerId);
     request.signal.throwIfAborted();
     const deadline = new AbortController();

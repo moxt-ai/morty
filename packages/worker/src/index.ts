@@ -12,3 +12,4 @@ export default {
 
 // Preserve the retired namespace and its records without binding it to incoming requests.
 export { DurableObject as ProjectDurableObject } from "cloudflare:workers";
+export { ComputerRelay } from "../../relay/src/durable-objects/computer-relay.ts";

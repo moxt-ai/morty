@@ -1,7 +1,7 @@
 import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/** The Projects an AppCredential without all-Project access may use. The credential's own record owns this scope. */
-export const machineAccountGrant = sqliteTable(
+// Migration-only declaration: preserve historical records without a runtime reader or writer.
+export const retainedMachineAccountGrantTable = sqliteTable(
     "machine_account_grants",
     {
         credentialId: text("credential_id").notNull(),

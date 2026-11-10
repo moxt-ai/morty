@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker from "../src/application.ts";
@@ -18,7 +16,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
     let hold = false;
     try {
         const owner = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(owner.computerId, [
+        await using runtime = await cloud.connectAgent(owner.computerId, owner.token, [
             {
                 harness: "configuration-test",
                 label: "Configuration Test",
@@ -90,14 +88,11 @@ test("Given a browser opening a Session, When its device is revoked before the R
     }
 }, 45_000);
 
-test("Given a device with an open Session, When its owner disconnects it while the public Relay endpoint is unavailable, Then both credentials are revoked together without a retry", async () => {
+test("Given a device with an open Session, When its owner disconnects it while the Runtime is offline, Then device and Session access are revoked together without a retry", async () => {
     const cloud = await createIdentityFixture();
-    // A real listener that resets every connection, as an unreachable Relay would.
-    const unreachable = createServer((connection) => connection.destroy());
-    await new Promise<void>((resolve) => unreachable.listen(0, "127.0.0.1", resolve));
     try {
         const owner = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(owner.computerId);
+        await using runtime = await cloud.connectAgent(owner.computerId, owner.token);
         const request = (path: string, token: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
                 new Request(`${APP_ORIGIN}/morty/api/${path}`, {
@@ -142,37 +137,29 @@ test("Given a device with an open Session, When its owner disconnects it while t
             }),
             await opened.json(),
         );
-        const readHistory = () =>
-            new MortyClient({
-                endpoint: window.endpoint,
-                computerId: window.computerId,
-                credentialProvider: { credential: async () => window.credential },
-            }).events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
-        await readHistory();
-        const relay = cloud.baseConfiguration.MORTY_RELAY_URL;
-        const address = unreachable.address();
-        if (address === null || typeof address === "string") {
-            throw new Error("Missing unreachable Relay address");
-        }
-
+        const readAccess = () =>
+            cloud.relayRequest(
+                new Request(
+                    `${cloud.origin}/morty/api/v1/computers/${window.computerId}/harnesses/${window.target.harness}/sessions/${window.target.sessionId}/live-event-subscription-target`,
+                    { headers: { authorization: `Bearer ${window.credential}` }, signal: AbortSignal.timeout(15_000) },
+                ),
+            );
+        expect((await readAccess()).status).toBe(200);
         await runtime.disconnect();
-        await cloud.changeRelayOrigin(`http://127.0.0.1:${address.port}`);
-        await runtime.reconnect();
         const failed = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
 
         expect.soft(failed.status).toBe(200);
         expect.soft(await failed.json()).toEqual({ status: "device_access_ended" });
         expect((await request(`${project}/session`, browser)).status).toBe(401);
 
-        await runtime.disconnect();
-        await cloud.changeRelayOrigin(relay);
         await runtime.reconnect();
         const remaining = await request(`${project}/identity/devices`, owner.token);
         expect(await remaining.json()).toMatchObject({ devices: [] });
-        await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
+        const denied = await readAccess();
+        expect(denied.status).toBe(401);
+        expect(await denied.json()).toMatchObject({ error: { code: "credential_revoked" } });
     } finally {
         await cloud.close();
-        await new Promise<void>((resolve) => unreachable.close(() => resolve()));
     }
 }, 60_000);
 

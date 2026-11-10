@@ -1,29 +1,29 @@
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
+import type { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
 import { relayIdentifier } from "../components/management/entity/computer-management.ts";
 import { ManagementError } from "../components/management/entity/management-error.ts";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
 import { computerBindings } from "../composition/computer-bindings.ts";
-import { routeComputerObject } from "../gateway/computer-object-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { readJsonBody } from "./body-parser.ts";
 
-export const cloudComputerContext = createMiddleware<{
-    readonly Bindings: CloudBindings;
-    readonly Variables: { readonly dependencies: ApplicationContext };
-}>(async (context, next) => {
-    const request = context.req.raw;
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
-    const computerId = await cloudComputerId(request);
-    const routed = await routeComputerObject(request, context.env, computerId);
-    if (routed !== null) {
-        return routed;
-    }
-    const bindings = computerId === null ? context.env : await computerBindings(context.env, computerId, signal);
-    context.set("dependencies", createApplicationDependencies(bindings));
-    return await next();
-});
+export const cloudComputerContext = (computer: ComputerBackendService) =>
+    createMiddleware<{
+        readonly Bindings: CloudBindings;
+        readonly Variables: { readonly dependencies: ApplicationContext };
+    }>(async (context, next) => {
+        const request = context.req.raw;
+        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
+        const requestedId = context.req.param("computerId");
+        if (requestedId !== undefined && requestedId !== computer.computerId) {
+            throw new ManagementError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
+        }
+        const bindings = await computerBindings(context.env, computer.computerId, signal);
+        context.set("dependencies", createApplicationDependencies(bindings, computer));
+        return await next();
+    });
 
 export async function cloudComputerId(request: Request): Promise<string | null> {
     const path = new URL(request.url).pathname;

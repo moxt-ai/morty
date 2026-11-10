@@ -75,7 +75,6 @@ function validateTimestamp(value: string, field: string): string {
 
 export class MortySessionAccess {
     readonly credential: string;
-    readonly credentialId: string;
     readonly computerId: string;
     readonly target: NativeSessionTarget;
     readonly expiresAt: string;
@@ -85,7 +84,6 @@ export class MortySessionAccess {
         if (!/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u.test(this.credential)) {
             throw invalidResponse("The Session credential is invalid");
         }
-        this.credentialId = identifierField(resource, "credentialId");
         this.computerId = identifierField(resource, "computerId");
         const target = readNativeSessionTarget(resource["target"]);
         if (target === null) {

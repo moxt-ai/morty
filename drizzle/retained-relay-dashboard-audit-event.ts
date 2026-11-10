@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const relayDashboardAuditEvent = sqliteTable(
+// Migration-only declaration: preserve historical records without a runtime reader or writer.
+export const retainedDashboardAuditTable = sqliteTable(
     "service_audit_events",
     {
         auditId: text("audit_id").primaryKey(),

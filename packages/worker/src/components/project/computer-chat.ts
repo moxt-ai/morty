@@ -1,6 +1,7 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import { computerApplication as application } from "../../computer-application.ts";
+import type { ComputerBackendService } from "../../../../relay/src/service/computer-backend-service.ts";
+import { createComputerApplication } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
@@ -19,11 +20,17 @@ export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
     readonly #accessEnded: () => Promise<void>;
-    /** `accessEnded` closes at once the live connections an identity change no longer authorizes. */
-    constructor(storage: DurableObjectStorage, owns: (id: string) => boolean, accessEnded: () => Promise<void>) {
+    readonly #runtime: (computerId: string) => ComputerBackendService;
+    constructor(
+        storage: DurableObjectStorage,
+        owns: (id: string) => boolean,
+        accessEnded: () => Promise<void>,
+        runtime: (computerId: string) => ComputerBackendService,
+    ) {
         this.#storage = storage;
         this.#owns = owns;
         this.#accessEnded = accessEnded;
+        this.#runtime = runtime;
     }
 
     /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
@@ -59,14 +66,17 @@ export class ComputerChat {
         if (!this.#owns(validatedComputerId) || bound !== validatedComputerId) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await application.fetch(request, this.#bindings(validatedComputerId, env));
+        return await createComputerApplication(this.#runtime(validatedComputerId)).fetch(
+            request,
+            this.#bindings(validatedComputerId, env),
+        );
     }
 
     readonly #bootstrap = async (request: Request, env: CloudBindings): Promise<Response> => {
         const input: unknown = await request.json();
         const parsed = v.parse(computerBootstrap, input);
         await this.#bindComputer(parsed.computer.computerId);
-        return await application.fetch(
+        return await createComputerApplication(this.#runtime(parsed.computer.computerId)).fetch(
             new Request(request.url, {
                 body: JSON.stringify(parsed),
                 headers: { "content-type": "application/json" },

@@ -135,7 +135,7 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     ).toBe(401);
 
     // Reload the real Worker with its durable storage intact before resuming the incomplete bootstrap.
-    await fixture.changeRelayOrigin(fixture.baseConfiguration.MORTY_RELAY_URL);
+    await fixture.reload();
 
     const retry = await replace();
     expect(retry.status).toBe(201);

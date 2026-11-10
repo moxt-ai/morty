@@ -1,6 +1,4 @@
-import { MortyAppCredentialProvider, MortyRelayAppClient } from "@morty-build/client/relay";
 import { createTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
-import { seedMortyService } from "@morty-build/relay-test-support/service-fixture";
 import { type ControlledAgent, createControlledAgentRuntime } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
@@ -14,13 +12,6 @@ export async function startTestRelay(
     const bindings = await createBindings(options.allowedOrigins);
     try {
         const app = { request: bindings.request };
-        const application = await seedMortyService(bindings.env.RELAY_DIRECTORY_DATABASE);
-        const credential = application.credential;
-        const service = new MortyRelayAppClient({
-            endpoint: bindings.origin,
-            credentialProvider: new MortyAppCredentialProvider(credential),
-            transport: { fetch: bindings.request },
-        });
         const close = async (): Promise<void> => {
             cancellation.abort(new Error("Test Relay stopped"));
             try {
@@ -31,20 +22,17 @@ export async function startTestRelay(
         };
         return {
             app,
-            appId: application.appId,
-            appCredential: credential,
-            attachments: bindings.env.R2_BUCKET_APAC,
             baseUrl: bindings.origin,
             cloudflare: bindings.cloudflare,
             configure: bindings.configure,
-            service,
             connectAgent: async (
                 computerId: string,
+                token: string,
                 agents: readonly ControlledAgent[] = [{ harness: "codex", label: "Codex" }],
                 sessionIds?: ReadonlySet<string>,
             ) => {
                 const runtime = await createControlledAgentRuntime({
-                    credential,
+                    credential: token,
                     behavior: {
                         reply: agents[0]?.reply ?? mortyReply,
                         files: mortyFiles,

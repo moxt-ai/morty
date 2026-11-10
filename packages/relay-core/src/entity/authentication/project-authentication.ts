@@ -202,7 +202,6 @@ export class ExpiringProjectAccessLifetime extends ProjectAccessLifetime {
 export class ProjectAccessContext {
     readonly actor: AuditActor;
     readonly authenticatedAtEpochMilliseconds: number;
-    readonly credentialId: string;
     readonly lifetime: ProjectAccessLifetime;
     readonly permissions: ReadonlySet<ProjectPermission>;
     readonly scope: ComputerScope;
@@ -215,14 +214,12 @@ export class ProjectAccessContext {
         scope: ComputerScope,
         permissions: ReadonlySet<ProjectPermission>,
         actor: AuditActor,
-        credentialId: string,
         authenticatedAtEpochMilliseconds: number,
         lifetime: ProjectAccessLifetime,
     ) {
         this.scope = scope;
         this.permissions = new Set(permissions);
         this.actor = actor;
-        this.credentialId = credentialId;
         this.authenticatedAtEpochMilliseconds = authenticatedAtEpochMilliseconds;
         this.lifetime = lifetime;
     }
@@ -308,12 +305,10 @@ function projectAuthenticationErrorStatus(code: string): number {
 }
 
 export class RuntimeAccessContext extends VerifiedChannelAccess {
-    readonly credentialId: string;
     readonly scope: ComputerScope;
 
-    constructor(scope: ComputerScope, credentialId: string) {
+    constructor(scope: ComputerScope) {
         super(scope.computerId, []);
         this.scope = scope;
-        this.credentialId = credentialId;
     }
 }

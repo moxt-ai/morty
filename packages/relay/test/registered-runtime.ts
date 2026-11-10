@@ -1,7 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { RELAY_APP_PROJECT_PERMISSIONS, type SessionAccessHolder } from "@morty-build/client/protocol";
-import { eq } from "drizzle-orm";
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
 import { runtimePairing, runtimeRegistration } from "../../relay-core/src/schema/project-do/index.ts";
@@ -10,7 +9,7 @@ import { ManagedBotStorage } from "../../worker/src/components/management/storag
 import { ComputerChat } from "../../worker/src/components/project/computer-chat.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { migrateComputerStorage } from "../src/durable-objects/migrate-computer-storage.ts";
-import { machineAccount, serviceCredential } from "../src/schema/d1/index.ts";
+import { machineAccount } from "../src/schema/d1/index.ts";
 import { computerDirectoryDrizzle } from "../src/storage/relay-drizzle-database.ts";
 import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 
@@ -68,16 +67,16 @@ export async function endOwnerAccess(computerId: string, holder: SessionAccessHo
 }
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
-export async function registerRuntimeFixture(computerId: string): Promise<{ readonly hostCredentialId: string }> {
+export async function registerRuntimeFixture(computerId: string): Promise<void> {
     const registeredAt = Date.UTC(2026, 9, 27);
-    const appId = `app_${computerId}`;
+    const userId = `user_${computerId}`;
     const directory = computerDirectoryDrizzle(env.RELAY_DIRECTORY_DATABASE);
     await directory.batch([
         directory
             .insert(machineAccount)
             .values({
                 computerId,
-                appId,
+                userId,
                 displayName: "Registered test Project",
                 clientReference: computerId,
                 idempotencyKey: computerId,
@@ -112,23 +111,4 @@ export async function registerRuntimeFixture(computerId: string): Promise<{ read
             });
         }
     });
-    const project = await directory
-        .select({ appId: machineAccount.appId })
-        .from(machineAccount)
-        .where(eq(machineAccount.computerId, computerId))
-        .get();
-    if (project === undefined) {
-        throw new Error("Missing fixture project");
-    }
-    const hostCredentialId = `fixture_${crypto.randomUUID()}`;
-    await directory.insert(serviceCredential).values({
-        credentialId: hostCredentialId,
-        publicCredentialId: crypto.randomUUID(),
-        appId: project.appId,
-        secretDigest: "internal-verified-host-fixture",
-        permissionsJson: JSON.stringify(RELAY_APP_PROJECT_PERMISSIONS),
-        allProjects: 1,
-        issuedAt: registeredAt,
-    });
-    return { hostCredentialId };
 }

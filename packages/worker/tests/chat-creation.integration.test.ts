@@ -43,7 +43,7 @@ async function createChatFixture(
     sessionIds: ReadonlySet<string> = new Set(),
 ) {
     const identity = await cloud.createAnonymousUser();
-    const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
+    const runtime = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
     const environment = cloud.environment();
     const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
         worker.fetch(

@@ -106,16 +106,15 @@ export async function routeComputerDurableObject(
     const body = request.body === null ? undefined : await request.arrayBuffer();
     request.signal.throwIfAborted();
     try {
-        return await bindings.COMPUTER_RELAY.getByName(computerId, { locationHint: placement.locationHint }).fetch(
-            durableObjectUrl,
-            {
-                method: request.method,
-                headers: request.headers,
-                ...(body === undefined ? {} : { body }),
-                signal: request.signal,
-                redirect: request.redirect,
-            },
-        );
+        const computer = bindings.COMPUTER_RELAY.getByName(computerId, { locationHint: placement.locationHint });
+        const routedRequest = new Request(durableObjectUrl, {
+            method: request.method,
+            headers: request.headers,
+            ...(body === undefined ? {} : { body }),
+            signal: request.signal,
+            redirect: request.redirect,
+        });
+        return await computer.fetch(routedRequest);
     } catch (error) {
         logger.error(
             {

@@ -6,8 +6,9 @@ import {
     clientLocationOf,
     encodeClientLocation,
 } from "./components/management/entity/client-location.ts";
-import { createApplicationDependencies } from "./composition/application-context.ts";
+import { logger } from "./composition/application-context.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
+import { fetchPublicRelay } from "./gateway/local-relay.ts";
 import { notFoundPage, webPages } from "./gateway/web-pages.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
@@ -20,9 +21,27 @@ const notFound = (): never => {
 };
 
 const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
-    .onError(
-        errorHandler<{ readonly Bindings: CloudBindings }>(
-            (context) => createApplicationDependencies(context.env).logger,
+    .onError(errorHandler<{ readonly Bindings: CloudBindings }>(() => logger))
+    .use("/morty/api/identity/transfers/redeem", async (context, next) => {
+        const headers = new Headers(context.req.raw.headers);
+        const location = clientLocationOf(context.req.raw);
+        headers.delete(clientLocationHeader);
+        if (location !== null) {
+            headers.set(clientLocationHeader, encodeClientLocation(location));
+        }
+        context.req.raw = new Request(context.req.raw, { headers });
+        await next();
+    })
+    .route(
+        "/morty/api/v1",
+        new Hono<{ readonly Bindings: CloudBindings }>().all("*", (context) =>
+            fetchPublicRelay(context.req.raw, context.env),
+        ),
+    )
+    .route(
+        "/morty/api/channels",
+        new Hono<{ readonly Bindings: CloudBindings }>().all("*", (context) =>
+            fetchPublicRelay(context.req.raw, context.env),
         ),
     )
     .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
@@ -37,16 +56,7 @@ export async function fetchPublicApplication(
     bindings: CloudBindings,
     context?: ExecutionContext,
 ): Promise<Response> {
-    if (!new URL(request.url).pathname.endsWith("/identity/transfers/redeem")) {
-        return await publicApplication.fetch(request, bindings, context);
-    }
-    const headers = new Headers(request.headers);
-    const location = clientLocationOf(request);
-    headers.delete(clientLocationHeader);
-    if (location !== null) {
-        headers.set(clientLocationHeader, encodeClientLocation(location));
-    }
-    return await publicApplication.fetch(new Request(request, { headers }), bindings, context);
+    return await publicApplication.fetch(request, bindings, context);
 }
 
 export default { fetch: fetchPublicApplication } satisfies ExportedHandler<CloudBindings, unknown>;

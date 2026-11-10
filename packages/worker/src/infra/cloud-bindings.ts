@@ -24,17 +24,6 @@ export const projectStorageBindingsSchema = v.pipe(
 
 export type ProjectStorageBindings = v.InferOutput<typeof projectStorageBindingsSchema>;
 
-export const relayEndpointBindingsSchema = v.pipe(
-    v.object({
-        MORTY_RELAY_URL: v.string(),
-    }),
-    v.readonly(),
-);
-
-export const appOriginBindingSchema = v.pipe(v.object({ APP_ORIGIN: v.string() }), v.readonly());
-
-export const relayCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_SECRET: v.string() }), v.readonly());
-
 export interface CloudBindings {
     readonly COMPUTER_RELAY?: unknown;
     readonly CHAT_ATTACHMENTS_APAC?: unknown;
@@ -48,6 +37,7 @@ export interface CloudBindings {
     readonly CHAT_ACCESS_ENDED?: () => Promise<void>;
     /** The Project object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
-    readonly MORTY_RELAY_URL?: unknown;
-    readonly MORTY_SERVICE_SECRET?: unknown;
+    readonly RELAY_DIRECTORY_DATABASE?: unknown;
+    readonly MORTY_SESSION_SIGNING_SECRET?: unknown;
+    readonly MORTY_ALLOWED_ORIGINS?: unknown;
 }
