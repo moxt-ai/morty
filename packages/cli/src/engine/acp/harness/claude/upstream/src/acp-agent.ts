@@ -1543,6 +1543,11 @@ async function waitForMcpAuthentication(
 }
 
 export class ClaudeAcpAgent {
+    private readonly lifetime = new AbortController();
+    readonly signal: AbortSignal = this.lifetime.signal;
+    private readonly creating = new Set<Promise<NewSessionResponse>>();
+    private readonly creationControllers = new Set<AbortController>();
+    private closing: Promise<void> | null = null;
     private readonly pendingSubmissions = new Map<string, Set<AbortController>>();
     sessions: {
         [key: string]: Session;
@@ -5202,12 +5207,14 @@ export class ClaudeAcpAgent {
 
     /** Cleanly tear down a session: cancel in-flight work, release stream
      *  resources, and remove it from the session map. */
-    private async teardownSession(sessionId: string): Promise<void> {
+    private async teardownSession(sessionId: string, graceful = true): Promise<void> {
         const session = this.sessions[sessionId];
         if (!session) {
             return;
         }
-        await this.cancel({ sessionId });
+        if (graceful) {
+            await this.cancel({ sessionId });
+        }
         // cancel() arms the force-cancel floor and interrupts gracefully, but a
         // wedged consumer only wakes when `cancelController` aborts — closeQueryStream
         // below doesn't touch it. Since we're tearing the session down anyway, wake
@@ -5228,7 +5235,25 @@ export class ClaudeAcpAgent {
 
     /** Tear down all active sessions. Called when the ACP connection closes. */
     async dispose(): Promise<void> {
-        await Promise.all(Object.keys(this.sessions).map((id) => this.teardownSession(id)));
+        if (this.closing === null) {
+            this.lifetime.abort(new DOMException("The Claude client closed", "AbortError"));
+            for (const controller of this.creationControllers) {
+                controller.abort(this.signal.reason);
+            }
+            this.closing = (async () => {
+                await Promise.allSettled([...this.creating]);
+                await Promise.all(Object.keys(this.sessions).map((id) => this.teardownSession(id, false)));
+            })();
+        }
+        return await this.closing;
+    }
+
+    sessionConfiguration(sessionId: string) {
+        const session = this.sessions[sessionId];
+        if (!session || session.queryClosed) {
+            throw RequestError.internalError(undefined, SESSION_ENDED_MESSAGE);
+        }
+        return { configOptions: session.configOptions, modes: session.modes };
     }
 
     async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
@@ -6301,6 +6326,20 @@ export class ClaudeAcpAgent {
             permissionMode?: PermissionMode;
         } = {},
     ): Promise<NewSessionResponse> {
+        this.signal.throwIfAborted();
+        const creating = this.createSessionQuery(params, creationOpts);
+        this.creating.add(creating);
+        try {
+            return await creating;
+        } finally {
+            this.creating.delete(creating);
+        }
+    }
+
+    private async createSessionQuery(
+        params: NewSessionRequest,
+        creationOpts: { resume?: string; publicSessionId?: string; permissionMode?: PermissionMode },
+    ): Promise<NewSessionResponse> {
         // Validate `cwd` up front. The ACP spec requires an absolute path, and the
         // directory must actually exist on the machine running the agent. Without
         // this check a session is created against a missing directory and the
@@ -6323,516 +6362,526 @@ export class ClaudeAcpAgent {
         const settingsManager = new SettingsManager(params.cwd, {
             logger: this.logger,
         });
-        await settingsManager.initialize();
-
-        const mcpServers: Record<string, McpServerConfig> = {};
-        if (Array.isArray(params.mcpServers)) {
-            for (const server of params.mcpServers) {
-                if ("type" in server && (server.type === "http" || server.type === "sse")) {
-                    // HTTP or SSE type MCP server
-                    mcpServers[server.name] = {
-                        type: server.type,
-                        url: server.url,
-                        headers: server.headers
-                            ? Object.fromEntries(server.headers.map((e) => [e.name, e.value]))
-                            : undefined,
-                    };
-                } else if (!("type" in server)) {
-                    // Stdio type MCP server (with or without explicit type field)
-                    mcpServers[server.name] = {
-                        type: "stdio",
-                        command: server.command,
-                        args: server.args,
-                        env: server.env ? Object.fromEntries(server.env.map((e) => [e.name, e.value])) : undefined,
-                    };
-                }
-            }
-        }
-
-        let systemPrompt: Options["systemPrompt"] = { type: "preset", preset: "claude_code" };
-        if (params._meta?.systemPrompt) {
-            const customPrompt = params._meta.systemPrompt;
-            if (typeof customPrompt === "string") {
-                systemPrompt = customPrompt;
-            } else if (typeof customPrompt === "object" && customPrompt !== null && !Array.isArray(customPrompt)) {
-                // Forward all preset options (append, excludeDynamicSections, and
-                // anything the SDK adds later) while locking type/preset.
-                systemPrompt = {
-                    ...(customPrompt as object),
-                    type: "preset",
-                    preset: "claude_code",
-                } as Options["systemPrompt"];
-            }
-        }
-
-        const permissionMode = resolvePermissionMode(
-            settingsManager.getSettings().permissions?.defaultMode,
-            this.logger,
-        );
-        const initialPermissionMode = creationOpts.permissionMode ?? permissionMode;
-
-        // Extract options from _meta if provided
         const sessionMeta = params._meta as NewSessionMeta | undefined;
         const userProvidedOptions = sessionMeta?.claudeCode?.options;
-        const forwardSubagentText =
-            supportsSubagentTranscript(this.clientCapabilities) || userProvidedOptions?.forwardSubagentText === true;
-
-        // Configure thinking behavior from environment variable
-        const thinking = resolveThinkingConfig(process.env.MAX_THINKING_TOKENS, this.logger);
-
-        // Parse model configuration from environment (e.g. Bedrock model overrides)
-        const modelConfig = parseModelConfig(process.env.CLAUDE_MODEL_CONFIG);
-
-        // Elicitation modes the connected client advertised. We only forward
-        // elicitations (and only re-enable AskUserQuestion) for modes the client
-        // can actually render.
-        const elicitationSupport: ElicitationSupport = {
-            form: !!this.clientCapabilities?.elicitation?.form,
-            url: !!this.clientCapabilities?.elicitation?.url,
-        };
-
-        // AskUserQuestion surfaces as a `permission_ask_user_question` dialog that
-        // we render as a form elicitation. Without form-elicitation support there
-        // is no way to present it over ACP, so keep it disabled in that case.
-        const disallowedTools = elicitationSupport.form ? [] : ["AskUserQuestion"];
-
-        // Resolve which built-in tools to expose.
-        // Explicit tools array from _meta.claudeCode.options takes precedence.
-        // disableBuiltInTools is a legacy shorthand for tools: [] — kept for
-        // backward compatibility but callers should prefer the tools array.
-        const tools: Options["tools"] =
-            userProvidedOptions?.tools ??
-            (params._meta?.disableBuiltInTools === true ? [] : { type: "preset", preset: "claude_code" });
-
         const abortController = userProvidedOptions?.abortController || new AbortController();
-
-        // Per-session task state. Created here (rather than in the session record
-        // below) so the TaskCreated/TaskCompleted hook callbacks can close over
-        // the same Map that the streaming message handler will read from.
-        const taskState: TaskState = new Map();
-
-        // The exact env the query will be created with. Built (and the provider
-        // cache key derived from it, below) in one place so the key always
-        // describes the backend this query actually talks to: `providers/set`,
-        // `providers/disable`, and `logout` mutate the process-wide provider
-        // config concurrently, so re-resolving it after any of the awaits between
-        // here and the session registration could disagree with the env baked
-        // into the query.
-        const resolvedProvider = this.resolveProviderConfig();
-        const providerEnv = createEnvForProvider(resolvedProvider);
-        const configuredSettings =
-            userProvidedOptions?.settings ??
-            (modelConfig
-                ? {
-                      ...(modelConfig.modelOverrides && { modelOverrides: modelConfig.modelOverrides }),
-                      ...(modelConfig.availableModels && { availableModels: modelConfig.availableModels }),
-                  }
-                : undefined);
-        // Claude Code applies env from settings.json after the subprocess env. Put
-        // an active ACP route in the programmatic settings tier too so user/project
-        // settings cannot silently restore a different ANTHROPIC_BASE_URL.
-        let settings = configuredSettings;
-        if (resolvedProvider) {
-            const baseSettings =
-                typeof configuredSettings === "string"
-                    ? (JSON.parse(await fs.readFile(path.resolve(params.cwd, configuredSettings), "utf8")) as Exclude<
-                          Options["settings"],
-                          string | undefined
-                      >)
-                    : configuredSettings;
-            settings = {
-                ...baseSettings,
-                apiKeyHelper: "",
-                env: { ...baseSettings?.env, ...providerEnv },
-            };
-        }
-        const env = {
-            ...this.environment,
-            ...userProvidedOptions?.env,
-            // Client-managed LLM routing: `providers/set` config wins, else the
-            // legacy gateway auth request. Routing is baked into the query at
-            // creation; provider updates recreate loaded queries between turns.
-            ...providerEnv,
-            // Opt-in to session state events like when the agent is idle
-            CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
-        };
-        // Scopes the context-window cache to this query's backend (see
-        // `contextWindowCache`). Derived from the same `env` object handed to the
-        // SDK, so per-session `_meta` env routing and ambient process-env routing
-        // are distinguished exactly as the CLI will see them.
-        const providerCacheKey = providerCacheKeyFor(env);
-        this.logger.log(
-            `[session/query] sessionId=${sessionId} resume=${creationOpts?.resume ?? "none"} apiType=${resolvedProvider?.apiType ?? "native"} baseUrl=${resolvedProvider?.baseUrl ?? "native"}`,
-        );
-
-        const options: Options = {
-            systemPrompt,
-            settingSources: ["user", "project", "local"],
-            ...(thinking !== undefined && { thinking }),
-            ...userProvidedOptions,
-            ...(settings && { settings }),
-            env,
-            // Override certain fields that must be controlled by ACP
-            cwd: params.cwd,
-            includePartialMessages: true,
-            forwardSubagentText,
-            mcpServers: { ...(userProvidedOptions?.mcpServers || {}), ...mcpServers },
-            // If we want bypassPermissions to be an option, we have to allow it here.
-            // But it doesn't work in root mode, so we only activate it if it will work.
-            allowDangerouslySkipPermissions: ALLOW_BYPASS,
-            permissionMode: initialPermissionMode,
-            canUseTool: this.canUseTool(sessionId),
-            // Forward MCP elicitation requests onto ACP elicitation. Only attached
-            // when the client advertised support, so non-supporting clients keep the
-            // SDK's default (auto-decline) behavior. (AskUserQuestion is handled in
-            // canUseTool, not here.)
-            ...(elicitationSupport.form || elicitationSupport.url
-                ? { onElicitation: this.handleMcpElicitation(sessionId, elicitationSupport) }
-                : {}),
-            // Render the CLI's refusal-fallback consent prompt ("<model> declined —
-            // retry with <fallback>?") as an ACP form elicitation. Declaring the
-            // kind is the opt-in: the CLI never emits an undeclared dialog, and the
-            // flow instead degrades to the classic refusal error ending the turn.
-            // Gated on form elicitation since that's the only ACP surface that can
-            // present a choice outside a tool call.
-            ...(elicitationSupport.form
-                ? {
-                      onUserDialog: this.handleUserDialog(sessionId),
-                      supportedDialogKinds: [REFUSAL_FALLBACK_DIALOG_KIND],
-                  }
-                : {}),
-            pathToClaudeCodeExecutable: this.claudeExecutable(),
-            ...(this.spawnClaudeCodeProcess === undefined
-                ? {}
-                : { spawnClaudeCodeProcess: this.spawnClaudeCodeProcess }),
-            extraArgs: {
-                ...userProvidedOptions?.extraArgs,
-                "replay-user-messages": "",
-            },
-            disallowedTools: [...(userProvidedOptions?.disallowedTools || []), ...disallowedTools],
-            tools,
-            hooks: {
-                ...userProvidedOptions?.hooks,
-                PostToolUse: [
-                    ...(userProvidedOptions?.hooks?.PostToolUse || []),
-                    {
-                        hooks: [
-                            createPostToolUseHook({
-                                onEnterPlanMode: async () => {
-                                    await this.sessionModes.publishCurrent(sessionId, "plan");
-                                    await this.updateConfigOption(sessionId, MODE_CONFIG_ID, "plan");
-                                },
-                            }),
-                        ],
-                    },
-                ],
-                // Mirror model switches the adapter didn't drive into the ACP picker
-                // and the model-dependent bookkeeping (context window, mode clamping,
-                // effort/Fast-mode options). Without this, a `/model <name>` command
-                // typed as a prompt — which the CLI executes as a local command —
-                // switches the session's model with no refusal-fallback frame, and
-                // the client's picker silently drifts. `source: 'sdk'` is the
-                // adapter's own setModel (applyConfigOptionValue already synced it),
-                // and 'resume' restores are read back via readResumedLiveModel, so
-                // only the remaining sources sync here (CLI 2.1.251+; older CLIs
-                // never fire the hook and keep the pre-hook behavior).
-                PostModelSwitch: [
-                    ...(userProvidedOptions?.hooks?.PostModelSwitch || []),
-                    {
-                        hooks: [
-                            async (input) => {
-                                if (
-                                    input.hook_event_name === "PostModelSwitch" &&
-                                    input.source !== "sdk" &&
-                                    input.source !== "resume"
-                                ) {
-                                    // Don't run the sync before answering the hook: the sync
-                                    // can issue applyFlagSettings (an outgoing control request)
-                                    // while the CLI is awaiting this hook's response, and SDK
-                                    // control requests are serialized over one channel.
-                                    // syncModelAfterExternalSwitch contains its own errors, so
-                                    // the detached call can't surface an unhandled rejection.
-                                    const toModel = input.to_model;
-                                    setImmediate(() => {
-                                        const live = this.sessions[sessionId];
-                                        if (!live) {
-                                            return;
-                                        }
-                                        void this.syncModelAfterExternalSwitch(sessionId, live, toModel);
-                                    });
-                                }
-                                return { continue: true };
-                            },
-                        ],
-                    },
-                ],
-                TaskCreated: [
-                    ...(userProvidedOptions?.hooks?.TaskCreated || []),
-                    {
-                        hooks: [
-                            createTaskHook({
-                                taskState,
-                                onChange: () => this.publishTaskPlan(sessionId, taskState),
-                            }),
-                        ],
-                    },
-                ],
-                TaskCompleted: [
-                    ...(userProvidedOptions?.hooks?.TaskCompleted || []),
-                    {
-                        hooks: [
-                            createTaskHook({
-                                taskState,
-                                onChange: () => this.publishTaskPlan(sessionId, taskState),
-                            }),
-                        ],
-                    },
-                ],
-            },
-            ...(creationOpts.resume !== undefined && { resume: creationOpts.resume }),
-            abortController,
-        };
-
-        // Prefer the official ACP `additionalDirectories` field. Fall back to the
-        // legacy `_meta.additionalRoots` extension for clients that haven't been
-        // updated yet. Either source is merged with directories supplied via
-        // `_meta.claudeCode.options.additionalDirectories` (SDK pass-through).
-        const acpAdditionalDirectories = params.additionalDirectories ?? sessionMeta?.additionalRoots ?? [];
-        options.additionalDirectories = [
-            ...(userProvidedOptions?.additionalDirectories ?? []),
-            ...acpAdditionalDirectories,
-        ];
-
-        if (creationOpts?.resume === undefined) {
-            // Set our own session id if not resuming an existing session.
-            options.sessionId = creationOpts.publicSessionId ? randomUUID() : sessionId;
-        }
-
-        // Handle abort controller from meta options
-        if (abortController?.signal.aborted) {
-            throw new Error("Cancelled");
-        }
-
-        const q = query({
-            prompt: input,
-            options,
-        });
-
-        let initializationResult: Awaited<ReturnType<typeof q.initializationResult>>;
+        this.creationControllers.add(abortController);
+        let q: Query | null = null;
         try {
-            initializationResult = await q.initializationResult();
-        } catch (error) {
-            if (
-                creationOpts.resume &&
-                error instanceof Error &&
-                (error.message === "Query closed before response received" ||
-                    error.message.includes("No conversation found with session ID"))
-            ) {
-                throw RequestError.resourceNotFound(sessionId);
+            await settingsManager.initialize();
+            this.signal.throwIfAborted();
+
+            const mcpServers: Record<string, McpServerConfig> = {};
+            if (Array.isArray(params.mcpServers)) {
+                for (const server of params.mcpServers) {
+                    if ("type" in server && (server.type === "http" || server.type === "sse")) {
+                        // HTTP or SSE type MCP server
+                        mcpServers[server.name] = {
+                            type: server.type,
+                            url: server.url,
+                            headers: server.headers
+                                ? Object.fromEntries(server.headers.map((e) => [e.name, e.value]))
+                                : undefined,
+                        };
+                    } else if (!("type" in server)) {
+                        // Stdio type MCP server (with or without explicit type field)
+                        mcpServers[server.name] = {
+                            type: "stdio",
+                            command: server.command,
+                            args: server.args,
+                            env: server.env ? Object.fromEntries(server.env.map((e) => [e.name, e.value])) : undefined,
+                        };
+                    }
+                }
             }
-            throw error;
-        }
 
-        if (shouldHideClaudeAuth() && initializationResult.account.subscriptionType && !this.gatewayAuthRequest) {
-            throw RequestError.authRequired(
-                undefined,
-                "This integration does not support using claude.ai subscriptions.",
+            let systemPrompt: Options["systemPrompt"] = { type: "preset", preset: "claude_code" };
+            if (params._meta?.systemPrompt) {
+                const customPrompt = params._meta.systemPrompt;
+                if (typeof customPrompt === "string") {
+                    systemPrompt = customPrompt;
+                } else if (typeof customPrompt === "object" && customPrompt !== null && !Array.isArray(customPrompt)) {
+                    // Forward all preset options (append, excludeDynamicSections, and
+                    // anything the SDK adds later) while locking type/preset.
+                    systemPrompt = {
+                        ...(customPrompt as object),
+                        type: "preset",
+                        preset: "claude_code",
+                    } as Options["systemPrompt"];
+                }
+            }
+
+            const permissionMode = resolvePermissionMode(
+                settingsManager.getSettings().permissions?.defaultMode,
+                this.logger,
             );
+            const initialPermissionMode = creationOpts.permissionMode ?? permissionMode;
+
+            // Extract options from _meta if provided
+            const forwardSubagentText =
+                supportsSubagentTranscript(this.clientCapabilities) ||
+                userProvidedOptions?.forwardSubagentText === true;
+
+            // Configure thinking behavior from environment variable
+            const thinking = resolveThinkingConfig(process.env.MAX_THINKING_TOKENS, this.logger);
+
+            // Parse model configuration from environment (e.g. Bedrock model overrides)
+            const modelConfig = parseModelConfig(process.env.CLAUDE_MODEL_CONFIG);
+
+            // Elicitation modes the connected client advertised. We only forward
+            // elicitations (and only re-enable AskUserQuestion) for modes the client
+            // can actually render.
+            const elicitationSupport: ElicitationSupport = {
+                form: !!this.clientCapabilities?.elicitation?.form,
+                url: !!this.clientCapabilities?.elicitation?.url,
+            };
+
+            // AskUserQuestion surfaces as a `permission_ask_user_question` dialog that
+            // we render as a form elicitation. Without form-elicitation support there
+            // is no way to present it over ACP, so keep it disabled in that case.
+            const disallowedTools = elicitationSupport.form ? [] : ["AskUserQuestion"];
+
+            // Resolve which built-in tools to expose.
+            // Explicit tools array from _meta.claudeCode.options takes precedence.
+            // disableBuiltInTools is a legacy shorthand for tools: [] — kept for
+            // backward compatibility but callers should prefer the tools array.
+            const tools: Options["tools"] =
+                userProvidedOptions?.tools ??
+                (params._meta?.disableBuiltInTools === true ? [] : { type: "preset", preset: "claude_code" });
+
+            // Per-session task state. Created here (rather than in the session record
+            // below) so the TaskCreated/TaskCompleted hook callbacks can close over
+            // the same Map that the streaming message handler will read from.
+            const taskState: TaskState = new Map();
+
+            // The exact env the query will be created with. Built (and the provider
+            // cache key derived from it, below) in one place so the key always
+            // describes the backend this query actually talks to: `providers/set`,
+            // `providers/disable`, and `logout` mutate the process-wide provider
+            // config concurrently, so re-resolving it after any of the awaits between
+            // here and the session registration could disagree with the env baked
+            // into the query.
+            const resolvedProvider = this.resolveProviderConfig();
+            const providerEnv = createEnvForProvider(resolvedProvider);
+            const configuredSettings =
+                userProvidedOptions?.settings ??
+                (modelConfig
+                    ? {
+                          ...(modelConfig.modelOverrides && { modelOverrides: modelConfig.modelOverrides }),
+                          ...(modelConfig.availableModels && { availableModels: modelConfig.availableModels }),
+                      }
+                    : undefined);
+            // Claude Code applies env from settings.json after the subprocess env. Put
+            // an active ACP route in the programmatic settings tier too so user/project
+            // settings cannot silently restore a different ANTHROPIC_BASE_URL.
+            let settings = configuredSettings;
+            if (resolvedProvider) {
+                const baseSettings =
+                    typeof configuredSettings === "string"
+                        ? (JSON.parse(
+                              await fs.readFile(path.resolve(params.cwd, configuredSettings), "utf8"),
+                          ) as Exclude<Options["settings"], string | undefined>)
+                        : configuredSettings;
+                settings = {
+                    ...baseSettings,
+                    apiKeyHelper: "",
+                    env: { ...baseSettings?.env, ...providerEnv },
+                };
+            }
+            const env = {
+                ...this.environment,
+                ...userProvidedOptions?.env,
+                // Client-managed LLM routing: `providers/set` config wins, else the
+                // legacy gateway auth request. Routing is baked into the query at
+                // creation; provider updates recreate loaded queries between turns.
+                ...providerEnv,
+                // Opt-in to session state events like when the agent is idle
+                CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
+            };
+            // Scopes the context-window cache to this query's backend (see
+            // `contextWindowCache`). Derived from the same `env` object handed to the
+            // SDK, so per-session `_meta` env routing and ambient process-env routing
+            // are distinguished exactly as the CLI will see them.
+            const providerCacheKey = providerCacheKeyFor(env);
+            this.logger.log(
+                `[session/query] sessionId=${sessionId} resume=${creationOpts?.resume ?? "none"} apiType=${resolvedProvider?.apiType ?? "native"} baseUrl=${resolvedProvider?.baseUrl ?? "native"}`,
+            );
+
+            const options: Options = {
+                systemPrompt,
+                settingSources: ["user", "project", "local"],
+                ...(thinking !== undefined && { thinking }),
+                ...userProvidedOptions,
+                ...(settings && { settings }),
+                env,
+                // Override certain fields that must be controlled by ACP
+                cwd: params.cwd,
+                includePartialMessages: true,
+                forwardSubagentText,
+                mcpServers: { ...(userProvidedOptions?.mcpServers || {}), ...mcpServers },
+                // If we want bypassPermissions to be an option, we have to allow it here.
+                // But it doesn't work in root mode, so we only activate it if it will work.
+                allowDangerouslySkipPermissions: ALLOW_BYPASS,
+                permissionMode: initialPermissionMode,
+                canUseTool: this.canUseTool(sessionId),
+                // Forward MCP elicitation requests onto ACP elicitation. Only attached
+                // when the client advertised support, so non-supporting clients keep the
+                // SDK's default (auto-decline) behavior. (AskUserQuestion is handled in
+                // canUseTool, not here.)
+                ...(elicitationSupport.form || elicitationSupport.url
+                    ? { onElicitation: this.handleMcpElicitation(sessionId, elicitationSupport) }
+                    : {}),
+                // Render the CLI's refusal-fallback consent prompt ("<model> declined —
+                // retry with <fallback>?") as an ACP form elicitation. Declaring the
+                // kind is the opt-in: the CLI never emits an undeclared dialog, and the
+                // flow instead degrades to the classic refusal error ending the turn.
+                // Gated on form elicitation since that's the only ACP surface that can
+                // present a choice outside a tool call.
+                ...(elicitationSupport.form
+                    ? {
+                          onUserDialog: this.handleUserDialog(sessionId),
+                          supportedDialogKinds: [REFUSAL_FALLBACK_DIALOG_KIND],
+                      }
+                    : {}),
+                pathToClaudeCodeExecutable: this.claudeExecutable(),
+                ...(this.spawnClaudeCodeProcess === undefined
+                    ? {}
+                    : { spawnClaudeCodeProcess: this.spawnClaudeCodeProcess }),
+                extraArgs: {
+                    ...userProvidedOptions?.extraArgs,
+                    "replay-user-messages": "",
+                },
+                disallowedTools: [...(userProvidedOptions?.disallowedTools || []), ...disallowedTools],
+                tools,
+                hooks: {
+                    ...userProvidedOptions?.hooks,
+                    PostToolUse: [
+                        ...(userProvidedOptions?.hooks?.PostToolUse || []),
+                        {
+                            hooks: [
+                                createPostToolUseHook({
+                                    onEnterPlanMode: async () => {
+                                        await this.sessionModes.publishCurrent(sessionId, "plan");
+                                        await this.updateConfigOption(sessionId, MODE_CONFIG_ID, "plan");
+                                    },
+                                }),
+                            ],
+                        },
+                    ],
+                    // Mirror model switches the adapter didn't drive into the ACP picker
+                    // and the model-dependent bookkeeping (context window, mode clamping,
+                    // effort/Fast-mode options). Without this, a `/model <name>` command
+                    // typed as a prompt — which the CLI executes as a local command —
+                    // switches the session's model with no refusal-fallback frame, and
+                    // the client's picker silently drifts. `source: 'sdk'` is the
+                    // adapter's own setModel (applyConfigOptionValue already synced it),
+                    // and 'resume' restores are read back via readResumedLiveModel, so
+                    // only the remaining sources sync here (CLI 2.1.251+; older CLIs
+                    // never fire the hook and keep the pre-hook behavior).
+                    PostModelSwitch: [
+                        ...(userProvidedOptions?.hooks?.PostModelSwitch || []),
+                        {
+                            hooks: [
+                                async (input) => {
+                                    if (
+                                        input.hook_event_name === "PostModelSwitch" &&
+                                        input.source !== "sdk" &&
+                                        input.source !== "resume"
+                                    ) {
+                                        // Don't run the sync before answering the hook: the sync
+                                        // can issue applyFlagSettings (an outgoing control request)
+                                        // while the CLI is awaiting this hook's response, and SDK
+                                        // control requests are serialized over one channel.
+                                        // syncModelAfterExternalSwitch contains its own errors, so
+                                        // the detached call can't surface an unhandled rejection.
+                                        const toModel = input.to_model;
+                                        setImmediate(() => {
+                                            const live = this.sessions[sessionId];
+                                            if (!live) {
+                                                return;
+                                            }
+                                            void this.syncModelAfterExternalSwitch(sessionId, live, toModel);
+                                        });
+                                    }
+                                    return { continue: true };
+                                },
+                            ],
+                        },
+                    ],
+                    TaskCreated: [
+                        ...(userProvidedOptions?.hooks?.TaskCreated || []),
+                        {
+                            hooks: [
+                                createTaskHook({
+                                    taskState,
+                                    onChange: () => this.publishTaskPlan(sessionId, taskState),
+                                }),
+                            ],
+                        },
+                    ],
+                    TaskCompleted: [
+                        ...(userProvidedOptions?.hooks?.TaskCompleted || []),
+                        {
+                            hooks: [
+                                createTaskHook({
+                                    taskState,
+                                    onChange: () => this.publishTaskPlan(sessionId, taskState),
+                                }),
+                            ],
+                        },
+                    ],
+                },
+                ...(creationOpts.resume !== undefined && { resume: creationOpts.resume }),
+                abortController,
+            };
+
+            // Prefer the official ACP `additionalDirectories` field. Fall back to the
+            // legacy `_meta.additionalRoots` extension for clients that haven't been
+            // updated yet. Either source is merged with directories supplied via
+            // `_meta.claudeCode.options.additionalDirectories` (SDK pass-through).
+            const acpAdditionalDirectories = params.additionalDirectories ?? sessionMeta?.additionalRoots ?? [];
+            options.additionalDirectories = [
+                ...(userProvidedOptions?.additionalDirectories ?? []),
+                ...acpAdditionalDirectories,
+            ];
+
+            if (creationOpts?.resume === undefined) {
+                // Set our own session id if not resuming an existing session.
+                options.sessionId = creationOpts.publicSessionId ? randomUUID() : sessionId;
+            }
+
+            // Handle abort controller from meta options
+            this.signal.throwIfAborted();
+            abortController.signal.throwIfAborted();
+            q = query({
+                prompt: input,
+                options,
+            });
+
+            let initializationResult: Awaited<ReturnType<typeof q.initializationResult>>;
+            try {
+                initializationResult = await q.initializationResult();
+            } catch (error) {
+                if (
+                    creationOpts.resume &&
+                    error instanceof Error &&
+                    (error.message === "Query closed before response received" ||
+                        error.message.includes("No conversation found with session ID"))
+                ) {
+                    throw RequestError.resourceNotFound(sessionId);
+                }
+                throw error;
+            }
+
+            if (shouldHideClaudeAuth() && initializationResult.account.subscriptionType && !this.gatewayAuthRequest) {
+                throw RequestError.authRequired(
+                    undefined,
+                    "This integration does not support using claude.ai subscriptions.",
+                );
+            }
+
+            // Apply user's `availableModels` allowlist from settings.json before any
+            // downstream model handling. The SDK only enforces this allowlist in its
+            // own UI, not in `initializationResult.models`, so we filter here to keep
+            // configOptions, the current-model resolver, and the stored modelInfos
+            // consistent with what the user configured.
+            const settingsAvailableModels = settingsManager.getSettings().availableModels;
+            const settingsModelOverrides = settingsManager.getSettings().modelOverrides;
+            const allowedModels = Array.isArray(settingsAvailableModels)
+                ? applyAvailableModelsAllowlist(
+                      initializationResult.models,
+                      settingsAvailableModels,
+                      settingsModelOverrides,
+                  )
+                : initializationResult.models;
+
+            const { modelState: models, resumedContextWindow } = await getAvailableModels(
+                q,
+                allowedModels,
+                initializationResult.models,
+                settingsManager,
+                this.logger,
+                creationOpts.resume !== undefined,
+            );
+
+            // Resolve the current model's capabilities separately from the stable
+            // permission-mode catalog advertised to ACP clients.
+            // A resumed session can be running a model outside the `availableModels`
+            // allowlist (currentModelId is then the verbatim live id, see
+            // `matchResumedModel`); its capabilities are still known to the SDK's
+            // unfiltered list, so fall back to that before treating the model as
+            // unknown — otherwise auto mode would be spuriously clamped and the
+            // Fast-mode/Effort options hidden for a model that supports them.
+            const allowlistedModelInfo = allowedModels.find((m) => m.value === models.currentModelId);
+            const fallbackModelInfo = allowlistedModelInfo
+                ? undefined
+                : (resolveModelPreference(initializationResult.models, models.currentModelId) ?? undefined);
+            const currentModelInfo = allowlistedModelInfo ?? fallbackModelInfo;
+            // Register the fallback-resolved capabilities under the verbatim live id
+            // so every modelInfos consumer (buildConfigOptions' effort lookup, later
+            // rebuilds via session.modelInfos) agrees with the gating below. The
+            // picker options themselves come from `models.availableModels`, so this
+            // adds no selectable entry. The spread keeps every capability flag
+            // (current and future); the identity fields are overridden because the
+            // fuzzy-matched sibling's resolvedModel/displayName/description can
+            // describe a different context lane and would poison later resolvedModel
+            // matching (syncModelAfterExternalSwitch) and context-window inference
+            // (applyConfigOptionValue) if they traveled under this id.
+            const modelInfos = fallbackModelInfo
+                ? [
+                      ...allowedModels,
+                      {
+                          ...fallbackModelInfo,
+                          value: models.currentModelId,
+                          displayName: models.currentModelId,
+                          description: "",
+                          resolvedModel: undefined,
+                      },
+                  ]
+                : allowedModels;
+            const { modes, autoModeFallbackWarningPending } = await this.sessionModes.initialize({
+                query: q,
+                requestedMode: initialPermissionMode,
+                currentModelInfo,
+                currentModelId: models.currentModelId,
+            });
+
+            const agents = await discoverCustomAgents(q);
+            // Only adopt the requested agent as the selected value if it's one we
+            // actually surface in the picker. A built-in (filtered out above) or
+            // otherwise-unknown name would leave the config option's `currentValue`
+            // pointing at an entry not in its own `options` list, which clients render
+            // as a blank/invalid selection.
+            const requestedAgent = userProvidedOptions?.agent;
+            const currentAgent =
+                requestedAgent && agents.some((a) => a.name === requestedAgent) ? requestedAgent : DEFAULT_AGENT_ID;
+
+            // Seed Fast mode from the SDK's reported state so the UI reflects reality
+            // (the CLI may start a session with fast mode already on, or force it off
+            // when `fastModePerSessionOptIn` is set). The toggle is only surfaced while
+            // the resolved model advertises `supportsFastMode`.
+            const fastModeEnabled =
+                initializationResult.fast_mode_state !== undefined &&
+                fastModeStateEnabled(initializationResult.fast_mode_state);
+            // `fast_mode_disabled_reason` reflects the post-switch model since SDK
+            // 0.3.219 (the initialize response used to answer from the spawn-time
+            // model). A fresh SDK session reports `sdk_opt_in_required` — the toggle IS
+            // the opt-in — which normalizes away, so only real blockers are retained.
+            const fastModeDisabledReason = fastModeEnabled
+                ? undefined
+                : normalizeFastModeDisabledReason(initializationResult.fast_mode_disabled_reason);
+            const fastMode: FastModeOptionState = {
+                supported: currentModelInfo?.supportsFastMode ?? false,
+                enabled: fastModeEnabled,
+                useBooleanOption: clientSupportsBooleanConfigOptions(this.clientCapabilities),
+                disabledReason: fastModeDisabledReason,
+            };
+
+            // The Effort picker seed mirrors what the CLI itself resolves from the
+            // persisted settings — the current model's `modelSettings` entry first
+            // (the CLI persists /effort per model), then the legacy top-level value.
+            // Display-only: no applyFlagSettings here. The CLI reads the same
+            // settings, so pinning the seed at the flag layer was always redundant —
+            // and it would override the CLI's own per-model restore on every later
+            // model switch. Only a user's explicit ACP picker choice pins the flag
+            // (see applyConfigOptionValue / Session.effortPinnedByUser).
+            const configOptions = buildConfigOptions(
+                modes,
+                models,
+                modelInfos,
+                settingsEffortForModel(settingsManager.getSettings(), currentModelInfo),
+                agents,
+                currentAgent,
+                fastMode,
+            );
+            // Seed the context window WITHOUT any extra IPC on the session/new path.
+            // On session/load, the resumed session's own `getContextUsage` report — a
+            // response `getAvailableModels` already awaited to learn the live model
+            // (resumed sessions ARE serviced pre-turn, unlike fresh ones) — is
+            // authoritative and wins. Otherwise: the cached authoritative window if a
+            // prior turn has learned it for this model (`result.modelUsage`,
+            // cross-session), else the text heuristic, else the default. We
+            // deliberately do NOT issue a getContextUsage call here: on a fresh
+            // session that control request is not serviced until the first prompt
+            // turn runs, so awaiting it — as 0.59.0 did — made session/new take ~15s
+            // (issues #886/#880). The authoritative window arrives on the first
+            // `result.modelUsage` and is cached from there.
+            //
+            // Text inference alone misses aliases that resolve to extended-context
+            // models with no "1m" token anywhere in their id or description (e.g.
+            // `sonnet` → claude-sonnet-5, natively ~1M): those stream
+            // `usage_update.size: 200000` until the first result's modelUsage corrects
+            // it — but the cache means only the FIRST session to ever run a turn on such
+            // a model eats that window, not every fresh session after a process
+            // restart (issue #596; a post-restart session/load is covered by the
+            // resumed report above).
+            //
+            // The inference fallback is deliberately keyed to the allowlisted entry: a
+            // fallback-resolved sibling's resolvedModel/displayName/description can
+            // describe a different context lane than the verbatim live id (e.g. an
+            // "opus[1m]" row matched for a bare 200k id), so on the fallback path only
+            // the id itself is a trustworthy window signal.
+            const seededWindow =
+                resumedContextWindow !== null
+                    ? { size: resumedContextWindow, authoritative: true }
+                    : immediateContextWindow(providerCacheKey, models.currentModelId, allowlistedModelInfo);
+
+            this.sessions[sessionId] = {
+                query: q,
+                input: input,
+                cancelled: false,
+                streamedMessageIds: new Set(),
+                cwd: params.cwd,
+                sessionFingerprint: computeSessionFingerprint(params),
+                creationParams: params,
+                settingsManager,
+                titles: new SessionTitles(this, sessionId),
+                accumulatedUsage: {
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    cachedReadTokens: 0,
+                    cachedWriteTokens: 0,
+                },
+                accumulatedModelUsage: {},
+                lastModelUsageReading: {},
+                modes,
+                models,
+                modelInfos,
+                autoModeFallbackWarningShown: false,
+                autoModeFallbackWarningPending,
+                configOptions,
+                agents,
+                currentAgent,
+                fastModeEnabled,
+                fastModeDisabledReason,
+                abortController,
+                emitRawSDKMessages: sessionMeta?.claudeCode?.emitRawSDKMessages ?? false,
+                forwardSubagentText,
+                contextWindowSize: seededWindow.size,
+                contextWindowAuthoritative: seededWindow.authoritative,
+                providerCacheKey,
+                taskState,
+                toolUseCache: {},
+                emittedToolCalls: new Set(),
+                liveBackgroundTasks: new Map(),
+                emittedAssistantText: false,
+                idleBoundary: { kind: "unaccounted" },
+            };
+
+            return {
+                sessionId,
+                modes,
+                configOptions,
+            };
+        } catch (cause) {
+            q?.close();
+            input.end();
+            settingsManager.dispose();
+            abortController.abort();
+            throw cause;
+        } finally {
+            this.creationControllers.delete(abortController);
         }
-
-        // Apply user's `availableModels` allowlist from settings.json before any
-        // downstream model handling. The SDK only enforces this allowlist in its
-        // own UI, not in `initializationResult.models`, so we filter here to keep
-        // configOptions, the current-model resolver, and the stored modelInfos
-        // consistent with what the user configured.
-        const settingsAvailableModels = settingsManager.getSettings().availableModels;
-        const settingsModelOverrides = settingsManager.getSettings().modelOverrides;
-        const allowedModels = Array.isArray(settingsAvailableModels)
-            ? applyAvailableModelsAllowlist(
-                  initializationResult.models,
-                  settingsAvailableModels,
-                  settingsModelOverrides,
-              )
-            : initializationResult.models;
-
-        const { modelState: models, resumedContextWindow } = await getAvailableModels(
-            q,
-            allowedModels,
-            initializationResult.models,
-            settingsManager,
-            this.logger,
-            creationOpts.resume !== undefined,
-        );
-
-        // Resolve the current model's capabilities separately from the stable
-        // permission-mode catalog advertised to ACP clients.
-        // A resumed session can be running a model outside the `availableModels`
-        // allowlist (currentModelId is then the verbatim live id, see
-        // `matchResumedModel`); its capabilities are still known to the SDK's
-        // unfiltered list, so fall back to that before treating the model as
-        // unknown — otherwise auto mode would be spuriously clamped and the
-        // Fast-mode/Effort options hidden for a model that supports them.
-        const allowlistedModelInfo = allowedModels.find((m) => m.value === models.currentModelId);
-        const fallbackModelInfo = allowlistedModelInfo
-            ? undefined
-            : (resolveModelPreference(initializationResult.models, models.currentModelId) ?? undefined);
-        const currentModelInfo = allowlistedModelInfo ?? fallbackModelInfo;
-        // Register the fallback-resolved capabilities under the verbatim live id
-        // so every modelInfos consumer (buildConfigOptions' effort lookup, later
-        // rebuilds via session.modelInfos) agrees with the gating below. The
-        // picker options themselves come from `models.availableModels`, so this
-        // adds no selectable entry. The spread keeps every capability flag
-        // (current and future); the identity fields are overridden because the
-        // fuzzy-matched sibling's resolvedModel/displayName/description can
-        // describe a different context lane and would poison later resolvedModel
-        // matching (syncModelAfterExternalSwitch) and context-window inference
-        // (applyConfigOptionValue) if they traveled under this id.
-        const modelInfos = fallbackModelInfo
-            ? [
-                  ...allowedModels,
-                  {
-                      ...fallbackModelInfo,
-                      value: models.currentModelId,
-                      displayName: models.currentModelId,
-                      description: "",
-                      resolvedModel: undefined,
-                  },
-              ]
-            : allowedModels;
-        const { modes, autoModeFallbackWarningPending } = await this.sessionModes.initialize({
-            query: q,
-            requestedMode: initialPermissionMode,
-            currentModelInfo,
-            currentModelId: models.currentModelId,
-        });
-
-        const agents = await discoverCustomAgents(q);
-        // Only adopt the requested agent as the selected value if it's one we
-        // actually surface in the picker. A built-in (filtered out above) or
-        // otherwise-unknown name would leave the config option's `currentValue`
-        // pointing at an entry not in its own `options` list, which clients render
-        // as a blank/invalid selection.
-        const requestedAgent = userProvidedOptions?.agent;
-        const currentAgent =
-            requestedAgent && agents.some((a) => a.name === requestedAgent) ? requestedAgent : DEFAULT_AGENT_ID;
-
-        // Seed Fast mode from the SDK's reported state so the UI reflects reality
-        // (the CLI may start a session with fast mode already on, or force it off
-        // when `fastModePerSessionOptIn` is set). The toggle is only surfaced while
-        // the resolved model advertises `supportsFastMode`.
-        const fastModeEnabled =
-            initializationResult.fast_mode_state !== undefined &&
-            fastModeStateEnabled(initializationResult.fast_mode_state);
-        // `fast_mode_disabled_reason` reflects the post-switch model since SDK
-        // 0.3.219 (the initialize response used to answer from the spawn-time
-        // model). A fresh SDK session reports `sdk_opt_in_required` — the toggle IS
-        // the opt-in — which normalizes away, so only real blockers are retained.
-        const fastModeDisabledReason = fastModeEnabled
-            ? undefined
-            : normalizeFastModeDisabledReason(initializationResult.fast_mode_disabled_reason);
-        const fastMode: FastModeOptionState = {
-            supported: currentModelInfo?.supportsFastMode ?? false,
-            enabled: fastModeEnabled,
-            useBooleanOption: clientSupportsBooleanConfigOptions(this.clientCapabilities),
-            disabledReason: fastModeDisabledReason,
-        };
-
-        // The Effort picker seed mirrors what the CLI itself resolves from the
-        // persisted settings — the current model's `modelSettings` entry first
-        // (the CLI persists /effort per model), then the legacy top-level value.
-        // Display-only: no applyFlagSettings here. The CLI reads the same
-        // settings, so pinning the seed at the flag layer was always redundant —
-        // and it would override the CLI's own per-model restore on every later
-        // model switch. Only a user's explicit ACP picker choice pins the flag
-        // (see applyConfigOptionValue / Session.effortPinnedByUser).
-        const configOptions = buildConfigOptions(
-            modes,
-            models,
-            modelInfos,
-            settingsEffortForModel(settingsManager.getSettings(), currentModelInfo),
-            agents,
-            currentAgent,
-            fastMode,
-        );
-        // Seed the context window WITHOUT any extra IPC on the session/new path.
-        // On session/load, the resumed session's own `getContextUsage` report — a
-        // response `getAvailableModels` already awaited to learn the live model
-        // (resumed sessions ARE serviced pre-turn, unlike fresh ones) — is
-        // authoritative and wins. Otherwise: the cached authoritative window if a
-        // prior turn has learned it for this model (`result.modelUsage`,
-        // cross-session), else the text heuristic, else the default. We
-        // deliberately do NOT issue a getContextUsage call here: on a fresh
-        // session that control request is not serviced until the first prompt
-        // turn runs, so awaiting it — as 0.59.0 did — made session/new take ~15s
-        // (issues #886/#880). The authoritative window arrives on the first
-        // `result.modelUsage` and is cached from there.
-        //
-        // Text inference alone misses aliases that resolve to extended-context
-        // models with no "1m" token anywhere in their id or description (e.g.
-        // `sonnet` → claude-sonnet-5, natively ~1M): those stream
-        // `usage_update.size: 200000` until the first result's modelUsage corrects
-        // it — but the cache means only the FIRST session to ever run a turn on such
-        // a model eats that window, not every fresh session after a process
-        // restart (issue #596; a post-restart session/load is covered by the
-        // resumed report above).
-        //
-        // The inference fallback is deliberately keyed to the allowlisted entry: a
-        // fallback-resolved sibling's resolvedModel/displayName/description can
-        // describe a different context lane than the verbatim live id (e.g. an
-        // "opus[1m]" row matched for a bare 200k id), so on the fallback path only
-        // the id itself is a trustworthy window signal.
-        const seededWindow =
-            resumedContextWindow !== null
-                ? { size: resumedContextWindow, authoritative: true }
-                : immediateContextWindow(providerCacheKey, models.currentModelId, allowlistedModelInfo);
-
-        this.sessions[sessionId] = {
-            query: q,
-            input: input,
-            cancelled: false,
-            streamedMessageIds: new Set(),
-            cwd: params.cwd,
-            sessionFingerprint: computeSessionFingerprint(params),
-            creationParams: params,
-            settingsManager,
-            titles: new SessionTitles(this, sessionId),
-            accumulatedUsage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                cachedReadTokens: 0,
-                cachedWriteTokens: 0,
-            },
-            accumulatedModelUsage: {},
-            lastModelUsageReading: {},
-            modes,
-            models,
-            modelInfos,
-            autoModeFallbackWarningShown: false,
-            autoModeFallbackWarningPending,
-            configOptions,
-            agents,
-            currentAgent,
-            fastModeEnabled,
-            fastModeDisabledReason,
-            abortController,
-            emitRawSDKMessages: sessionMeta?.claudeCode?.emitRawSDKMessages ?? false,
-            forwardSubagentText,
-            contextWindowSize: seededWindow.size,
-            contextWindowAuthoritative: seededWindow.authoritative,
-            providerCacheKey,
-            taskState,
-            toolUseCache: {},
-            emittedToolCalls: new Set(),
-            liveBackgroundTasks: new Map(),
-            emittedAssistantText: false,
-            idleBoundary: { kind: "unaccounted" },
-        };
-
-        return {
-            sessionId,
-            modes,
-            configOptions,
-        };
     }
 
     /**
