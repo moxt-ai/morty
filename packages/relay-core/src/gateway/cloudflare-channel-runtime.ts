@@ -6,7 +6,6 @@ import { RuntimeStatus } from "../service/channel/channel.ts";
 import type { ChannelGateway } from "./channel-gateway.ts";
 
 const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-morty-host-credential-id";
-const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-morty-session-access-revoked-through";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
@@ -71,29 +70,6 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         signal.throwIfAborted();
         if (response.status !== 204) {
             throw new Error("The Runtime connection could not be revoked");
-        }
-    };
-
-    readonly disconnectSessionViewers = async (
-        computerId: string,
-        revokedThrough: number,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        signal.throwIfAborted();
-        const headers = new Headers();
-        headers.set(INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER, String(revokedThrough));
-        const response = await this.fetchRuntime(
-            { computerId },
-            new Request(`https://runtime.internal/computers/${encodeURIComponent(computerId)}/session-viewers/revoke`, {
-                headers,
-                method: "DELETE",
-                signal,
-            }),
-            signal,
-        );
-        signal.throwIfAborted();
-        if (response.status !== 204) {
-            throw new Error("The Runtime's Session views could not be revoked");
         }
     };
 

@@ -130,15 +130,8 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
             signal,
         );
 
-    readonly revokeSessionAccess: ComputerManagementStore["revokeSessionAccess"] = (revokedAt, signal) =>
-        this.call("revokeSessionAccess", (stub, computerId) => stub.revokeSessionAccess(computerId, revokedAt), signal);
-
-    readonly readSessionAccessRevocation: ComputerManagementStore["readSessionAccessRevocation"] = (signal) =>
-        this.call(
-            "readSessionAccessRevocation",
-            (stub, computerId) => stub.readSessionAccessRevocation(computerId),
-            signal,
-        );
+    readonly holdsAccess: ComputerManagementStore["holdsAccess"] = (holder, signal) =>
+        this.call("holdsAccess", (stub, computerId) => stub.holdsAccess(computerId, holder), signal);
 
     readonly recordAudit: ComputerManagementStore["recordAudit"] = (audit, signal) =>
         this.call("recordAudit", (stub, computerId) => stub.recordAudit(computerId, audit), signal);

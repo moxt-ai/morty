@@ -2,8 +2,8 @@ import { sql } from "drizzle-orm";
 import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
- * The latest time the computer revoked the Session credentials issued for it. It only moves forward: pairing the
- * computer again never resets it, so a credential issued before an earlier revocation stays refused.
+ * Retained records of when a computer last revoked its Session credentials. Nothing reads or writes them: a Session
+ * credential is now honored only while the access of its holder still holds.
  */
 export const sessionAccessRevocation = sqliteTable(
     "session_access_revocations",

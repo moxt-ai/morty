@@ -1,11 +1,16 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { createMiddleware } from "hono/factory";
-import type { LocalOperation } from "../entity/authentication/credential.ts";
+import { accessHolder, type LocalOperation } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 type SessionEnvironment = ManagementHttpEnvironment & {
-    Variables: { readonly session: Session; readonly accessExpiresAt: number | null };
+    Variables: {
+        readonly session: Session;
+        readonly accessExpiresAt: number | null;
+        readonly accessHolder: SessionAccessHolder;
+    };
 };
 
 export const authenticatedSession = createMiddleware<SessionEnvironment>(async (context, next) => {
@@ -17,6 +22,7 @@ export const authenticatedSession = createMiddleware<SessionEnvironment>(async (
         case "authenticated":
             context.set("session", result.session);
             context.set("accessExpiresAt", result.accessExpiresAt);
+            context.set("accessHolder", result.holder);
             await next();
             return;
         case "unauthenticated":
@@ -40,6 +46,7 @@ export const localSession = (operation: LocalOperation) =>
                     userId: result.credential.userId,
                 });
                 context.set("accessExpiresAt", null);
+                context.set("accessHolder", accessHolder(result.credential));
                 await next();
                 return;
             case "unauthenticated":

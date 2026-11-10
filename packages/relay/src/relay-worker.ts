@@ -2,6 +2,7 @@ import {
     CONTENT_WRITE_MAX_BYTES,
     decodeContentWriteCommand,
     decodeFileReadCommand,
+    decodeSessionAccessHolder,
     type Identifier,
     isDirectoryPath,
     isIdentifier,
@@ -263,6 +264,7 @@ export function createRelayApplication(
             const input = v.parse(
                 v.strictObject({
                     expiresInSeconds: v.pipe(v.number(), v.safeInteger(), v.minValue(60), v.maxValue(900)),
+                    holder: v.pipe(v.unknown(), v.transform(decodeSessionAccessHolder)),
                 }),
                 body,
             );
@@ -270,6 +272,7 @@ export function createRelayApplication(
                 context.var.sessionAccessTarget,
                 credential,
                 input.expiresInSeconds,
+                input.holder,
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
@@ -647,42 +650,14 @@ export function createRelayApplication(
                 {
                     credentialId: target.credentialId,
                     signingKeyId: target.signingKeyId,
-                    issuedAt: target.issuedAtEpochMilliseconds,
+                    holder: target.holder,
                     expiresAt: target.expiresAtEpochMilliseconds,
                 },
                 context.req.raw.signal,
             );
         });
-    const sessionAccessRoutes = new Hono<DispatchEnvironment>().post("/revocations", async (context) => {
-        const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
-        if (credential === undefined) {
-            return context.json(
-                { error: { code: "project_credential_required", message: "An App credential is required" } },
-                401,
-            );
-        }
-        v.parse(v.strictObject({}), await context.req.json());
-        if (!("MORTY_COMPUTER_STORE" in context.env)) {
-            throw new Error("Session access is revoked only in the Project's ComputerRelay");
-        }
-        const computerId = validateIdentifier(context.req.param("computerId") ?? "", "computer_id");
-        const _store = context.env.MORTY_COMPUTER_STORE;
-        const channel = gateways(context.env).channel;
-        const revoked = await context.var.sessionAccess.revoke(
-            computerId,
-            credential,
-            {
-                disconnect: (computerId, revokedThrough, signal) =>
-                    channel.disconnectSessionViewers(computerId, revokedThrough, signal),
-            },
-            context.req.raw.signal,
-        );
-        context.header("Cache-Control", "no-store");
-        return context.json(revoked);
-    });
     const projectRoutes = new Hono<DispatchEnvironment>()
         .route("/harnesses/:harness/sessions", sessionRoutes)
-        .route("/session-access", sessionAccessRoutes)
         .all("/pairings/*", projectHandler)
         .all("/*", projectHandler);
     const versionedRoutes = new Hono<DispatchEnvironment>()

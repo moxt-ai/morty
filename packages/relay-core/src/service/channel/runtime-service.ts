@@ -10,6 +10,7 @@ import {
     RUNTIME_STATUS_KIND,
     type RuntimeLivenessReadyEvent,
     SESSION_EVENT_KIND,
+    type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
@@ -37,14 +38,12 @@ export type RuntimeSocketIdentity =
     | {
           readonly role: "viewer";
           readonly expiresAt: number;
-          /**
-           * The verified Session credential's authority and signing generation. A missing identity is revoked.
-           */
+          /** The verified Session credential's authority, signing generation and whose access it carries. */
           readonly credential: {
               readonly credentialId: string;
               readonly signingKeyId: string;
-              readonly issuedAt: number;
-          } | null;
+              readonly holder: SessionAccessHolder;
+          };
           readonly computerId: string;
 
           readonly sessionFilter: NativeSessionTarget;
@@ -284,23 +283,6 @@ export class RuntimeService {
         });
     };
 
-    /**
-     * Ends the live Session views opened with a Session credential the Project no longer honors: one issued no later
-     * than `revokedThrough`. Views opened with App access are unaffected.
-     */
-    readonly revokeSessionViewers = (scope: ComputerScope, revokedThrough: number): void => {
-        for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
-            if (
-                identity.role === "viewer" &&
-                identity.computerId === scope.computerId &&
-                identity.credential !== null &&
-                identity.credential.issuedAt <= revokedThrough
-            ) {
-                socket.close(1008, "Session access revoked");
-            }
-        }
-    };
-
     readonly revokeRuntime = async (scope: ComputerScope, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         // The Project's Runtime authority committed the revocation before notifying; acceptance and every
@@ -346,7 +328,7 @@ export class RuntimeService {
     /**
      * Closes the host connections and live Session views whose credential no longer authorizes them. A host's own
      * messages are authorized as they arrive, but nothing the Runtime sends to a quiet host or to a view is, so the
-     * Relay runs this while either is connected. Revocation pushes stay the fast path; this bounds what they miss.
+     * Relay runs this as soon as access to the computer ends, and periodically while either is connected.
      */
     readonly reauthorizeConnections = async (signal: AbortSignal): Promise<void> => {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {

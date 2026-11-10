@@ -4,6 +4,7 @@ import {
     decodeSessionAccessCredential,
     type NativeSessionTarget,
     ProtocolMessageError,
+    type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
@@ -20,6 +21,8 @@ export interface SessionAccess {
     /** The AppCredential that issued the Session credential. */
     readonly credentialId: string;
     readonly issuedAtEpochMilliseconds: number;
+    /** Whose access the credential carries. */
+    readonly holder: SessionAccessHolder;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
     readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
@@ -30,26 +33,6 @@ export interface SessionAccess {
  * read access, such as reading a Session's settings or native history, reads only that Session through it, which is
  * what Session read access permits.
  */
-/** The live Session views a Project's Runtimes hold, which a revocation of Session access must also end. */
-export interface SessionViewers {
-    readonly disconnect: (computerId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
-}
-
-async function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {
-    signal.throwIfAborted();
-    await new Promise<void>((resolve, reject) => {
-        const abort = (): void => {
-            clearTimeout(timer);
-            reject(signal.reason);
-        };
-        const timer = setTimeout(() => {
-            signal.removeEventListener("abort", abort);
-            resolve();
-        }, milliseconds);
-        signal.addEventListener("abort", abort, { once: true });
-    });
-}
-
 function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
     return permission === ProjectPermission.RuntimeRead ? ProjectPermission.SessionRead : permission;
 }
@@ -69,10 +52,15 @@ export class SessionAccessService {
         this.#signer = signer;
     }
 
+    /**
+     * Issues a Session credential carrying `holder`'s access. It is refused when that access has already ended, as the
+     * credential would be refused from its first use.
+     */
     readonly issue = async (
         target: SessionAccessTarget,
         appCredential: string,
         expiresInSeconds: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ): Promise<{
         readonly credential: string;
@@ -95,12 +83,8 @@ export class SessionAccessService {
             "",
             signal,
         );
-        // A revocation also revokes credentials issued within a clock margin after it, so a credential issued inside
-        // that margin would be refused from its first use. Issuing waits the margin out instead: a credential issued
-        // after a revocation is never revoked by it.
-        const revokedThrough = await this.#control.readSessionAccessRevokedThrough(target.computerId, signal);
-        if (revokedThrough !== null && Date.now() <= revokedThrough) {
-            await waitFor(revokedThrough + 1 - Date.now(), signal);
+        if (!(await this.#control.holdsAccess(target.computerId, holder, signal))) {
+            throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
         }
         const issuedAtEpochMilliseconds = Date.now();
         const expiresAtEpochMilliseconds = issuedAtEpochMilliseconds + expiresInSeconds * 1_000;
@@ -109,6 +93,7 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
             purpose: "session-access",
+            holder,
             target: nativeTarget,
         });
         return {
@@ -118,22 +103,6 @@ export class SessionAccessService {
             computerId: target.computerId,
             target: nativeTarget,
         };
-    };
-
-    /**
-     * Revokes every Session credential issued for the Project until now and closes the live views opened with them.
-     * The revocation commits first and every request reads it, so closing views only ends them promptly. A failure to
-     * close one leaves the revocation in force for the caller to retry; retries do not move the revocation back.
-     */
-    readonly revoke = async (
-        computerId: string,
-        appCredential: string,
-        viewers: SessionViewers,
-        signal: AbortSignal,
-    ): Promise<{ readonly revokedThrough: string }> => {
-        const revokedThrough = await this.#control.revokeSessionAccess(computerId, appCredential, signal);
-        await viewers.disconnect(computerId, revokedThrough, signal);
-        return { revokedThrough: new Date(revokedThrough).toISOString() };
     };
 
     readonly authorizeLiveEvents = async (
@@ -209,6 +178,7 @@ export class SessionAccessService {
             signingKeyId: await this.#signer.keyId(),
             credentialId: application.credential_id,
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
+            holder: claims.holder,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
             authorize: async (permission, authorizationSignal) => {
@@ -216,7 +186,7 @@ export class SessionAccessService {
                     computerId,
                     application,
                     sessionScopedPermission(permission),
-                    claims.issuedAtEpochMilliseconds,
+                    claims.holder,
                     authorizationSignal,
                 );
             },

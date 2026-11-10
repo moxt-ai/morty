@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import {
     type CredentialRow,
@@ -88,19 +89,12 @@ export class ComputerManagementStorage {
         return decodeOptionalStorageRecord(RelayComputerScopeRowSchema, rows[0] ?? null);
     };
 
-    /**
-     * Records that the Project revoked its Session credentials at `revokedAt`, in the Project's own storage, and returns
-     * its latest revocation.
-     */
-    readonly recordSessionAccessRevocation = async (
+    /** Whether `holder`'s access to the computer holds now. */
+    readonly holdsAccess = async (
         computerId: string,
-        revokedAt: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
-    ): Promise<number> => await this.#projects.forProject(computerId).revokeSessionAccess(revokedAt, signal);
-
-    /** The latest time the Project revoked its Session credentials, or null when it never did. */
-    readonly readSessionAccessRevocation = async (computerId: string, signal: AbortSignal): Promise<number | null> =>
-        await this.#projects.forProject(computerId).readSessionAccessRevocation(signal);
+    ): Promise<boolean> => await this.#projects.forProject(computerId).holdsAccess(holder, signal);
 
     /** The authoritative grant list is owned by the credential in D1. */
     readonly scopedProjects = async (

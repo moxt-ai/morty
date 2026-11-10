@@ -16,8 +16,8 @@ import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-di
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { seedMortyService } from "../../relay-test-support/src/service-fixture.ts";
 import { computerDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
-import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/worker.ts";
+import { computerManagementStore } from "./registered-runtime.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
@@ -78,10 +78,7 @@ async function project(_name = "Runtime pairing") {
                 }),
                 {
                     ...env,
-                    MORTY_COMPUTER_STORE: new SqliteComputerManagementStore(
-                        computerId,
-                        new DurableObjectDatabaseAdapter(state.storage),
-                    ),
+                    MORTY_COMPUTER_STORE: computerManagementStore(computerId, state.storage),
                     MORTY_COMPUTER_ID: computerId,
                 },
             );
@@ -99,17 +96,6 @@ async function project(_name = "Runtime pairing") {
     return {
         computerId,
         credentialId: defaultCredential.credentialId,
-        issueSession: () =>
-            request(`/v1/computers/${computerId}/harnesses/codex/sessions/revoke-test/access-credentials`, "POST", {
-                expiresInSeconds: 900,
-            }),
-        checkSession: (token: string) =>
-            request(
-                `/v1/computers/${computerId}/harnesses/codex/sessions/revoke-test/live-event-subscription-target`,
-                "GET",
-                undefined,
-                token,
-            ),
         create,
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
@@ -368,24 +354,18 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
 });
 
-it("Given a Runtime and a Session credential issued before its owner revoked it, When the computer is paired again, Then neither the old daemon credential nor that Session credential is accepted", async () => {
+it("Given a Runtime its owner revoked, When the computer is paired again, Then the old daemon credential is not accepted", async () => {
     const app = await project();
     const original = await app.pair("original");
     const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });
     const old = v.parse(credential, await responseJson(await app.claim(original), 200));
     expect(old.computerId).toBe(original.computerId);
-    const { credential: sessionToken } = v.parse(
-        v.object({ credential: v.string() }),
-        await responseJson(await app.issueSession(), 201),
-    );
-    expect((await app.checkSession(sessionToken)).status).toBe(200);
     expect((await app.revoke(original)).status).toBe(204);
     const replacement = await app.pair("replacement");
     const current = v.parse(credential, await responseJson(await app.claim(replacement), 200));
     expect(current.computerId).toBe(replacement.computerId);
     expect(current.computerId).toBe(old.computerId);
     expect(current.runtimeCredential).not.toBe(old.runtimeCredential);
-    expect((await app.checkSession(sessionToken)).status).toBe(401);
     expect((await app.publish(original, old.runtimeCredential)).status).toBe(401);
     expect((await app.publish(replacement, old.runtimeCredential)).status).toBe(401);
     expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);

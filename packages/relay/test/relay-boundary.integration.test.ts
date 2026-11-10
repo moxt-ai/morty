@@ -36,7 +36,7 @@ import {
     runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase, RelaySockets } from "@morty-build/relay-core";
+import { DurableObjectSqlDatabase, RelaySockets } from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
@@ -47,8 +47,8 @@ import {
 } from "../../relay-test-support/src/service-fixture.ts";
 import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
 import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
-import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/worker.ts";
+import { computerManagementStore, ownerAccessHolder } from "./registered-runtime.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -154,7 +154,7 @@ async function relaySigningKey(publicCredentialId: string, signingSecret: string
     const hmac = { hash: "SHA-256", name: "HMAC" } as const;
     const salt = await crypto.subtle.importKey(
         "raw",
-        new TextEncoder().encode("morty.session-access.v1:"),
+        new TextEncoder().encode("morty.session-access.v2:"),
         hmac,
         false,
         ["sign"],
@@ -771,7 +771,10 @@ describe.sequential("Relay Session-only boundary", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                         {
-                            body: JSON.stringify({ expiresInSeconds: 900 }),
+                            body: JSON.stringify({
+                                expiresInSeconds: 900,
+                                holder: await ownerAccessHolder(computerId),
+                            }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -1177,7 +1180,10 @@ describe.sequential("Relay Session-only boundary", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                         {
-                            body: JSON.stringify({ expiresInSeconds: 900 }),
+                            body: JSON.stringify({
+                                expiresInSeconds: 900,
+                                holder: await ownerAccessHolder(computerId),
+                            }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -1386,7 +1392,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             new Request(
                 `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                 {
-                    body: JSON.stringify({ expiresInSeconds: 900 }),
+                    body: JSON.stringify({ expiresInSeconds: 900, holder: await ownerAccessHolder(computerId) }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 },
@@ -1407,15 +1413,6 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         computerId,
         sessionTarget: nativeTarget(sessionId),
         deleteApp: () => retireMortyService(env.RELAY_DIRECTORY_DATABASE, app.appId),
-        revokeSessionAccess: () =>
-            worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/session-access/revocations`, {
-                    method: "POST",
-                    headers: credentialHeaders(appCredential),
-                    body: JSON.stringify({}),
-                }),
-                environment,
-            ),
         revoke: () =>
             worker.fetch(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/pairing`, {
@@ -1587,7 +1584,10 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                             {
                                 method: "POST",
                                 headers: credentialHeaders(issuer),
-                                body: JSON.stringify({ expiresInSeconds: 900 }),
+                                body: JSON.stringify({
+                                    expiresInSeconds: 900,
+                                    holder: await ownerAccessHolder(computerId),
+                                }),
                             },
                         ),
                         environment,
@@ -1687,8 +1687,7 @@ it.each(["text", "binary"])(
                 const database = new DurableObjectSqlDatabase(state.storage);
                 const context = createRelayDurableObjectContext(state, bindings(), {
                     database,
-                    storeFor: (computerId) =>
-                        new SqliteComputerManagementStore(computerId, new DurableObjectDatabaseAdapter(state.storage)),
+                    storeFor: (computerId) => computerManagementStore(computerId, state.storage),
                 });
                 const relay = new RelaySockets(
                     createDurableObjectDependencies({
@@ -2638,40 +2637,6 @@ describe.sequential("Relay Turn submission", () => {
             runtime.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a Session credential with an open live view, When the App revokes the Project's Session access, Then the credential is refused as revoked and its view closes while a credential issued right afterwards works", async () => {
-        // Issuing right after a revocation waits out the revocation's clock margin, which takes real time.
-        vi.useRealTimers();
-        const runtime = await connectRuntimeDaemon("session-access-revocation");
-        try {
-            const subscribed = await runtime.subscribe();
-            if (subscribed.webSocket === null) {
-                throw new Error("Expected the live Session view");
-            }
-            const view = subscribed.webSocket;
-            const viewClosed = new Promise<CloseEvent>((resolve) => {
-                view.addEventListener("close", resolve, { once: true });
-            });
-            view.accept();
-
-            const revoked = await responseJson(await runtime.revokeSessionAccess(), 200);
-            expect(Date.parse(text(revoked, "revokedThrough"))).toBeGreaterThan(Date.now());
-
-            expect(await viewClosed).toMatchObject({ code: 1008, reason: "Session access revoked" });
-            expect(await responseJson(await runtime.submitRuntimeTurn("revoked"), 401)).toMatchObject({
-                error: { code: "credential_revoked" },
-            });
-            const reissued = await runtime.issueRuntimeCredential(runtime.computerId);
-            const submitted = runtime.submitRuntimeTurn("reissued", () => reissued);
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
-                kind: "session.prompt",
-                commandId: "reissued",
-            });
-            runtime.startTurn("reissued", "1");
-            expect(await responseJson(await submitted, 200)).toMatchObject({ state: { kind: "running" } });
-        } finally {
-            runtime.daemon.close(1000, "Test complete");
-        }
-    });
     it("Given a Session credential, When HTTP reaches RuntimeRelay directly, Then the command executes without a project relay hop and remains correlated", async () => {
         const runtime = await connectRuntimeDaemon("direct-runtime");
         try {
@@ -2755,7 +2720,10 @@ describe.sequential("Relay Turn submission", () => {
                     new Request(
                         `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                         {
-                            body: JSON.stringify({ expiresInSeconds: 900 }),
+                            body: JSON.stringify({
+                                expiresInSeconds: 900,
+                                holder: await ownerAccessHolder(computerId),
+                            }),
                             headers: credentialHeaders(appCredential),
                             method: "POST",
                         },
@@ -3013,7 +2981,7 @@ describe.sequential("Relay Turn submission", () => {
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/access-credentials`,
                     {
-                        body: JSON.stringify({ expiresInSeconds: 900 }),
+                        body: JSON.stringify({ expiresInSeconds: 900, holder: await ownerAccessHolder(computerId) }),
                         headers: credentialHeaders(appCredential),
                         method: "POST",
                     },

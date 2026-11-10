@@ -1,3 +1,4 @@
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import {
     AuditActor,
     ComputerScope,
@@ -9,7 +10,6 @@ import {
 } from "@morty-build/relay-core";
 import { RelayAuditActorKind } from "../entity/computer-management.ts";
 import type { CredentialRow } from "../entity/relay-records.ts";
-import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { appCredentialActive, credentialPermissions } from "./app-credential-authentication-service.ts";
 
@@ -20,13 +20,13 @@ import { appCredentialActive, credentialPermissions } from "./app-credential-aut
 export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     readonly #storage: Pick<
         ComputerManagementStorage,
-        "readActiveComputerScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
+        "holdsAccess" | "readActiveComputerScope" | "readCredentialById" | "scopedProjects"
     >;
 
     constructor(
         storage: Pick<
             ComputerManagementStorage,
-            "readActiveComputerScope" | "readCredentialById" | "readSessionAccessRevocation" | "scopedProjects"
+            "holdsAccess" | "readActiveComputerScope" | "readCredentialById" | "scopedProjects"
         >,
     ) {
         this.#storage = storage;
@@ -73,21 +73,21 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     };
 
     /**
-     * Authorizes a Session credential the AppCredential issued at `issuedAt`: the AppCredential's own access, unless
-     * the Project has since revoked the Session credentials issued by then.
+     * Authorizes a Session credential the AppCredential issued for `holder`: the AppCredential's own access, while the
+     * holder's access to the computer still holds.
      */
     readonly authorizeSessionCredential = async (
         row: CredentialRow,
         computerId: string,
         requiredPermissions: readonly ProjectPermission[],
-        issuedAt: number,
+        holder: SessionAccessHolder,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => {
-        const [access, revokedAt] = await Promise.all([
+        const [access, holds] = await Promise.all([
             this.authorize(row, computerId, requiredPermissions, signal),
-            this.#storage.readSessionAccessRevocation(computerId, signal),
+            this.#storage.holdsAccess(computerId, holder, signal),
         ]);
-        if (revokedAt !== null && issuedAt <= sessionAccessRevokedThrough(revokedAt)) {
+        if (!holds) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session credential has been revoked");
         }
         return access;
@@ -108,14 +108,13 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
     readonly grantsSessionCredential: ProjectCredentialAuthority["grantsSessionCredential"] = async (
         computerId,
         credentialId,
-        issuedAt,
+        holder,
         requiredPermissions,
         signal,
     ) =>
         await this.#grantsThrough(
             credentialId,
-            async (row) =>
-                await this.authorizeSessionCredential(row, computerId, requiredPermissions, issuedAt, signal),
+            async (row) => await this.authorizeSessionCredential(row, computerId, requiredPermissions, holder, signal),
             signal,
         );
 

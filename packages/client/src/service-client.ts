@@ -30,6 +30,7 @@ import {
     type NativeSessionTarget,
     type PromptAttachment,
     type RuntimeDiagnosticsResult,
+    type SessionAccessHolder,
     type SessionConfigureCommand,
     type SessionEventLogPage,
     type SessionLiveEventBatch,
@@ -64,7 +65,6 @@ import {
     type MortyRuntimePairingStatus,
     type MortyRuntimePairingWaitOptions,
     MortySessionAccess,
-    MortySessionAccessRevocation,
     type MortyTurn,
     type MortyTurnCancellation,
     type SubmitMortyTurnRequest,
@@ -962,25 +962,21 @@ export class MortySessionResources {
         );
 
     /**
-     * Has the Relay issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
-     * revocation, it is never covered by that revocation.
+     * Has the Relay issue a Session credential, signed with a key only the Relay holds, that carries `holder`'s access.
+     * The Relay honors it only while that access holds and the Runtime pairing current at issue is still current.
      */
-    readonly createAccess = async (sessionTarget: NativeSessionTarget, expiresInSeconds: number, signal: AbortSignal) =>
+    readonly createAccess = async (
+        sessionTarget: NativeSessionTarget,
+        expiresInSeconds: number,
+        holder: SessionAccessHolder,
+        signal: AbortSignal,
+    ) =>
         new MortySessionAccess(
             await this.#executor.post(
                 sessionPath(this.#computerId, sessionTarget, "access-credentials"),
-                { expiresInSeconds },
+                { expiresInSeconds, holder },
                 signal,
             ),
-        );
-
-    /**
-     * Revokes every Session credential issued for the Project until now and closes the live views opened with them.
-     * Retrying is safe: a later revocation never undoes an earlier one.
-     */
-    readonly revokeAccess = async (signal: AbortSignal) =>
-        new MortySessionAccessRevocation(
-            await this.#executor.post(projectPath(this.#computerId, "session-access/revocations"), {}, signal),
         );
 
     /** Opens a Session the Runtime holds, with the Agent and directory it holds the Session with. */

@@ -7,6 +7,7 @@ import {
     decodeSessionStatusChangedEvent,
     type NativeSessionTarget,
     SESSION_CLOSE_NOTICE_KIND,
+    type SessionAccessHolder,
     type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
@@ -60,6 +61,8 @@ export type ChatScope = {
     readonly userId: string;
     /** When the requesting access ends, if it does; the Session credentials it obtains end no later. */
     readonly accessExpiresAt: number | null;
+    /** Whose access the request carries; the Session credentials it obtains last only while that access holds. */
+    readonly holder: SessionAccessHolder;
     readonly computerId: string;
     readonly signal: AbortSignal;
 };
@@ -139,16 +142,20 @@ export class ChatService {
     }
 
     readonly authorize = async (
-        requester: { readonly userId: string; readonly accessExpiresAt: number | null },
+        requester: {
+            readonly userId: string;
+            readonly accessExpiresAt: number | null;
+            readonly holder: SessionAccessHolder;
+        },
         computerId: string,
         signal: AbortSignal,
     ): Promise<ChatScope> => {
-        const { userId, accessExpiresAt } = requester;
+        const { userId, accessExpiresAt, holder } = requester;
         const ownsProject = await this.#identities.ownsProject(userId, computerId, signal);
         if (!ownsProject) {
             throw new ComputerManagementError("NOT_FOUND", "Your Morty data was not found.", 404);
         }
-        return { userId, accessExpiresAt, computerId, signal };
+        return { userId, accessExpiresAt, holder, computerId, signal };
     };
 
     readonly runtimeConfiguration = async (scope: ChatScope) => {
@@ -445,6 +452,7 @@ export class ChatService {
             { ...session, target: ready.target },
             ready,
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
+            scope.holder,
             scope.signal,
         );
     };
@@ -461,6 +469,7 @@ export class ChatService {
                 workspaceRef: metadata.directory,
             },
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
+            scope.holder,
             scope.signal,
         );
     };
@@ -473,6 +482,7 @@ export class ChatService {
             scope.computerId,
             session.target,
             sessionCredentialLifetime(RENEWED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
+            scope.holder,
             scope.signal,
         );
     };
