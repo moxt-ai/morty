@@ -157,13 +157,17 @@ export class ClaudeAdapter implements Adapter {
         const request = { cwd: params.scope.cwd, sessionId, mcpServers: [] };
         const existing = this.#sessions.get(sessionId);
         existing?.assertWorkspace(params.scope);
-        if (existing?.available && !replay) {
+        if (existing?.available) {
             try {
-                return await this.#opened(
-                    existing,
-                    params,
-                    await waitForAgentOperation(existing.agent.resumeSession(request), this.#signal(params.signal)),
+                const signal = this.#signal(params.signal);
+                // Claude can replay on its current SDK query. Replacing it after resume would lose
+                // the interrupted-task recovery updates produced by that first query.
+                const response = await waitForAgentOperation(
+                    replay ? existing.agent.loadSession(request, signal) : existing.agent.resumeSession(request),
+                    signal,
                 );
+                await existing.drained(signal);
+                return await this.#opened(existing, params, response);
             } catch (cause) {
                 await this.#release(sessionId);
                 params.signal.throwIfAborted();

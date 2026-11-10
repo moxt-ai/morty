@@ -102,6 +102,9 @@ export class HarnessSession<Client extends HarnessClient> {
         return !this.#lifetime.signal.aborted && !this.agent.signal.aborted;
     }
 
+    readonly drained = (signal: AbortSignal): Promise<void> =>
+        waitForAgentOperation(this.#drained(), AbortSignal.any([signal, this.#lifetime.signal]));
+
     readonly assertWorkspace = (workspace: { readonly cwd: string }): void => {
         if (this.workspace.cwd !== workspace.cwd) {
             throw new AcpExecutionError("The session workspace cannot change", {}, "session_identity_mismatch");
