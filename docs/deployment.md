@@ -114,7 +114,7 @@ archive integrity; GitHub Release assets retain the accepted artifacts beyond
 Actions artifact retention.
 
 Every failed gate stops dependent stages. When the automatic Worker restoration
-itself fails, the job reports it and production keeps the unverified Workers until
+itself fails, the job reports it and production keeps the unverified Worker until
 recovery. npm and Cloudflare are
 independent systems, so a failure after npm publication cannot undo publication;
 it leaves an incomplete release with no final GitHub Release. Inspect the failing
