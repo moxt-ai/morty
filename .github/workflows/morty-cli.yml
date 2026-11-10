@@ -113,6 +113,13 @@ jobs:
         with:
           name: morty-release
           path: .release
+      - name: Upload accepted browser source maps before activating the release
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: |
+          python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json --verify-release-only
+          node scripts/upload-sentry-sourcemaps.mjs .release/cloud
       - name: Deploy and verify the Workers, restoring the previous ones on failure
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

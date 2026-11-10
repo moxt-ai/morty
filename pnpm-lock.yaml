@@ -212,6 +212,9 @@ importers:
       '@morty-build/runtime-test-support':
         specifier: workspace:*
         version: link:packages/runtime-test-support
+      '@sentry/cli':
+        specifier: 2.58.6
+        version: 2.58.6(supports-color@10.2.2)
       '@sentry/vite-plugin':
         specifier: 'catalog:'
         version: 5.4.0(supports-color@10.2.2)

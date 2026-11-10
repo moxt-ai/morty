@@ -87,6 +87,14 @@ jobs:
           path: .release
           run-id: ${{ steps.archive.outputs.cli_run }}
           github-token: ${{ github.token }}
+      - name: Restore source maps for the exact archived browser release
+        if: env.OPERATION == 'restore'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          EXPECTED_REVISION: ${{ steps.archive.outputs.revision }}
+        run: |
+          python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release .release/cloud --cli-release .release/release.json --verify-release-only
+          node scripts/upload-sentry-sourcemaps.mjs .release/cloud
       - name: Publish to the independent account and verify health
         if: env.OPERATION == 'restore'
         env:
