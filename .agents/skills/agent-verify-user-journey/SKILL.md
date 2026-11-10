@@ -1,12 +1,13 @@
 ---
 name: agent-verify-user-journey
-description: Start Morty's local Chat and Platform stack with --mode=initial|paired|todolist (default todolist). Open the unpaired setup page, pair a selected harness and open its handoff, or verify an agent turn and live message controls through Morty's browser UI. Generated-app correctness is out of scope.
+description: Start Morty's local consolidated Worker with --mode=initial|paired|todolist (default todolist). Open the unpaired setup page, pair a selected harness and open its handoff, or verify an agent turn and live message controls through Morty's browser UI. Generated-app correctness is out of scope.
 ---
 
 # Agent User-Journey Verification
 
 Verify the real Morty product boundary at the requested stopping point. Start
-the local Chat Worker and local Platform in every mode. Depending on `--mode`,
+the local Morty Worker in every mode. It serves both the application and Runtime
+relay at one origin. Depending on `--mode`,
 open the initial setup page, pair a Runtime and open its handoff, or continue
 through an agent task and live message controls in Morty's browser UI. Verify
 the agent integration, not the correctness of the work the agent produces.
@@ -16,7 +17,7 @@ Claude Code, or Pi to run the isolated local setup command below from its own
 native session. Do not use `codex exec`, `claude`, or another harness CLI to
 generate the app. The harness
 must receive the task through the paired Runtime and Morty Session flow so this
-journey verifies the local Workers, Platform relay, live events, and UI as well
+journey verifies the local Worker, Runtime relay, live events, and UI as well
 as the agent itself.
 
 Load and follow `chat-local-full-dev` for local-stack setup, Runtime connection,
@@ -93,8 +94,8 @@ Use `chat-local-full-dev` to:
 1. Validate the Morty checkout, pinned Node and pnpm versions, and locked
    workspace dependencies.
 2. Start an isolated local stack in `web-server` mode. This must include the
-   local Chat Worker, its Durable Objects/queues/R2/assets, and the local
-   Platform fixture. Read `chatOrigin`, `platformOrigin`, and `stateDir` from
+   consolidated Morty Worker and its Durable Objects, D1, attachment storage and assets.
+   Read `chatOrigin` and `stateDir` from
    the ready/status record; do not assume ports.
 3. Check stack health before opening the browser.
 4. For `initial`, open `<chatOrigin>/setup` using the browser procedure below,
@@ -261,7 +262,7 @@ through internal APIs to keep the turn active.
 Wait for the visible turn to complete through live Session events. Confirm in
 the UI that the selected model handled the turn and capture the final response
 and its summary. Do not infer success merely from files appearing in the
-workspace, and do not bypass Morty by querying the daemon or Platform directly.
+workspace, and do not bypass Morty by querying the daemon or internal relay directly.
 
 If generation fails, retain the browser-visible failure and inspect the local
 stack logs using `chat-local-full-dev`. Report the failure; do not repair the
@@ -281,7 +282,7 @@ not an agent-integration failure; a failed agent turn or message control is.
 
 Screenshot the behavior the user actually asked to verify, at the product
 boundary where that behavior is visible. Do not automatically use screenshots
-of the generated to-do app as evidence for a Morty, Platform, Runtime, or
+of the generated to-do app as evidence for a Morty, relay, Runtime, or
 streaming fix.
 
 For example, a streaming fix needs screenshots of the Morty conversation while
@@ -328,7 +329,7 @@ Return:
 
 1. Selected mode and browser; for paired modes, the selected harness; for
    `todolist`, the exact model identifier shown in Morty.
-2. Local Chat and Platform origins, whether the paired Runtime connected, and
+2. Local Morty origin, whether the paired Runtime connected, and
    whether the stack was stopped or intentionally left running. Never report
    identity tokens or handoff links.
 3. State directory and removal command when left running; randomized workspace
@@ -339,7 +340,7 @@ Return:
    Mark skipped stages as not run, never passed. Generated-app correctness is
    out of scope, not a passed stage.
 5. Repository-relative screenshot paths.
-6. Any agent-turn, Worker, Platform, Runtime, local CLI install, or Morty browser
+6. Any agent-turn, Worker, relay, Runtime, local CLI install, or Morty browser
    failure, including relevant typed error codes when available.
 
 Setup-only success is not full journey verification. Do not call the journey

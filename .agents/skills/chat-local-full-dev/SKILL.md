@@ -1,11 +1,11 @@
 ---
 name: chat-local-full-dev
-description: Prepare, debug, and remove an isolated local Morty Worker plus the local relay it depends on. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed production Worker; use the worker-debug skill for that.
+description: Prepare, debug, and remove the isolated local Morty Worker, which serves both the application and Runtime relay. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed production Worker; use the worker-debug skill for that.
 ---
 
 # Local Morty development
 
-Run the browser, Worker, relay and Runtime from this workspace in disposable local
+Run the browser, consolidated Worker and Runtime from this workspace in disposable local
 storage. Nothing in this workflow deploys or changes Cloudflare accounts.
 
 1. Confirm the Git root and read its instructions. Use the pinned Node and pnpm.
@@ -13,10 +13,11 @@ storage. Nothing in this workflow deploys or changes Cloudflare accounts.
    `pnpm build:cli`. No submodule or Moxt package is required.
 2. Run `scripts/local-dev web-server --background`. Use `web-server-morty-cli`
    to additionally verify the checkout's Runtime. The helper builds browser/setup
-   artifacts, migrates isolated local storage and provisions a local service
-   identity directly in that storage. There is no developer login or privileged
-   bootstrap HTTP endpoint. Do not print or commit generated credentials.
-3. Read the returned JSON for `stateDir`, `chatOrigin`, `platformOrigin` and log
+    artifacts and migrates isolated local storage. The Worker serves application
+    and relay requests at one origin, without an inter-Worker service credential.
+    There is no developer login or privileged bootstrap HTTP endpoint.
+    Do not print or commit generated credentials.
+3. Read the returned JSON for `stateDir`, `chatOrigin` and log
    locations. Do not assume ports. Run one stack per checkout because Wrangler's
    local registry is shared by that checkout.
 4. Verify `node scripts/local-dev.cjs status --state-dir <stateDir>`. Drive user
@@ -37,8 +38,8 @@ storage. Nothing in this workflow deploys or changes Cloudflare accounts.
    and Agent-owned history. Never use a global process-name kill.
 
 Use `node scripts/local-dev.cjs logs --state-dir <stateDir> --worker all --follow`
-for logs. Development uses a fully local stack with its own generated service
-identity. It does not require cloud service credentials.
+for logs. There is no separate relay process or relay log. Development uses a
+fully local stack and does not require cloud service credentials.
 
 Run `pnpm lint`, `pnpm typecheck`, and related integration tests. Test installation
 through the packed archive. Follow issue #6's complete acceptance gates before
