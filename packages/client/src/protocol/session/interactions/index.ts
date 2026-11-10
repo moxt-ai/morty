@@ -90,6 +90,11 @@ const sessionPermissionRespondCommandSchema = z
     })
     .readonly();
 
+/**
+ * Repeating the same answer succeeds within the live Session's last 256 answered permissions. A different
+ * answer returns permission_response_conflict. An unavailable request is never inferred to have succeeded;
+ * reconnecting clients reconcile the current interaction snapshot before offering another answer.
+ */
 export type SessionPermissionRespondCommand = z.infer<typeof sessionPermissionRespondCommandSchema>;
 
 export const sessionPermissionResolvedEventSchema = z

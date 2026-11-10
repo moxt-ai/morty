@@ -6,6 +6,7 @@ import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionOperationFailedEvent,
+    decodeSessionPromptSteeredEvent,
     encodeSessionPromptCommand,
     encodeSessionPromptDispositionCommand,
     SESSION_PROMPT_DISPOSITION_KIND,
@@ -54,9 +55,13 @@ const cancel = (peer: RealDaemonPeer, commandId: string) =>
 const observe = (peer: RealDaemonPeer) => {
     const events: SessionLiveEvent[] = [];
     const failures: SessionOperationFailedEvent[] = [];
+    const steered: string[] = [];
     const next = async () => {
         const raw = await peer.nextMessage();
         switch (decodeMessageKind(raw)) {
+            case "session.prompt.steered":
+                steered.push(decodeSessionPromptSteeredEvent(raw).requestId);
+                break;
             case "session.event.v2":
                 events.push(...decodeSessionEventEnvelope(raw).events);
                 break;
@@ -68,6 +73,7 @@ const observe = (peer: RealDaemonPeer) => {
     return {
         events,
         failures,
+        steered,
         until: async (ready: () => boolean) => {
             while (!ready()) {
                 await next();
@@ -166,6 +172,11 @@ test("Given a queued instruction, When two clients request steering together, Th
         steer(peer, queued);
         await observed.lifecycle("prompt.completed", queued);
         await observed.lifecycle("prompt.completed", running);
+        const retry = steer(peer, queued);
+        await observed.until(
+            () => observed.steered.includes(retry) || observed.failures.some((failure) => failure.requestId === retry),
+        );
+        expect(observed.steered).toContain(retry);
         expect(observed.failures.every((failure) => failure.code === "turn_already_started")).toBe(true);
         expect(
             observed.events.filter(
