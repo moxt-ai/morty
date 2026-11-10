@@ -65,7 +65,7 @@
         "@sentry/vite-plugin": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@types/node": "catalog:",
-        "@types/ws": "^8.18.1",
+        "@types/ws": "^8.18.2",
         "@vitejs/plugin-react": "catalog:",
         "@vitest/coverage-istanbul": "catalog:",
         "dependency-cruiser": "catalog:",
@@ -82,7 +82,7 @@
         "vite": "catalog:",
         "vitest": "catalog:",
         "wrangler": "catalog:",
-        "ws": "^8.22.0",
+        "ws": "^8.22.1",
         "@electron/asar": "4.3.1",
         "drizzle-orm": "catalog:"
     },
