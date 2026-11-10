@@ -11,6 +11,7 @@ import type {
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import {
+    type PiProcessHost,
     type PiRpcEvent,
     PiRpcProcess,
     PiRpcProcessError,
@@ -199,7 +200,10 @@ export class SessionManager {
     private readonly teardowns = new Set<Promise<void>>();
     private readonly creating = new Set<Promise<PiAcpSession>>();
 
-    constructor(private readonly signal: AbortSignal = new AbortController().signal) {}
+    constructor(
+        private readonly signal: AbortSignal,
+        private readonly processes: PiProcessHost,
+    ) {}
 
     /** Dispose all sessions and their underlying pi subprocesses. */
     async disposeAll(): Promise<void> {
@@ -273,6 +277,7 @@ export class SessionManager {
         let proc: PiRpcProcess;
         try {
             proc = await PiRpcProcess.spawn({
+                processes: this.processes,
                 cwd: params.cwd,
                 environment: params.environment,
                 origin: params.origin,

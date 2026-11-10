@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import * as readline from "node:readline";
 import { getPiCommand, shouldUseShellForPiCommand } from "./command.js";
 
@@ -22,6 +22,30 @@ export class PiRpcProcessError extends Error {
         this.name = "PiRpcProcessError";
     }
 }
+
+export class PiRpcTeardownError extends Error {
+    readonly code = "pi_process_teardown_timeout";
+
+    constructor() {
+        super("Pi process output did not close after termination.");
+        this.name = "PiRpcTeardownError";
+    }
+}
+
+export interface PiProcessHost {
+    readonly spawn: (
+        command: string,
+        args: readonly string[],
+        options: {
+            readonly cwd: string;
+            readonly environment: Readonly<NodeJS.ProcessEnv>;
+            readonly shell: boolean;
+        },
+    ) => ChildProcessWithoutNullStreams;
+    readonly stop: (child: ChildProcessWithoutNullStreams) => Promise<void>;
+}
+
+const PIPE_CLOSE_TIMEOUT_MS = 5_000;
 
 const ESC = String.fromCharCode(0x1b);
 const CSI = String.fromCharCode(0x9b);
@@ -112,6 +136,7 @@ export type PiSessionOrigin =
     | { readonly kind: "fork"; readonly sessionPath: string };
 
 type SpawnParams = {
+    readonly processes: PiProcessHost;
     readonly signal?: AbortSignal;
     readonly cwd: string;
     readonly environment: Readonly<NodeJS.ProcessEnv>;
@@ -125,6 +150,8 @@ export class PiRpcProcess {
     private readonly lifetime = new AbortController();
     private readonly exited = Promise.withResolvers<void>();
     private closing: Promise<void> | null = null;
+    private removeAbortListener: () => void = () => undefined;
+    private readonly lines: readline.Interface;
 
     get signal(): AbortSignal {
         return this.lifetime.signal;
@@ -133,7 +160,10 @@ export class PiRpcProcess {
     private eventHandlers: Array<(ev: PiRpcEvent) => void> = [];
     private readonly preludeLines: string[] = [];
 
-    private constructor(child: ChildProcessWithoutNullStreams) {
+    private constructor(
+        child: ChildProcessWithoutNullStreams,
+        private readonly processes: PiProcessHost,
+    ) {
         this.child = child;
         this.child.stdin.on("error", () => {
             // Pending RPC promises receive the process error below. Keep a closed stdin from also
@@ -141,6 +171,7 @@ export class PiRpcProcess {
         });
 
         const rl = readline.createInterface({ input: child.stdout });
+        this.lines = rl;
         rl.on("line", (line) => {
             if (!line.trim()) {
                 return;
@@ -181,7 +212,10 @@ export class PiRpcProcess {
             }
             this.pending.clear();
         });
-        child.once("close", () => this.exited.resolve());
+        child.once("close", () => {
+            this.removeAbortListener();
+            this.exited.resolve();
+        });
 
         child.on("error", (cause) => {
             const err = new PiRpcProcessError(cause);
@@ -222,13 +256,24 @@ export class PiRpcProcess {
         }
 
         // Windows cmd launchers need shell escaping; direct executables use native argv.
-        const child = spawn(cmd, args, {
+        const child = params.processes.spawn(cmd, args, {
             cwd: params.cwd,
-            stdio: "pipe",
-            env: params.environment,
+            environment: params.environment,
             shell: shouldUseShellForPiCommand(cmd),
-            ...(params.signal === undefined ? {} : { signal: params.signal }),
-        }) as ChildProcessWithoutNullStreams;
+        });
+        const proc = new PiRpcProcess(child, params.processes);
+        // Native spawn cancellation kills only the launcher. Capture and stop its tree instead.
+        if (params.signal !== undefined) {
+            const signal = params.signal;
+            const abort = (): void => {
+                void proc.dispose().catch(() => undefined);
+            };
+            signal.addEventListener("abort", abort, { once: true });
+            proc.removeAbortListener = () => signal.removeEventListener("abort", abort);
+            if (signal.aborted) {
+                abort();
+            }
+        }
 
         // Ensure spawn failures (e.g. ENOENT when pi isn't installed) are surfaced as a
         // deterministic error instead of later EPIPE/internal-error noise.
@@ -251,6 +296,8 @@ export class PiRpcProcess {
                 child.once("error", onError);
             });
         } catch (e: any) {
+            await proc.dispose();
+            params.signal?.throwIfAborted();
             const code = typeof e?.code === "string" ? e.code : undefined;
             if (code === "ENOENT") {
                 throw new PiRpcSpawnError(
@@ -273,8 +320,6 @@ export class PiRpcProcess {
             // leave stderr untouched; ACP clients may capture it.
         });
 
-        const proc = new PiRpcProcess(child);
-
         // Best-effort handshake.
         // Important: pi may emit a get_state response pointing at a sessionFile in a directory
         // that is created lazily. Create the parent dir up-front to avoid later parse errors
@@ -291,6 +336,10 @@ export class PiRpcProcess {
             // ignore for now
         }
 
+        if (params.signal?.aborted) {
+            await proc.dispose();
+            params.signal.throwIfAborted();
+        }
         return proc;
     }
 
@@ -301,21 +350,33 @@ export class PiRpcProcess {
         };
     }
 
-    dispose(signal: NodeJS.Signals | number = "SIGTERM"): Promise<void> {
+    dispose(): Promise<void> {
         if (this.closing !== null) {
             return this.closing;
         }
         this.lifetime.abort();
         this.closing = (async () => {
-            const force = setTimeout(() => this.child.kill("SIGKILL"), 1_000);
-            force.unref();
             try {
-                if (this.child.exitCode === null && this.child.signalCode === null) {
-                    this.child.kill(signal);
+                await this.processes.stop(this.child);
+                // A descendant can retain inherited pipes even after the launcher exits.
+                let timeout: ReturnType<typeof setTimeout> | undefined;
+                try {
+                    await Promise.race([
+                        this.exited.promise,
+                        new Promise<never>((_resolve, reject) => {
+                            timeout = setTimeout(() => reject(new PiRpcTeardownError()), PIPE_CLOSE_TIMEOUT_MS);
+                            timeout.unref();
+                        }),
+                    ]);
+                } finally {
+                    clearTimeout(timeout);
                 }
-                await this.exited.promise;
             } finally {
-                clearTimeout(force);
+                this.removeAbortListener();
+                this.lines.close();
+                this.child.stdin.destroy();
+                this.child.stdout.destroy();
+                this.child.stderr.destroy();
             }
         })();
         return this.closing;
@@ -323,7 +384,7 @@ export class PiRpcProcess {
 
     terminateAfterFailure(cause: unknown): void {
         this.lifetime.abort(new PiRpcProcessError(cause));
-        void this.dispose();
+        void this.dispose().catch(() => undefined);
     }
 
     /**
@@ -492,7 +553,7 @@ export class PiRpcProcess {
         const line = `${JSON.stringify(withId)}\n`;
 
         return new Promise<PiRpcResponse>((resolve, reject) => {
-            const signal = opts?.signal;
+            const signal = opts?.signal === undefined ? this.signal : AbortSignal.any([this.signal, opts.signal]);
             if (signal?.aborted === true) {
                 reject(signal.reason);
                 return;
