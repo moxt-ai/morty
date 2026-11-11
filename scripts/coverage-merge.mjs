@@ -4,7 +4,7 @@ import coverageLibrary from "istanbul-lib-coverage";
 import reportLibrary from "istanbul-lib-report";
 import reports from "istanbul-reports";
 
-const root = new URL("../../", import.meta.url);
+const root = new URL("../", import.meta.url);
 
 export async function mergeCoverage(reportNames, signal) {
     const coverage = coverageLibrary.createCoverageMap({});

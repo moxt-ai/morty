@@ -29,14 +29,6 @@ export default defineConfig(async (): Promise<ViteUserConfig> => {
             // so shared-runner contention can slow the ~200-round-trip WebSocket replay test well
             // beyond the default budget even though it normally finishes in a couple of seconds.
             testTimeout: 30_000,
-            coverage: {
-                provider: "istanbul",
-                reporter: ["text-summary", "json"],
-                reportsDirectory: "../../coverage/relay",
-                reportOnFailure: true,
-                include: ["src/**/*.{ts,tsx}"],
-                exclude: ["**/*.d.ts", "**/testing/**"],
-            },
         },
     };
 });
