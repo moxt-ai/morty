@@ -25,28 +25,16 @@ than opening files directly, so filtering and following stay consistent.
 
 ## Correlating one request
 
-1. Capture the request from the browser tool's network view: method, path, status,
-   and the `server-timing` response header. The header names each phase, for
-   example `total`, `authentication`, `ownership`, `session`, and `morty`.
-2. Find the matching one-line JSON event in the Chat log (`chat-request-timing`)
-   and read its `timings` object. A phase that dominates the total points at the
-   boundary to inspect next.
-3. Follow relay and Runtime connection events in the same Worker log.
-4. For failures, read the JSON error object: `err.code` is the stable code, and
-   `err.stack` shows the originating module.
+1. Capture the failing browser operation, request method, path, status and time.
+   Keep credentials and request bodies containing private content out of reports.
+2. Inspect the matching Worker and Runtime logs for that time window. Follow the
+   computer and request identifiers when present; do not assume an event name from
+   an older release still exists.
+3. Read the structured error code and sanitized cause chain. Correlate the cloud
+   failure with the local daemon evidence before assigning a root cause.
 
-## Structured event shapes
-
-Chat emits JSON lines, one per event. Common `event` values:
-
-- `anonymous-user-request-timing`, `chat-request-timing` - per-request timings.
-- `chat-workspace-listed`, `chat-agent-settings-discovered`,
-  `bot-chat-access-issued`, `session-access-issued` - audit events.
-- `runtime-pairing-issued` - management audit event; `bot-setup-requested` -
-  the browser-triggered Machine binding request.
-
-Errors are logged as an object with `err.code`, `httpStatus`, and a sanitized
-`msg`. Branch on the code, never the message text.
+Branch on typed error codes, never human-readable message text. A successful HTTP
+response alone does not establish that the requested Agent operation completed.
 
 ## Inspecting persisted state
 
@@ -57,7 +45,6 @@ the `sqlite3` CLI:
 ```sh
 sqlite3 <path.sqlite> '.tables'
 sqlite3 -header -column <path.sqlite> 'select * from chat_managed_session limit 5;'
-sqlite3 -header -column <path.sqlite> 'select * from project_migrations order by id;'
 ```
 
 Durable Object and D1 files are WAL-backed. If a value looks stale, the Worker is
@@ -70,10 +57,8 @@ part of the live state.
 | --- | --- | --- |
 | Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | The running Runtime and local relay use different release contracts | Rebuild the checkout CLI and start a fresh isolated stack through `scripts/local-dev`; check `morty status` |
 | Relay exits after `Can't call WebSocket send() after close()` | A replaced or closing daemon socket received a send | Correlate `chatLog` and Runtime diagnostics; fix the relay boundary |
-| `RELAY_UNAVAILABLE` (502) on first request | Local relay storage is not ready or its schema does not match | Inspect `chatLog`; recreate only the disposable local stack |
-| `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | The local R2 seed is missing | Recreate the stack with the current helper and verify its seed step |
-| `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Read the logged typed error and validation issue path in `chatLog` |
-| `NOT_FOUND` on a Session or Conversation | Wrong Project or local state directory | Compare the requested identity with the stack record |
+| Validation failure (400) | The request does not match the current schema | Read the typed error and validation issue path |
+| A missing Session or conversation | Wrong computer or local state directory | Compare the requested identity with the stack record |
 | A stopped stack's port remains bound | Another stack still owns the port | Use `status` and remove only the identified stack |
 | Unresolved workspace packages or duplicated ACP SDK instances | Locked dependencies were not installed consistently | Run `pnpm install --frozen-lockfile` at the workspace root and rebuild the CLI |
 
@@ -82,7 +67,7 @@ part of the live state.
 When a request fails validation, compare every boundary in order:
 
 1. Browser request construction and serialized body size.
-2. Chat Worker global body limit, route body limit, and schema.
+2. Morty Worker global body limit, route body limit, and schema.
 3. ComputerRelay authorization and local relay operations.
 4. Runtime or Agent protocol validation.
 
@@ -91,7 +76,7 @@ When a request fails validation, compare every boundary in order:
 For a contract-level reproduction, call the supported Chat HTTP boundary at
 `chatOrigin`. Establish an isolated identity through the setup helper first;
 creation is idempotent and requires a creation key. Reuse the fixture's authorized
-identity for the relevant Project, and keep credentials out of transcripts and
+identity for the relevant computer, and keep credentials out of transcripts and
 logs. Do not bypass admission or authorization just to reach a handler.
 
 ## Escalating to deployed environments

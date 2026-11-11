@@ -12,57 +12,32 @@ Morty owns its browser application, local Runtime and internal cloud services.
 This glossary describes their authorization and ownership boundaries. For
 user-facing behavior, start with the [usage guide](GUIDE.md).
 
-A computer in the switcher is a machine account this browser remembers. Switching follows that account’s URL and loads its own credentials and conversation. The Relay and Web protocols call its routing and authorization scope a Project. The database stores the machine account and its grants directly.
+A computer in the switcher is a machine account this browser remembers. Switching
+opens that computer's URL and loads its own access credentials and conversation.
+Each computer is an authorization and storage boundary.
 
 ## How the main concepts relate
 
-```text
-Project
-  ├── User
-  └── Bot
-       └── Runtime ── represents one paired local execution endpoint
-            ├── Agent
-            ├── Workspace
-            └── Morty Session ── backs a Morty conversation
-
-Machine
-  └── local daemon
-       ├── Runtime connection
-       └── Agent-owned Native Sessions
-                    ├── open/import ── continue the selected history
-                    └── fork ───────── create an independent continuation
-```
-
-A Bot gives an authorized User a browser entry into a paired Runtime. A Runtime can
-serve many Sessions and can advertise more than one Agent. A Native Session belongs
-to an Agent, not to Morty. Morty uses that Agent-owned identity to continue work
-through an authorized Runtime; it does not allocate a second Session identity.
-Sharing an identity does not transfer ownership of the Agent's history to Morty.
+A paired Runtime connects one computer to Morty. It discovers installed Agents and
+runs authorized work in local directories. The browser opens conversations owned
+by those Agents through that Runtime. Sharing browser access does not transfer
+ownership of the Agent's history to Morty.
 
 ## Morty application concepts
 
-### Project
+### Computer
 
-The authorization and isolation boundary for a Morty installation. Users, Bots,
-Runtimes, conversations, and sharing credentials are scoped through a Project. In
-code, a Project ID must not be treated as a machine, Bot, Runtime, or Session ID.
+The machine account and isolation boundary for a paired Morty installation.
+Runtime pairing, browser access, conversation metadata and sharing are scoped to
+this computer. Access to one computer never grants access to another. A computer
+identity is not a Native Session identity.
 
-Cross-Project access is a boundary crossing and must be explicitly authorized.
+### Owner and browser access
 
-### User
-
-The Morty identity authorized to use Bots and conversations in a Project. A User is
-not the operating-system account running the daemon and is not an Agent identity.
-Browser access is established through device pairing and explicit sharing.
-
-### Bot
-
-The browser-facing resource through which a User reaches a configured local
-environment. A Bot resolves the Runtime available to the chat experience and lets a
-conversation select an advertised Agent and workspace.
-
-A Bot is not an Agent process, Runtime, machine, or conversation. One Bot can expose
-many conversations over the same Runtime.
+The owner identity controls access to a computer. Browser access is established
+through setup handoff or explicit sharing and can be revoked. This identity is
+separate from the operating-system account running the daemon and from the Agent's
+own account.
 
 ### Conversation
 
@@ -71,7 +46,7 @@ tool activity, interactions, files, and controls around a Morty Session.
 
 An established Morty conversation uses the underlying Agent's Native Session ID.
 Morty does not assign an independent conversation or Session identity. The native
-identity is scoped to the selected Agent and Runtime within an authorized Project;
+identity is scoped to the selected Agent and Runtime on an authorized Computer;
 the same native value elsewhere does not identify or authorize the same work.
 
 ### New Chat draft
@@ -103,7 +78,7 @@ Native Session or local history; importing that Native Session brings it back.
 
 The computer, VM, container, or WSL environment where the daemon and Agents run.
 Morty stores a local machine identity during setup, but a Machine is not the same as
-its cloud Runtime. Replacing a Project or pairing can replace the Runtime while the
+its cloud Runtime. Replacing a Computer or pairing can replace the Runtime while the
 physical machine remains the same.
 
 ### Local daemon
@@ -114,7 +89,7 @@ and execution boundary. Morty's Worker and browser do not execute the coding Age
 
 ### Runtime
 
-The Project-scoped Morty execution endpoint created by pairing the local daemon.
+The Computer-scoped Morty execution endpoint created by pairing the local daemon.
 Morty routes Agent discovery, workspace browsing, Session operations, and live
 events through it. One Runtime connection carries many Sessions; a Runtime is not
 created per conversation.
@@ -204,7 +179,7 @@ The harness-owned **Session ID**, together with the harness on the selected
 Computer, identifies the conversation for discovery and subsequent operations.
 Morty does not assign an additional Session entry identity or conversation ID.
 
-Native identity must be scoped by Project, Runtime, and Agent. A native identity
+Native identity must be scoped by Computer, Runtime, and Agent. A native identity
 does not replace validation and authorization at the local execution boundary.
 Request and operation identities track pending work and recovery, not separate
 conversations.
@@ -228,13 +203,13 @@ new conversation or Session.
 ### Setup and pairing
 
 Setup creates or reuses Morty's local identity and establishes the Morty pairing
-needed for a Runtime. Pairing authorizes a local daemon for a Project and stores its
+needed for a Runtime. Pairing authorizes a local daemon for a Computer and stores its
 Runtime connection locally. Reconnecting an existing Runtime is not a new pairing.
 
 ### Sharing link and browser identity
 
 A Morty link carries the information needed to establish an authorized browser
-identity for a Project or conversation flow. It is not the daemon's Runtime
+identity for a Computer or conversation flow. It is not the daemon's Runtime
 credential. Revoking shared access must not be modeled as deleting the Machine's
 Agent history.
 

@@ -22,8 +22,9 @@ Production is one `morty-production` Worker at `morty.build`. It serves the webs
 identity and computer management APIs, pairing and Session traffic. Each computer
 owns its state and Runtime connection in a `ComputerRelay` Durable Object. Relay
 is an internal responsibility of this deployment, not a separately deployed
-service. D1 holds the computer directory; R2 holds attachments and immutable web
-assets. Local and CI stacks use the same topology with isolated storage.
+service. D1 holds the computer directory; R2 holds immutable web assets.
+Conversation attachments remain on the connected computer. Local and CI stacks
+use the same topology with isolated storage.
 
 The release pipeline builds the checksummed portable cloud artifact together with
 the CLI archive, validates its source revision and pinned destination, then
@@ -49,8 +50,8 @@ Never log credentials.
 
 Clerk, developer sign-in, organization management, and the generic platform
 console are retired. Morty's anonymous identity, sharing, pairing and authorization
-remain enforced. Removing unused authentication surfaces must not remove project
-or Agent data. Historical database migrations are immutable.
+remain enforced. Removing unused authentication surfaces must not remove retained
+computer or Agent data. Historical database migrations are immutable.
 
 Deployment checks account authority, artifact identity, required secrets and the
 destination resources before writes. Production refuses to activate an installer until the exact

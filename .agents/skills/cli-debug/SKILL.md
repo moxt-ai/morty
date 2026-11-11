@@ -1,6 +1,6 @@
 ---
 name: cli-debug
-description: Debug Morty CLI daemon failures on a user's local machine using the bounded local diagnostic log. Use when a user asks why a local Agent operation failed (for example a native session import, fork, or preview returning "The local agent operation could not be completed."), where the daemon writes diagnostics, how to read logs/daemon.log, or how to correlate a Platform relay failure code with the local cause.
+description: Debug Morty CLI daemon failures on a user's local machine using the bounded local diagnostic log. Use when a user asks why a local Agent operation failed (for example a native session import, fork, or preview returning "The local agent operation could not be completed."), where the daemon writes diagnostics, how to read logs/daemon.log, or how to correlate a Morty relay failure code with the local cause.
 ---
 
 # CLI Debugging
@@ -16,15 +16,15 @@ Resolve the CLI state root before anything else:
 | Precedence | Source | Path |
 | --- | --- | --- |
 | 1 | `MORTY_STATE_DIRECTORY` environment variable of the daemon process | its value |
-| 2 | platform default | macOS: `~/Library/Application Support/Morty/v2`; Windows: `%LOCALAPPDATA%\Morty\v2`; Linux: `$XDG_STATE_HOME/morty/v2` or `~/.local/state/morty/v2` |
+| 2 | platform default | macOS: `~/Library/Application Support/Morty/v3`; Windows: `%LOCALAPPDATA%\Morty\v3`; Linux: `$XDG_STATE_HOME/morty/v3` or `~/.local/state/morty/v3` |
 
 Read the variable from the environment the daemon actually runs in (for example
 the shell or service definition that started it); do not assume your current
 shell matches. When unset, use the platform default from the table.
 
-The running daemon's diagnostic directory may be nested beneath that root, under
-`installations/<applicationId>/<installationId>`. Locate the actual log rather than
-assuming that the root itself contains it. For a managed local stack, use
+Locate the running daemon's actual log beneath that state root. Do not reuse an
+older installation generation or assume that a log from another daemon belongs
+to the current process. For a managed local stack, use
 `node scripts/local-dev.cjs logs --state-dir <stack-state> --worker runtime` first.
 If that does not find the log, search the resolved CLI state root for `daemon.log`.
 
@@ -48,8 +48,8 @@ package version). Compare the invoking CLI and running Runtime versions using
 Each line is one JSON diagnostic with a stable prefix:
 
 ```text
-Morty relay diagnostic {"channelId":"...","event":"relay_connection_failed",...}
-Morty daemon diagnostic {"channelId":"...","event":"native_session_operation_failed","requestId":"...",...,"failureName":"Error","failureMessage":"...","failureCode":"...","cause1Name":"...","cause1Message":"..."}
+Morty relay diagnostic {"computerId":"...","event":"relay_connection_failed",...}
+Morty daemon diagnostic {"computerId":"...","event":"native_session_operation_failed","requestId":"...",...,"failureName":"Error","failureMessage":"...","failureCode":"...","cause1Name":"...","cause1Message":"..."}
 ```
 
 Extract evidence with line-oriented tools; the file is small by design:
@@ -86,7 +86,7 @@ file; the per-channel audit database under `<state directory>/audit/` and
 
 ## Correlate a remote failure
 
-When the user reports a failure seen in Chat or the Platform relay (for example
+When the user reports a failure seen in Chat or the Morty relay (for example
 code `session_operation_failed` or the generic "The local agent operation could
 not be completed." message), the UI message is collapsed at the daemon boundary
 on purpose; the concrete cause is only in the local log.
@@ -95,9 +95,9 @@ Correlate by:
 
 1. Time window: convert the user-visible failure time to the same clock and
    inspect that range of lines.
-2. `channelId`: match the paired channel the user's Bot uses.
+2. `computerId`: match the paired computer shown in the browser.
 3. `requestId` or `sessionId`: match when the reporter can supply one.
-4. `agentId` and `action` (`list`/`find`/`preview`/`import`/`fork`) on
+4. `harness` and `action` (`list`/`find`/`preview`/`import`/`fork`) on
    `native_session_operation_failed` events.
 
 Keep the daemon's error taxonomy straight when interpreting codes:
