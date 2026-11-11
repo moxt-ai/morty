@@ -1,6 +1,5 @@
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
-import { dataTestId } from "../../../data-testid.ts";
 import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import type { ToolCallState } from "./tool-renderer.ts";
 
@@ -49,7 +48,6 @@ export function ReadToolPresentation({
             autoOpen={autoOpen}
             icon={<FileText aria-hidden="true" className="size-4 shrink-0" />}
             state={state}
-            testId={dataTestId.recognizedReadToolCall}
             title={title}
         >
             <div className="grid min-w-0 gap-2 text-xs">

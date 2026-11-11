@@ -127,7 +127,6 @@ export function createChatWorkspace(options: {
     readonly bugReportDialog: BugReportDialogStore;
     readonly computerId: string;
     readonly requests: BotChatApi;
-    readonly url?: string;
     readonly createTransfer?: ((terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
     readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
@@ -215,7 +214,7 @@ export function createChatWorkspace(options: {
                 paneEntry = null;
             }
         },
-        url: options.url ?? window.location.href,
+        url: window.location.href,
     });
     const directory = createConversationDirectoryStore(
         requests,

@@ -7,9 +7,6 @@ export const overlayTriggerOffsetPx = 6;
 export {
     agentConfigurationPopoverWidthClassName,
     executionDetailsDialogDesktopWidthClassName,
-    executionDetailsDialogWidthPx,
-    overlayWidthLadder,
-    overlayWidthPx,
 } from "./overlay-width.ts";
 
 /** Solid panel surface shared by configuration popovers and nested pickers. Matches input fill. */

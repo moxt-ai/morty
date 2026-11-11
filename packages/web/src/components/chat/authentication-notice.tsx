@@ -21,7 +21,7 @@ export function AuthenticationNotice({
             role="alert"
         >
             <div className="flex items-start gap-2.5">
-                <KeyRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-400" />
+                <KeyRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-700" />
                 <p className="font-medium">{guidance.title}</p>
             </div>
             <p className="mt-2 leading-relaxed text-muted-foreground">{guidance.description}</p>

@@ -7,7 +7,6 @@ import { flushSync } from "react-dom";
 import * as v from "valibot";
 import { afterAll, afterEach } from "vitest";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
-import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
 import { encodeIdentityScope, identityScopeSchema } from "../../src/services/identity/identity-scope-url.ts";
 import { withStoredAccessLock } from "../../src/services/identity/remembered-computers.ts";
@@ -66,8 +65,6 @@ export async function createTestApp(
         readonly environment?: Environment;
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
-        /** Receives the page views and setup steps the application measures. */
-        readonly analytics?: PageAnalytics;
         /** How the device moves setup to the agent's computer; defaults to the test browser's own. */
         readonly setupHandoff?: SetupHandoff;
         readonly agent?: ControlledAgent;
@@ -85,7 +82,6 @@ export async function createTestApp(
               }
             | { readonly kind: "share"; readonly code?: (application: Application) => string }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
-            | { readonly kind: "component-library"; readonly entryId: string }
             | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly harness: string; readonly sessionId: string }
             | { readonly kind: "morty" };
@@ -113,8 +109,6 @@ export async function createTestApp(
             transfer.hash = `code=${page.code(current)}`;
         }
         window.location.href = transfer.href;
-    } else if (page.kind === "component-library") {
-        window.location.href = new URL(`/playground/${page.entryId}`, current.origin).href;
     } else if (page.kind === "bootstrap") {
         const destination = new URL("/", current.origin);
         if (page.identity === true) {
@@ -160,7 +154,6 @@ export async function createTestApp(
         origin: current.origin,
         transport: current.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
-        ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
         ...(options.setupHandoff === undefined ? {} : { setupHandoff: options.setupHandoff }),
     });
     let rendered: { readonly unmount: () => void } = { unmount: () => {} };

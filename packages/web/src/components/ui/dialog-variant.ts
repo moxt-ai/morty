@@ -1,4 +1,4 @@
-import { type DialogSize, overlayWidthPx } from "./overlay-width.ts";
+import type { DialogSize } from "./overlay-width.ts";
 
 export type DialogAppearance = "default" | "setup" | "surface";
 
@@ -24,7 +24,7 @@ type DialogVariantLayout = {
 
 /**
  * Default width and shell choices when each product dialog is rendered.
- * `appearance="setup"` always uses {@link overlayWidthPx.dialogStandard} regardless of `size`.
+ * `appearance="setup"` always uses the standard width regardless of `size`.
  */
 const dialogVariantLayout: Record<DialogVariant, DialogVariantLayout> = {
     bugReport: {
@@ -68,49 +68,6 @@ const dialogVariantLayout: Record<DialogVariant, DialogVariantLayout> = {
         size: "large",
     },
 };
-
-const dialogVariantTitle: Record<DialogVariant, string> = {
-    bugReport: "Report a bug",
-    connectAgentPairing: "Connect agent",
-    devicesAccess: "Devices with access",
-    endAccess: "End current access?",
-    identitySharing: "Continue on another device",
-    networkLatency: "Network latency",
-    openSession: "Open Session",
-    workingDirectory: "Choose working directory",
-};
-
-function dialogSizeToOverlayWidthKey(size: DialogSize): keyof typeof overlayWidthPx {
-    switch (size) {
-        case "standard":
-            return "dialogStandard";
-        case "medium":
-            return "dialogMedium";
-        case "large":
-            return "dialogLarge";
-        case "wide":
-            return "dialogWide";
-    }
-}
-
-function dialogVariantDesktopWidthPx(variant: DialogVariant): number {
-    const layout = dialogVariantLayout[variant];
-    if (layout.appearance === "setup") {
-        return overlayWidthPx.dialogStandard;
-    }
-    return overlayWidthPx[dialogSizeToOverlayWidthKey(layout.size)];
-}
-
-/** Playground / docs — variant id with resolved desktop width in px. */
-export const dialogVariantCatalog: readonly {
-    readonly title: string;
-    readonly variant: DialogVariant;
-    readonly widthPx: number;
-}[] = dialogVariants.map((variant) => ({
-    title: dialogVariantTitle[variant],
-    variant,
-    widthPx: dialogVariantDesktopWidthPx(variant),
-}));
 
 export function resolveDialogGeneration(options: {
     readonly appearance?: DialogAppearance | undefined;

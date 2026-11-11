@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
                 {children}
                 {state.kind === "visible" && (
                     <Primitive.Root
-                        className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg data-[state=closed]:animate-out data-[state=open]:animate-cloud-enter"
+                        className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg data-[state=open]:animate-cloud-enter"
                         key={state.id}
                         onOpenChange={(open) => {
                             if (!open) {
