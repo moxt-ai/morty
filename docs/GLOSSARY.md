@@ -77,9 +77,10 @@ Native Session or local history; importing that Native Session brings it back.
 ### Machine
 
 The computer, VM, container, or WSL environment where the daemon and Agents run.
-Morty stores a local machine identity during setup, but a Machine is not the same as
-its cloud Runtime. Replacing a Computer or pairing can replace the Runtime while the
-physical machine remains the same.
+Setup saves the Computer's identity and pairing in Morty's local state directory;
+there is no separate Machine identity. The Runtime executes on this Machine,
+while the cloud Relay authenticates and routes its connection. Replacing a Computer
+or pairing does not replace the physical Machine.
 
 ### Local daemon
 
