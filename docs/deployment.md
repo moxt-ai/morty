@@ -9,7 +9,7 @@ metadata:
 # Morty releases and deployment
 
 Morty owns one workspace and one public npm distribution, `@morty-build/cli`.
-Internal client, Runtime, relay, and storage packages are not separately published.
+The browser, Runtime, internal relay and storage code ship with this product.
 The only hosted application environment is production in the Morty Cloudflare
 account. Development, integration and performance checks use isolated local or
 CI services; there is no permanent staging or benchmark deployment. Local
@@ -48,10 +48,8 @@ verify a deployment before revoking the replaced token; never use a personal
 User API Token or a Global API key as a fallback.
 Never log credentials.
 
-Clerk, developer sign-in, organization management, and the generic platform
-console are retired. Morty's anonymous identity, sharing, pairing and authorization
-remain enforced. Removing unused authentication surfaces must not remove retained
-computer or Agent data. Historical database migrations are immutable.
+Morty's identity, sharing, pairing and authorization remain enforced. Retain
+computer and Agent data and preserve immutable database migration history.
 
 Deployment checks account authority, artifact identity, required secrets and the
 destination resources before writes. Production refuses to activate an installer until the exact
@@ -59,9 +57,7 @@ Morty npm version exists with the accepted archive integrity. Upload immutable a
 A restore uses the archived bytes and source revision, validates current Durable
 Object migration history, and never rolls persistent data backwards.
 
-Wrangler updates supplied secrets additively. Remove retired Clerk/OIDC/webhook
-secrets explicitly only after replacing their consumers and verifying the target
-service. Cloudflare cannot return stored secret plaintext; obtain it from its
+Cloudflare cannot return stored secret plaintext; obtain it from its
 owner or replace it with a new signing secret. Rotating the signing secret ends
 existing Session access; Runtime and owner credentials have separate lifetimes.
 
@@ -150,22 +146,7 @@ repository is private, OIDC still binds publishing authority to the configured
 workflow and environment, and the archived release records its source revision and
 checksums. Do not describe that release record as a public provenance attestation.
 
-Keep the previous production setup available until the new package is published
-and its replacement verified. The authorized pre-launch reset supports only the
-current Morty protocol and installation generation. Activate the matching cloud
-and CLI release together, then verify fresh installation, pairing, conversation,
-attachments and reconnect. Earlier Morty credentials, local state and browser
-links are unsupported; no legacy reader or forwarding service is required.
-
-The November 10 single-Worker consolidation is an explicitly authorized pre-launch
-reset. It creates an independent D1 directory and a new ComputerRelay namespace.
-Historical DO and D1 records must be archived and verified before their live
-resources are retired. Remove the separate Relay Worker, old domain binding, old
-directory, empty Relay R2 buckets and service secrets after production verifies
-the new release. Archived history does not require an active legacy reader.
-
-Preserve release archives and retained data for recovery. Do not roll a new
-installation back into an earlier state generation or replay old writers against
-new schemas. Recovery restores an accepted matching cloud/CLI release and uses
-fresh pairing when generations differ. Moxt services and Agent-owned data remain
-outside this cutover. Subsequent releases follow the normal compatibility policy.
+Preserve release archives and retained data for recovery. Recovery restores an
+accepted matching cloud/CLI release and uses fresh pairing when installation
+generations differ. Never replay old writers against new schemas. Moxt services
+and Agent-owned data remain independent of Morty's release lifecycle.
