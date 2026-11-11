@@ -17,7 +17,7 @@ export function pendingExecutionContext(
     const base: ExecutionContext = {
         ...connectionPresentation(home, null),
         harness: "",
-        machine: home.computerConfiguration?.computer.machineName.trim() || (loading ? "Loading…" : "Unknown"),
+        computer: home.computerConfiguration?.computer.computerName.trim() || (loading ? "Loading…" : "Unknown"),
         agent: loading ? "Loading…" : "Unknown",
         directory: null,
         directoryName: loading ? "Loading…" : "Unknown",
@@ -35,7 +35,7 @@ export function pendingExecutionContext(
             return {
                 ...base,
                 harness: settings.selectedAgent.harness,
-                machine: computer?.machineName.trim() || settings.selectedAgent.machineName.trim() || "Unknown",
+                computer: computer?.computerName.trim() || settings.selectedAgent.computerName.trim() || "Unknown",
                 agent: offered?.label.trim() || settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
                 directoryName: directoryName(settings.cwd.directoryLabel),
@@ -84,7 +84,7 @@ export function sessionExecutionContext(
     return {
         ...connectionPresentation(home, connection),
         harness: identity.harness,
-        machine: configuration?.computer.machineName.trim() || "Unknown",
+        computer: configuration?.computer.computerName.trim() || "Unknown",
         agent: identity.agent,
         directory: session.result.ready.directoryLabel,
         directoryName: directoryName(session.result.ready.directoryLabel),

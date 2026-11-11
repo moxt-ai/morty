@@ -464,7 +464,7 @@ export function ConversationSidebar({
             ? sessionExecutionContext(pane.session, home, paneConnection)
             : pendingExecutionContext(home, draftSettings);
     const computer = home.computerConfiguration?.computer ?? null;
-    const computerName = computer?.machineName ?? "";
+    const computerName = computer?.computerName ?? "";
     const nativeAgents = computer === null ? [] : nativeSessionAgentTabs(computer);
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);

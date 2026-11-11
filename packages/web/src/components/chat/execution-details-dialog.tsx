@@ -43,7 +43,7 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
                     </span>
                 </dd>
                 <dt className={executionDetailsTermClassName}>Computer</dt>
-                <dd className="text-foreground [overflow-wrap:anywhere]">{context.machine}</dd>
+                <dd className="text-foreground [overflow-wrap:anywhere]">{context.computer}</dd>
                 <dt className={executionDetailsTermClassName}>Session connection</dt>
                 <dd className="text-foreground">{context.connection}</dd>
                 <dt className={executionDetailsTermClassName}>Computer status</dt>

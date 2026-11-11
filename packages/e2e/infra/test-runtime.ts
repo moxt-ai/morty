@@ -13,7 +13,7 @@ export async function createTestRuntime(
     journey: E2EHarness,
     browserName: "chromium" | "firefox" | "webkit" = "chromium",
     contextOptions: BrowserContextOptions = {},
-    machineName = "Browser test Runtime",
+    computerName = "Browser test Runtime",
     agent: { readonly harness: string; readonly name: string } = { harness: "claude", name: "Claude Code" },
 ) {
     const setupClockStart = Date.parse("2026-09-15T12:00:00Z");
@@ -32,7 +32,7 @@ export async function createTestRuntime(
             echoUserMessage: true,
             sessionIds: new Set(["setup-reconnect-session"]),
         },
-        machineName,
+        computerName,
     );
     const additionalRuntimes: ControlledSetupRuntime[] = [];
     const additionalFailure = Promise.withResolvers<never>();

@@ -30,7 +30,7 @@ export function createRelayDependencies(infrastructure: {
         services: {
             identities,
             projectAuthentication: infrastructure.control,
-            machineAccounts: infrastructure.control,
+            computerAccounts: infrastructure.control,
             projects: infrastructure.projects,
         },
     });

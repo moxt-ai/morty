@@ -396,7 +396,7 @@ function SessionRenderItemContent({
     active,
     answerChoices,
     item,
-    machineName,
+    computerName,
     onAnswer,
     onChooseAnswer,
     onRetryUnknownDelivery,
@@ -408,7 +408,7 @@ function SessionRenderItemContent({
     readonly active: boolean;
     readonly answerChoices: ReadonlyMap<string, AgentQuestionChoices>;
     readonly item: SessionRenderItem;
-    readonly machineName: string;
+    readonly computerName: string;
     readonly onAnswer: (messageId: string) => void;
     readonly onChooseAnswer: (messageId: string, questionIndex: number, answer: string) => void;
     readonly onRemoveUnknownDelivery: () => void;
@@ -464,7 +464,7 @@ function SessionRenderItemContent({
             active={active}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
             failureHarness={pane.harness}
-            failureMachineName={machineName}
+            failureComputerName={computerName}
             message={item.message}
             onRemoveUnknownDelivery={onRemoveUnknownDelivery}
             onRetryUnknownDelivery={onRetryUnknownDelivery}
@@ -871,7 +871,7 @@ function MortySessionPaneBody({
     const authenticationRecovery =
         presentation.authenticationFailure === null
             ? null
-            : authenticationGuidance(presentation.authenticationFailure.code, pane.harness, executionContext.machine);
+            : authenticationGuidance(presentation.authenticationFailure.code, pane.harness, executionContext.computer);
     // The notice slot's three inputs, shared by the pane-level in-flow slot and the
     // composer's overlay slot so both placements render the very same card.
     const slotConnectionNotice =
@@ -1042,7 +1042,7 @@ function MortySessionPaneBody({
                                                             active={active}
                                                             answerChoices={composer.answerChoices}
                                                             item={item}
-                                                            machineName={executionContext.machine}
+                                                            computerName={executionContext.computer}
                                                             onAnswer={answer}
                                                             onChooseAnswer={pane.store.getState().chooseAnswer}
                                                             onRemoveUnknownDelivery={
@@ -1072,7 +1072,7 @@ function MortySessionPaneBody({
                                                             active={active}
                                                             answerChoices={composer.answerChoices}
                                                             item={item}
-                                                            machineName={executionContext.machine}
+                                                            computerName={executionContext.computer}
                                                             onAnswer={answer}
                                                             onChooseAnswer={pane.store.getState().chooseAnswer}
                                                             onRemoveUnknownDelivery={

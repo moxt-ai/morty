@@ -17,12 +17,12 @@ export async function conversationLoaded(page: Page): Promise<void> {
 function runtimeTest() {
     return base.extend<{
         readonly runtime: Awaited<ReturnType<typeof createTestRuntime>>;
-        readonly runtimeMachineName: string;
+        readonly runtimeComputerName: string;
         readonly runtimeAgent: { readonly harness: string; readonly name: string };
     }>({
-        runtimeMachineName: ["Browser test Runtime", { option: true }],
+        runtimeComputerName: ["Browser test Runtime", { option: true }],
         runtimeAgent: [{ harness: "claude", name: "Claude Code" }, { option: true }],
-        runtime: async ({ browserName, contextOptions, runtimeMachineName, runtimeAgent }, use, testInfo) => {
+        runtime: async ({ browserName, contextOptions, runtimeComputerName, runtimeAgent }, use, testInfo) => {
             const harness = await E2EHarness.create("chat-e2e");
             let failure: unknown;
             try {
@@ -30,7 +30,7 @@ function runtimeTest() {
                     harness,
                     browserName,
                     contextOptions,
-                    runtimeMachineName,
+                    runtimeComputerName,
                     runtimeAgent,
                 );
                 try {

@@ -36,7 +36,7 @@ export interface PairingDirectoryInfrastructure {
     readonly services: {
         readonly identities: ComputerIdentityService;
         readonly projectAuthentication: Pick<ComputerManagementService, "authorizeProject">;
-        readonly machineAccounts: Pick<ComputerManagementService, "requireActiveAccount">;
+        readonly computerAccounts: Pick<ComputerManagementService, "requireActiveAccount">;
         readonly projects: Pick<ComputerManagementStorageDirectory, "resolve">;
     };
 }
@@ -276,7 +276,7 @@ export class PairingDirectoryService {
     private readonly redeemPairing = async (
         expectedComputerId: string,
         pairingCode: string,
-        machineName: string,
+        computerName: string,
         workspaceName: string,
         agents: readonly AgentDescriptor[],
         signal: AbortSignal,
@@ -288,7 +288,7 @@ export class PairingDirectoryService {
         if (pairing === null || pairing.computer_id !== expectedComputerId) {
             throw new PairingDirectoryError("invalid_pairing_code", "The pairing code is invalid or expired");
         }
-        await this.#cx.services.machineAccounts.requireActiveAccount(pairing.computer_id, signal);
+        await this.#cx.services.computerAccounts.requireActiveAccount(pairing.computer_id, signal);
         const daemonToken = await deriveComputerDaemonToken(pairingCode, pairing.computer_id, pairing.poll_token_hash);
         const claimed = await storage.claimPairing(
             {
@@ -296,7 +296,7 @@ export class PairingDirectoryService {
                 codeHash,
                 daemonHash: await hashPairingCredential(daemonToken),
                 now: Date.now(),
-                machineName,
+                computerName,
                 workspaceName,
                 agents: JSON.stringify(agents),
                 auditId: `rpa_${crypto.randomUUID()}`,
@@ -313,7 +313,7 @@ export class PairingDirectoryService {
     readonly redeemComputerPairing = async (
         computerId: string,
         pairingCode: string,
-        machineName: string,
+        computerName: string,
         workspaceName: string,
         agents: readonly AgentDescriptor[],
         signal: AbortSignal,
@@ -321,7 +321,7 @@ export class PairingDirectoryService {
         await this.redeemPairing(
             validateIdentifier(computerId, "computer_id"),
             pairingCode,
-            machineName,
+            computerName,
             workspaceName,
             agents,
             signal,
@@ -338,7 +338,7 @@ export class PairingDirectoryService {
             (row) =>
                 new ComputerDescriptor(
                     parseAgents(row.agents_json),
-                    row.machine_name,
+                    row.computer_name,
                     row.workspace_name,
                     row.computer_id,
                 ),

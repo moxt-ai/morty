@@ -58,7 +58,7 @@ test("Given a packed Morty release, starting and restarting its daemon preserve 
         await writeFile(join(existing, "owned-by-moxt"), "preserve this installation\n");
         await Promise.all([run("start"), run("start"), run("start")]);
         assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
-        const installation = join(morty, "machine");
+        const installation = join(morty, "computer");
         const hash = createHash("sha256").update(installation).digest("hex").slice(0, 32);
         const endpoint =
             process.platform === "win32"

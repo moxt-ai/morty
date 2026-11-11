@@ -48,14 +48,14 @@ export interface VerifiedComputerAccess {
  */
 export class ComputerDescriptor {
     readonly agents: readonly AgentDescriptor[];
-    readonly machineName: string;
+    readonly computerName: string;
     readonly computerId: string;
     readonly workspaceName: string;
 
-    constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
+    constructor(agents: readonly AgentDescriptor[], computerName: string, workspaceName: string, computerId: string) {
         this.agents = agents;
         this.computerId = computerId;
-        this.machineName = machineName;
+        this.computerName = computerName;
         this.workspaceName = workspaceName;
     }
 }
@@ -66,7 +66,7 @@ export type PairingStatus =
     | {
           readonly status: "paired";
           readonly agents: readonly AgentDescriptor[];
-          readonly machineName: string;
+          readonly computerName: string;
           readonly computerId: string;
           readonly workspaceName: string;
       }

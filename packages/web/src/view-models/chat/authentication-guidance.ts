@@ -3,15 +3,15 @@ import type { AuthenticationGuidance } from "../../components/chat/authenticatio
 export function authenticationGuidance(
     code: string,
     harness: string,
-    machineName: string,
+    computerName: string,
 ): AuthenticationGuidance | null {
     if (code !== "authentication_required") {
         return null;
     }
     const computer =
-        machineName.trim().length === 0 || machineName === "Unknown"
+        computerName.trim().length === 0 || computerName === "Unknown"
             ? "the computer running this agent"
-            : `“${machineName}”`;
+            : `“${computerName}”`;
     const firstStep = `Open a terminal on ${computer}, using the same computer account that runs this agent.`;
     const lastStep = "Return here and send your message again when authentication is complete.";
     switch (harness) {

@@ -16,7 +16,7 @@ export interface CollectedLocalLogs {
      * Logs and log directories that could not be read, as state-relative paths.
      * A directory entry means it could not be listed, so its files are unknown.
      * Deliberately distinct from "absent": only ENOENT counts as absent, so a
-     * permission or I/O failure is never reported as an empty machine.
+     * permission or I/O failure is never reported as an empty computer.
      */
     readonly unreadable: readonly string[];
 }

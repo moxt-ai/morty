@@ -827,7 +827,7 @@ const multilineDraft = [
     "Leave the disabled state faded.",
 ].join("\n");
 const setupPrompt =
-    "Fetch setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.";
+    "Fetch setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this computer.";
 
 function TextareaRow({ children, label }: { readonly children: ReactNode; readonly label: string }) {
     return (
@@ -1200,7 +1200,7 @@ const playgroundExecutionContext = {
     feedback: { kind: "hidden" },
     indicator: { kind: "ready", label: "Ready" },
     lastConfirmed: "Last confirmed 2 min ago",
-    machine: "Jane's MacBook",
+    computer: "Jane's MacBook",
 } as const satisfies ExecutionContext;
 
 function ExecutionDetailsDialogGallery() {
@@ -1610,7 +1610,7 @@ function NativeSessionDirectoryPlaceholderGallery() {
             <Specimen title="Agent not installed">
                 <NativeSessionDirectoryPlaceholderFrame>
                     <NativeSessionDirectoryPlaceholder
-                        description="Install it on this machine to browse saved sessions."
+                        description="Install it on this computer to browse saved sessions."
                         icon={PackageOpen}
                         title="Pi is not installed"
                     />
@@ -1628,7 +1628,7 @@ function NativeSessionDirectoryPlaceholderGallery() {
             <Specimen title="Empty directory">
                 <NativeSessionDirectoryPlaceholderFrame>
                     <NativeSessionDirectoryPlaceholder
-                        description="This agent didn't report any on this machine."
+                        description="This agent didn't report any on this computer."
                         icon={Inbox}
                         title="No saved sessions"
                     />

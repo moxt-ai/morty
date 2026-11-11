@@ -268,7 +268,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 <DevicesDialog
                     accessExpiry={workspace.accessExpiry}
                     devices={workspace.linkedDevices}
-                    computerName={model.computerConfiguration?.computer?.machineName ?? ""}
+                    computerName={model.computerConfiguration?.computer?.computerName ?? ""}
                     signal={workspace.operationsSignal}
                     store={workspace.deviceAccess}
                 />

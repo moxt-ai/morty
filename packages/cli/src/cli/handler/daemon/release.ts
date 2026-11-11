@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 
 import { releaseIdleAgentProcesses } from "../../../daemon/lifecycle/daemon.ts";
-import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-computer.ts";
 import type { CliContext } from "../../context.ts";
 
 export function registerReleaseCommand(program: Command, context: CliContext): void {

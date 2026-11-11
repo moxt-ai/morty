@@ -441,7 +441,7 @@ test("Given Sentry rejects a report, When the user retries after it recovers, Th
     }
 });
 
-test("Given a native handoff cannot find its Agent, When the user reports the displayed error, Then the report includes its code and attempts daemon diagnostics for that Machine", {
+test("Given a native handoff cannot find its Agent, When the user reports the displayed error, Then the report includes its code and attempts daemon diagnostics for that Computer", {
     timeout: 30_000,
 }, async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -450,7 +450,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
     try {
         const app = await createTestApp({ page: { kind: "continue", harness: "pi", sessionId: "native-session" } });
         await app.waitForView(() => {
-            expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Machine first.");
+            expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Computer first.");
         });
         await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await app.user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "Cannot continue Pi");
@@ -477,7 +477,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
                 requestId: expect.stringMatching(/^[a-f0-9-]{36}$/u),
             }),
         );
-        expect(envelope).not.toContain("Connect an Agent to this Machine first.");
+        expect(envelope).not.toContain("Connect an Agent to this Computer first.");
         await app.close();
         render(
             <App

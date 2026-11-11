@@ -76,7 +76,7 @@ export type BotConnectionStatus =
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 
 /**
- * The Machine's connection as the page shows it everywhere. It is derived from the Computer configuration the page
+ * The Computer's connection as the page shows it everywhere. It is derived from the Computer configuration the page
  * follows, so no failure path can leave one part of the page saying offline while another says online.
  */
 export function botConnectionStatus(
@@ -265,7 +265,7 @@ export const createBotChatHomeStore = (
         readonly computerId: string;
         readonly titles: SessionTitlesStore;
         readonly draftConfiguration: () => ChatDraftConfiguration | null;
-        /** Whether the connection header reports the New Session page's connection available, network and Machine included. */
+        /** Whether the connection header reports the New Session page's connection available, network and Computer included. */
         readonly connectionAvailable: () => boolean;
         readonly entry?: "address" | "restore";
         /**
@@ -571,7 +571,7 @@ export const createBotChatHomeStore = (
                                 }
                                 set({ pairing: { kind: pairing } });
                                 if (pairing === "unpaired") {
-                                    // An unpaired Machine waits for the pairing
+                                    // An unpaired Computer waits for the pairing
                                     // it just read to change; the pairing flow
                                     // completes by restarting the load.
                                     await requests.waitForComputerPairingChange(watchSignal);
@@ -584,13 +584,13 @@ export const createBotChatHomeStore = (
                                     // setup just as a setup-watch notification
                                     // would, including draft settings and the
                                     // directory. No session operation was issued
-                                    // while the Machine was unconfigured.
+                                    // while the Computer was unconfigured.
                                     completeSetup();
                                     return;
                                 }
                                 dropped = false;
                             }
-                            // A bound Machine keeps following workspace
+                            // A bound Computer keeps following workspace
                             // changes even while its Computer is offline.
                             // A watch re-armed after a network outage may find a Computer that changed meanwhile.
                             const rearmed = armed;
@@ -655,7 +655,7 @@ export const createBotChatHomeStore = (
                         // the same repeatable recovery loop that owns every
                         // later watch: it waits for connectivity, re-reads the
                         // pairing state, and keeps waiting on the setup watch
-                        // for an unconfigured Machine.
+                        // for an unconfigured Computer.
                         phase = "setup";
                         await followConfigurationChanges(signal);
                         return;

@@ -297,7 +297,7 @@ export function NativeSessionDialog({
                                         <NativeSessionDirectoryPlaceholder
                                             icon={PackageOpen}
                                             title={`${model.directory.agentLabel} is not installed`}
-                                            description="Install it on this machine to browse saved sessions."
+                                            description="Install it on this computer to browse saved sessions."
                                         />
                                     )}
                                     {model.directory.kind === "failed" && (
@@ -319,7 +319,7 @@ export function NativeSessionDialog({
                                         <NativeSessionDirectoryPlaceholder
                                             icon={Inbox}
                                             title="No saved sessions"
-                                            description="This agent didn't report any on this machine."
+                                            description="This agent didn't report any on this computer."
                                         />
                                     )}
                                     {model.directory.kind === "ready" && model.directory.entries.length > 0 && (

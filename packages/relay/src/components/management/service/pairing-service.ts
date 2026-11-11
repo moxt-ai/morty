@@ -46,7 +46,7 @@ export class PairingService {
         const channels = await this.#pairings.listProjectComputers(computerId, signal);
         const channel = channels.find((candidate) => candidate.computerId === computerId);
         if (channel === undefined) {
-            // A revoked Computer is not listed; saying so lets its Machine be paired again instead of waiting for it.
+            // A revoked Computer is not listed; saying so lets it be paired again instead of waiting for it.
             if (await this.#pairings.isProjectComputerRevoked(computerId, signal)) {
                 throw new PairingDirectoryError("computer_revoked", "The Computer has been revoked");
             }
@@ -67,12 +67,19 @@ export class PairingService {
     readonly redeemComputerPairing: PairingDirectoryService["redeemComputerPairing"] = async (
         computerId,
         pairingCode,
-        machineName,
+        computerName,
         workspaceName,
         agents,
         signal,
     ) =>
-        await this.#pairings.redeemComputerPairing(computerId, pairingCode, machineName, workspaceName, agents, signal);
+        await this.#pairings.redeemComputerPairing(
+            computerId,
+            pairingCode,
+            computerName,
+            workspaceName,
+            agents,
+            signal,
+        );
 
     readonly authorizePairedHost = async (computerId: string, signal: AbortSignal) =>
         await this.#pairings.authorizePairedHost(computerId, signal);

@@ -1,2 +1,2 @@
-export { machineAccessRevocation } from "./machine-access-revocation.ts";
-export { machineAccount } from "./machine-account.ts";
+export { computerAccessRevocation } from "./computer-access-revocation.ts";
+export { computerAccount } from "./computer-account.ts";

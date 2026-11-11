@@ -34,8 +34,8 @@ The CLI keeps this computer's Morty identity in the operating system's local
 application data directory for the current user, which is not synced to other
 computers, and protects it using filesystem permissions. Each computer has its own.
 Do not copy it to a repository, a synced folder, or another computer.
-The CLI reuses the saved identity and Machine for this origin and reconnects an
-active managed connection when possible. If the saved Machine's Computer is no
+The CLI reuses the saved identity and Computer for this origin and reconnects an
+active managed connection when possible. If the saved Computer is no
 longer managed here, setup stops with `PROJECT_REPLACEMENT_REQUIRED` before replacing
 anything. Explain in the user's language: **I cannot find this computer's original
 connection configuration. Setting up a new connection will invalidate earlier
@@ -46,7 +46,7 @@ After approval, rerun the same command with `--replace-computer <computerId>`, u
 the exact `computerId` from `error.replacement`. Approval applies only to that computer.
 Do not retry with this option automatically, delete local state, or create another
 identity to bypass confirmation. If the user declines, stop and keep the saved state.
-Approved replacement keeps the user, replaces the Project and Machine, and pairs a
+Approved replacement keeps the user, replaces the Project and Computer, and pairs a
 new Computer. Links and browsers from the replaced Project stop working.
 Morty owns Computer connection state and identifiers; do not save or back them up yourself.
 Normal setup and reconnection need no registration, separate bind command, or confirmation.
@@ -62,10 +62,10 @@ Return the exact clickable `url` and the working directory from the `workspace` 
 If `qrPath` is null, explain that the QR image is unavailable and use the link. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
 scan the QR code to chat within 10 minutes. It works on one device only and opens the same
-user and Machine; that device keeps access until <`accessExpiresAt` in the user's local time>. Keep the Computer online.
+user and Computer; that device keeps access until <`accessExpiresAt` in the user's local time>. Keep the Computer online.
 You can bind an account later.**
 Also tell the user, in their language: **If you want to revoke these sharing links
-later, come back and tell me: "Revoke all links I previously shared from this machine."
+later, come back and tell me: "Revoke all links I previously shared from this computer."
 I can do that for you.** Include this reminder whenever you deliver a new sharing
 link; knowing the command yourself does not replace telling the user.
 When `project` is `"replaced"`, also tell the user, in their language: **This computer's
@@ -92,7 +92,7 @@ Keep saved credentials private. Do not output tokens, pairing tickets, or privat
 configuration; only the ready handoff URL is intended for the user.
 
 Managing previously shared access:
-- When the user asks to revoke all previously shared access from this machine, run `morty revoke-all-access`, as the same user on the same computer as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the same CLI installation as setup; never put local credentials in command arguments or output.
+- When the user asks to revoke all previously shared access from this computer, run `morty revoke-all-access`, as the same user on the same computer as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the same CLI installation as setup; never put local credentials in command arguments or output.
 - This command uses the original locally saved identity, revokes previous sharing links and all other Morty credentials for its current Project (including recovery credentials), and replaces this computer's own local credential, so a copy of it stops working too; setup saves the replacement itself, so new sharing links can still be created. It does not stop the daemon or its tasks. It also closes chat windows already open with the revoked access. If it fails with `SESSION_ACCESS_REVOCATION_UNAVAILABLE`, the access is already revoked but windows already open elsewhere are not closed yet; run the same command again, which is safe and finishes closing them.
 - Report success only after `status: "access_revoked"`. A missing local identity is an error; do not run setup or create a new identity to conceal it. This command is scoped to the Project saved in this local configuration, not other installations; a Project that setup replaced already ended everything shared from it.
 

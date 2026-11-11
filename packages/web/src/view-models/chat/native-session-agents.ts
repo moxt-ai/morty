@@ -32,7 +32,7 @@ export function nativeSessionAgentTabs(computer: ChatComputer): readonly NativeS
         ...installed,
         {
             computerId: anchor.computerId,
-            machineName: anchor.machineName,
+            computerName: anchor.computerName,
             harness: PI_HARNESS,
             label: "Pi",
             installed: false,

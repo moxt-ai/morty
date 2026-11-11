@@ -6,7 +6,7 @@ import type { SessionDeliveryStore } from "./session-delivery-store.ts";
  * control and the action refuses through the same rule over the same facts, so the two cannot disagree.
  */
 export interface SessionOperationFacts {
-    /** The network, the Machine and this Session's stream are all available, as the connection header reports. */
+    /** The network, the Computer and this Session's stream are all available, as the connection header reports. */
     readonly connectionAvailable: boolean;
     readonly connection: SessionConnection["kind"];
     /** The user asked to stop the running turn. */
@@ -40,7 +40,7 @@ export function canSubmit(facts: Pick<SessionOperationFacts, "connection" | "con
 }
 
 /**
- * What the user's submissions also need: a reachable Machine, no question awaiting the user's answer, and no stop the
+ * What the user's submissions also need: a reachable Computer, no question awaiting the user's answer, and no stop the
  * user is still waiting on, during which the composer is locked.
  */
 function userCanReachSession(facts: SessionOperationFacts): boolean {

@@ -19,6 +19,6 @@ export async function provisionAccount(
 ) {
     return v.parse(
         computerManagementSchema,
-        await accounts.provisionMachineAccount(userId, "Morty", `cloud-${reference}`, reference, location, signal),
+        await accounts.provisionComputerAccount(userId, "Morty", `cloud-${reference}`, reference, location, signal),
     );
 }

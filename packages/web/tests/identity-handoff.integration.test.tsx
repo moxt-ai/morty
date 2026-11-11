@@ -168,7 +168,7 @@ test("Given opening a native session fails, When the user tries again, Then the 
         },
     });
     await app.waitForView(() => {
-        expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Machine first.");
+        expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Computer first.");
     });
 
     // The retry must run the whole open-session request again: once a Computer answers
@@ -253,7 +253,7 @@ test("Given an expired handoff with no retained access, When the user copies the
     await app.user.click(copy);
 
     expect(await navigator.clipboard.readText()).toBe(
-        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`,
+        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this computer.`,
     );
     expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
     expect(queryByRole(document.body, "button", { name: "Dismiss notification" })).toBeNull();

@@ -62,10 +62,10 @@ async function project(_name = "Runtime pairing") {
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
         status: async (_pairing: Pairing) => management("GET"),
-        claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", machineName = "Computer machine") =>
+        claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", computerName = "Paired computer") =>
             request(endpoint === "claim" ? "/pairings/claim" : `/v1/pairings/${pairing.computerId}/redeem`, "POST", {
                 pairingCode: pairing.pairingCode,
-                machineName,
+                computerName,
                 workspaceName: "Computer workspace",
                 agents: [],
             }),
@@ -139,7 +139,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
                 codeHash,
                 daemonHash: await hashPairingCredential("delayed-computer-credential"),
                 now: claimTime,
-                machineName: "Delayed machine",
+                computerName: "Delayed computer",
                 workspaceName: "Delayed workspace",
                 agents: "[]",
                 auditId: `rpa_${crypto.randomUUID()}`,
@@ -183,7 +183,7 @@ it.each(["redeem"] as const)(
         await app.restart();
 
         vi.setSystemTime(new Date(Date.now() + 20_000));
-        const response = await responseJson(await app.claim(pairing, endpoint, "Retry machine"), 200);
+        const response = await responseJson(await app.claim(pairing, endpoint, "Retry computer"), 200);
         // A retry returns the exact current redemption contract.
         const identity = { computerId: v.string() };
         const credential = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/));
@@ -196,7 +196,7 @@ it.each(["redeem"] as const)(
         });
         expect((await app.publish(pairing, computerCredential)).status).toBe(204);
         expect(await responseJson(await app.list(), 200)).toMatchObject({
-            computers: [{ computerId: pairing.computerId, machineName: "Computer machine" }],
+            computers: [{ computerId: pairing.computerId, computerName: "Paired computer" }],
         });
         expect(
             await app.storage((storage) =>

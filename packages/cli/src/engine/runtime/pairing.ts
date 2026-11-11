@@ -138,7 +138,7 @@ function readRelayError(value: unknown): PairingClientError {
             }
         }
     }
-    return new PairingClientError("pairing_failed", "The relay could not pair this machine");
+    return new PairingClientError("pairing_failed", "The relay could not pair this computer");
 }
 
 function decodePairingResponse(value: unknown): ClaimPairingResponse {
@@ -177,7 +177,7 @@ async function claimPairing(
         response = await fetch(endpoint, {
             body: JSON.stringify({
                 agents,
-                machineName: hostname(),
+                computerName: hostname(),
                 pairingCode: options.code,
                 workspaceName: basename(defaultWorkspace) || "Local workspace",
             }),

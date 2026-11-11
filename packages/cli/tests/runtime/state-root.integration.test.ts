@@ -56,7 +56,7 @@ async function openedStateRoot(): Promise<{
         const stopped = await runCli(["quit"], env);
         expect(stopped.code, stopped.stderr).toBe(0);
     }
-    const application = join(root, "machine");
+    const application = join(root, "computer");
     return { root, installation: application, home };
 }
 
@@ -74,7 +74,7 @@ describe("Morty state root", () => {
             const target = join(home, "redirected");
             await mkdir(root, { recursive: true, mode: 0o700 });
             await mkdir(target, { mode: 0o700 });
-            await symlink(target, join(root, "machine"), process.platform === "win32" ? "junction" : "dir");
+            await symlink(target, join(root, "computer"), process.platform === "win32" ? "junction" : "dir");
             const env = environment(home, root);
             try {
                 const result = await runCli(command === "start" ? ["start"] : ["pair", "list"], env);
@@ -96,7 +96,7 @@ describe("Morty state root", () => {
             temporaryDirectories.push(home);
             const root = join(home, "state");
             await runCli(["pair", "list"], environment(home, root));
-            const versionDirectory = join(root, "machine");
+            const versionDirectory = join(root, "computer");
             await chmod(versionDirectory, 0o777);
 
             const listed = await runCli(["pair", "list"], environment(home, root));
@@ -119,7 +119,7 @@ describe("Morty state root", () => {
 
     it("Given an installation's data where an earlier nested Morty only left control files, When Morty runs there, Then it still refuses instead of treating it as a root", async () => {
         const { root, installation, home } = await openedStateRoot();
-        await mkdir(join(installation, "machine"), { recursive: true, mode: 0o700 });
+        await mkdir(join(installation, "computer"), { recursive: true, mode: 0o700 });
 
         const listed = await runCli(["pair", "list"], environment(home, installation));
 

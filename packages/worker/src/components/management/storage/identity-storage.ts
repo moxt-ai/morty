@@ -111,7 +111,7 @@ function browserCredentialInForce(database: IdentityDatabase, now: number) {
     return and(isNull(browserCredential.replacedAt), browserAccessHeld(database, now));
 }
 
-/** The one rule for the machine's own and recovery credentials: each holds its own access until it is revoked. */
+/** The one rule for the computer's own and recovery credentials: each holds its own access until it is revoked. */
 function ownerAccessHeld(credential: { readonly revokedAt: SQLiteColumn } = ownerCredential) {
     return isNull(credential.revokedAt);
 }
@@ -135,7 +135,7 @@ export interface IdentityTransfer extends SharedLinkTerms {
 }
 
 /**
- * A credential of the computer's owner as it stands now. The machine's own and recovery credentials hold their own
+ * A credential of the computer's owner as it stands now. The computer's own and recovery credentials hold their own
  * access or were revoked; a browser credential holds its device's access until its device's term, unless a newer
  * credential of the device replaced it or the device's access ended.
  */
@@ -201,7 +201,7 @@ export class IdentityStorage {
     };
 
     /**
-     * The owner's credential this token authenticates as, as it stands at `now`; null for any other token. The machine's
+     * The owner's credential this token authenticates as, as it stands at `now`; null for any other token. The computer's
      * own and recovery credentials are read first, so the credential its holder chose as the successor is that one.
      */
     readonly findCredential = async (
@@ -265,7 +265,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Whether the access a Session credential carries holds at `now`: its browser device's, or the machine's own or a
+     * Whether the access a Session credential carries holds at `now`: its browser device's, or the computer's own or a
      * recovery credential's. Only the computer owner's access holds.
      */
     readonly holdsAccess = async (holder: SessionAccessHolder, now: number, signal: AbortSignal): Promise<boolean> => {
@@ -344,7 +344,7 @@ export class IdentityStorage {
 
     /**
      * Revokes every local and recovery credential except the caller's, ends every browser device's access, and cancels
-     * the links no device has used yet. Only the machine's own credential, which belongs to no device, may do this.
+     * the links no device has used yet. Only the computer's own credential, which belongs to no device, may do this.
      */
     readonly revokeOtherAccess = async (
         userId: string,
@@ -376,7 +376,7 @@ export class IdentityStorage {
      * Revokes every local and recovery credential, the caller's included, and ends every browser device's access, in one
      * transaction that issues `successor` as the only local credential. Every link was shared by access this ends, so
      * none adds a device afterwards. Only
-     * the machine's own credential may do this, so a copy of it stops working too. Repeating it with the successor as
+     * the computer's own credential may do this, so a copy of it stops working too. Repeating it with the successor as
      * the caller, after a lost reply, repeats the revocation and keeps the successor. False when the caller no longer
      * holds access, and then nothing changed.
      */
@@ -453,7 +453,7 @@ export class IdentityStorage {
 
     /**
      * Ends the access of every browser device except the one kept, and cancels the links no device has used yet. The
-     * machine's own and recovery credentials belong to no device, so they stay.
+     * computer's own and recovery credentials belong to no device, so they stay.
      */
     readonly endOtherBrowserAccess = async (
         userId: string,
@@ -589,7 +589,7 @@ export class IdentityStorage {
         return issued === undefined ? { kind: "conflict" } : { kind: "issued", ...issued };
     };
 
-    /** Issues a recovery credential while the machine's own credential that asks for it holds access. */
+    /** Issues a recovery credential while the computer's own credential that asks for it holds access. */
     readonly createRecoveryToken = async (
         userId: string,
         parentToken: string,

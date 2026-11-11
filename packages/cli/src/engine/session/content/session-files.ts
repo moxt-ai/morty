@@ -45,10 +45,10 @@ async function resolveFile(
         return null;
     }
     // Agents link their output with workspace-root-relative references such as
-    // "/index.html", which collide with machine-absolute paths. Interpret a
+    // "/index.html", which collide with computer-absolute paths. Interpret a
     // plain reference against the session working directory first, and fall
-    // back to the machine-absolute interpretation, so both keep resolving. An
-    // explicit file URL always means its machine-absolute target.
+    // back to the computer-absolute interpretation, so both keep resolving. An
+    // explicit file URL always means its computer-absolute target.
     const candidates =
         requested.explicitUrl || workingDirectory === null
             ? [requested.path]

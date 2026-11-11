@@ -48,11 +48,11 @@ export class ManagementService {
         return identity;
     };
 
-    /** The owner's Machine: where its Computer pairing stands, read from the Relay that owns it. */
-    readonly readMachine = async (userId: string, signal: AbortSignal) => {
+    /** The owner's Computer: where its Runtime pairing stands, read from the Relay that owns it. */
+    readonly readComputer = async (userId: string, signal: AbortSignal) => {
         const project = await this.readProject(userId, signal);
         if (project === null) {
-            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
+            throw new ManagementError("BOT_NOT_FOUND", "Computer is unavailable.", 404);
         }
         return { computerPairing: await this.#relay.readComputerPairing(project.computerId, signal) };
     };

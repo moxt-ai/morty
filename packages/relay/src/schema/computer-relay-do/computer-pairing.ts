@@ -19,7 +19,8 @@ export const computerPairing = sqliteTable("computer_pairings", {
 export const computerRegistration = sqliteTable("computer_registrations", {
     generation: integer("generation").primaryKey(),
     claimedAt: integer("claimed_at").notNull(),
-    machineName: text("machine_name").notNull(),
+    // Keep the persisted column name so retained registrations remain readable.
+    computerName: text("machine_name").notNull(),
     workspaceName: text("workspace_name").notNull(),
     agentsJson: text("agents_json").notNull(),
 });
