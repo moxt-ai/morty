@@ -25,8 +25,6 @@ export class SessionTurns {
         this.#activity = activity;
     }
 
-    readonly acceptsPrompts = (): boolean => this.#activity.acceptsPrompts();
-
     readonly session = (sessionTarget: NativeSessionTarget): SessionExecutionState => {
         let session = this.#bySessionTarget.get(sessionTarget);
         if (session === undefined) {

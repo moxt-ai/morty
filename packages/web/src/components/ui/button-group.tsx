@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * The same scale applies to stacked and horizontal groups. Pair the group
  * with buttons of the same `size`.
  */
-export const buttonGroupGapClassName = {
+const buttonGroupGapClassName = {
     default: "gap-2.5", // 36px buttons → 10px
     lg: "gap-3", // 40px buttons → 12px
     sm: "gap-2", // 32px buttons → 8px

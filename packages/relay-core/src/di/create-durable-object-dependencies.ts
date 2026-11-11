@@ -5,7 +5,6 @@ import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStoreResolver } from "../infra/project-store.ts";
-import type { SessionStatusNotifications } from "../infra/session-status-notifications.ts";
 import { ChannelActor } from "../service/channel/channel-actor.ts";
 import { ChannelCredentialService } from "../service/channel/channel-credential-service.ts";
 import { LocalRuntimeRequests } from "../service/channel/local-runtime-requests.ts";
@@ -23,7 +22,6 @@ function createRuntimeRelayDependencies(cx: {
     readonly gateways: {
         readonly peers: RuntimePeers;
         readonly projectCredentials: ProjectCredentialAuthority;
-        readonly notifications?: SessionStatusNotifications;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
@@ -39,7 +37,7 @@ function createRuntimeRelayDependencies(cx: {
         if (project.computerId !== scope.computerId) {
             throw new Error("The Project placement is invalid");
         }
-        return new ChannelCredentialService(cx.storages.projectStores.resolve(project.storagePlacement));
+        return new ChannelCredentialService(cx.storages.projectStores.resolve(project.computerId));
     };
     const credentials: RuntimeCredentials = {
         authorizeHostMessage: async (identity, permission, signal) => {
@@ -83,7 +81,6 @@ function createRuntimeRelayDependencies(cx: {
                 config: { computerId: scope.computerId },
                 gateways: {
                     peers: cx.gateways.peers,
-                    ...(cx.gateways.notifications === undefined ? {} : { notifications: cx.gateways.notifications }),
                 },
             }),
     };
@@ -114,7 +111,6 @@ export function createDurableObjectDependencies(cx: {
     readonly gateways: {
         readonly peers: RuntimePeers;
         readonly projectCredentials: ProjectCredentialAuthority;
-        readonly notifications?: SessionStatusNotifications;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
@@ -138,7 +134,6 @@ export function createDurableObjectDependencies(cx: {
         gateways: {
             peers,
             projectCredentials: cx.gateways.projectCredentials,
-            ...(cx.gateways.notifications === undefined ? {} : { notifications: cx.gateways.notifications }),
         },
         storages: cx.storages,
         utilities: cx.utilities,

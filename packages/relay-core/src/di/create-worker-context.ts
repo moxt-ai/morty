@@ -17,12 +17,10 @@ export function createWorkerContext(options: {
     readonly stores: ProjectStoreResolver;
     readonly identityStores: readonly ProjectStore[];
     readonly projects: ProjectStorageDirectory;
-    readonly apiPrefix: string;
     readonly gateways: WorkerRuntimeGateways;
 }) {
     return createRelayDependencies({
         authentication: { projects: options.authorization },
-        config: { apiPrefix: options.apiPrefix },
         stores: options.stores,
         identityStores: options.identityStores,
         machineAccounts: options.applications,

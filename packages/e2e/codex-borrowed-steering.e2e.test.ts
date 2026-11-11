@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { MortyRuntimeEngine } from "@morty-build/cli/engine";
 import { expect, test } from "@playwright/test";
 import { chromium, firefox, webkit } from "playwright-core";
 import { CodexAppServerClient } from "../../packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
 import { stopProcessTree } from "../../packages/cli/src/engine/util/process/executable.ts";
 import { CodexFixture } from "../../packages/cli/tests/support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../../packages/cli/tests/support/llm/openai.ts";
+import { MortyRuntimeEngine } from "../cli/src/engine/runtime/engine.ts";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../web/src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../web/src/services/identity/identity-scope-url.ts";

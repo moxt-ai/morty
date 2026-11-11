@@ -161,7 +161,7 @@ describe("daemon environment proxy", () => {
         Object.assign(process.env, codex.environment);
 
         try {
-            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const { MortyRuntimeEngine } = await import("../../src/engine/runtime/engine.ts");
             const { connectRelay } = await import("../../src/engine/runtime/relay/connect.ts");
             const { describeEnvironmentProxyRoute, environmentProxyDispatcher } = await import(
                 "../../src/engine/util/network/environment-proxy.ts"

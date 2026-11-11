@@ -1,10 +1,6 @@
 export {
     MORTY_API_PREFIX,
-    MORTY_API_VERSION,
-    MortyApiConfigurationError,
-    mortyApiPath,
     mortyApiUrl,
-    parseMortyApiPrefix,
 } from "./relay/morty-api.ts";
 
 export type { ProjectLocationHint } from "./relay/project-location.ts";
@@ -310,15 +306,6 @@ export {
     SESSION_PERMISSION_RESOLVED_KIND,
     SESSION_PERMISSION_RESPOND_KIND,
 } from "./session/interactions/index.ts";
-
-export type {
-    Interaction,
-    InteractionRequest,
-    InteractionResponse,
-    InteractionState,
-} from "./session/interactions/model.ts";
-
-export { decodeInteraction } from "./session/interactions/model.ts";
 
 export type {
     SessionArchiveCommand,

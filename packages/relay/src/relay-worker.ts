@@ -3,7 +3,6 @@ import {
     decodeContentWriteCommand,
     decodeFileReadCommand,
     type Identifier,
-    isDirectoryPath,
     isIdentifier,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
@@ -232,36 +231,6 @@ export function createRelayApplication(
                 kind: "expiring",
                 computerId: target.computerId,
             });
-        })
-        .get("/:sessionId/native-events-preview", sessionAccessTargetMiddleware, async (context) => {
-            const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
-            if (credential === undefined) {
-                return context.json(
-                    { error: { code: "session_access_required", message: "A Session credential is required" } },
-                    401,
-                );
-            }
-            const access = await context.var.sessionAccess.authenticate(
-                context.var.sessionAccessTarget,
-                credential,
-                context.req.raw.signal,
-            );
-            const sessionTarget = nativeTarget(context.req);
-            const eventLimit = decodeSessionRequest(
-                v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
-                Number(context.req.query("eventLimit") ?? "50"),
-            );
-            const control = authorizedSessionControl(context, access, sessionTarget);
-            const directory = decodeSessionRequest(v.custom<string>(isDirectoryPath), context.req.query("directory"));
-            const events = await control.previewEvents(directory, {
-                cursor: decodeSessionRequest(
-                    v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
-                    context.req.query("cursor") ?? null,
-                ),
-                eventLimit,
-            });
-            context.header("Cache-Control", "no-store");
-            return context.json(events);
         })
         .get("/:sessionId/configuration", sessionAccessTargetMiddleware, async (context) => {
             const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
@@ -648,7 +617,6 @@ export function createRelayApplication(
                 stores,
                 identityStores,
                 projects,
-                apiPrefix: MORTY_API_PREFIX,
             });
             context.set("relay", cx);
             await next();

@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { ExternalImageContentBlock, SessionEvent } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it } from "vitest";
-import { MortyClient, MortyPageRequest, StaticMortyCredentialProvider } from "../src/index.ts";
+import { MortyClient, MortyPageRequest } from "../src/index.ts";
 
 const recordedAt = "2026-10-07T00:00:00.000Z";
 
@@ -76,7 +76,12 @@ describe("Session Event Log V2 SDK", () => {
             throw new Error("Expected an IP server address");
         }
         const client = new MortyClient({
-            credentialProvider: new StaticMortyCredentialProvider("test-credential"),
+            credentialProvider: {
+                credential: async (signal: AbortSignal) => {
+                    signal.throwIfAborted();
+                    return "test-credential";
+                },
+            },
             endpoint: `http://127.0.0.1:${address.port}`,
             computerId: "project-1",
         });

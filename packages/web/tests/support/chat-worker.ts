@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client";
+import { MortyClient } from "@morty-build/client";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createResponseLossProxy } from "../../../relay-test-support/src/response-loss-proxy.ts";
@@ -77,7 +77,12 @@ export async function createChatWorkerEnvironment(
                 return new MortyClient({
                     endpoint: cloud.directOrigin,
                     computerId: runtime.computerId,
-                    credentialProvider: new StaticMortyCredentialProvider(access.credential),
+                    credentialProvider: {
+                        credential: async (signal: AbortSignal) => {
+                            signal.throwIfAborted();
+                            return access.credential;
+                        },
+                    },
                 });
             };
             return {

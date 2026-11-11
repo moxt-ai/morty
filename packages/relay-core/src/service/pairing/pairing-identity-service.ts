@@ -33,7 +33,7 @@ export class ComputerIdentityService {
     }
 
     private readonly matchesPlacement = (source: ProjectStore, project: ProjectStorageContext): boolean =>
-        source === this.#stores.resolve(project.storagePlacement);
+        source === this.#stores.resolve(project.computerId);
 
     readonly authenticateProject = async (
         credential: ComputerIdentityCredential,

@@ -12,7 +12,7 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { MortyRuntimeEngine } from "../../src/exports/engine.ts";
+import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
 import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 it("Given an explicit data directory, When a host constructs Engine and reopens its store, Then construction has no side effects and saved connections survive", async () => {

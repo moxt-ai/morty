@@ -1,78 +1,13 @@
 import {
-    decodeIdentifier,
-    decodeSessionAccessCredential,
     decodeTurn,
-    type Identifier,
     type NativeSessionTarget,
     type PromptAttachment,
-    readNativeSessionTarget,
     type SessionConfigurationSelection,
     type SessionPromptDisposition,
     type TurnRequest,
 } from "@morty-build/client/protocol";
 
-import { MortyProtocolError, MortyValidationError } from "./errors.ts";
-
-function invalidResponse(message: string): MortyProtocolError {
-    return new MortyProtocolError(message);
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function record(value: unknown, name: string): Readonly<Record<string, unknown>> {
-    if (!isRecord(value)) {
-        throw invalidResponse(`The service returned an invalid ${name}`);
-    }
-    return value;
-}
-
-function stringField(value: Readonly<Record<string, unknown>>, field: string, maximumLength = 8_500_000): string {
-    const candidate = value[field];
-    if (typeof candidate !== "string" || candidate.length > maximumLength) {
-        throw invalidResponse(`The service returned an invalid ${field}`);
-    }
-    return candidate;
-}
-
-function identifierField(value: Readonly<Record<string, unknown>>, field: string): Identifier {
-    try {
-        return decodeIdentifier(value[field]);
-    } catch {
-        throw invalidResponse(`The service returned an invalid ${field}`);
-    }
-}
-
-function validateTimestamp(value: string, field: string): string {
-    if (Number.isNaN(Date.parse(value))) {
-        throw invalidResponse(`The service returned an invalid ${field}`);
-    }
-    return value;
-}
-
-export class MortySessionAccess {
-    readonly credential: string;
-    readonly computerId: string;
-    readonly target: NativeSessionTarget;
-    readonly expiresAt: string;
-    constructor(value: unknown) {
-        const resource = record(value, "Session access");
-        this.credential = stringField(resource, "credential", 2_048);
-        try {
-            decodeSessionAccessCredential(this.credential);
-        } catch (cause) {
-            throw new MortyProtocolError("The Session credential is invalid", { cause });
-        }
-        this.computerId = identifierField(resource, "computerId");
-        const target = readNativeSessionTarget(resource["target"]);
-        if (target === null) {
-            throw invalidResponse("The service returned an invalid native Session target");
-        }
-        this.target = target;
-        this.expiresAt = validateTimestamp(stringField(resource, "expiresAt", 128), "expiresAt");
-    }
-}
+import { MortyValidationError } from "./errors.ts";
 
 /** A Turn's content. The Runtime runs it with the Agent and directory of the Session it holds. */
 interface SubmitMortyTurnContent {
@@ -149,11 +84,11 @@ export abstract class MortyTurnState {
     abstract readonly kind: string;
 }
 
-export class MortyQueuedTurnState extends MortyTurnState {
+class MortyQueuedTurnState extends MortyTurnState {
     readonly kind = "queued";
 }
 
-export class MortyRunningTurnState extends MortyTurnState {
+class MortyRunningTurnState extends MortyTurnState {
     readonly kind = "running";
     readonly startedAt: string;
 
@@ -163,7 +98,7 @@ export class MortyRunningTurnState extends MortyTurnState {
     }
 }
 
-export class MortySucceededTurnState extends MortyTurnState {
+class MortySucceededTurnState extends MortyTurnState {
     readonly completedAt: string;
     readonly kind = "succeeded";
     readonly stopReason: string;
@@ -175,7 +110,7 @@ export class MortySucceededTurnState extends MortyTurnState {
     }
 }
 
-export class MortyFailedTurnState extends MortyTurnState {
+class MortyFailedTurnState extends MortyTurnState {
     readonly code: string;
     readonly failedAt: string;
     readonly kind = "failed";
@@ -191,7 +126,7 @@ export class MortyFailedTurnState extends MortyTurnState {
     }
 }
 
-export class MortyCancelledTurnState extends MortyTurnState {
+class MortyCancelledTurnState extends MortyTurnState {
     readonly cancelledAt: string;
     readonly kind = "cancelled";
 
@@ -201,7 +136,7 @@ export class MortyCancelledTurnState extends MortyTurnState {
     }
 }
 
-export class MortyIndeterminateTurnState extends MortyTurnState {
+class MortyIndeterminateTurnState extends MortyTurnState {
     readonly detectedAt: string;
     readonly kind = "indeterminate";
     readonly reason: string;

@@ -21,7 +21,6 @@ export function createTestComputerBackend(env: RelayRelayBindings, computerId: s
             stores: access.stores,
             identityStores: access.identityStores,
             projects: access.projects,
-            apiPrefix: "/morty/api",
             gateways: createRelayGateways(env),
         }),
         access.sessionAccess,

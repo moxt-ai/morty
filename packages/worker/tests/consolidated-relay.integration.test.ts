@@ -69,7 +69,6 @@ test("Given one Morty Worker without service credentials or Relay buckets, When 
     });
     expect(opened.status, await opened.clone().text()).toBe(200);
     const issued: unknown = await opened.json();
-    const sdkAccess = new MortySessionAccess(issued);
     const access = v.parse(
         v.object({
             credential: v.string(),
@@ -78,8 +77,6 @@ test("Given one Morty Worker without service credentials or Relay buckets, When 
         }),
         issued,
     );
-    expect(sdkAccess.credential).toBe(access.credential);
-    expect(sdkAccess.target).toEqual(access.target);
     expect(access.endpoint).toBe(bindings.origin);
     const session = `/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
     expect((await request(`${session}/live-event-subscription-target`, access.credential)).status).toBe(200);
@@ -92,5 +89,3 @@ test("Given one Morty Worker without service credentials or Relay buckets, When 
         expect((await request(path)).status).toBe(404);
     }
 });
-
-import { MortySessionAccess } from "@morty-build/client";

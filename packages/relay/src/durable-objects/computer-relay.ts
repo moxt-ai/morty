@@ -329,7 +329,6 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             stores: access.stores,
             identityStores: access.identityStores,
             projects: access.projects,
-            apiPrefix: "/morty/api",
             gateways: createRelayGateways(environment),
         });
         return new ComputerBackendService(

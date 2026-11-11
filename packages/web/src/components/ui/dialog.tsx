@@ -28,7 +28,7 @@ import {
 } from "./overlay-width.ts";
 import { ScrollArea } from "./scroll-area.tsx";
 
-export { dialogVariantCatalog, dialogVariantLayout } from "./dialog-variant.ts";
+export { dialogVariantCatalog } from "./dialog-variant.ts";
 export type { DialogAppearance, DialogSize, DialogVariant };
 
 /** Sections inside a default dialog body. The dialog header and `footer` stay outside the scroll region. */
@@ -38,7 +38,6 @@ export const dialogBodyStackClassName = "flex flex-col gap-5";
 export const dialogSectionTitleClassName = "text-[13px] font-medium leading-5 text-foreground";
 
 /** Primary/cancel row at the bottom of a default dialog body. */
-export const dialogFooterActionsClassName = "mt-5 flex justify-end gap-2";
 
 /** Pinned `footer` slot: 20px above the actions, 24px on the sides and below. */
 export const dialogPinnedFooterActionsClassName = "flex justify-end gap-2 px-6 pt-5 pb-6";
@@ -47,7 +46,6 @@ export const dialogPinnedFooterActionsClassName = "flex justify-end gap-2 px-6 p
 export const dialogSurfaceBodyClassName = "space-y-5 px-3 pb-4 sm:px-5 sm:pb-5";
 
 /** Surface-appearance section label above grouped cards (e.g. Devices with access). */
-export const dialogSurfaceSectionHeadingClassName = "mb-2 px-0.5 text-12 font-medium leading-4 text-morty-text-3";
 
 export function Dialog({
     title,

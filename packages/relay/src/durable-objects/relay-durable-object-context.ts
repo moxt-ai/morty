@@ -20,12 +20,7 @@ export function createRelayDurableObjectContext(
 ) {
     const stores: ComputerManagementStores = {
         forProject: storage.storeFor,
-        resolve: (placement) => {
-            if (!placement.hasShard) {
-                throw new Error("Missing computer placement");
-            }
-            return storage.storeFor(placement.shard.d1ShardId);
-        },
+        resolve: storage.storeFor,
     };
     const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
     const projects = new ComputerManagementStorageDirectory(controlStorage);

@@ -1,4 +1,3 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
 import { ComputerManagementError, type ComputerManagementPlacement } from "./computer-management.ts";
 
 const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([
@@ -36,12 +35,6 @@ export function decodeComputerPlacement(computerId: string): ComputerManagementP
         return null;
     }
     return placements.get(code) ?? null;
-}
-
-export function projectBucketLocation(locationHint: ProjectLocationHint): "apac" | "wnam" {
-    return locationHint === "apac" || locationHint === "apac-ne" || locationHint === "apac-se" || locationHint === "oc"
-        ? "apac"
-        : "wnam";
 }
 
 export function computerIdFromPrefixedValue(value: string): string | null {

@@ -5,7 +5,7 @@ import { join } from "node:path";
 const markerName = "morty-installation.json";
 const marker = JSON.stringify({ product: "morty", generation: 3 });
 
-export class MortyOwnershipError extends Error {
+class MortyOwnershipError extends Error {
     readonly code = "morty_state_not_owned";
 }
 

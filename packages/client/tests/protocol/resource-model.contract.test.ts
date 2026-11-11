@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeInteraction, decodeTurn } from "../../src/protocol/index.ts";
+import { decodeTurn } from "../../src/protocol/index.ts";
 
 describe("Morty resource contract", () => {
     it("Given a persisted Turn page, When a caller decodes it, Then every terminal state round-trips", () => {
@@ -41,36 +41,5 @@ describe("Morty resource contract", () => {
             throw new Error("expected a known Turn");
         }
         expect(queued.request.kind).toBe("prompt");
-    });
-
-    it("Given an Interaction snapshot, When a caller decodes it, Then the request and response states round-trip", () => {
-        const interaction = decodeInteraction({
-            attemptId: "attempt-a",
-            interactionId: "interaction-a",
-            request: {
-                kind: "permission",
-                options: [
-                    { kind: "allow_once", name: "Allow", optionId: "option-allow" },
-                    { kind: "reject_once", name: "Reject", optionId: "option-reject" },
-                ],
-                title: "Run the tool",
-                toolCallId: "tool-call-a",
-                toolKind: "bash",
-            },
-            target: { harness: "claude", sessionId: "session-a" },
-            state: {
-                kind: "responded",
-                respondedAt: "2026-09-07T00:00:02.000Z",
-                responderId: "responder-a",
-                response: { content: "allowed", kind: "permission" },
-            },
-            turnId: "turn-a",
-        });
-        expect(interaction).not.toBeNull();
-        if (interaction === null) {
-            throw new Error("expected a known interaction");
-        }
-        expect(interaction.state.kind).toBe("responded");
-        expect(interaction.request.kind).toBe("permission");
     });
 });

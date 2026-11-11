@@ -5,7 +5,6 @@ import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 import {
     type OverlayContentOpenAutoFocus,
-    overlayMenuSeparatorClassName,
     overlaySurfacePanelClassName,
     overlaySurfaceRadiusClassName,
     overlayTriggerOffsetPx,
@@ -115,15 +114,5 @@ export function SelectItem({ className, children, ...props }: ComponentProps<typ
             </span>
             <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
         </SelectPrimitive.Item>
-    );
-}
-
-export function SelectSeparator({ className, ...props }: ComponentProps<typeof SelectPrimitive.Separator>) {
-    return (
-        <SelectPrimitive.Separator
-            className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName, className)}
-            data-slot="select-separator"
-            {...props}
-        />
     );
 }

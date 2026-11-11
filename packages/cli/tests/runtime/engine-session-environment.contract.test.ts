@@ -14,7 +14,7 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { MortyRuntimeEngine, type RunLoopParams } from "../../src/engine/runtime/engine.ts";
 import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 test.for(["saved", "provided"] as const)(

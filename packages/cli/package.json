@@ -6,13 +6,6 @@
     "bin": {
         "morty": "dist/cli.js"
     },
-    "exports": {
-        "./engine": {
-            "morty-source": "./src/exports/engine.ts",
-            "types": "./dist/exports/engine.d.ts",
-            "default": "./dist/engine.js"
-        }
-    },
     "files": [
         "dist",
         "LICENSE",
@@ -23,14 +16,7 @@
         "node": "^22.19.0 || ^24.20.0"
     },
     "publishConfig": {
-        "access": "public",
-        "exports": {
-            "./engine": {
-                "types": "./dist/exports/engine.d.ts",
-                "import": "./dist/engine.js",
-                "default": "./dist/engine.js"
-            }
-        }
+        "access": "public"
     },
     "repository": {
         "type": "git",

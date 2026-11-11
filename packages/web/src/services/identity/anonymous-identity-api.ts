@@ -396,9 +396,6 @@ export class AnonymousIdentityApi {
         return result.token;
     };
 
-    readonly saveIdentity = async (identity: AnonymousIdentity, signal: AbortSignal): Promise<void> =>
-        withStoredAccessLock(signal, async (access) => this.#saveIdentity(v.parse(identitySchema, identity), access));
-
     readonly #saveIdentity = (identity: AnonymousIdentity, access: StoredAccessWriter) => {
         const scope = { computerId: identity.computerId, userId: identity.userId };
         access.save(scope, identity.token);

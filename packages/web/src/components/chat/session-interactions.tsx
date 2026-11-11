@@ -1,5 +1,4 @@
 import type { SessionElicitationField } from "@morty-build/client";
-import type { ElicitationResponseRequest } from "@morty-build/client/channel";
 import { ArrowUpRight, ChevronDown, HelpCircle, ShieldCheck } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -576,7 +575,7 @@ function ElicitationCard({
     const externalUrl = safeExternalUrl(elicitation.url);
     const answered = elicitation.state.kind !== "pending";
     const [missingRequiredTitle, setMissingRequiredTitle] = useState("");
-    const cancel = (action: ElicitationResponseRequest["action"]): void => {
+    const cancel = (action: ElicitationInteractionResponse["action"]): void => {
         respond({
             action,
             content: "",

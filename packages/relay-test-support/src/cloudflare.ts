@@ -38,7 +38,6 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
         compatibilityDate: "2026-09-07",
         compatibilityFlags: ["nodejs_compat"],
         d1Databases: ["RELAY_DIRECTORY_DATABASE"],
-        r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
         ratelimits: {
             ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
         },

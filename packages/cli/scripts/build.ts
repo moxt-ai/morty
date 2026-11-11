@@ -14,7 +14,7 @@ await rm(licensesPath, { force: true });
 
 const result = await build({
     absWorkingDir: directory,
-    entryPoints: { cli: "src/cli/entrypoint.ts", engine: "src/exports/engine.ts" },
+    entryPoints: { cli: "src/cli/entrypoint.ts" },
     bundle: true,
     splitting: true,
     platform: "node",

@@ -41,7 +41,6 @@ const sessionTurnOwnershipSchema = z.object({
 });
 
 export class CodexAdapter implements Adapter {
-    #agent: AcpAgentDefinition;
     readonly #queryProcesses: AgentQueryProcesses;
     readonly #connector: AcpSessionConnector;
     readonly #executionConnections: AcpExecutionConnections;
@@ -51,7 +50,6 @@ export class CodexAdapter implements Adapter {
     #previewCache: PreviewEventCache | null = null;
 
     constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
-        this.#agent = agent;
         this.#dependencies = dependencies;
         this.#contentExternalizer = {
             update: async (sessionTarget, update, signal) => {
@@ -67,7 +65,6 @@ export class CodexAdapter implements Adapter {
     }
 
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
-        this.#agent = agent;
         this.#queryProcesses.refreshAgent(agent);
     };
     readonly getCapabilities = async (query: NativeSessionQuery) => await this.#queryProcesses.capabilities(query);

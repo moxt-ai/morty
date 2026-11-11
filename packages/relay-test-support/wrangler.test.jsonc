@@ -26,12 +26,6 @@
             "migrations_dir": "../relay/migrations/d1"
         }
     ],
-    "r2_buckets": [
-        {
-            "binding": "CHAT_ATTACHMENTS_APAC",
-            "bucket_name": "morty-test-attachments"
-        }
-    ],
     "vars": {
         "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
         "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret",

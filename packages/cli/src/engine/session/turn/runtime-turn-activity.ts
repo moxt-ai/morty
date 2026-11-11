@@ -1,32 +1,13 @@
 import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
 import type { ActiveRuntimeTurn } from "./active-turn.ts";
 
-/** Worker upgrade admission: foreground turns, queued input, and live native background work. */
+/** Tracks foreground and native background work for idle observations. */
 export class RuntimeTurnActivity {
     readonly #turns = new Set<ActiveRuntimeTurn>();
     readonly #backgroundSources = new Map<object, Exclude<BackgroundActivity, "none">>();
     readonly #idleWaiters = new Set<() => void>();
-    // When work last started or stopped; the quiet period is measured from here.
-    #changedAt = Date.now();
-    #reserved = false;
-
-    readonly acceptsPrompts = (): boolean => !this.#reserved;
 
     readonly count = (): number => this.#turns.size + this.#backgroundSources.size;
-
-    /** Why admission is held: prompts running or queued, native tasks running, results not yet handled. */
-    readonly describe = (): {
-        readonly turns: number;
-        readonly backgroundRunning: number;
-        readonly backgroundAwaitingResults: number;
-    } => {
-        const activities = [...this.#backgroundSources.values()];
-        return {
-            turns: this.#turns.size,
-            backgroundRunning: activities.filter((activity) => activity === "running").length,
-            backgroundAwaitingResults: activities.filter((activity) => activity === "awaiting-results").length,
-        };
-    };
 
     readonly setBackgroundActivity = (source: object, activity: BackgroundActivity): void => {
         // Agents repeat unchanged reports; only a transition counts as activity.
@@ -52,7 +33,6 @@ export class RuntimeTurnActivity {
     };
 
     #changed(): void {
-        this.#changedAt = Date.now();
         if (this.count() === 0) {
             for (const resolve of this.#idleWaiters) {
                 resolve();
@@ -78,26 +58,5 @@ export class RuntimeTurnActivity {
             this.#idleWaiters.add(idle);
             signal.addEventListener("abort", abort, { once: true });
         });
-    };
-
-    /**
-     * Close admission only after the Runtime has had no work for `quietMilliseconds`.
-     * The moment a reply finishes is when a user is most likely to continue, so idle
-     * alone is not an upgrade window. Checking and reserving happen synchronously, so
-     * no prompt can be admitted between them.
-     */
-    readonly reserveIfQuiet = (quietMilliseconds: number): Disposable | null => {
-        if (this.#reserved) {
-            throw new Error("A daemon upgrade already owns admission");
-        }
-        if (this.count() > 0 || Date.now() - this.#changedAt < quietMilliseconds) {
-            return null;
-        }
-        this.#reserved = true;
-        return {
-            [Symbol.dispose]: () => {
-                this.#reserved = false;
-            },
-        };
     };
 }

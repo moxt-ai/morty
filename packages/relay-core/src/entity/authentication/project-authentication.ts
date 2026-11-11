@@ -9,9 +9,6 @@ export class ProjectPermission {
         PROJECT_PERMISSION_NAMES.map((name) => [name, new ProjectPermission(name)]),
     );
 
-    /** The permission this release knows by that name, if any. */
-    static readonly known = (name: string): ProjectPermission | undefined => ProjectPermission.#byName.get(name);
-
     static readonly named = (name: ProjectPermissionName): ProjectPermission => {
         const permission = ProjectPermission.#byName.get(name);
         if (permission === undefined) {
@@ -19,17 +16,9 @@ export class ProjectPermission {
         }
         return permission;
     };
-
-    static readonly ArtifactRead = ProjectPermission.named("artifact:read");
-    static readonly ArtifactWrite = ProjectPermission.named("artifact:write");
-    static readonly IdentityBindingsManage = ProjectPermission.named("identity-binding:manage");
-    static readonly InteractionRespond = ProjectPermission.named("interaction:respond");
-    static readonly ProjectEventsRead = ProjectPermission.named("project:event:read");
-    static readonly ProjectRead = ProjectPermission.named("project:read");
     static readonly RuntimePair = ProjectPermission.named("runtime:pair");
     static readonly RuntimeRead = ProjectPermission.named("runtime:read");
     static readonly RuntimeRevoke = ProjectPermission.named("runtime:revoke");
-    static readonly SessionDelete = ProjectPermission.named("session:delete");
     static readonly SessionRead = ProjectPermission.named("session:read");
     static readonly SessionWrite = ProjectPermission.named("session:write");
 
@@ -53,8 +42,6 @@ export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.fre
 ]);
 
 export class AuditActorKind {
-    static readonly BrowserAccess = new AuditActorKind("browser_access");
-
     readonly value: string;
 
     protected constructor(value: string) {
@@ -74,20 +61,8 @@ export class AuditActor {
     }
 }
 
-export abstract class ProjectAccessLifetime {
-    abstract readonly expiresAtEpochMilliseconds: number;
-    abstract readonly isExpiring: boolean;
-}
-
-export class PerpetualProjectAccessLifetime extends ProjectAccessLifetime {
-    readonly expiresAtEpochMilliseconds = Number.MAX_SAFE_INTEGER;
-    readonly isExpiring = false;
-}
-
 export class ProjectAccessContext {
     readonly actor: AuditActor;
-    readonly authenticatedAtEpochMilliseconds: number;
-    readonly lifetime: ProjectAccessLifetime;
     readonly permissions: ReadonlySet<ProjectPermission>;
     readonly scope: ComputerScope;
 
@@ -95,18 +70,10 @@ export class ProjectAccessContext {
         return this.scope.computerId;
     }
 
-    constructor(
-        scope: ComputerScope,
-        permissions: ReadonlySet<ProjectPermission>,
-        actor: AuditActor,
-        authenticatedAtEpochMilliseconds: number,
-        lifetime: ProjectAccessLifetime,
-    ) {
+    constructor(scope: ComputerScope, permissions: ReadonlySet<ProjectPermission>, actor: AuditActor) {
         this.scope = scope;
         this.permissions = new Set(permissions);
         this.actor = actor;
-        this.authenticatedAtEpochMilliseconds = authenticatedAtEpochMilliseconds;
-        this.lifetime = lifetime;
     }
 
     readonly permits = (permission: ProjectPermission): boolean => this.permissions.has(permission);
@@ -133,19 +100,9 @@ function projectAuthenticationErrorStatus(code: string): number {
         case "credential_revoked":
         case "project_credential_invalid":
             return 401;
-        case "owner_access_required":
         case "project_access_denied":
         case "project_permission_denied":
             return 403;
-        case "owner_credential_not_found":
-            return 404;
-        case "owner_credential_rotation_conflict":
-            return 409;
-        case "access_credential_lifetime_invalid":
-        case "audit_page_invalid":
-        case "credential_overlap_invalid":
-        case "project_permission_invalid":
-            return 400;
         default:
             return 503;
     }
