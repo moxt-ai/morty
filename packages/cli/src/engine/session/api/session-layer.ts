@@ -1,5 +1,5 @@
 import type { SessionInfoUpdatedEvent, SessionLiveEvent } from "@morty-build/client/protocol";
-import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
+import type { BackgroundActivity } from "../../acp/agent/agent-lifecycle.ts";
 import { AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { CommandLedgerTable } from "../../storage/session/command-ledger-table.ts";
 import { LiveEventPositionTable } from "../../storage/session/live-event-position-table.ts";

@@ -1,4 +1,4 @@
-import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
+import type { BackgroundActivity } from "../../acp/agent/agent-lifecycle.ts";
 import type { ActiveRuntimeTurn } from "./active-turn.ts";
 
 /** Worker upgrade admission: foreground turns, queued input, and live native background work. */

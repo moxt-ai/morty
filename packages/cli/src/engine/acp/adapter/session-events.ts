@@ -7,7 +7,7 @@ import {
 import { truncate } from "../../util/value-utils.ts";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { AcpAgentDefinition } from "../agent/agent-definition.ts";
-import type { BackgroundActivity, PromptDelegationStage } from "../agent/in-process-endpoint.ts";
+import type { BackgroundActivity, PromptDelegationStage } from "../agent/agent-lifecycle.ts";
 import type { AgentConnection } from "../connection/agent-connection.ts";
 import { AgentUpdateStream } from "../connection/agent-update-stream.ts";
 import type { AcpClientHandler } from "../connection/create-client.ts";
@@ -64,12 +64,6 @@ type ExecutionState =
           readonly operation: ConfigurationOperation;
       }
     | { readonly kind: "closed" };
-
-/**
- * Moves the Morty fields a harness carries in ACP `_meta` onto the event update the protocol defines them on. Every
- * reader that turns a harness update into a Session event applies it.
- */
-export { withMortyFields } from "./native-session-event.ts";
 
 /** ACP subscription lifetime, ordered delivery and harness normalization belong to the adapter. */
 export class AdapterSessionConnection {

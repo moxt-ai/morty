@@ -17,7 +17,7 @@ import { AcpExecutionError, AcpPromptExecutionError } from "../../acp/acp-error.
 import { RetryableAcpInitializationError, validateAgentRuntime } from "../../acp/adapter/agent-initialization.ts";
 import type { NativeSessionEvent, NativeSessionSubscriber } from "../../acp/adapter/native-session-event.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
-import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
+import type { BackgroundActivity } from "../../acp/agent/agent-lifecycle.ts";
 import { validatePromptContent } from "../../acp/client/prompt-content.ts";
 import type {
     Adapter,

@@ -1,5 +1,5 @@
 import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk/unstable";
-import type { AcpEndpointTermination } from "../../agent/in-process-endpoint.ts";
+import type { AgentTermination } from "../../agent/agent-lifecycle.ts";
 import type { CodexAppServerServerRequest } from "./app-server-client.ts";
 
 /** Session behavior selected after opening; transport ownership stays with the native client. */
@@ -24,5 +24,5 @@ export interface CodexSessionAgent {
     readonly compact: (signal: AbortSignal) => Promise<PromptResponse>;
     readonly onNotification: (method: string, params: unknown) => Promise<void>;
     readonly onServerRequest: (request: CodexAppServerServerRequest) => Promise<void>;
-    readonly onTerminated: (termination: AcpEndpointTermination) => void;
+    readonly onTerminated: (termination: AgentTermination) => void;
 }

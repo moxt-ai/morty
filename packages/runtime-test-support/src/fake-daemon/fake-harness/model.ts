@@ -1,6 +1,6 @@
 import type { ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type { AgentQuestion } from "@morty-build/client/protocol";
-import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/in-process-endpoint.ts";
+import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/agent-lifecycle.ts";
 
 export type HarnessOutput =
     | {

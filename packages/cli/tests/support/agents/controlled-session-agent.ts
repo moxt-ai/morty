@@ -5,14 +5,9 @@ import {
     methods,
     PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk/unstable";
-
-import type {
-    AcpEndpointTermination,
-    InProcessAcpEndpoint,
-    InProcessAcpEndpointFactory,
-} from "../../../src/engine/acp/agent/in-process-endpoint.ts";
+import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
+import type { AgentTermination } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
 import type { AgentConnectionFactory } from "../../../src/engine/acp/connection/agent-connection.ts";
-import { ControlledEndpointConnection } from "./controlled-endpoint-connection.ts";
 
 export interface AgentOperation {
     readonly endpoint: number;
@@ -44,11 +39,11 @@ class RequestGate {
 }
 
 /** One Agent process; records the Session requests it serves. */
-export class ControlledSessionEndpoint implements InProcessAcpEndpoint {
+export class ControlledSessionEndpoint implements ControlledAcpPeer {
     readonly #agent: ControlledSessionAgent;
     readonly #app: AgentApp;
     #connection: AgentConnection | null = null;
-    readonly #termination = Promise.withResolvers<AcpEndpointTermination>();
+    readonly #termination = Promise.withResolvers<AgentTermination>();
     readonly terminated = this.#termination.promise;
 
     constructor(endpoint: number, agent: ControlledSessionAgent) {
@@ -104,16 +99,13 @@ export class ControlledSessionEndpoint implements InProcessAcpEndpoint {
  */
 export class ControlledSessionAgent {
     readonly createConnection: AgentConnectionFactory = (options) =>
-        new ControlledEndpointConnection(
-            this.createEndpoint({ ...options, onSessionUpdate: options.client.onUpdate }),
-            options.client,
-        );
+        new ControlledEndpointConnection(this.createEndpoint(), options.client);
     readonly operations: AgentOperation[] = [];
     /** Holds the end of process teardown, so a close stays in flight. */
     readonly closes = new RequestGate();
     readonly #endpoints: ControlledSessionEndpoint[] = [];
 
-    readonly createEndpoint: InProcessAcpEndpointFactory = () => {
+    readonly createEndpoint = (): ControlledAcpPeer => {
         const endpoint = new ControlledSessionEndpoint(this.#endpoints.length, this);
         this.#endpoints.push(endpoint);
         return endpoint;

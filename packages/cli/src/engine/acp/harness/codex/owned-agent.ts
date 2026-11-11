@@ -4,11 +4,7 @@ import type { ContentBlock, PermissionOption, PromptResponse } from "@agentclien
 import type { AgentQuestion } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp-error.ts";
 import type { NativeSessionInteractions } from "../../adapter/native-session-event.ts";
-import {
-    type AcpEndpointTermination,
-    acpEndpointTerminationError,
-    type BackgroundActivity,
-} from "../../agent/in-process-endpoint.ts";
+import { type AgentTermination, agentTerminationError, type BackgroundActivity } from "../../agent/agent-lifecycle.ts";
 import type { CodexAppServerClient, CodexAppServerServerRequest } from "./app-server-client.ts";
 import {
     commandApprovalParamsSchema,
@@ -248,11 +244,11 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
     }
 
     readonly nativeTurnId = (): string | null => this.#nativeTurnId;
-    readonly onTerminated = (termination: AcpEndpointTermination): void => {
+    readonly onTerminated = (termination: AgentTermination): void => {
         if (this.#turn !== null) {
             this.#turn.steeringContent.clear();
         }
-        this.#turn?.completion.reject(acpEndpointTerminationError(termination));
+        this.#turn?.completion.reject(agentTerminationError(termination));
         this.#settleCompaction("cancelled");
     };
     readonly close = async (): Promise<void> => {

@@ -7,7 +7,7 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { captureProcessTree, type ProcessTreeIdentity, stopProcessTree } from "../../../util/process/executable.ts";
-import { acpEndpointTerminationError } from "../../agent/in-process-endpoint.ts";
+import { agentTerminationError } from "../../agent/agent-lifecycle.ts";
 import { CodexAppServerClient } from "./app-server-client.ts";
 import {
     threadForkResponseSchema,
@@ -87,7 +87,7 @@ export class CodexAcpAgent {
         });
         void this.#appServer.terminated.then((termination) => {
             this.#sessionAgent.onTerminated(termination);
-            this.#lifetime.abort(acpEndpointTerminationError(termination));
+            this.#lifetime.abort(agentTerminationError(termination));
             if (termination.kind === "failed") {
                 void this.dispose("force").catch((cause: unknown) => {
                     console.error("The failed Codex client could not release its process tree", cause);
