@@ -18,7 +18,7 @@ function encodeSecret(bytes: Uint8Array): string {
 
 /**
  * The credential that succeeds `current`: the same routing prefix with a new 256-bit secret. A credential ends with
- * its 43-character secret, so a successor keeps reaching the Project the current credential belongs to.
+ * its 43-character secret, so a successor keeps reaching the Computer the current credential belongs to.
  */
 export function runtimeCredentialSuccessor(current: string): string {
     if (!CREDENTIAL_PATTERN.test(current)) {

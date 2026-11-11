@@ -169,7 +169,7 @@ it("Given two browser connections to one Runtime, When their pending uploads exc
             kind: "http.request",
             requestId,
             method: "POST",
-            path: "/morty/api/v1/computers/upload-project/daemon/content",
+            path: "/morty/api/v1/computers/upload-computer/daemon/content",
             headers: [],
             body: "",
             bodyByteLength: 8 * 1024 * 1024,
@@ -272,7 +272,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
                 JSON.stringify({
                     kind: "session.events.subscribe",
                     subscriptionId,
-                    path: "/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
+                    path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
                     headers: [],
                 }),
             );
@@ -350,7 +350,7 @@ it("Given a Unicode JSON request and response, When the relay carries them over 
             headers: [["content-type", "application/json"]],
             kind: "http.request",
             method: "POST",
-            path: "/morty/api/v1/computers/project/sessions",
+            path: "/morty/api/v1/computers/computer/sessions",
             requestId: "text-body",
         }),
     );
@@ -400,7 +400,7 @@ it("Given an invalid binary declaration, When the request ID is reused for a val
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/morty/api/v1/computers/project/sessions",
+            path: "/morty/api/v1/computers/computer/sessions",
             requestId: "reused-upload",
         }),
     );
@@ -435,7 +435,7 @@ it("Given a binary upload sends an invalid chunk, When it retries the same reque
         headers: [],
         kind: "http.request",
         method: "POST",
-        path: "/morty/api/v1/computers/project/sessions",
+        path: "/morty/api/v1/computers/computer/sessions",
         requestId: "retry-upload",
     };
     const invalid = nextMessage(socket);
@@ -475,7 +475,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/computers/project/sessions",
+                path: "/morty/api/v1/computers/computer/sessions",
                 requestId: "abandoned-upload",
             }),
         );
@@ -487,7 +487,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/computers/project/sessions",
+                path: "/morty/api/v1/computers/computer/sessions",
                 requestId: "next-upload",
             }),
         );
@@ -513,7 +513,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/computers/project/sessions",
+                path: "/morty/api/v1/computers/computer/sessions",
                 requestId: "next-upload",
             }),
         );
@@ -551,7 +551,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/morty/api/v1/computers/project/sessions",
+                path: "/morty/api/v1/computers/computer/sessions",
                 requestId: `pending-${index}`,
             }),
         );
@@ -564,7 +564,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/morty/api/v1/computers/project/sessions",
+            path: "/morty/api/v1/computers/computer/sessions",
             requestId: "pending-overflow",
         }),
     );
@@ -633,7 +633,7 @@ it("Given an established event subscription, When the browser transport closes, 
         JSON.stringify({
             headers: [],
             kind: "session.events.subscribe",
-            path: "/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
+            path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
             subscriptionId: "subscription-1",
         }),
     );
@@ -676,7 +676,7 @@ it("Given two live subscriptions, When each receives event batches, Then deliver
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: `/morty/api/v1/computers/project/harnesses/claude/sessions/${subscriptionId}/events-v2`,
+                path: `/morty/api/v1/computers/computer/harnesses/claude/sessions/${subscriptionId}/events-v2`,
                 subscriptionId,
             }),
         );
@@ -740,7 +740,7 @@ it("Given an established event subscription is quiet, When the transport idle de
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: "/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
+                path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
                 subscriptionId: "subscription-1",
             }),
         );
@@ -782,7 +782,7 @@ it("Given a finite request is in flight, When the browser transport closes, Then
             headers: [],
             kind: "http.request",
             method: "GET",
-            path: "/morty/api/v1/computers/project/daemon/agents",
+            path: "/morty/api/v1/computers/computer/daemon/agents",
             requestId: "pending-request",
         }),
     );

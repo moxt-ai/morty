@@ -1,5 +1,5 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { ProjectPermission, toHttpError, validateIdentifier } from "@morty-build/relay-core";
+import { ComputerPermission, toHttpError, validateIdentifier } from "@morty-build/relay-core";
 import type { SessionAccessService } from "../service/session-access-service.ts";
 
 /** Shared by transport admission and execution; never executes a content write. */
@@ -44,7 +44,7 @@ export async function authorizeSessionContentUpload(request: Request, sessions: 
                 target,
             },
             credential,
-            ProjectPermission.SessionWrite,
+            ComputerPermission.SessionWrite,
             request.signal,
         );
         return { access, target, contentKey };

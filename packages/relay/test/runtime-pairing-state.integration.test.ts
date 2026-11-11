@@ -5,7 +5,7 @@ import { DurableObjectDatabaseAdapter } from "@morty-build/relay-core";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { hashPairingCredential } from "../../relay-core/src/entity/pairing/pairing.ts";
-import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
+import { ComputerPairingStorage } from "../../relay-core/src/storage/computer-pairing-storage.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
@@ -32,7 +32,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 afterAll(async () => await abortAllDurableObjects());
 
-async function project(_name = "Runtime pairing") {
+async function computer(_name = "Runtime pairing") {
     const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const owner = await createOwner();
     const { computerId } = owner;
@@ -91,7 +91,7 @@ async function project(_name = "Runtime pairing") {
 }
 
 it("Given a current pairing reservation, When an obsolete claim endpoint is called, Then it returns not found and leaves the reservation available for redemption", async () => {
-    const app = await project();
+    const app = await computer();
     const pairing = await app.pair("retired-claim");
     expect(await responseJson(await app.claim(pairing, "claim"), 404)).toMatchObject({ error: { code: "NOT_FOUND" } });
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
@@ -99,7 +99,7 @@ it("Given a current pairing reservation, When an obsolete claim endpoint is call
 });
 
 it("Given pending reservations at capacity, When their deadline passes without expiry maintenance, Then status reads and new reservations succeed", async () => {
-    const app = await project();
+    const app = await computer();
     const first = await app.pair("reservation-0");
     expect(await responseJson(await app.create("over-capacity"), 429)).toMatchObject({
         error: { code: "runtime_quota_exceeded" },
@@ -117,23 +117,23 @@ it("Given pending reservations at capacity, When their deadline passes without e
 });
 
 it("Given simultaneous retries of one creation, When they commit, Then they share one reservation and occupy the single daemon slot", async () => {
-    const app = await project();
+    const app = await computer();
     const [left, right] = await Promise.all([app.pair("same-request"), app.pair("same-request")]);
     expect(left).toEqual(right);
     expect((await app.create("no-place")).status).toBe(429);
 });
 
-it("Given a delayed claim, When newer requests have reused expired capacity, Then the claim cannot overbook the Project", async () => {
-    const app = await project();
+it("Given a delayed claim, When newer requests have reused expired capacity, Then the claim cannot overbook the Computer", async () => {
+    const app = await computer();
     const pairing = await app.pair("delayed-claim");
     const claimTime = Date.now();
     const codeHash = await hashPairingCredential(pairing.pairingCode);
     vi.setSystemTime(new Date(pairing.expiresAt));
     await app.pair("replacement");
-    // Execute the original command against the real Project database after
+    // Execute the original command against the real Computer database after
     // newer transactions, as can happen when a database request is delayed.
     const claimed = await app.storage(async (storage) =>
-        new RuntimeDirectoryStorage(app.computerId, new DurableObjectDatabaseAdapter(storage)).claim(
+        new ComputerPairingStorage(app.computerId, new DurableObjectDatabaseAdapter(storage)).claim(
             {
                 computerId: pairing.computerId,
                 codeHash,
@@ -153,7 +153,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
 });
 
 it("Given a claim whose audit cannot commit, When the caller retries after recovery, Then the request is still pending and can be claimed once", async () => {
-    const app = await project();
+    const app = await computer();
     const pairing = await app.pair("claim-rollback");
     await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON audit_events
         WHEN NEW.action = 'runtime_pairing.claimed'
@@ -173,7 +173,7 @@ it("Given a claim whose audit cannot commit, When the caller retries after recov
 it.each(["redeem"] as const)(
     "Given a committed %s response is lost, When the caller retries after a relay restart, Then the original credential is recovered without changing the registration",
     async (endpoint) => {
-        const app = await project();
+        const app = await computer();
         const pairing = await app.pair(`lost-${endpoint}`);
         // Discard the first result before the caller can save its credential.
         const discarded = await app.claim(pairing, endpoint);
@@ -214,7 +214,7 @@ it.each(["redeem"] as const)(
 );
 
 it("Given a revocation whose audit cannot commit, When it is retried, Then access remains until the complete revocation commits", async () => {
-    const app = await project();
+    const app = await computer();
     const pairing = await app.pair("revoke-rollback");
     const claimed = v.parse(
         v.object({ runtimeCredential: v.string() }),
@@ -236,7 +236,7 @@ it("Given a revocation whose audit cannot commit, When it is retried, Then acces
 });
 
 it("Given one available Runtime place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
-    const app = await project();
+    const app = await computer();
     const responses = await Promise.all([app.create("competitor-a"), app.create("competitor-b")]);
     expect(responses.map((response) => response.status).sort()).toEqual([201, 429]);
     const winnerIndex = responses.findIndex((response) => response.status === 201);
@@ -251,7 +251,7 @@ it("Given one available Runtime place, When distinct requests compete, Then exac
 });
 
 it("Given a pending pairing, When claims arrive concurrently, Then they return the same credential and its Runtime survives the handshake deadline", async () => {
-    const app = await project();
+    const app = await computer();
     const pairing = await app.pair("claim-once");
     const responses = await Promise.all([app.claim(pairing), app.claim(pairing)]);
     const results = await Promise.all(responses.map((response) => responseJson(response, 200)));
@@ -278,7 +278,7 @@ it("Given a pending pairing, When claims arrive concurrently, Then they return t
 });
 
 it("Given an unclaimed Runtime identity, When it is revoked, Then its code cannot claim it and revocation remains visible after expiry", async () => {
-    const app = await project();
+    const app = await computer();
     const pairing = await app.pair("cancel-before-claim");
     expect((await app.revoke(pairing)).status).toBe(204);
     const revoked = await responseJson(await app.status(pairing), 200);
@@ -291,9 +291,9 @@ it("Given an unclaimed Runtime identity, When it is revoked, Then its code canno
     expect(await responseJson(await app.list(), 200)).toEqual({ runtimes: [] });
 });
 
-it("Given separate Projects, When they use the same pairing idempotency key, Then each receives its own stable Runtime identity", async () => {
-    const first = await project();
-    const second = await project("Another Runtime pairing App");
+it("Given separate Computers, When they use the same pairing idempotency key, Then each receives its own stable Runtime identity", async () => {
+    const first = await computer();
+    const second = await computer("Another Runtime pairing App");
     const left = await first.pair("same-key");
     const right = await second.pair("same-key");
     expect(left.computerId).not.toBe(right.computerId);
@@ -302,7 +302,7 @@ it("Given separate Projects, When they use the same pairing idempotency key, The
 });
 
 it("Given a Runtime its owner revoked, When the computer is paired again, Then the old daemon credential is not accepted", async () => {
-    const app = await project();
+    const app = await computer();
     const original = await app.pair("original");
     const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });
     const old = v.parse(credential, await responseJson(await app.claim(original), 200));

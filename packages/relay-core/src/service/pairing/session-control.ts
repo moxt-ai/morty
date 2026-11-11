@@ -16,7 +16,7 @@ import {
     ProtocolMessageError,
     type SessionPromptCommand,
 } from "@morty-build/client/protocol";
-import type { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
+import type { ComputerPermission } from "../../entity/authentication/computer-authentication.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import {
     nativeSessionRequestPermission,
@@ -31,7 +31,7 @@ import type { RuntimeControlCommand, RuntimeControlResult } from "./runtime-cont
  */
 export type RuntimeControl = (
     command: RuntimeControlCommand,
-    permission: ProjectPermission,
+    permission: ComputerPermission,
 ) => Promise<RuntimeControlResult>;
 
 /** A Turn for an existing Session. The Runtime runs it with the Agent and directory of the Session it holds. */

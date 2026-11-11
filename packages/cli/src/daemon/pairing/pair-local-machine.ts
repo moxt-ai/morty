@@ -1,13 +1,13 @@
 import { join } from "node:path";
 import { claimMortyState } from "@morty-build/local-state";
-import type { VerifiedRuntimeConnection } from "../../engine/runtime/connection/runtime-connection.ts";
+import type { VerifiedComputerConnection } from "../../engine/runtime/connection/computer-connection.ts";
 import {
     RuntimeInstallationStore,
     RuntimeInstallationStoreError,
 } from "../../engine/runtime/connection/runtime-installation-store.ts";
 import {
     PairingClientError,
-    pairRuntimeConnection,
+    pairComputerConnection,
     parsePairingCode,
     parseRelayOrigin,
     validateComputerId,
@@ -75,10 +75,10 @@ export async function openMortyInstallation(
 export async function pairLocalMachine(
     arguments_: readonly string[],
     signal: AbortSignal = new AbortController().signal,
-): Promise<VerifiedRuntimeConnection> {
+): Promise<VerifiedComputerConnection> {
     const requested = parsePairCommand(arguments_, "");
     const installation = await openMortyInstallation(signal, process.env);
-    return await pairRuntimeConnection(
+    return await pairComputerConnection(
         installation,
         {
             pairingCode: requested.code,

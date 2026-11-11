@@ -9,7 +9,7 @@ import {
     type ChatDraftConfiguration,
     runtimeAgentAvailability,
 } from "../../services/chat/bot-chat-api.ts";
-import { CloudApiError, isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
+import { CloudApiError, isComputerConnectionFailure } from "../../services/management/management-api.ts";
 import {
     centralSessionStorage,
     newConversationDraftEntry,
@@ -768,7 +768,7 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     const message = formatError(cause, "Chat is unavailable.");
-                    if (isRuntimeConnectionFailure(cause)) {
+                    if (isComputerConnectionFailure(cause)) {
                         // Only a failed read is eligible for automatic replay; it does not assert the computer is offline.
                         failLoad("runtime", message);
                         options.onWaitingForRuntime();

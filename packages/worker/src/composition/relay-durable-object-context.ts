@@ -4,7 +4,7 @@ import type {
     ComputerManagementStore,
     ComputerManagementStores,
 } from "../../../relay/src/infra/computer-management-store.ts";
-import { BackendProjectAccess } from "../../../relay/src/service/backend-project-access.ts";
+import { BackendComputerAccess } from "../../../relay/src/service/backend-computer-access.ts";
 import { ComputerManagementStorage } from "../../../relay/src/storage/computer-management-storage.ts";
 
 export interface RelayDurableObjectEnvironment {
@@ -20,15 +20,15 @@ export function createRelayDurableObjectContext(
     },
 ) {
     const stores: ComputerManagementStores = {
-        forProject: storage.storeFor,
+        forComputer: storage.storeFor,
         resolve: storage.storeFor,
     };
     const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
-    const projects = new ComputerManagementStorageDirectory(controlStorage);
+    const computers = new ComputerManagementStorageDirectory(controlStorage);
     return createDurableObjectContext(state, {
         stores,
-        projects,
-        projectCredentials: new BackendProjectAccess(controlStorage),
+        computers,
+        computerCredentials: new BackendComputerAccess(controlStorage),
         doDatabase: storage.database,
     });
 }

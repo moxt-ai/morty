@@ -3,7 +3,7 @@ import {
     ProtocolMessageError,
     type SessionAccessClaims,
 } from "@morty-build/client/protocol";
-import { ProjectAuthenticationError } from "@morty-build/relay-core/contracts";
+import { ComputerAuthenticationError } from "@morty-build/relay-core/contracts";
 
 const SIGNING_SECRET_MINIMUM_LENGTH = 32;
 const MAXIMUM_LIFETIME_MILLISECONDS = 15 * 60 * 1_000;
@@ -34,7 +34,7 @@ export class SessionAccessSigner {
 
     constructor(secret: string) {
         if (typeof secret !== "string" || secret.length < SIGNING_SECRET_MINIMUM_LENGTH) {
-            throw new ProjectAuthenticationError(
+            throw new ComputerAuthenticationError(
                 "relay_configuration_invalid",
                 "The Session credential signing secret is invalid",
             );

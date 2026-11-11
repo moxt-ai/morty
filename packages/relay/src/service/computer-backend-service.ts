@@ -26,18 +26,18 @@ export class ComputerBackendService {
     readonly #pairingKey = () => hashSecret(`morty.internal.pairing.v1:${this.pairingRoot}`);
 
     readonly createPairing = async (idempotencyKey: string, signal: AbortSignal) =>
-        await this.context.services.runtimePairings.createProjectRuntimePairing(
+        await this.context.services.runtimePairings.createComputerRuntimePairing(
             this.computerId,
             await this.#pairingKey(),
             idempotencyKey,
             signal,
         );
     readonly readPairing = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.readProjectRuntimePairing(this.computerId, signal);
+        await this.context.services.runtimePairings.readComputerRuntimePairing(this.computerId, signal);
     readonly revokeRuntime = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.revokeProjectRuntime(this.computerId, signal);
+        await this.context.services.runtimePairings.revokeComputerRuntime(this.computerId, signal);
     readonly runtimes = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.listProjectRuntimes(this.computerId, signal);
+        await this.context.services.runtimePairings.listComputerRuntimes(this.computerId, signal);
     readonly agents = async (signal: AbortSignal) =>
         await this.context.services.runtimePairings.getRuntimeAgents(this.computerId, signal);
     readonly diagnostics = async (signal: AbortSignal) =>
@@ -45,7 +45,7 @@ export class ComputerBackendService {
     readonly latency = async (signal: AbortSignal) =>
         await this.context.services.runtimePairings.measureRuntimeLatency(this.computerId, signal);
     readonly probe = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.probeProject(this.computerId, signal);
+        await this.context.services.runtimePairings.probeComputer(this.computerId, signal);
     readonly control = async (command: RuntimeControlCommand, signal: AbortSignal) =>
         await this.context.services.runtimePairings.requestControl(this.computerId, command, signal);
     readonly workspace = async (command: WorkspaceListCommand, signal: AbortSignal) =>
@@ -79,7 +79,7 @@ export class ComputerBackendService {
         );
     readonly openHost = async (signal: AbortSignal): Promise<WebSocket> => {
         const access = await this.context.services.runtimePairings.authorizePairedHost(this.computerId, signal);
-        const response = await this.context.gateways.channelGateway.acceptHost(
+        const response = await this.context.gateways.computerGateway.acceptHost(
             access,
             new Request("https://runtime.internal/host", { headers: { upgrade: "websocket" }, signal }),
             signal,

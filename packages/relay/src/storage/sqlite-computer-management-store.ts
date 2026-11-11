@@ -1,17 +1,17 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
+import { SqliteComputerStore } from "@morty-build/relay-core/computer-store";
 import { relayDrizzle, type SqlDatabase } from "@morty-build/relay-core/database";
-import { SqliteProjectStore } from "@morty-build/relay-core/project-store";
-import { auditEvent } from "@morty-build/relay-core/schema/project-do";
+import { auditEvent } from "@morty-build/relay-core/schema/computer-relay";
 import { and, desc, eq } from "drizzle-orm";
 import * as v from "valibot";
 import { AuditRowSchema } from "../entity/relay-records.ts";
 import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
 
 /**
- * A Project's Relay and Relay operations over its own SQLite storage. Only the Account Durable Object
+ * A Computer's Relay and Relay operations over its own SQLite storage. Only the Account Durable Object
  * constructs this; everything else reaches these tables through its operations.
  */
-export class SqliteComputerManagementStore extends SqliteProjectStore implements ComputerManagementStore {
+export class SqliteComputerManagementStore extends SqliteComputerStore implements ComputerManagementStore {
     readonly #computerId: string;
     readonly #database: SqlDatabase;
 

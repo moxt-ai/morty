@@ -6,7 +6,7 @@ import {
     type SessionAccessGrant,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
-import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
+import { ComputerAuthenticationError, ComputerPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 import type { ComputerManagementService } from "./computer-management-service.ts";
 
@@ -22,7 +22,7 @@ export interface SessionAccess {
     readonly grant: SessionAccessGrant;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
-    readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
+    readonly authorize: (permission: ComputerPermission, signal: AbortSignal) => Promise<void>;
 }
 
 /**
@@ -30,8 +30,8 @@ export interface SessionAccess {
  * read access, such as reading a Session's settings or native history, reads only that Session through it, which is
  * what Session read access permits.
  */
-function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
-    return permission === ProjectPermission.RuntimeRead ? ProjectPermission.SessionRead : permission;
+function sessionScopedPermission(permission: ComputerPermission): ComputerPermission {
+    return permission === ComputerPermission.RuntimeRead ? ComputerPermission.SessionRead : permission;
 }
 
 export class SessionAccessService {
@@ -59,16 +59,16 @@ export class SessionAccessService {
         readonly target: NativeSessionTarget;
     }> => {
         if (target.kind !== "session") {
-            throw new ProjectAuthenticationError("project_permission_denied", "A selected Session is required");
+            throw new ComputerAuthenticationError("project_permission_denied", "A selected Session is required");
         }
         const nativeTarget = decodeNativeSessionTarget(target.target);
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
-            throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
+            throw new ComputerAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
-        await this.#control.authorizeProject(target.computerId, ProjectPermission.SessionWrite, signal);
+        await this.#control.authorizeComputer(target.computerId, ComputerPermission.SessionWrite, signal);
         const generation = await this.#control.currentSessionGeneration(target.computerId, holder, signal);
         if (generation === null) {
-            throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
+            throw new ComputerAuthenticationError("credential_revoked", "The Session access has ended");
         }
         const issuedAtEpochMilliseconds = Date.now();
         const expiresAtEpochMilliseconds = issuedAtEpochMilliseconds + expiresInSeconds * 1_000;
@@ -93,12 +93,12 @@ export class SessionAccessService {
         credentialValue: string,
         signal: AbortSignal,
     ): Promise<SessionAccess> =>
-        await this.authorizeSession(target, credentialValue, ProjectPermission.SessionRead, signal);
+        await this.authorizeSession(target, credentialValue, ComputerPermission.SessionRead, signal);
 
     readonly authorizeSession = async (
         target: SessionAccessTarget,
         credentialValue: string,
-        permission: ProjectPermission,
+        permission: ComputerPermission,
         signal: AbortSignal,
     ): Promise<SessionAccess> => {
         signal.throwIfAborted();
@@ -109,7 +109,7 @@ export class SessionAccessService {
 
     /**
      * Verifies a Session credential for its selected Session without authorizing any operation. Each operation then
-     * authorizes the permission it needs through the Project routes, narrowed to the one Session the credential selects.
+     * authorizes the permission it needs through the Computer routes, narrowed to the one Session the credential selects.
      */
     readonly authenticate = async (
         target: SessionAccessTarget,
@@ -117,7 +117,7 @@ export class SessionAccessService {
         signal: AbortSignal,
     ): Promise<SessionAccess> => {
         if (target.kind !== "session") {
-            throw new ProjectAuthenticationError(
+            throw new ComputerAuthenticationError(
                 "project_permission_denied",
                 "The credential authorizes only a selected Session",
             );
@@ -127,12 +127,12 @@ export class SessionAccessService {
             claims = await this.#signer.verify(credentialValue, Date.now());
         } catch (cause) {
             if (cause instanceof SessionAccessCredentialExpiredError) {
-                throw new ProjectAuthenticationError("credential_expired", "The Session credential has expired", {
+                throw new ComputerAuthenticationError("credential_expired", "The Session credential has expired", {
                     cause,
                 });
             }
             if (cause instanceof ProtocolMessageError) {
-                throw new ProjectAuthenticationError(
+                throw new ComputerAuthenticationError(
                     "project_credential_invalid",
                     "The Session credential is invalid",
                     {
@@ -143,7 +143,7 @@ export class SessionAccessService {
             throw cause;
         }
         if (claims.computerId !== target.computerId || !sameNativeSession(claims.target, target.target)) {
-            throw new ProjectAuthenticationError(
+            throw new ComputerAuthenticationError(
                 "project_permission_denied",
                 "The credential authorizes only the selected Session",
             );

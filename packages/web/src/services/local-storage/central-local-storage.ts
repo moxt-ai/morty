@@ -268,7 +268,7 @@ export function readableComputer(value: unknown): RememberedComputer | null {
 // Linked devices this browser has been told about
 // ---------------------------------------------------------------------------
 
-/** When the latest device this browser was told about joined the Project; later joins are new to it. */
+/** When the latest device this browser was told about joined the Computer; later joins are new to it. */
 export const linkedDevicesSeenEntry = (computerId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
         key: scopedKey("morty:linked-devices-seen:v1:", computerId),

@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
 import { waitForSharedOperation } from "../session/manager/operation-drain.ts";
+import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 import { ConnectionManager } from "./connection/connection-manager.ts";
-import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
 import { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
-import { type MortyRuntimePairingOptions, pairRuntimeConnection, prepareRuntimeConnection } from "./pairing.ts";
+import { type MortyRuntimePairingOptions, pairComputerConnection, prepareComputerConnection } from "./pairing.ts";
 import {
-    type MortyRuntimeConnection,
+    type MortyComputerConnection,
     prepareProvidedRuntime,
     RuntimeLoop,
     type RuntimeLoopOptions,
@@ -19,7 +19,7 @@ export interface MortyRuntimeEngineParams {
 
 type EngineLoopConnection =
     | { readonly kind: "saved"; readonly pairingGeneration: string }
-    | { readonly kind: "provided"; readonly connection: MortyRuntimeConnection };
+    | { readonly kind: "provided"; readonly connection: MortyComputerConnection };
 
 export interface RunLoopParams extends RuntimeLoopOptions {
     readonly connection: EngineLoopConnection;
@@ -86,8 +86,8 @@ export class MortyRuntimeEngine {
     readonly pair = async (
         input: MortyRuntimePairingOptions,
         signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection> =>
-        await pairRuntimeConnection(
+    ): Promise<VerifiedComputerConnection> =>
+        await pairComputerConnection(
             await this.#ensureInstallation(signal),
             input,
             signal,
@@ -100,7 +100,7 @@ export class MortyRuntimeEngine {
             switch (connection.kind) {
                 case "saved": {
                     const saved = await installation.readConnection(connection.pairingGeneration, preparationSignal);
-                    return await prepareRuntimeConnection(
+                    return await prepareComputerConnection(
                         installation,
                         saved,
                         preparationSignal,
@@ -126,7 +126,7 @@ export class MortyRuntimeEngine {
     };
 }
 
+export type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 export type { ConnectionManager } from "./connection/connection-manager.ts";
-export type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
 
 export type { MortyRuntimePairingOptions } from "./pairing.ts";

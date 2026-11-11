@@ -55,7 +55,7 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When th
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
-    await runtime.forgetRuntimeConnections();
+    await runtime.forgetComputerConnections();
     const connected = await runtime.followInstructions(
         "/setup.md",
         "setup-reconnect-session",
@@ -70,11 +70,11 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When th
     expect(connected.computerId).not.toBe(original.computerId);
     const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
-    // The agent reads this to tell the user that links from the replaced Project stopped working.
+    // The agent reads this to tell the user that links from the replaced Computer stopped working.
     expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "replaced" }));
 });
 
-test("Given a browser opened the saved Machine's link, When the user approves replacing its Project, Then earlier access ends and the new link works in the same tab", async ({
+test("Given a browser opened the saved Machine's link, When the user approves replacing its Computer, Then earlier access ends and the new link works in the same tab", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -82,7 +82,7 @@ test("Given a browser opened the saved Machine's link, When the user approves re
     await page.goto(original.url);
     await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
     const previousToken = original.configuration["user_token"];
-    await runtime.forgetRuntimeConnections();
+    await runtime.forgetComputerConnections();
 
     const connected = await runtime.followInstructions(
         "/setup.md",

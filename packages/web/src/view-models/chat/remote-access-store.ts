@@ -4,7 +4,7 @@ import { readIdentityScope } from "../../services/identity/identity-scope-url.ts
 import {
     computerKey,
     rememberedComputers,
-    storedTokenForProject,
+    storedTokenForComputer,
     withStoredAccessLock,
 } from "../../services/identity/remembered-computers.ts";
 import {
@@ -64,7 +64,8 @@ export function createRemoteAccessOperations(options: {
             try {
                 await withStoredAccessLock(signal, async (access) =>
                     api.endRemoteAccess(
-                        storedTokenForProject(options.identity.computerId) ?? (await options.identity.getToken(signal)),
+                        storedTokenForComputer(options.identity.computerId) ??
+                            (await options.identity.getToken(signal)),
                         signal,
                         access,
                     ),

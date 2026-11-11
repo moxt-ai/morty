@@ -27,7 +27,7 @@ export interface CollectedLocalLogs {
  * start, or a worker that died silently, has to be collectable from disk alone.
  *
  * Covers both log owners: the Runtime's own `daemon.log` under the version-scoped
- * CLI installation, and the manager-written worker lifecycle and unhandled
+ * CLI installation, and the daemon lifecycle and unhandled
  * rejection logs under the control installation.
  *
  * This is a read-only forensic path, so it never repairs anything: permissions

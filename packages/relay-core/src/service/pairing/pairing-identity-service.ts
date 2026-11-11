@@ -1,13 +1,13 @@
-import { RuntimeAccessContext } from "../../entity/authentication/project-authentication.ts";
+import { RuntimeAccessContext } from "../../entity/authentication/computer-authentication.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { PairingScopeRow } from "../../entity/pairing/pairing-records.ts";
-import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
-import type { ProjectStore, ProjectStoreResolver } from "../../infra/project-store.ts";
+import type { ComputerStorageContext, ComputerStorageDirectory } from "../../infra/computer-storage-directory.ts";
+import type { ComputerStore, ComputerStoreResolver } from "../../infra/computer-store.ts";
 import { DatabaseError } from "../../infra/sql-database.ts";
 
-/** A credential that matches nothing, including one stored for a Project that is no longer served. */
+/** A credential that matches nothing, including one stored for a Computer that is no longer served. */
 function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
     const code =
         credential.kind === "pairing"
@@ -19,40 +19,40 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
 }
 
 /**
- * Finds the Project a credential belongs to by asking the Project stores this execution can search, then confirms
- * that the Relay still serves that Project from the store that matched.
+ * Finds the Computer a credential belongs to by asking the Computer stores this execution can search, then confirms
+ * that the Relay still serves that Computer from the store that matched.
  */
 export class ComputerIdentityService {
-    readonly #sources: readonly ProjectStore[];
-    readonly #stores: ProjectStoreResolver;
-    readonly #projects: ProjectStorageDirectory;
-    constructor(sources: readonly ProjectStore[], stores: ProjectStoreResolver, projects: ProjectStorageDirectory) {
+    readonly #sources: readonly ComputerStore[];
+    readonly #stores: ComputerStoreResolver;
+    readonly #computers: ComputerStorageDirectory;
+    constructor(sources: readonly ComputerStore[], stores: ComputerStoreResolver, computers: ComputerStorageDirectory) {
         this.#sources = [...sources];
         this.#stores = stores;
-        this.#projects = projects;
+        this.#computers = computers;
     }
 
-    private readonly matchesPlacement = (source: ProjectStore, project: ProjectStorageContext): boolean =>
-        source === this.#stores.resolve(project.computerId);
+    private readonly matchesPlacement = (source: ComputerStore, computer: ComputerStorageContext): boolean =>
+        source === this.#stores.resolve(computer.computerId);
 
-    readonly authenticateProject = async (
+    readonly authenticateComputer = async (
         credential: ComputerIdentityCredential,
         signal: AbortSignal,
-    ): Promise<ProjectStorageContext> => {
+    ): Promise<ComputerStorageContext> => {
         const identity = await this.authenticate(credential, signal);
-        const project = await this.#projects.resolve(identity.computerId, signal);
+        const computer = await this.#computers.resolve(identity.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (computer === null) {
             throw unmatchedCredential(credential);
         }
-        if (!this.matchesPlacement(identity.source, project)) {
+        if (!this.matchesPlacement(identity.source, computer)) {
             throw new PairingDirectoryError("directory_unavailable", "Workspace storage is unavailable");
         }
-        return project;
+        return computer;
     };
 
     /**
-     * Presents a daemon credential with its successor. The Project store rotates the credential; a retired credential
+     * Presents a daemon credential with its successor. The Computer store rotates the credential; a retired credential
      * presented with another successor is reported as reused, for the caller to end the Runtime's access, and one of a
      * Runtime whose access already ended as revoked.
      */
@@ -66,7 +66,7 @@ export class ComputerIdentityService {
         signal.throwIfAborted();
         try {
             const matches: {
-                readonly source: ProjectStore;
+                readonly source: ComputerStore;
                 readonly kind: "rotated" | "reused";
                 readonly row: PairingScopeRow;
             }[] = [];
@@ -93,12 +93,12 @@ export class ComputerIdentityService {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
             }
             const computerId = validateIdentifier(match.row.computer_id, "computer_id");
-            const project = await this.#projects.resolve(computerId, signal);
+            const computer = await this.#computers.resolve(computerId, signal);
             signal.throwIfAborted();
-            if (project === null) {
+            if (computer === null) {
                 throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
             }
-            if (!this.matchesPlacement(match.source, project)) {
+            if (!this.matchesPlacement(match.source, computer)) {
                 throw new PairingDirectoryError("directory_unavailable", "Runtime storage is unavailable");
             }
             return {
@@ -122,7 +122,7 @@ export class ComputerIdentityService {
     private readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
-            const matches: { readonly computerId: string; readonly source: ProjectStore }[] = [];
+            const matches: { readonly computerId: string; readonly source: ComputerStore }[] = [];
             for (const source of this.#sources) {
                 for (const row of await source.findCredential(credential, signal)) {
                     signal.throwIfAborted();
@@ -140,9 +140,11 @@ export class ComputerIdentityService {
                 throw cause;
             }
             if (cause instanceof DatabaseError && cause.code === "database_timeout") {
-                throw new PairingDirectoryError("directory_timeout", "The Project directory timed out", { cause });
+                throw new PairingDirectoryError("directory_timeout", "The Computer directory timed out", { cause });
             }
-            throw new PairingDirectoryError("directory_unavailable", "The Project directory is unavailable", { cause });
+            throw new PairingDirectoryError("directory_unavailable", "The Computer directory is unavailable", {
+                cause,
+            });
         }
     };
 }

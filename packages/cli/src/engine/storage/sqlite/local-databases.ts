@@ -4,17 +4,17 @@ import { acpSessionStoreMigrations } from "../../generated/acp-session-store-mig
 import { sessionEventCacheMigrations } from "../../generated/session-event-cache-migrations.ts";
 import { LocalSqliteDatabase } from "./local-sqlite-database.ts";
 
-export interface ChannelSessionDatabasePaths {
+export interface ComputerSessionDatabasePaths {
     readonly events: string;
     readonly sessions: string;
 }
 
 /** Each relay channel keeps its saved sessions and its spilled session events in its own files. */
-export function channelSessionDatabasePaths(stateDirectory: string, computerId: string): ChannelSessionDatabasePaths {
-    const channelHash = createHash("sha256").update(computerId).digest("hex");
+export function computerSessionDatabasePaths(stateDirectory: string, computerId: string): ComputerSessionDatabasePaths {
+    const computerHash = createHash("sha256").update(computerId).digest("hex");
     return {
-        events: join(stateDirectory, "sessions", `${channelHash}.events.sqlite`),
-        sessions: join(stateDirectory, "sessions", `${channelHash}.sqlite`),
+        events: join(stateDirectory, "sessions", `${computerHash}.events.sqlite`),
+        sessions: join(stateDirectory, "sessions", `${computerHash}.sqlite`),
     };
 }
 

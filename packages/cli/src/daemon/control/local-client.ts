@@ -7,17 +7,17 @@ import { readOrCreateControlToken } from "../../storage/daemon/control-token.ts"
 export const CONTROL_TIMEOUT_MILLISECONDS = 130_000;
 const MAXIMUM_MESSAGE_BYTES = 64 * 1024;
 
-const managerPlatform = platformSupportFor(process.platform);
+const daemonPlatform = platformSupportFor(process.platform);
 
 export function controlSocketPath(stateDirectory: InstallationDirectory): string {
-    const installationHash = createHash("sha256").update(stateDirectory).digest("hex").slice(0, 32);
-    return managerPlatform.controlSocketPath(installationHash);
+    const stateDirectoryHash = createHash("sha256").update(stateDirectory).digest("hex").slice(0, 32);
+    return daemonPlatform.controlSocketPath(stateDirectoryHash);
 }
 
 export async function readSocketMessage(socket: Socket, signal: AbortSignal): Promise<unknown> {
     signal.throwIfAborted();
     if (socket.destroyed || socket.readableEnded) {
-        throw new Error("The manager connection closed without a response");
+        throw new Error("The daemon connection closed without a response");
     }
     return await new Promise((resolve, reject) => {
         let encoded = "";
@@ -39,7 +39,7 @@ export async function readSocketMessage(socket: Socket, signal: AbortSignal): Pr
         const data = (chunk: Buffer): void => {
             encoded += chunk.toString("utf8");
             if (encoded.length > MAXIMUM_MESSAGE_BYTES) {
-                finish(new Error("The manager message is too large"));
+                finish(new Error("The daemon message is too large"));
                 socket.destroy();
                 return;
             }
@@ -53,7 +53,7 @@ export async function readSocketMessage(socket: Socket, signal: AbortSignal): Pr
             }
         };
         const onError = (cause: Error): void => finish(cause);
-        const end = (): void => finish(new Error("The manager connection closed without a response"));
+        const end = (): void => finish(new Error("The daemon connection closed without a response"));
         socket.on("data", data);
         socket.once("error", onError);
         socket.once("end", end);
@@ -70,7 +70,7 @@ export async function sendLocalRequest(
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(CONTROL_TIMEOUT_MILLISECONDS)]);
     deadline.throwIfAborted();
     const path = controlSocketPath(stateDirectory);
-    await managerPlatform.validateControlPeer(path, deadline);
+    await daemonPlatform.validateControlPeer(path, deadline);
     const socket = createConnection(path);
     try {
         await new Promise<void>((resolve, reject) => {

@@ -61,7 +61,7 @@ export interface RuntimeConfig {
     readonly rediscoverAgents?: (signal: AbortSignal) => Promise<readonly CatalogAgent[]>;
 }
 
-export interface RuntimeConnectionConfig {
+export interface ComputerConnectionConfig {
     readonly defaultWorkspace: string;
     readonly computerId: string;
     readonly relayUrl: URL;
@@ -69,7 +69,7 @@ export interface RuntimeConnectionConfig {
 }
 
 export function createRuntimeConfig(
-    connection: RuntimeConnectionConfig,
+    connection: ComputerConnectionConfig,
     dependencies: RuntimeAgentDependencies,
     localContext: RuntimeLocalContext,
     reconnectTarget: RuntimeReconnectTarget | null = null,

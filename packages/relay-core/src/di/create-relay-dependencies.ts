@@ -1,27 +1,27 @@
-import type { ProjectAccessAuthorizer } from "../entity/authentication/project-authorization.ts";
-import type { ChannelGateway } from "../gateway/channel-gateway.ts";
+import type { ComputerAccessAuthorizer } from "../entity/authentication/computer-authorization.ts";
+import type { ComputerGateway } from "../gateway/computer-gateway.ts";
+import type { ComputerStorageDirectory } from "../infra/computer-storage-directory.ts";
+import type { ComputerStore, ComputerStoreResolver } from "../infra/computer-store.ts";
 import type { MachineAccountDirectory } from "../infra/machine-account-directory.ts";
-import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
-import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.ts";
-import { ChannelService } from "../service/channel/channel-service.ts";
-import type { LocalSessionOperations } from "../service/channel/local-session-operations.ts";
+import { ComputerCatalogService } from "../service/computer/computer-catalog-service.ts";
+import type { LocalSessionOperations } from "../service/computer/local-session-operations.ts";
 import { PairingDirectoryService } from "../service/pairing/pairing-directory-service.ts";
 import { ComputerIdentityService } from "../service/pairing/pairing-identity-service.ts";
 import { PairingService } from "../service/pairing/pairing-service.ts";
 
 interface PairingInfrastructure {
-    readonly authentication: { readonly projects: ProjectAccessAuthorizer };
+    readonly authentication: { readonly computers: ComputerAccessAuthorizer };
     readonly machineAccounts: MachineAccountDirectory;
-    readonly stores: ProjectStoreResolver;
-    readonly projects: ProjectStorageDirectory;
-    /** The Project stores this execution searches to find the Project a credential belongs to. */
-    readonly identityStores: readonly ProjectStore[];
+    readonly stores: ComputerStoreResolver;
+    readonly computers: ComputerStorageDirectory;
+    /** The Computer stores this execution searches to find the Computer a credential belongs to. */
+    readonly identityStores: readonly ComputerStore[];
 }
 
 export interface RelayInfrastructure extends PairingInfrastructure {
-    readonly authentication: { readonly projects: ProjectAccessAuthorizer };
+    readonly authentication: { readonly computers: ComputerAccessAuthorizer };
     readonly gateways: {
-        readonly channelGateway: ChannelGateway;
+        readonly computerGateway: ComputerGateway;
         readonly runtimeOperations?: LocalSessionOperations;
         readonly nowEpochMilliseconds: () => number;
     };
@@ -33,14 +33,14 @@ export interface RelayInfrastructure extends PairingInfrastructure {
 }
 
 function createPairings(cx: PairingInfrastructure) {
-    const identities = new ComputerIdentityService(cx.identityStores, cx.stores, cx.projects);
+    const identities = new ComputerIdentityService(cx.identityStores, cx.stores, cx.computers);
     return new PairingDirectoryService({
         gateways: { machineAccounts: cx.machineAccounts },
         storages: {
-            forProject: (project) => cx.stores.resolve(project.computerId),
-            projectDirectory: cx.projects,
+            forComputer: (computer) => cx.stores.resolve(computer.computerId),
+            computerDirectory: cx.computers,
         },
-        services: { identities, projectAuthentication: cx.authentication.projects },
+        services: { identities, computerAuthentication: cx.authentication.computers },
     });
 }
 
@@ -57,7 +57,7 @@ function createHttpContext(infrastructure: RelayInfrastructure, pairings: Pairin
         services: Object.freeze({
             pairings,
             runtimePairings: new PairingService(cx),
-            channels: new ChannelService(cx),
+            computerCatalog: new ComputerCatalogService(cx),
         }),
     });
 }

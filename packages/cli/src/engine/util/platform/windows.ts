@@ -98,7 +98,7 @@ async function validatePathPermissions(
 }
 
 export const windowsPlatform: PlatformSupport = {
-    controlSocketPath: (installationHash) => `\\\\.\\pipe\\morty-${installationHash}`,
+    controlSocketPath: (stateDirectoryHash) => `\\\\.\\pipe\\morty-${stateDirectoryHash}`,
     prepareControlSocket: async () => {},
     secureControlSocket: validateWindowsPipe,
     validateControlPeer: validateWindowsPipe,

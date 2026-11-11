@@ -51,7 +51,7 @@ import {
     type ServiceToDaemonMessage,
     WORKSPACE_LIST_KIND,
 } from "@morty-build/client/protocol";
-import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
+import { ComputerPermission } from "../../entity/authentication/computer-authentication.ts";
 import type { RuntimeControlCommand, RuntimeControlResult } from "./runtime-control-request.ts";
 
 /** The Runtime's reply to one control command, which names the command's own request identifier. */
@@ -61,7 +61,7 @@ interface RuntimeControlReply {
 }
 
 interface RuntimeControlDefinition {
-    readonly permission: ProjectPermission | ((command: RuntimeControlCommand) => ProjectPermission);
+    readonly permission: ComputerPermission | ((command: RuntimeControlCommand) => ComputerPermission);
     readonly reply: RuntimeControlReply;
 }
 
@@ -75,94 +75,94 @@ function directReply<K extends RuntimeControlResult["kind"]>(
 /** Code-owned command policy; callers must still authorize the selected permission. */
 export const runtimeControlRegistry = {
     "runtime.diagnostics.read": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("runtime.diagnostics.result", decodeRuntimeDiagnosticsResult),
     },
     "runtime.ping": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("runtime.pong", decodeRuntimePongEvent),
     },
     "native.session.request": {
         permission: (command: RuntimeControlCommand) =>
             command.kind === "native.session.request"
                 ? nativeSessionRequestPermission(command.action)
-                : ProjectPermission.SessionWrite,
+                : ComputerPermission.SessionWrite,
         reply: directReply("native.session.result", decodeNativeSessionResult),
     },
     "session.prepare": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.ready", decodeSessionReadyEvent),
     },
     "session.create": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.ready", decodeSessionReadyEvent),
     },
     "session.creation.read": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("session.ready", decodeSessionReadyEvent),
     },
     "session.configure": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.config.updated", decodeSessionConfigUpdatedEvent),
     },
     "session.config.read": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("session.config.read.result", decodeSessionConfigReadResult),
     },
     "session.rename": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.renamed", decodeSessionRenamedEvent),
     },
     "session.close": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.closed", decodeSessionClosedEvent),
     },
     "session.archive": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.archived", decodeSessionArchivedEvent),
     },
     "session.cancel-before-start": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.turn.withdrawn", decodeSessionTurnWithdrawnEvent),
     },
     "session.cancel": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.turn.stopped", decodeSessionTurnStoppedEvent),
     },
     "session.prompt.disposition": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.prompt.steered", decodeSessionPromptSteeredEvent),
     },
     "session.prompt": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.prompt.accepted", decodeSessionPromptAcceptedEvent),
     },
     "session.preview-history.page.load": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("session.preview-history.page.loaded", decodeSessionPreviewHistoryWirePageLoaded),
     },
     "session.live-history.v2.page.load": {
-        permission: ProjectPermission.SessionRead,
+        permission: ComputerPermission.SessionRead,
         reply: directReply("session.live-history.v2.page.loaded", decodeSessionHistoryWirePageLoaded),
     },
     "session.elicitation.respond": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.interaction.answered", decodeSessionInteractionAnsweredEvent),
     },
     "session.permission.respond": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.interaction.answered", decodeSessionInteractionAnsweredEvent),
     },
     "session.list": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("session.listed", decodeSessionsListedEvent),
     },
     "session.query": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ComputerPermission.RuntimeRead,
         reply: directReply("session.queried", decodeSessionsQueriedEvent),
     },
     "session.restore": {
-        permission: ProjectPermission.SessionWrite,
+        permission: ComputerPermission.SessionWrite,
         reply: directReply("session.restored", decodeSessionRestoredEvent),
     },
 } satisfies { readonly [K in RuntimeControlCommand["kind"]]: RuntimeControlDefinition };
@@ -171,22 +171,22 @@ export const runtimeControlRegistry = {
  * Listing reads every native session the Runtime can see, and reading the active Turn reads one Session's execution.
  * Every other native request acts on the Agent's sessions.
  */
-export function nativeSessionRequestPermission(action: NativeSessionRequest["action"]): ProjectPermission {
+export function nativeSessionRequestPermission(action: NativeSessionRequest["action"]): ComputerPermission {
     switch (action) {
         case "list":
-            return ProjectPermission.RuntimeRead;
+            return ComputerPermission.RuntimeRead;
         case "active-turn":
-            return ProjectPermission.SessionRead;
+            return ComputerPermission.SessionRead;
         case "find":
         case "import":
         case "fork":
-            return ProjectPermission.SessionWrite;
+            return ComputerPermission.SessionWrite;
         default:
             return action satisfies never;
     }
 }
 
-export function runtimeControlPermission(command: RuntimeControlCommand): ProjectPermission {
+export function runtimeControlPermission(command: RuntimeControlCommand): ComputerPermission {
     const { permission } = runtimeControlRegistry[command.kind];
     return typeof permission === "function" ? permission(command) : permission;
 }
@@ -195,7 +195,7 @@ export function runtimeControlPermission(command: RuntimeControlCommand): Projec
  * What a credential must grant to send this message to a Runtime, however it reaches the Relay: an HTTP route and a
  * host connection apply the same answer. Null for messages only the Relay itself sends to a daemon.
  */
-export function runtimeCommandPermission(message: ServiceToDaemonMessage): ProjectPermission | null {
+export function runtimeCommandPermission(message: ServiceToDaemonMessage): ComputerPermission | null {
     switch (message.kind) {
         case "runtime.diagnostics.read":
         case RUNTIME_PING_KIND:
@@ -223,13 +223,13 @@ export function runtimeCommandPermission(message: ServiceToDaemonMessage): Proje
         case AGENT_CATALOG_DISCOVER_KIND:
         case AGENT_SETTINGS_DISCOVER_KIND:
         case WORKSPACE_LIST_KIND:
-            return ProjectPermission.RuntimeRead;
+            return ComputerPermission.RuntimeRead;
         case FILE_READ_KIND:
-            return ProjectPermission.SessionRead;
+            return ComputerPermission.SessionRead;
         case CONTENT_WRITE_KIND:
         case CONTENT_COMMIT_KIND:
         case NATIVE_SESSION_CANCEL_KIND:
-            return ProjectPermission.SessionWrite;
+            return ComputerPermission.SessionWrite;
         case RUNTIME_HEARTBEAT_ACK_KIND:
         case RUNTIME_LIVENESS_READY_KIND:
             return null;

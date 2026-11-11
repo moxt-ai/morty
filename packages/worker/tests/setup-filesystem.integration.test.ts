@@ -835,8 +835,8 @@ async function setupMachine(
     deadline?: (milliseconds: number) => AbortSignal,
     run: {
         readonly harness?: string;
-        /** The Project whose replacement the user explicitly approved. */
-        readonly replaceProject?: string;
+        /** The Computer whose replacement the user explicitly approved. */
+        readonly replaceComputer?: string;
         /** The `--session-id` the agent passes; `null` passes none. */
         readonly sessionArgument?: string | null;
         /** The calling agent's shell environment, where a harness exposes its current session. */
@@ -861,7 +861,7 @@ async function setupMachine(
             paths.workspace,
             "--harness",
             run.harness ?? "settings-test",
-            ...(run.replaceProject === undefined ? [] : ["--replace-computer", run.replaceProject]),
+            ...(run.replaceComputer === undefined ? [] : ["--replace-computer", run.replaceComputer]),
             ...(run.sessionArgument === null ? [] : ["--session-id", run.sessionArgument ?? "native-upgrade-project"]),
         ],
         {
@@ -964,7 +964,7 @@ test("Given setup was stopped after pairing its Runtime, When the user runs setu
     timeout: 120_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        // A Project holds at most eight Runtimes; each stopped run must not leave another one behind.
+        // A Computer holds at most eight Runtimes; each stopped run must not leave another one behind.
         for (let attempt = 1; attempt <= 8; attempt += 1) {
             const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "runtime_paired" });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
@@ -975,7 +975,7 @@ test("Given setup was stopped after pairing its Runtime, When the user runs setu
     });
 });
 
-test("Given a shared Machine whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Project", {
+test("Given a shared Machine whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Computer", {
     timeout: 120_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
@@ -1003,9 +1003,9 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             });
         await runtime.forgetConnections();
 
-        for (const replaceProject of [undefined, "another-project"]) {
+        for (const replaceComputer of [undefined, "another-project"]) {
             const blocked = await setupMachine(runtime, paths, undefined, {
-                ...(replaceProject === undefined ? {} : { replaceProject }),
+                ...(replaceComputer === undefined ? {} : { replaceComputer }),
             });
             expect(blocked.code).toBe(1);
             expect(blocked.events.at(-1)).toMatchObject({
@@ -1018,7 +1018,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect(await readFile(join(paths.state, "config.json"), "utf8")).toBe(saved);
         }
 
-        const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
+        const approved = await setupMachine(runtime, paths, undefined, { replaceComputer: config.computer_id });
         expect(approved.code, JSON.stringify(approved.events)).toBe(0);
         expect(approved.events).toContainEqual(
             expect.objectContaining({ status: "replacement_access_revoked", previousComputerId: config.computer_id }),
@@ -1039,7 +1039,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect(JSON.stringify(diagnostics)).not.toContain(url);
 
         await runtime.forgetConnections();
-        const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
+        const stale = await setupMachine(runtime, paths, undefined, { replaceComputer: config.computer_id });
         expect(stale.code).toBe(1);
         expect(stale.events.at(-1)).toMatchObject({
             error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { computerId: current.computer_id } },
@@ -1047,7 +1047,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
     });
 });
 
-test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Project", {
+test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Computer", {
     timeout: 120_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
@@ -1056,7 +1056,7 @@ test("Given an approved replacement request times out, When setup is retried wit
         const config = await savedIdentity(paths.state);
         await runtime.forgetConnections();
         const uncertain = await setupMachine(runtime, paths, undefined, {
-            replaceProject: config.computer_id,
+            replaceComputer: config.computer_id,
             stallFromStage: "replacement",
         });
         expect(uncertain.code).toBe(1);
@@ -1070,7 +1070,7 @@ test("Given an approved replacement request times out, When setup is retried wit
                 replacementAccess: { kind: "unknown", previousComputerId: config.computer_id },
             },
         });
-        const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
+        const finished = await setupMachine(runtime, paths, undefined, { replaceComputer: config.computer_id });
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
     });
 });
@@ -1102,7 +1102,7 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
             },
         });
         expect(blocked.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
-        expect((await setupMachine(runtime, paths, undefined, { replaceProject: computerId })).code).toBe(0);
+        expect((await setupMachine(runtime, paths, undefined, { replaceComputer: computerId })).code).toBe(0);
     });
 });
 
@@ -1119,7 +1119,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
             await runtime.forgetConnections();
 
             const stopped = await setupMachine(runtime, paths, undefined, {
-                replaceProject: config.computer_id,
+                replaceComputer: config.computer_id,
                 interruptAt,
             });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
@@ -1141,7 +1141,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 });
             }
 
-            const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
+            const finished = await setupMachine(runtime, paths, undefined, { replaceComputer: config.computer_id });
             expect(finished.code, JSON.stringify(finished.events)).toBe(0);
             expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
 
@@ -1293,7 +1293,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
     }
 }, 30000);
 
-test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and only the replacement of the current identity setup saved opens the current one", async () => {
+test("Given setup replaced the Computer but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Computer and only the replacement of the current identity setup saved opens the current one", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
     const configurationDirectory = join(directory, "state");
     await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));

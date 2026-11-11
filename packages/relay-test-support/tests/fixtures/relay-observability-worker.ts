@@ -70,17 +70,17 @@ export class ComputerRelay extends RelayRuntimeRelay {
     }
 }
 
-function projectOverload(): Error {
-    return Object.assign(new Error("Project DO overloaded"), { overloaded: true });
+function computerOverload(): Error {
+    return Object.assign(new Error("Computer DO overloaded"), { overloaded: true });
 }
 
-export class UnavailableProject extends DurableObject {
+export class UnavailableComputer extends DurableObject {
     override fetch(): Response {
-        throw projectOverload();
+        throw computerOverload();
     }
 
     recordAudit(): never {
-        throw projectOverload();
+        throw computerOverload();
     }
 }
 

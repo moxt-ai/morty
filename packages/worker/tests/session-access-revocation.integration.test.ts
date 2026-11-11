@@ -40,7 +40,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
                 }),
                 env,
             );
-        const project = `computers/${owner.computerId}`;
+        const computer = `computers/${owner.computerId}`;
         const chat = `chat/computers/${owner.computerId}`;
         expect(
             (
@@ -50,7 +50,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
                 })
             ).status,
         ).toBe(202);
-        const shared = await request(`${project}/identity/transfers`, owner.token, {
+        const shared = await request(`${computer}/identity/transfers`, owner.token, {
             operationId: crypto.randomUUID(),
         });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
@@ -59,7 +59,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
         const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
         const { devices } = v.parse(
             v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
-            await (await request(`${project}/identity/devices`, owner.token)).json(),
+            await (await request(`${computer}/identity/devices`, owner.token)).json(),
         );
         const device = devices.find((entry) => entry.label === "Revoked browser");
         if (device === undefined) {
@@ -73,10 +73,10 @@ test("Given a browser opening a Session, When its device is revoked before the R
             workspaceRef: ".",
         });
         await creation.promise;
-        const revoked = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
+        const revoked = await request(`${computer}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
         expect(revoked.status).toBe(200);
         expect(await revoked.json()).toEqual({ status: "device_access_ended" });
-        expect((await request(`${project}/session`, browser)).status).toBe(401);
+        expect((await request(`${computer}/session`, browser)).status).toBe(401);
         continueCreation.resolve();
         const opened = await opening;
         expect(opened.status).toBe(401);
@@ -103,12 +103,12 @@ test("Given a device with an open Session, When its owner disconnects it while t
                 }),
                 cloud.environment(),
             );
-        const project = `computers/${owner.computerId}`;
+        const computer = `computers/${owner.computerId}`;
         const chat = `chat/computers/${owner.computerId}`;
         expect(
             (await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" })).status,
         ).toBe(202);
-        const shared = await request(`${project}/identity/transfers`, owner.token, {
+        const shared = await request(`${computer}/identity/transfers`, owner.token, {
             operationId: crypto.randomUUID(),
         });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
@@ -116,7 +116,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
         const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
         const { devices } = v.parse(
             v.object({ devices: v.array(v.object({ id: v.string() })) }),
-            await (await request(`${project}/identity/devices`, owner.token)).json(),
+            await (await request(`${computer}/identity/devices`, owner.token)).json(),
         );
         const device = devices[0];
         if (device === undefined) {
@@ -147,14 +147,14 @@ test("Given a device with an open Session, When its owner disconnects it while t
             );
         expect((await readAccess()).status).toBe(200);
         await runtime.disconnect();
-        const failed = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
+        const failed = await request(`${computer}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
 
         expect.soft(failed.status).toBe(200);
         expect.soft(await failed.json()).toEqual({ status: "device_access_ended" });
-        expect((await request(`${project}/session`, browser)).status).toBe(401);
+        expect((await request(`${computer}/session`, browser)).status).toBe(401);
 
         await runtime.reconnect();
-        const remaining = await request(`${project}/identity/devices`, owner.token);
+        const remaining = await request(`${computer}/identity/devices`, owner.token);
         expect(await remaining.json()).toMatchObject({ devices: [] });
         const denied = await readAccess();
         expect(denied.status).toBe(401);
@@ -177,14 +177,14 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
             }),
             cloud.environment(),
         );
-    const project = `computers/${owner.computerId}`;
+    const computer = `computers/${owner.computerId}`;
     const chat = `chat/computers/${owner.computerId}`;
     expect(
         (await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" })).status,
     ).toBe(202);
     /** A browser joins through a link the owner shares, and opens a conversation it then reads. */
     const joinBrowser = async (label: string) => {
-        const shared = await request(`${project}/identity/transfers`, owner.token, {
+        const shared = await request(`${computer}/identity/transfers`, owner.token, {
             operationId: crypto.randomUUID(),
         });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
@@ -192,7 +192,7 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
         const token = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
         const { devices } = v.parse(
             v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
-            await (await request(`${project}/identity/devices`, owner.token)).json(),
+            await (await request(`${computer}/identity/devices`, owner.token)).json(),
         );
         const device = devices.find((entry) => entry.label === label);
         if (device === undefined) {
@@ -232,20 +232,20 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
             );
         return { deviceId: device.id, token, readConversation, watchConversation };
     };
-    return { owner, runtime, request, project, joinBrowser };
+    return { owner, runtime, request, computer, joinBrowser };
 }
 
 test("Given two browsers reading their conversations, one watching it live, When the owner removes that one, Then its live view ends and it stops reading while the other keeps reading with the access it holds", async () => {
     const cloud = await createIdentityFixture();
     try {
-        const { owner, runtime, request, project, joinBrowser } = await sharedComputer(cloud);
+        const { owner, runtime, request, computer, joinBrowser } = await sharedComputer(cloud);
         await using _runtime = runtime;
         const removed = await joinBrowser("Removed browser");
         const kept = await joinBrowser("Kept browser");
         const removedView = await removed.watchConversation();
 
         const ended = await request(
-            `${project}/identity/v1/devices/${removed.deviceId}`,
+            `${computer}/identity/v1/devices/${removed.deviceId}`,
             owner.token,
             undefined,
             "DELETE",
@@ -263,11 +263,11 @@ test("Given two browsers reading their conversations, one watching it live, When
 test("Given a browser reading its conversation, When it ends its own access, Then the access it already holds no longer reads the conversation", async () => {
     const cloud = await createIdentityFixture();
     try {
-        const { runtime, request, project, joinBrowser } = await sharedComputer(cloud);
+        const { runtime, request, computer, joinBrowser } = await sharedComputer(cloud);
         await using _runtime = runtime;
         const browser = await joinBrowser("Leaving browser");
 
-        const ended = await request(`${project}/identity/v1/browser-access`, browser.token, undefined, "DELETE");
+        const ended = await request(`${computer}/identity/v1/browser-access`, browser.token, undefined, "DELETE");
 
         expect(ended.status).toBe(204);
         await expect(browser.readConversation()).rejects.toMatchObject({ code: "credential_revoked" });

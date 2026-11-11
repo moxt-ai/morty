@@ -47,7 +47,7 @@ export default class extends WorkerEntrypoint {
     const creationKey = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
     const body = JSON.stringify({ creationKey });
     try {
-        // An upstream configuration failure still consumes admission, without needing to create disposable Projects.
+        // An upstream configuration failure still consumes admission, without needing to create disposable Computers.
         const first = await runtime.dispatchFetch("https://chat.test/morty/api/identity/anonymous-users", {
             method: "POST",
             headers: { "content-type": "application/json", "CF-Connecting-IP": "192.0.2.10" },

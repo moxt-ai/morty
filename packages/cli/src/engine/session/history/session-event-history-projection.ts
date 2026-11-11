@@ -45,7 +45,7 @@ export type SessionEventHistoryProjectionMutation =
  */
 export type MaterializedEventsResolver = (eventIds: readonly string[]) => ReadonlyMap<string, SessionEvent>;
 
-function projectNewEvent(
+function computerNewEvent(
     liveEvent: Extract<SessionLiveEvent, { readonly type: "acp" }>,
     eventId: string,
 ): AcpSessionEvent {
@@ -56,7 +56,7 @@ function projectNewEvent(
     return { ...event, eventId };
 }
 
-function projectLifecycleEvent(
+function computerLifecycleEvent(
     liveEvent: Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>,
 ): LifecycleSessionEvent {
     const { position: _position, ...event } = liveEvent;
@@ -220,7 +220,7 @@ export class SessionEventHistoryProjection {
             }
         }
 
-        const event = projectNewEvent(liveEvent, liveEvent.eventId);
+        const event = computerNewEvent(liveEvent, liveEvent.eventId);
         this.#latestEvent = event;
         this.#indexToolCall(event);
         return { events: [event], kind: "append" };
@@ -262,7 +262,7 @@ export class SessionEventHistoryProjection {
                     return { kind: "skip" };
                 }
                 this.#turns.set(payload.commandId, "open");
-                return { events: [projectLifecycleEvent(liveEvent)], kind: "append" };
+                return { events: [computerLifecycleEvent(liveEvent)], kind: "append" };
             case "prompt.completed":
             case "prompt.failed":
             case "prompt.failed-before-start":
@@ -270,7 +270,7 @@ export class SessionEventHistoryProjection {
                     return { kind: "skip" };
                 }
                 this.#turns.set(payload.commandId, "ended");
-                return { events: [projectLifecycleEvent(liveEvent)], kind: "append" };
+                return { events: [computerLifecycleEvent(liveEvent)], kind: "append" };
             case "session.queue.changed":
             case "session.permission.requested":
             case "session.permission.resolved":

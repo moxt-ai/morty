@@ -117,7 +117,7 @@ it("Given a live Session view, When the owner revokes browser access, Then the l
     daemon.close(1000, "done");
 });
 
-it("Given a live Session view the revocation push missed, When the Project's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
+it("Given a live Session view the revocation push missed, When the Computer's Session access revocation is committed, Then the Relay's next connection check closes the view", async () => {
     const { daemon, owner, computerId, sessionId, viewInbox } = await openSessionView("missed");
     daemon.send(JSON.stringify({ kind: "session.event.v2", events: [liveEvent(sessionId, "before-revocation")] }));
     expect(await viewInbox.next()).toMatchObject([{ eventId: "before-revocation" }]);

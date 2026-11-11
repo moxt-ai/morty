@@ -104,7 +104,7 @@ test("Given rendered setup instructions at the edge, When users fetch different 
     }
 });
 
-test("Given setup replaced this computer's Project, When an agent follows the setup document, Then it tells the user that earlier links stopped working", async () => {
+test("Given Morty setup replaced this computer's previous connection, When an agent follows the setup document, Then it tells the user that earlier links stopped working", async () => {
     const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
         APP_ORIGIN: "https://chat.example",
     });

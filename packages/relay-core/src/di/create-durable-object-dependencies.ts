@@ -1,83 +1,82 @@
-import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../entity/authentication/project-authentication.ts";
-import type { ProjectCredentialAuthority } from "../entity/authentication/project-authorization.ts";
+import { COMPUTER_HOST_PERMISSIONS, ComputerPermission } from "../entity/authentication/computer-authentication.ts";
+import type { ComputerCredentialAuthority } from "../entity/authentication/computer-authorization.ts";
 import { ComputerScope } from "../entity/do/session.ts";
 import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
+import type { ComputerStorageDirectory } from "../infra/computer-storage-directory.ts";
+import type { ComputerStoreResolver } from "../infra/computer-store.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
-import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
-import type { ProjectStoreResolver } from "../infra/project-store.ts";
-import { ChannelActor } from "../service/channel/channel-actor.ts";
-import { ChannelCredentialService } from "../service/channel/channel-credential-service.ts";
-import { LocalRuntimeRequests } from "../service/channel/local-runtime-requests.ts";
-import { NativeSessionForks } from "../service/channel/native-session-forks.ts";
-import { RuntimeConnectionService } from "../service/channel/runtime-connection-service.ts";
-import { type RuntimeCredentials, type RuntimePeers, RuntimeService } from "../service/channel/runtime-service.ts";
-import { RuntimeConnectionStorage } from "../storage/runtime-connection-storage.ts";
+import { ComputerConnectionService } from "../service/computer/computer-connection-service.ts";
+import { ComputerConnections } from "../service/computer/computer-connections.ts";
+import { LocalRuntimeRequests } from "../service/computer/local-runtime-requests.ts";
+import { NativeSessionForks } from "../service/computer/native-session-forks.ts";
+import { type RuntimeCredentials, type RuntimePeers, RuntimeService } from "../service/computer/runtime-service.ts";
+import { ComputerConnectionStorage } from "../storage/computer-connection-storage.ts";
 
 function createRuntimeRelayDependencies(cx: {
     readonly database: DoSqlDatabase;
     readonly storages: {
-        readonly projectStores: ProjectStoreResolver;
-        readonly projectDirectory: ProjectStorageDirectory;
+        readonly computerStores: ComputerStoreResolver;
+        readonly computerDirectory: ComputerStorageDirectory;
     };
     readonly gateways: {
         readonly peers: RuntimePeers;
-        readonly projectCredentials: ProjectCredentialAuthority;
+        readonly computerCredentials: ComputerCredentialAuthority;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
     };
 }) {
-    /** Null when the Project is no longer served: none of its credentials remain active. */
-    const credentialService = async (scope: ComputerScope, signal: AbortSignal) => {
-        const project = await cx.storages.projectDirectory.resolve(scope.computerId, signal);
+    /** Null when the Computer is no longer served: none of its credentials remain active. */
+    const computerStore = async (scope: ComputerScope, signal: AbortSignal) => {
+        const computer = await cx.storages.computerDirectory.resolve(scope.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (computer === null) {
             return null;
         }
-        if (project.computerId !== scope.computerId) {
-            throw new Error("The Project placement is invalid");
+        if (computer.computerId !== scope.computerId) {
+            throw new Error("The Computer placement is invalid");
         }
-        return new ChannelCredentialService(cx.storages.projectStores.resolve(project.computerId));
+        return cx.storages.computerStores.resolve(computer.computerId);
     };
     const credentials: RuntimeCredentials = {
         authorizeHostMessage: async (identity, permission, signal) => {
-            const service = await credentialService(new ComputerScope(identity.computerId), signal);
-            if (service === null) {
+            const store = await computerStore(new ComputerScope(identity.computerId), signal);
+            if (store === null) {
                 return "revoked";
             }
             if (
-                (await service.activeGeneration(identity, signal)) === null ||
-                !(await cx.gateways.projectCredentials.grants(identity.computerId, PROJECT_HOST_PERMISSIONS, signal))
+                (await store.readActiveGeneration(identity.computerId, signal)) === null ||
+                !(await cx.gateways.computerCredentials.grants(identity.computerId, COMPUTER_HOST_PERMISSIONS, signal))
             ) {
                 return "revoked";
             }
-            if (permission === null || PROJECT_HOST_PERMISSIONS.includes(permission)) {
+            if (permission === null || COMPUTER_HOST_PERMISSIONS.includes(permission)) {
                 return "granted";
             }
-            return (await cx.gateways.projectCredentials.grants(identity.computerId, [permission], signal))
+            return (await cx.gateways.computerCredentials.grants(identity.computerId, [permission], signal))
                 ? "granted"
                 : "denied";
         },
         authorizeViewer: async (identity, signal) => {
-            return (await cx.gateways.projectCredentials.grantsSessionCredential(
+            return (await cx.gateways.computerCredentials.grantsSessionCredential(
                 identity.computerId,
                 identity.credential.grant,
-                [ProjectPermission.SessionRead],
+                [ComputerPermission.SessionRead],
                 signal,
             ))
                 ? "granted"
                 : "revoked";
         },
         activeGeneration: async (identity, signal) => {
-            const service = await credentialService(new ComputerScope(identity.computerId), signal);
-            return service === null ? null : await service.activeGeneration(identity, signal);
+            const store = await computerStore(new ComputerScope(identity.computerId), signal);
+            return store === null ? null : await store.readActiveGeneration(identity.computerId, signal);
         },
     };
     const services = {
         credentials,
-        connections: new RuntimeConnectionService(new RuntimeConnectionStorage(cx.database)),
-        channel: (scope: ComputerScope) =>
-            new ChannelActor({
+        connections: new ComputerConnectionService(new ComputerConnectionStorage(cx.database)),
+        computerConnections: (scope: ComputerScope) =>
+            new ComputerConnections({
                 config: { computerId: scope.computerId },
                 gateways: {
                     peers: cx.gateways.peers,
@@ -105,12 +104,12 @@ export type DurableObjectContext = ReturnType<typeof createDurableObjectDependen
 export function createDurableObjectDependencies(cx: {
     readonly doDatabase: DoSqlDatabase;
     readonly storages: {
-        readonly projectStores: ProjectStoreResolver;
-        readonly projectDirectory: ProjectStorageDirectory;
+        readonly computerStores: ComputerStoreResolver;
+        readonly computerDirectory: ComputerStorageDirectory;
     };
     readonly gateways: {
         readonly peers: RuntimePeers;
-        readonly projectCredentials: ProjectCredentialAuthority;
+        readonly computerCredentials: ComputerCredentialAuthority;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
@@ -133,7 +132,7 @@ export function createDurableObjectDependencies(cx: {
         database: cx.doDatabase,
         gateways: {
             peers,
-            projectCredentials: cx.gateways.projectCredentials,
+            computerCredentials: cx.gateways.computerCredentials,
         },
         storages: cx.storages,
         utilities: cx.utilities,

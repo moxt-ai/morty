@@ -52,7 +52,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "worker-lifecycle.log", [
+        await writeInstallationLog(stateDirectory, "daemon-lifecycle.log", [
             'Morty worker lifecycle {"kind":"worker_started","pid":4242,"version":"0.0.272"}',
             'Morty worker lifecycle {"kind":"worker_exited","pid":4242,"exitCode":137,"signal":"SIGKILL","stderr":"/home/user/secret-path boom"}',
         ]);
@@ -64,7 +64,7 @@ describe("Morty logs command", () => {
         const result = await runCli(["logs"], environment, AbortSignal.timeout(30_000));
 
         expect(result.code).toBe(0);
-        expect(result.stdout).toContain("worker-lifecycle.log");
+        expect(result.stdout).toContain("daemon-lifecycle.log");
         expect(result.stdout).toContain("daemon.log");
         expect(result.stdout).toContain("worker_started");
         expect(result.stdout).toContain("relay_connection_opened");

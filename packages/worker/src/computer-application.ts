@@ -16,7 +16,7 @@ const notFound = (): never => {
     throw new RequestError("NOT_FOUND", "Not found.", 404);
 };
 
-async function bootstrapProject(
+async function bootstrapComputer(
     request: Request,
     bindings: CloudBindings,
     computer: ComputerBackendService,
@@ -57,7 +57,7 @@ export function createComputerApplication(
     }>()
         .onError(errorHandler<{ readonly Bindings: CloudBindings }>(() => logger))
         .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
-        .post("/__computer/bootstrap", (context) => bootstrapProject(context.req.raw, context.env, computer))
+        .post("/__computer/bootstrap", (context) => bootstrapComputer(context.req.raw, context.env, computer))
         .route("/morty/api", createCloudRoutes(computer))
         .notFound(notFound);
 }

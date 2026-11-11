@@ -1,25 +1,25 @@
-import type { ProjectStorageDirectory } from "@morty-build/relay-core/contracts";
+import type { ComputerStorageDirectory } from "@morty-build/relay-core/contracts";
 import { PairingDirectoryError } from "@morty-build/relay-core/contracts";
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 
-/** The Relay directory is the Project lifecycle authority; it decides whether a Project's storage is served. */
-type ActiveProjects = Pick<ComputerManagementStorage, "readActiveComputerScope">;
+/** The Relay directory is the Computer lifecycle authority; it decides whether a Computer's storage is served. */
+type ActiveComputers = Pick<ComputerManagementStorage, "readActiveComputerScope">;
 
-export class ComputerManagementStorageDirectory implements ProjectStorageDirectory {
-    readonly #projects: ActiveProjects;
+export class ComputerManagementStorageDirectory implements ComputerStorageDirectory {
+    readonly #computers: ActiveComputers;
 
-    constructor(projects: ActiveProjects) {
-        this.#projects = projects;
+    constructor(computers: ActiveComputers) {
+        this.#computers = computers;
     }
 
-    readonly resolve: ProjectStorageDirectory["resolve"] = async (computerId, signal) => {
+    readonly resolve: ComputerStorageDirectory["resolve"] = async (computerId, signal) => {
         signal.throwIfAborted();
         const placement = decodeComputerPlacement(computerId);
         if (placement === null) {
-            throw new PairingDirectoryError("directory_unavailable", "Project storage placement is unavailable");
+            throw new PairingDirectoryError("directory_unavailable", "Computer storage placement is unavailable");
         }
-        if ((await this.#projects.readActiveComputerScope(computerId, signal)) === null) {
+        if ((await this.#computers.readActiveComputerScope(computerId, signal)) === null) {
             return null;
         }
         signal.throwIfAborted();

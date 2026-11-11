@@ -1,4 +1,4 @@
-import { PROJECT_LOCATION_HINTS } from "@morty-build/client/protocol";
+import { COMPUTER_LOCATION_HINTS } from "@morty-build/client/protocol";
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
@@ -14,7 +14,7 @@ export const machineAccount = sqliteTable(
         createdAt: integer("created_at").notNull(),
         updatedAt: integer("updated_at").notNull(),
         deletedAt: integer("deleted_at"),
-        locationHint: text("location_hint", { enum: PROJECT_LOCATION_HINTS }).notNull().default("apac"),
+        locationHint: text("location_hint", { enum: COMPUTER_LOCATION_HINTS }).notNull().default("apac"),
     },
     (table) => [
         check("computer_accounts_lifecycle_check", sql`${table.lifecycle} in ('active', 'deleted')`),

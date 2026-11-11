@@ -31,7 +31,7 @@ function creationRequest(headers: Readonly<Record<string, string>> = {}): Reques
     });
 }
 
-test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Project and Machine", async () => {
+test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Computer and Machine", async () => {
     const environment = fixture.environment();
     const creationKey = anonymousCreationKey();
     const create = async () => {
@@ -245,17 +245,17 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
         );
         expect(created.status).toBe(201);
         const identity = v.parse(v.object({ token: v.string(), computerId: v.string() }), await created.json());
-        const projectRequest = () =>
+        const computerRequest = () =>
             new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
                 headers: { authorization: `Bearer ${identity.token}` },
             });
-        const response = await worker.fetch(projectRequest(), environment);
+        const response = await worker.fetch(computerRequest(), environment);
         expect(response.status).toBe(200);
         const initial = v.parse(v.object({ computer: v.object({ computerId: v.string() }) }), await response.json());
-        const projectCode = { apac: "ap", "apac-ne": "an", "apac-se": "as", wnam: "wn" }[region];
-        expect(initial.computer.computerId).toMatch(new RegExp(`^prj_${projectCode}_01_`));
+        const computerCode = { apac: "ap", "apac-ne": "an", "apac-se": "as", wnam: "wn" }[region];
+        expect(initial.computer.computerId).toMatch(new RegExp(`^prj_${computerCode}_01_`));
         const revisited = await worker.fetch(
-            new GeolocatedRequest(projectRequest(), region === "wnam" ? "AS" : "NA", region === "wnam" ? "CN" : "US"),
+            new GeolocatedRequest(computerRequest(), region === "wnam" ? "AS" : "NA", region === "wnam" ? "CN" : "US"),
             environment,
         );
         expect(revisited.status).toBe(200);
@@ -263,8 +263,8 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
     }
 });
 
-test("Given explicit location choices, When users create Morty identities, Then every supported Project code is honored", async () => {
-    for (const [locationHint, projectCode] of [
+test("Given explicit location choices, When users create Morty identities, Then every supported Computer code is honored", async () => {
+    for (const [locationHint, computerCode] of [
         ["wnam", "wn"],
         ["enam", "en"],
         ["sam", "sa"],
@@ -288,11 +288,11 @@ test("Given explicit location choices, When users create Morty identities, Then 
 
         expect(response.status).toBe(201);
         const identity = v.parse(v.object({ computerId: v.string() }), await response.json());
-        expect(identity.computerId).toMatch(new RegExp(`^prj_${projectCode}_01_`, "u"));
+        expect(identity.computerId).toMatch(new RegExp(`^prj_${computerCode}_01_`, "u"));
     }
 });
 
-test("Given Projects in separate regions, When users reopen and transfer Morty access, Then Project objects retain their identities and reject another Project", async () => {
+test("Given Computers in separate regions, When users reopen and transfer Morty access, Then Computer objects retain their identities and reject another Computer", async () => {
     const environment = fixture.environment();
     class RegionalRequest extends Request {
         override readonly cf: { readonly continent: string };
@@ -352,7 +352,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
     }
 });
 
-test("Given a first-time visitor, When their identity and Bot are managed, Then both persist behind the Project boundary", async () => {
+test("Given a first-time visitor, When their identity and Bot are managed, Then both persist behind the Computer boundary", async () => {
     const identity = await fixture.createAnonymousUser();
     const response = await worker.fetch(accountRequest(identity.token, identity.computerId), fixture.environment());
 
@@ -370,7 +370,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     );
     expect(served.status).toBe(200);
     expect(await served.json()).toEqual({ runtimePairing: "unpaired" });
-    const projectResponse = await worker.fetch(
+    const computerResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
@@ -378,18 +378,18 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     );
     const { computer } = v.parse(
         v.object({ computer: v.object({ computerId: v.string() }) }),
-        await projectResponse.json(),
+        await computerResponse.json(),
     );
     expect(identity.computerId).toBe(computer.computerId);
     expect(identity.token).toMatch(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
-    // A Project that was never created is not found, whichever credential asks for it.
+    // A Computer that was never created is not found, whichever credential asks for it.
     expect(
         (await worker.fetch(accountRequest(identity.token, `prj_wn_01_${"z".repeat(24)}`), fixture.environment()))
             .status,
     ).toBe(404);
 });
 
-test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
+test("Given a user with a draft Bot on a Computer-scoped Relay, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const served = await worker.fetch(

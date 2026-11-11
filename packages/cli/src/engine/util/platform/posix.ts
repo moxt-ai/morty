@@ -15,9 +15,9 @@ async function removeControlSocket(path: string): Promise<void> {
 }
 
 export const posixOperations = {
-    controlSocketPath: (installationHash: string) => {
+    controlSocketPath: (stateDirectoryHash: string) => {
         const directory = `morty-${process.getuid?.()}`;
-        const filename = `${installationHash}.sock`;
+        const filename = `${stateDirectoryHash}.sock`;
         const preferred = join(tmpdir(), directory, filename);
         // macOS reserves 104 bytes including the terminator for a Unix socket path.
         // The short fallback receives the same private-directory and peer checks.

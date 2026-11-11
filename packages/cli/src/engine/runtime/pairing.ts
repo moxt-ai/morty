@@ -12,7 +12,7 @@ import { discoverRuntimeAgentInventory } from "./catalog/discover-agent-catalog.
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
 import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
-import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 
@@ -199,7 +199,7 @@ async function claimPairing(
 }
 
 function buildSavedRuntimeConfig(
-    connection: VerifiedRuntimeConnection,
+    connection: VerifiedComputerConnection,
     credentials: RuntimeCredentials,
     defaultWorkspace: string,
     inventory: LocalAgentInventory,
@@ -251,7 +251,7 @@ async function pairRuntime(
     options: PairCommandOptions,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<VerifiedRuntimeConnection> {
+): Promise<VerifiedComputerConnection> {
     const localContext = new RuntimeLocalContext(installation.stateDirectory, environment);
     const defaultWorkspace = await resolveDefaultWorkspace(options.workspace);
     const inventory = await discoverLocalAgentInventory({
@@ -273,12 +273,12 @@ async function pairRuntime(
     return connection;
 }
 
-export async function pairRuntimeConnection(
+export async function pairComputerConnection(
     installation: RuntimeInstallationStore,
     options: MortyRuntimePairingOptions,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<VerifiedRuntimeConnection> {
+): Promise<VerifiedComputerConnection> {
     return await pairRuntime(
         installation,
         {
@@ -292,9 +292,9 @@ export async function pairRuntimeConnection(
     );
 }
 
-export async function prepareRuntimeConnection(
+export async function prepareComputerConnection(
     installation: RuntimeInstallationStore,
-    connection: VerifiedRuntimeConnection,
+    connection: VerifiedComputerConnection,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
     maxAcpProcesses: number,

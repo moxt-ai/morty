@@ -7,7 +7,7 @@ import {
     type AnonymousIdentity,
     AnonymousIdentityApi,
     IdentityApiError,
-    transferCodeProject,
+    transferCodeComputer,
 } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
 import { computerKey, rememberedComputers, replacedToken, storedToken } from "@/services/identity/remembered-computers";
@@ -102,9 +102,9 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
 /**
  * Redeeming a transfer code is the only way to obtain access for a link that
  * was never opened in this browser. A link that no longer opens may not be this
- * browser's only access to its Project: another link it opened, or the
+ * browser's only access to its Computer: another link it opened, or the
  * computer's own access, can still open it. So a failed redemption falls back to
- * the access this browser still holds for the same Project.
+ * the access this browser still holds for the same Computer.
  */
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
     let attempt: AbortController | null = null;
@@ -256,10 +256,10 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     recordBrowserError("redeem", cause);
                     const message = formatError(cause, "This transfer link is unavailable.");
                     // A dead transfer code may not be this browser's only access
-                    // to its Project. Validate only the explicit scope, or a remembered
-                    // scope for this exact Project when the old link has no scope.
+                    // to its Computer. Validate only the explicit scope, or a remembered
+                    // scope for this exact Computer when the old link has no scope.
                     if (cause instanceof IdentityApiError && cause.code === "TRANSFER_UNAVAILABLE") {
-                        const computerId = transferCodeProject(state.code);
+                        const computerId = transferCodeComputer(state.code);
                         const explicit = readIdentityScope();
                         const scopes = hasIdentityScope()
                             ? explicit === null

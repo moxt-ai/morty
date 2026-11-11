@@ -11,7 +11,7 @@ import {
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
-import { runtimeRevoked } from "../../management/entity/runtime-pairing.ts";
+import { runtimeRevoked } from "../../management/entity/computer-pairing.ts";
 import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
@@ -145,8 +145,8 @@ export class ChatService {
         signal: AbortSignal,
     ): Promise<ChatScope> => {
         const { userId, accessExpiresAt, holder } = requester;
-        const ownsProject = await this.#identities.ownsProject(userId, computerId, signal);
-        if (!ownsProject) {
+        const ownsComputer = await this.#identities.ownsComputer(userId, computerId, signal);
+        if (!ownsComputer) {
             throw new ComputerManagementError("NOT_FOUND", "Your Morty data was not found.", 404);
         }
         return { userId, accessExpiresAt, holder, computerId, signal };
@@ -582,7 +582,7 @@ export class ChatService {
         input: NativePreviewInput,
     ) => {
         await this.#requireNativeSessionRuntime(scope, requestedComputerId);
-        // Operation identity belongs to this user and Machine, even when they share a Relay Project.
+        // Operation identity belongs to this user and Machine, even when they share a Relay Computer.
         const scopedOperationId = await scopedNativeForkOperationId(
             scope.computerId,
             `${scope.userId}\u0000fork\u0000${operationId}`,

@@ -19,14 +19,14 @@ type CloudHttpEnvironment = {
 };
 
 const managementApplication = createManagementApplication();
-const projectManagementApplication = createManagementApplication("/morty/api/computers/:computerId");
+const computerManagementApplication = createManagementApplication("/morty/api/computers/:computerId");
 const chatApplication = createChatApplication();
 
 export function createCloudRoutes(computer: ComputerBackendService) {
     return new Hono<CloudHttpEnvironment>()
         .use("*", cloudComputerContext(computer))
         .all("/computers/:computerId/*", (context) =>
-            projectManagementApplication.fetch(context.req.raw, context.var.dependencies),
+            computerManagementApplication.fetch(context.req.raw, context.var.dependencies),
         )
         .all("/chat", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies))
         .route(

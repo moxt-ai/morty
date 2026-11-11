@@ -2,8 +2,8 @@ import { decodeIdentifier, type Identifier, isIdentifier } from "@morty-build/cl
 import * as v from "valibot";
 
 const identifier = v.custom<Identifier>(isIdentifier);
-const projectSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
-export type ManagedProject = v.InferOutput<typeof projectSchema>;
+const computerSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
+export type ManagedComputer = v.InferOutput<typeof computerSchema>;
 const machineSchema = v.object({ runtimePairing: v.picklist(["unpaired", "paired", "revoked"]) });
 
 /**
@@ -44,9 +44,9 @@ export class ManagementApi {
         this.#credentialRejected = options.credentialRejected;
     }
 
-    readonly readProject = async (signal: AbortSignal): Promise<ManagedProject | null> =>
+    readonly readComputer = async (signal: AbortSignal): Promise<ManagedComputer | null> =>
         v.parse(
-            v.object({ computer: v.nullable(projectSchema) }),
+            v.object({ computer: v.nullable(computerSchema) }),
             await this.#request("/computer", "GET", undefined, signal),
         ).computer;
 
@@ -108,6 +108,6 @@ export class CloudApiError extends Error {
 
 const runtimeConnectionCodes = new Set(["connection_closed", "runtime_offline"]);
 
-export function isRuntimeConnectionFailure(cause: unknown): boolean {
+export function isComputerConnectionFailure(cause: unknown): boolean {
     return cause instanceof CloudApiError && runtimeConnectionCodes.has(cause.code.toLowerCase());
 }

@@ -1,8 +1,8 @@
 import type {
-    RuntimeConnectionActivation,
-    RuntimeConnectionInput,
-    VerifiedRuntimeConnection,
-} from "./runtime-connection.ts";
+    ComputerConnectionActivation,
+    ComputerConnectionInput,
+    VerifiedComputerConnection,
+} from "./computer-connection.ts";
 import type { RuntimeInstallationStore } from "./runtime-installation-store.ts";
 
 /** Saved connections; ensuring the installation exists remains an Engine responsibility. */
@@ -13,20 +13,20 @@ export class ConnectionManager {
         this.#ensureInstallation = ensureInstallation;
     }
 
-    readonly list = async (signal: AbortSignal): Promise<readonly VerifiedRuntimeConnection[]> =>
+    readonly list = async (signal: AbortSignal): Promise<readonly VerifiedComputerConnection[]> =>
         await (await this.#ensureInstallation(signal)).listConnections(signal);
 
-    readonly read = async (pairingGeneration: string, signal: AbortSignal): Promise<VerifiedRuntimeConnection> =>
+    readonly read = async (pairingGeneration: string, signal: AbortSignal): Promise<VerifiedComputerConnection> =>
         await (await this.#ensureInstallation(signal)).readConnection(pairingGeneration, signal);
 
-    readonly save = async (input: RuntimeConnectionInput, signal: AbortSignal): Promise<VerifiedRuntimeConnection> =>
+    readonly save = async (input: ComputerConnectionInput, signal: AbortSignal): Promise<VerifiedComputerConnection> =>
         await (await this.#ensureInstallation(signal)).saveConnection(input, signal);
 
     readonly setActivation = async (
         pairingGeneration: string,
-        activation: RuntimeConnectionActivation,
+        activation: ComputerConnectionActivation,
         signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection> =>
+    ): Promise<VerifiedComputerConnection> =>
         await (await this.#ensureInstallation(signal)).setConnectionActivation(pairingGeneration, activation, signal);
 
     readonly remove = async (pairingGeneration: string, signal: AbortSignal): Promise<void> =>

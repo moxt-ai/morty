@@ -444,7 +444,7 @@ describe("daemon session configuration boundary", () => {
             mkdir(nativeStateDirectory),
         ]);
         await writeFile(join(project, ".claude", "settings.json"), JSON.stringify({ model: "test-large" }));
-        const projectDirectory = await realpath(project);
+        const computerDirectory = await realpath(project);
 
         const socketReady = Promise.withResolvers<Duplex>();
         const relaySockets = new Set<Duplex>();
@@ -518,14 +518,14 @@ describe("daemon session configuration boundary", () => {
                 socket,
                 encodeAgentSettingsDiscoverCommand({
                     harness: agent.harness,
-                    directory: projectDirectory,
+                    directory: computerDirectory,
                     kind: AGENT_SETTINGS_DISCOVER_KIND,
                     requestId: "controlled-settings-in-project",
                 }),
             );
-            const inProject = await readAgentSettings(frames, "controlled-settings-in-project");
-            expect(inProject.directory).toBe(projectDirectory);
-            expect(inProject.settings).toContainEqual(
+            const inComputer = await readAgentSettings(frames, "controlled-settings-in-project");
+            expect(inComputer.directory).toBe(computerDirectory);
+            expect(inComputer.settings).toContainEqual(
                 expect.objectContaining({ defaultValue: "test-large", id: "model" }),
             );
 

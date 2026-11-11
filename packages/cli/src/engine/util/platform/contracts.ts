@@ -1,5 +1,5 @@
 export interface PlatformSupport {
-    readonly controlSocketPath: (installationHash: string) => string;
+    readonly controlSocketPath: (stateDirectoryHash: string) => string;
     readonly prepareControlSocket: (path: string) => Promise<void>;
     readonly secureControlSocket: (path: string, signal: AbortSignal) => Promise<void>;
     readonly validateControlPeer: (path: string, signal: AbortSignal) => Promise<void>;

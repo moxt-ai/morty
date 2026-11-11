@@ -1,14 +1,14 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { Hono } from "hono";
-import { createChannelRoutes } from "./channel/channel-routes.ts";
+import { createComputerCatalogRoutes } from "./computers/computer-catalog-routes.ts";
 import { rethrowHonoError } from "./middleware/error-middleware.ts";
-import { createProjectRuntimePairingRoutes } from "./pairing/project-runtime-pairing-routes.ts";
+import { createComputerRuntimePairingRoutes } from "./pairing/computer-runtime-pairing-routes.ts";
 import type { RelayHttpEnvironment } from "./relay-http-environment.ts";
 
 export function createRelayProtocolRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .basePath(MORTY_API_PREFIX)
         .onError(rethrowHonoError)
-        .route("/v1", createProjectRuntimePairingRoutes())
-        .route("/channels", createChannelRoutes());
+        .route("/v1", createComputerRuntimePairingRoutes())
+        .route("/channels", createComputerCatalogRoutes());
 }

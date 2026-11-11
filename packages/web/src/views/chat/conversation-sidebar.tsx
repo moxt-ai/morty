@@ -47,6 +47,7 @@ import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-cha
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import { chatDiagnostics } from "../../view-models/chat/chat-diagnostics.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
+import { computerLocationLabel } from "../../view-models/chat/computer-location-label.ts";
 import {
     type ConversationDirectoryStore,
     conversationDirectorySessions,
@@ -55,7 +56,6 @@ import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../vie
 import { conversationListStatus, hasUnreadConversation } from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
-import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
 import { noSessionExecution } from "../../view-models/chat/session-execution.ts";
 import { noSessionPane } from "../../view-models/chat/session-pane-store.ts";
@@ -104,7 +104,7 @@ function NetworkLatencyIntro({ computerId }: { readonly computerId: string | nul
     return (
         <div className="text-14 leading-5 text-muted-foreground">
             <p>Round-trip latency for this browser and its connected Runtime.</p>
-            <p className="mt-1">Relay location: {projectLocationLabel(computerId ?? "")}</p>
+            <p className="mt-1">Relay location: {computerLocationLabel(computerId ?? "")}</p>
         </div>
     );
 }

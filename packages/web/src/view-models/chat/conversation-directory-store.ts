@@ -2,7 +2,7 @@ import { sameNativeSession } from "@morty-build/client/native-session";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
-import { CloudApiError, isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { CloudApiError, isComputerConnectionFailure } from "@/services/management/management-api";
 import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
@@ -188,13 +188,13 @@ export const createConversationDirectoryStore = (
                             set({ state: { kind: "setup-required" } });
                             return;
                         }
-                        const message = isRuntimeConnectionFailure(cause)
+                        const message = isComputerConnectionFailure(cause)
                             ? "Computer is offline. Sessions will appear when it reconnects."
                             : isApiConnectionError(cause)
                               ? "Connection interrupted. Your sessions will appear when the connection returns."
                               : formatError(cause, "Sessions are unavailable.");
                         const failure =
-                            isRuntimeConnectionFailure(cause) || isApiConnectionError(cause)
+                            isComputerConnectionFailure(cause) || isApiConnectionError(cause)
                                 ? ("connection" as const)
                                 : ("unavailable" as const);
                         set((current) => {

@@ -1,4 +1,4 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
+import type { ComputerLocationHint } from "@morty-build/client/protocol";
 import { AuditActorKind, type HttpError } from "@morty-build/relay-core/contracts";
 
 export class RelayAuditActorKind extends AuditActorKind {
@@ -33,7 +33,7 @@ export class RelayAuthenticationConfiguration {
 }
 
 export interface ComputerManagementPlacement {
-    readonly locationHint: ProjectLocationHint;
+    readonly locationHint: ComputerLocationHint;
 }
 
 export function hasControlCharacters(value: string): boolean {

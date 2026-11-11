@@ -2,7 +2,7 @@ import { isIdentifier } from "@morty-build/client/protocol";
 import { Hono, type MiddlewareHandler } from "hono";
 import { ComputerScope } from "../../entity/do/session.ts";
 import { validateIdentifier } from "../../entity/pairing/pairing.ts";
-import type { RuntimeAdmission, RuntimeService } from "../../service/channel/runtime-service.ts";
+import type { RuntimeAdmission, RuntimeService } from "../../service/computer/runtime-service.ts";
 
 type Environment = { readonly Variables: { readonly scope: ComputerScope } };
 const webSocketUpgrade: MiddlewareHandler<Environment> = async (context, next) => {

@@ -1403,7 +1403,7 @@ it.each(["text", "binary"])(
             await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
+                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at ON computer_connection
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
@@ -2092,7 +2092,7 @@ describe.sequential("Relay Turn submission", () => {
             runtime.daemon.close(1000, "Test complete");
         }
     });
-    it("Given an authorized token for another Project, When it selects an existing Runtime, Then that Runtime refuses the Project mismatch", async () => {
+    it("Given an authorized token for another Computer, When it selects an existing Runtime, Then that Runtime refuses the Computer mismatch", async () => {
         const owner = await connectRuntimeDaemon("direct-owner");
         const other = await connectRuntimeDaemon("direct-other-project");
         try {
@@ -2208,7 +2208,7 @@ describe.sequential("Relay Turn submission", () => {
             runtime.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a Session credential, When HTTP reaches RuntimeRelay directly, Then the command executes without a project relay hop and remains correlated", async () => {
+    it("Given a Session credential, When HTTP reaches RuntimeRelay directly, Then the command executes without a computer relay hop and remains correlated", async () => {
         const runtime = await connectRuntimeDaemon("direct-runtime");
         try {
             const submitted = runtime.submitRuntimeTurn("direct-command");

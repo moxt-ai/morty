@@ -22,13 +22,13 @@ import { logger } from "@morty-build/relay-core/logging";
 import { migrateComputerStorage } from "../../../relay/src/durable-objects/migrate-computer-storage.ts";
 import { decodeComputerDurableObjectPath } from "../../../relay/src/entity/computer-durable-object-path.ts";
 import { decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
-import type { ProjectAuditRow, RelayAuditRecord } from "../../../relay/src/entity/relay-records.ts";
+import type { ComputerAuditRow, RelayAuditRecord } from "../../../relay/src/entity/relay-records.ts";
 import { SessionAccessSigner } from "../../../relay/src/entity/session-access-credential.ts";
 import { authorizeSessionContentUpload } from "../../../relay/src/http/session-content-upload.ts";
 import type { ComputerManagementStore } from "../../../relay/src/infra/computer-management-store.ts";
 import { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
 import { SqliteComputerManagementStore } from "../../../relay/src/storage/sqlite-computer-management-store.ts";
-import { ComputerChat } from "../components/project/computer-chat.ts";
+import { ComputerChat } from "../components/computer/computer-chat.ts";
 import type { ConfiguredRelayBindings } from "../composition/relay-bindings.ts";
 import { createRelayDurableObjectContext } from "../composition/relay-durable-object-context.ts";
 import { createComputerRelayRoutes } from "../composition/relay-http.ts";
@@ -126,7 +126,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         return store;
     }
 
-    readonly #localChannel = (computerId: string, request: Request): Promise<Response> => {
+    readonly #dispatchComputerRequest = (computerId: string, request: Request): Promise<Response> => {
         if (!this.#owns(computerId)) {
             throw new Error("Computer ID does not match this relay");
         }
@@ -250,7 +250,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         await this.#operate(computerId).recordAudit(audit, uncancelled);
     }
 
-    async listAuditEvents(computerId: string, limit: number): Promise<readonly ProjectAuditRow[]> {
+    async listAuditEvents(computerId: string, limit: number): Promise<readonly ComputerAuditRow[]> {
         return await this.#operate(computerId).listAuditEvents(limit, uncancelled);
     }
     override async fetch(request: Request): Promise<Response> {
@@ -305,7 +305,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         return {
             computerId,
             store,
-            channel: this.#localChannel,
+            dispatchComputerRequest: this.#dispatchComputerRequest,
             operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
         };
     }

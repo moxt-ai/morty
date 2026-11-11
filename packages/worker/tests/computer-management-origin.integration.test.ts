@@ -8,16 +8,16 @@ test("Given a machine owner, When the owner opens management, Then they can pair
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
-        const projectUrl = `${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management`;
+        const computerUrl = `${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management`;
         const headers = { authorization: `Bearer ${identity.token}` };
 
         const environment = fixture.environment();
 
-        const project = await worker.fetch(new Request(`${projectUrl}/computer`, { headers }), environment);
-        expect(project.status).toBe(200);
-        expect(await project.json()).toMatchObject({ computer: { computerId: identity.computerId } });
+        const computer = await worker.fetch(new Request(`${computerUrl}/computer`, { headers }), environment);
+        expect(computer.status).toBe(200);
+        expect(await computer.json()).toMatchObject({ computer: { computerId: identity.computerId } });
         const pairing = await worker.fetch(
-            new Request(`${projectUrl}/pairing`, {
+            new Request(`${computerUrl}/pairing`, {
                 method: "POST",
                 headers: { ...headers, "content-type": "application/json" },
                 body: JSON.stringify({ idempotencyKey: "reconfigured-service-pairing" }),
@@ -31,22 +31,22 @@ test("Given a machine owner, When the owner opens management, Then they can pair
     }
 });
 
-test("Given an existing Project and Machine, When Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
+test("Given an existing Computer and Machine, When Morty moves to another origin, Then the user keeps their Computer and can pair and replace it", {
     timeout: 30_000,
 }, async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
-        const projectUrl = `${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management`;
+        const computerUrl = `${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management`;
         const headers = { authorization: `Bearer ${identity.token}` };
-        const originalProject = await worker.fetch(
-            new Request(`${projectUrl}/computer`, { headers }),
+        const originalComputer = await worker.fetch(
+            new Request(`${computerUrl}/computer`, { headers }),
             fixture.environment(),
         );
-        expect(originalProject.status).toBe(200);
-        const project = await originalProject.json();
+        expect(originalComputer.status).toBe(200);
+        const computer = await originalComputer.json();
         const originalBot = await worker.fetch(
-            new Request(`${projectUrl}/machine`, { headers }),
+            new Request(`${computerUrl}/machine`, { headers }),
             fixture.environment(),
         );
         expect(originalBot.status).toBe(200);
@@ -60,15 +60,18 @@ test("Given an existing Project and Machine, When Morty moves to another origin,
             const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);
             expect(await session.json()).toMatchObject({ userId: identity.userId });
-            const currentBot = await worker.fetch(new Request(`${projectUrl}/machine`, { headers }), environment);
+            const currentBot = await worker.fetch(new Request(`${computerUrl}/machine`, { headers }), environment);
             expect(currentBot.status).toBe(200);
             expect(await currentBot.json()).toEqual(bot);
-            const currentProject = await worker.fetch(new Request(`${projectUrl}/computer`, { headers }), environment);
-            expect(currentProject.status).toBe(200);
-            expect(await currentProject.json()).toEqual(project);
+            const currentComputer = await worker.fetch(
+                new Request(`${computerUrl}/computer`, { headers }),
+                environment,
+            );
+            expect(currentComputer.status).toBe(200);
+            expect(await currentComputer.json()).toEqual(computer);
 
             const pairing = await worker.fetch(
-                new Request(`${projectUrl}/pairing`, {
+                new Request(`${computerUrl}/pairing`, {
                     method: "POST",
                     headers: { ...headers, "content-type": "application/json" },
                     body: JSON.stringify({ idempotencyKey: "relocated-relay-pairing" }),
@@ -79,7 +82,7 @@ test("Given an existing Project and Machine, When Morty moves to another origin,
             expect(await pairing.json()).toMatchObject({ computerId: identity.computerId, relayUrl: relocated.origin });
 
             const replaced = await worker.fetch(
-                new Request(`${projectUrl}/computer/replacement`, {
+                new Request(`${computerUrl}/computer/replacement`, {
                     method: "POST",
                     headers,
                 }),

@@ -1,8 +1,8 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq } from "drizzle-orm";
 import {
-    type ProjectRow,
-    ProjectRowSchema,
+    type ComputerRow,
+    ComputerRowSchema,
     type RelayAuditRecord,
     type RelayComputerScopeRow,
     RelayComputerScopeRowSchema,
@@ -12,9 +12,9 @@ import { machineAccount } from "../schema/d1/index.ts";
 import { waitForD1 } from "./d1-operation.ts";
 import { decodeOptionalStorageRecord } from "./decode-storage-record.ts";
 import { computerDirectoryDrizzle } from "./relay-drizzle-database.ts";
-import { projectServed } from "./relay-lifecycle.ts";
+import { computerServed } from "./relay-lifecycle.ts";
 
-const projectRow = {
+const computerRow = {
     computer_id: machineAccount.computerId,
     user_id: machineAccount.userId,
     display_name: machineAccount.displayName,
@@ -29,27 +29,27 @@ const projectRow = {
 
 export class ComputerManagementStorage {
     readonly database: D1Database;
-    readonly projects: Pick<ComputerManagementStores, "forProject">;
-    constructor(database: D1Database, projects: Pick<ComputerManagementStores, "forProject">) {
+    readonly computers: Pick<ComputerManagementStores, "forComputer">;
+    constructor(database: D1Database, computers: Pick<ComputerManagementStores, "forComputer">) {
         this.database = database;
-        this.projects = projects;
+        this.computers = computers;
     }
 
-    readonly readProjectByIdempotencyKey = async (
+    readonly readComputerByIdempotencyKey = async (
         userId: string,
         key: string,
         signal: AbortSignal,
-    ): Promise<ProjectRow | null> => {
+    ): Promise<ComputerRow | null> => {
         const rows = await waitForD1(
             () =>
                 computerDirectoryDrizzle(this.database)
-                    .select(projectRow)
+                    .select(computerRow)
                     .from(machineAccount)
                     .where(and(eq(machineAccount.userId, userId), eq(machineAccount.idempotencyKey, key)))
                     .limit(1),
             signal,
         );
-        return decodeOptionalStorageRecord(ProjectRowSchema, rows[0] ?? null);
+        return decodeOptionalStorageRecord(ComputerRowSchema, rows[0] ?? null);
     };
 
     readonly readActiveComputerScope = async (
@@ -65,7 +65,7 @@ export class ComputerManagementStorage {
                         lifecycle: machineAccount.lifecycle,
                     })
                     .from(machineAccount)
-                    .where(and(eq(machineAccount.computerId, computerId), projectServed))
+                    .where(and(eq(machineAccount.computerId, computerId), computerServed))
                     .limit(1),
             signal,
         );
@@ -77,26 +77,26 @@ export class ComputerManagementStorage {
         computerId: string,
         holder: SessionAccessHolder,
         signal: AbortSignal,
-    ): Promise<boolean> => await this.projects.forProject(computerId).holdsAccess(holder, signal);
+    ): Promise<boolean> => await this.computers.forComputer(computerId).holdsAccess(holder, signal);
     readonly recordAudit = async (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
-        await this.projects.forProject(audit.computerId).recordAudit(audit, signal);
+        await this.computers.forComputer(audit.computerId).recordAudit(audit, signal);
 
-    readonly registerMachineAccount = async (project: ProjectRow, signal: AbortSignal): Promise<boolean> => {
+    readonly registerMachineAccount = async (computer: ComputerRow, signal: AbortSignal): Promise<boolean> => {
         const result = await waitForD1(
             () =>
                 computerDirectoryDrizzle(this.database)
                     .insert(machineAccount)
                     .values({
-                        computerId: project.computer_id,
-                        userId: project.user_id,
-                        displayName: project.display_name,
-                        clientReference: project.client_reference,
-                        idempotencyKey: project.idempotency_key,
+                        computerId: computer.computer_id,
+                        userId: computer.user_id,
+                        displayName: computer.display_name,
+                        clientReference: computer.client_reference,
+                        idempotencyKey: computer.idempotency_key,
                         lifecycle: "active",
-                        createdAt: project.created_at,
-                        updatedAt: project.updated_at,
+                        createdAt: computer.created_at,
+                        updatedAt: computer.updated_at,
                         deletedAt: null,
-                        locationHint: project.location_hint,
+                        locationHint: computer.location_hint,
                     })
                     .onConflictDoNothing()
                     .run(),

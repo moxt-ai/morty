@@ -105,8 +105,8 @@ test("Given a browser that joined through a link, When it asks for recovery acce
             }),
             fixture.environment(),
         );
-    const project = `/computers/${owner.computerId}`;
-    const transfer = await request(`${project}/identity/transfers`, owner.token, "POST", {
+    const computer = `/computers/${owner.computerId}`;
+    const transfer = await request(`${computer}/identity/transfers`, owner.token, "POST", {
         operationId: crypto.randomUUID(),
     });
     const code = new URL(v.parse(v.object({ url: v.string() }), await transfer.json()).url).hash.slice(6);
@@ -119,14 +119,14 @@ test("Given a browser that joined through a link, When it asks for recovery acce
         fixture.environment(),
     );
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
-    const recoveryResponse = await request(`${project}/identity/recovery-token`, owner.token, "POST");
+    const recoveryResponse = await request(`${computer}/identity/recovery-token`, owner.token, "POST");
     expect(recoveryResponse.status).toBe(201);
     const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
 
     for (const token of [browser, recovery]) {
         for (const refused of [
-            await request(`${project}/identity/recovery-token`, token, "POST"),
-            await request(`${project}/management/pairing`, token, "POST", {
+            await request(`${computer}/identity/recovery-token`, token, "POST"),
+            await request(`${computer}/management/pairing`, token, "POST", {
                 idempotencyKey: "shared-pairing",
             }),
             await request(`/chat/computers/${owner.computerId}/setup`, token, "POST", {
@@ -140,10 +140,10 @@ test("Given a browser that joined through a link, When it asks for recovery acce
     }
     // Shared access still shares onward, as the sharing dialog offers, and still ends itself.
     expect(
-        (await request(`${project}/identity/transfers`, browser, "POST", { operationId: crypto.randomUUID() })).status,
+        (await request(`${computer}/identity/transfers`, browser, "POST", { operationId: crypto.randomUUID() })).status,
     ).toBe(201);
-    expect((await request(`${project}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
-    expect((await request(`${project}/session`, browser)).status).toBe(401);
+    expect((await request(`${computer}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
+    expect((await request(`${computer}/session`, browser)).status).toBe(401);
 });
 
 test("Given browser access granted through a link, When the access term its link granted passes, Then that access ends while the computer's own access stays", async () => {
@@ -221,7 +221,7 @@ test("Given browser access granted through a link, When that browser shares a ne
     expect(browserLink.accessExpiresAt).toBe(ownerLink.accessExpiresAt);
 });
 
-test("Given a well-formed Project identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {
+test("Given a well-formed Computer identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {
     const computerId = `prj_ap_01_${"N".repeat(24)}`;
     const response = await fetchPublicApplication(
         new Request(`${APP_ORIGIN}/morty/api/computers/${computerId}/session`),

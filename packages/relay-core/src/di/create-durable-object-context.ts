@@ -1,28 +1,28 @@
-import type { ProjectCredentialAuthority } from "../entity/authentication/project-authorization.ts";
-import { CloudflareChannelPeers } from "../gateway/cloudflare-channel-peers.ts";
+import type { ComputerCredentialAuthority } from "../entity/authentication/computer-authorization.ts";
+import { CloudflareRelayPeers } from "../gateway/cloudflare-relay-peers.ts";
+import type { ComputerStorageDirectory } from "../infra/computer-storage-directory.ts";
+import type { ComputerStoreResolver } from "../infra/computer-store.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
-import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
-import type { ProjectStoreResolver } from "../infra/project-store.ts";
 import { createDurableObjectDependencies } from "./create-durable-object-dependencies.ts";
 
 export function createDurableObjectContext(
     state: DurableObjectState,
     options: {
-        readonly stores: ProjectStoreResolver;
-        readonly projects: ProjectStorageDirectory;
-        readonly projectCredentials: ProjectCredentialAuthority;
+        readonly stores: ComputerStoreResolver;
+        readonly computers: ComputerStorageDirectory;
+        readonly computerCredentials: ComputerCredentialAuthority;
         readonly doDatabase: DoSqlDatabase;
     },
 ) {
     return createDurableObjectDependencies({
         doDatabase: options.doDatabase,
         storages: {
-            projectStores: options.stores,
-            projectDirectory: options.projects,
+            computerStores: options.stores,
+            computerDirectory: options.computers,
         },
         gateways: {
-            peers: new CloudflareChannelPeers(state),
-            projectCredentials: options.projectCredentials,
+            peers: new CloudflareRelayPeers(state),
+            computerCredentials: options.computerCredentials,
         },
         utilities: {
             waitUntil: (operation) => state.waitUntil(operation),

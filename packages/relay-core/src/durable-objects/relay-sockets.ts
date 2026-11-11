@@ -1,11 +1,11 @@
 import type { DurableObjectContext } from "../di/create-durable-object-dependencies.ts";
-import { CloudflareChannelSocket } from "../gateway/cloudflare-channel-peers.ts";
+import { CloudflareRelayPeerSocket } from "../gateway/cloudflare-relay-peers.ts";
 import { diagnosticText } from "../infra/log-diagnostics.ts";
 import { logger } from "../infra/logger.ts";
 
 function socketLogContext(webSocket: WebSocket) {
     try {
-        const identity = new CloudflareChannelSocket(webSocket).identity();
+        const identity = new CloudflareRelayPeerSocket(webSocket).identity();
         const { computerId, role } = identity;
         return {
             computerId,
@@ -35,7 +35,7 @@ export class RelaySockets {
     }
 
     async webSocketMessage(webSocket: WebSocket, message: unknown): Promise<void> {
-        const socket = new CloudflareChannelSocket(webSocket);
+        const socket = new CloudflareRelayPeerSocket(webSocket);
         const controller = new AbortController();
         const close = () => controller.abort(new DOMException("The channel socket closed", "AbortError"));
         webSocket.addEventListener("close", close, { once: true });
@@ -78,7 +78,7 @@ export class RelaySockets {
         } else if (context.role === "daemon" || context.role === "replaced-daemon") {
             this.#logger.info(details, "Runtime WebSocket closed");
         }
-        const socket = new CloudflareChannelSocket(webSocket);
+        const socket = new CloudflareRelayPeerSocket(webSocket);
         try {
             await this.withOperationSignal((signal) =>
                 this.#dependencies.services.runtime.detach(socket.identity(), socket, signal),

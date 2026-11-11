@@ -139,7 +139,7 @@ export async function createTestRuntime(
             restartRuntime: async () => await runtime.restart(),
             pauseRuntime: runtime.pause,
             resumeRuntime: runtime.resume,
-            forgetRuntimeConnections: async () => await runtime.forgetConnections(),
+            forgetComputerConnections: async () => await runtime.forgetConnections(),
             connectUnrelatedRuntime: async () => {
                 const unrelated = new ChatApi(stack.chatOrigin, journey.signal);
                 await unrelated.useBrowserIdentity(
@@ -170,7 +170,7 @@ export async function createTestRuntime(
                 sessionId?: string,
                 maximumWaitMilliseconds?: number,
                 workspace?: string,
-                replaceProject?: string,
+                replaceComputer?: string,
             ) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 if (sessionId !== undefined && harness !== "claude") {
@@ -197,7 +197,7 @@ export async function createTestRuntime(
                         },
                     },
                     runtime,
-                    ...(replaceProject === undefined ? {} : { replaceProject }),
+                    ...(replaceComputer === undefined ? {} : { replaceComputer }),
                     // A Claude Code shell exposes its current session; the controlled peer stands in for Claude Code.
                     agentEnvironment: sessionId === undefined ? {} : { CLAUDE_CODE_SESSION_ID: sessionId },
                 });

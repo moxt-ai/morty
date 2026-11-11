@@ -200,7 +200,7 @@ function decodeTurnCancellation(value: unknown, turnId: string): MortyTurnCancel
     return { turnId, stopReason: Reflect.get(value, "stopReason") };
 }
 
-function projectPath(computerId: string, resourcePath: string): string {
+function computerPath(computerId: string, resourcePath: string): string {
     if (!isIdentifier(computerId)) {
         throw new MortyValidationError("The Morty project identifier is invalid");
     }
@@ -219,7 +219,7 @@ function sessionPath(computerId: string, target: NativeSessionTarget, resourcePa
     if (!nativeSessionTargetSchema.safeParse(target).success) {
         throw new MortyValidationError("The Morty Session identifier is invalid");
     }
-    return projectPath(computerId, `${nativeSessionRoute(target)}/${resourcePath}`);
+    return computerPath(computerId, `${nativeSessionRoute(target)}/${resourcePath}`);
 }
 
 function requestUrl(endpoint: URL, path: string): URL {

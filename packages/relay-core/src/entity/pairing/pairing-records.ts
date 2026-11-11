@@ -12,29 +12,29 @@ export type RuntimeCredentialRotation =
     | { readonly kind: "revoked" }
     | { readonly kind: "unknown" };
 
-interface RuntimeRegistrationRow {
+interface ComputerRegistrationRow {
     readonly claimed_at: number;
     readonly agents_json: string;
     readonly machine_name: string;
     readonly workspace_name: string;
 }
 
-export interface RuntimeChannelRow extends PairingScopeRow, RuntimeRegistrationRow {}
+export interface PairedComputerRow extends PairingScopeRow, ComputerRegistrationRow {}
 
-export interface RuntimeDirectoryRow extends PairingScopeRow {
+export interface ComputerPairingStatusRow extends PairingScopeRow {
     readonly revoked_at: number | null;
-    readonly registration: RuntimeRegistrationRow | null;
+    readonly registration: ComputerRegistrationRow | null;
 }
 
-export interface PairingChannelRow extends RuntimeDirectoryRow {
+export interface ComputerPairingDetails extends ComputerPairingStatusRow {
     readonly expires_at: number;
 }
 
-export interface PairingClaimRow extends PairingChannelRow {
+export interface PairingClaimRow extends ComputerPairingDetails {
     readonly poll_token_hash: string;
 }
 
-export interface RuntimePairingRow extends PairingScopeRow {
+export interface ComputerPairingRequestRow extends PairingScopeRow {
     readonly pairing_code_hash: string;
     readonly poll_token_hash: string;
     readonly expires_at: number;

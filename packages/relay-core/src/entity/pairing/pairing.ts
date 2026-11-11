@@ -37,7 +37,7 @@ export interface ClaimedPairing {
     readonly daemonToken: string;
 }
 
-export class VerifiedChannelAccess {
+export class VerifiedComputerAccess {
     readonly agents: readonly AgentDescriptor[];
     readonly computerId: string;
 
@@ -48,11 +48,11 @@ export class VerifiedChannelAccess {
 }
 
 /**
- * A host connection opened with a project credential. The Relay stores no copy of that authority: the connection
+ * A host connection opened with a computer credential. The Relay stores no copy of that authority: the connection
  * names the credential, and every message it sends re-reads whether the credential still grants
- * `PROJECT_HOST_PERMISSIONS` and the message's own permission in the Project.
+ * `COMPUTER_HOST_PERMISSIONS` and the message's own permission in the Computer.
  */
-export class ChannelDescriptor {
+export class ComputerDescriptor {
     readonly agents: readonly AgentDescriptor[];
     readonly machineName: string;
     readonly computerId: string;
@@ -166,11 +166,11 @@ function pairingDirectoryErrorStatus(code: string): number {
     }
 }
 
-export class RevokedProjectRuntime {
-    readonly access: VerifiedChannelAccess;
+export class RevokedComputerRuntime {
+    readonly access: VerifiedComputerAccess;
     readonly revokedAt: string;
 
-    constructor(access: VerifiedChannelAccess, revokedAt: string) {
+    constructor(access: VerifiedComputerAccess, revokedAt: string) {
         this.access = access;
         this.revokedAt = revokedAt;
     }

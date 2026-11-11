@@ -1,8 +1,8 @@
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import type { BootstrapOrigin } from "../entity/computer-bootstrap.ts";
 import { type ComputerManagement, ComputerManagementError } from "../entity/computer-management.ts";
+import { computerRegion } from "../entity/computer-region.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { AccountProvisioner } from "./account-provisioning-service.ts";
@@ -39,52 +39,52 @@ export class ManagementService {
      */
     readonly initializeAnonymousUser = async (
         userId: string,
-        project: ComputerManagement,
+        computer: ComputerManagement,
         signal: AbortSignal,
         origin: BootstrapOrigin,
     ) => {
-        const token = await bootstrapToken(this.#credentialKey, userId, project.computerId, origin, signal);
-        const identity = await this.#authentication.createAnonymous(userId, project.computerId, signal, token);
+        const token = await bootstrapToken(this.#credentialKey, userId, computer.computerId, origin, signal);
+        const identity = await this.#authentication.createAnonymous(userId, computer.computerId, signal, token);
         return identity;
     };
 
     /** The owner's Machine: where its Runtime pairing stands, read from the Relay that owns it. */
     readonly readMachine = async (userId: string, signal: AbortSignal) => {
-        const project = await this.readProject(userId, signal);
-        if (project === null) {
+        const computer = await this.readComputer(userId, signal);
+        if (computer === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { runtimePairing: await this.#relay.readRuntimePairing(project.computerId, signal) };
+        return { runtimePairing: await this.#relay.readRuntimePairing(computer.computerId, signal) };
     };
 
-    readonly readProject = async (userId: string, signal: AbortSignal) => {
+    readonly readComputer = async (userId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         return this.#computerId === undefined || this.#ownerUserId !== userId ? null : { computerId: this.#computerId };
     };
 
-    /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
-    readonly replaceProject = async (userId: string, signal: AbortSignal) => {
-        const previous = await this.readProject(userId, signal);
+    /** Creates the successor Computer for a user whose Computer must be replaced, keeping the user. */
+    readonly replaceComputer = async (userId: string, signal: AbortSignal) => {
+        const previous = await this.readComputer(userId, signal);
         if (previous === null) {
             throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }
         // A successor needs its own Relay reference: clientReference is unique per (app, reference)
-        // and the primary reference is already bound to the previous Project. Keying the reference on
-        // the previous Project keeps replacement retries idempotent, as does reusing its placement.
+        // and the primary reference is already bound to the previous Computer. Keying the reference on
+        // the previous Computer keeps replacement retries idempotent, as does reusing its placement.
         const reference = `${userId}.${previous.computerId}`;
-        const project = await this.#provisionAccount(userId, reference, projectRegion(previous.computerId), signal);
-        return project;
+        const computer = await this.#provisionAccount(userId, reference, computerRegion(previous.computerId), signal);
+        return computer;
     };
 
     readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
-        const project = await this.#requireProject(userId, signal);
-        const pairing = await this.#relay.createPairing(project.computerId, idempotencyKey, signal);
+        const computer = await this.#requireComputer(userId, signal);
+        const pairing = await this.#relay.createPairing(computer.computerId, idempotencyKey, signal);
         return pairing;
     };
 
     readonly readRuntimePairing = async (userId: string, signal: AbortSignal) => {
-        const project = await this.#requireProject(userId, signal);
-        return await this.#relay.readPairing(project.computerId, signal);
+        const computer = await this.#requireComputer(userId, signal);
+        return await this.#relay.readPairing(computer.computerId, signal);
     };
 
     /**
@@ -111,12 +111,12 @@ export class ManagementService {
         return identity;
     };
 
-    readonly #requireProject = async (userId: string, signal: AbortSignal) => {
-        const project = await this.readProject(userId, signal);
-        if (project === null) {
+    readonly #requireComputer = async (userId: string, signal: AbortSignal) => {
+        const computer = await this.readComputer(userId, signal);
+        if (computer === null) {
             throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Runtime.", 409);
         }
-        return project;
+        return computer;
     };
 }
 
@@ -151,7 +151,7 @@ async function derivedToken(
     signal: AbortSignal,
 ) {
     if (serverKey === undefined) {
-        throw new Error("Deriving a credential needs the Project object's key.");
+        throw new Error("Deriving a credential needs the Computer object's key.");
     }
     const secret = await serverKey(signal);
     const key = await crypto.subtle.importKey(

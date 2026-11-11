@@ -18,7 +18,7 @@ import {
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
-import { isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { isComputerConnectionFailure } from "@/services/management/management-api";
 import type { AgentModelCatalog } from "../../services/diagnostics/model-catalog.ts";
 import { formatError } from "../format-error.ts";
 import { harnessOptions, nativeSessionAgentTabs } from "./native-session-agents.ts";
@@ -262,7 +262,7 @@ export const createDraftControlsStore = (
          * is reachable again.
          */
         const settleFailure = (cause: unknown, message: string): void => {
-            if (isRuntimeConnectionFailure(cause)) {
+            if (isComputerConnectionFailure(cause)) {
                 set({ settings: { kind: "unreachable" } });
                 onUnreachable();
                 return;

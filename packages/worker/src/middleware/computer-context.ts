@@ -1,9 +1,9 @@
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
 import type { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
+import { readComputerCredential } from "../components/management/entity/computer-credential.ts";
 import { relayIdentifier } from "../components/management/entity/computer-management.ts";
 import { ManagementError } from "../components/management/entity/management-error.ts";
-import { readProjectCredential } from "../components/management/entity/project-credential.ts";
 import { type ApplicationContext, createApplicationDependencies } from "../composition/application-context.ts";
 import { computerBindings } from "../composition/computer-bindings.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
@@ -50,7 +50,7 @@ export async function cloudComputerId(request: Request): Promise<string | null> 
     if (request.method === "POST" && inputKey !== null) {
         const input = await readJsonBody(request.clone());
         const parsed = v.safeParse(v.record(v.string(), v.unknown()), input);
-        const ticket = parsed.success ? readProjectCredential(parsed.output[inputKey]) : null;
+        const ticket = parsed.success ? readComputerCredential(parsed.output[inputKey]) : null;
         if (ticket?.kind === "morty_transfer_v1") {
             return ticket.computerId;
         }

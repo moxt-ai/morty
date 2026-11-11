@@ -31,7 +31,7 @@ const runtimeClaimSchema = v.object({
     runtimeCredential: v.string(),
 });
 
-export interface ControlledRuntimeConnection {
+export interface ControlledComputerConnection {
     readonly computerId: string;
     readonly origin: string;
     /** The Runtime's relay credential; it rotates on every connection and outlives restarts, as a saved one does. */
@@ -61,12 +61,12 @@ export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
     readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
 }
 
-type RuntimeConnectionOptions = Parameters<typeof createRuntimeConfig>[0];
+type ComputerConnectionOptions = Parameters<typeof createRuntimeConfig>[0];
 
 /** Creates the daemon configuration once, so Agent state survives restarts of its engine. */
 function controlledRuntime(
     agents: ReturnType<typeof createMortyFakeDaemon>["agents"],
-    connection: RuntimeConnectionOptions,
+    connection: ComputerConnectionOptions,
     directory: string,
 ): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => RuntimeLoop } {
     const config = createRuntimeConfig(
@@ -150,7 +150,7 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
 
 export async function connectControlledAgentRuntime(options: {
     readonly behavior: ControlledAgentBehavior;
-    readonly connection: ControlledRuntimeConnection;
+    readonly connection: ControlledComputerConnection;
     readonly signal: AbortSignal;
 }) {
     options.signal.throwIfAborted();

@@ -50,9 +50,9 @@ async function computerIdFromUnscopedRequest(request: Request): Promise<string |
     }
     const authorization = request.headers.get("authorization") ?? "";
     const bearer = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
-    const credentialProject = computerIdFromPrefixedValue(bearer);
-    if (credentialProject !== null) {
-        return credentialProject;
+    const credentialComputer = computerIdFromPrefixedValue(bearer);
+    if (credentialComputer !== null) {
+        return credentialComputer;
     }
     return null;
 }
@@ -108,7 +108,7 @@ export async function routeComputerDurableObject(
                 path: durableObjectUrl.pathname,
                 err: error,
             },
-            "Project Relay request failed",
+            "Computer Relay request failed",
         );
         throw error;
     }

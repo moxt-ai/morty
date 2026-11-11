@@ -2,11 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const DAEMON_LOG_FILENAME = "daemon.log";
-export const WORKER_LIFECYCLE_LOG_FILENAME = "worker-lifecycle.log";
+export const DAEMON_LIFECYCLE_LOG_FILENAME = "daemon-lifecycle.log";
 
-export function unhandledRejectionLogFilename(role: "manager" | "worker"): string {
-    return `unhandled-rejections-${role}.log`;
-}
+export const UNHANDLED_REJECTION_LOG_FILENAME = "unhandled-rejections-daemon.log";
 
 export function logDirectory(dataDirectory: string): string {
     return join(dataDirectory, "logs");
@@ -14,9 +12,11 @@ export function logDirectory(dataDirectory: string): string {
 
 export function processLogPaths(dataDirectory: string): readonly string[] {
     return [
-        WORKER_LIFECYCLE_LOG_FILENAME,
-        unhandledRejectionLogFilename("manager"),
-        unhandledRejectionLogFilename("worker"),
+        DAEMON_LIFECYCLE_LOG_FILENAME,
+        UNHANDLED_REJECTION_LOG_FILENAME,
+        "worker-lifecycle.log",
+        "unhandled-rejections-manager.log",
+        "unhandled-rejections-worker.log",
     ].map((filename) => join(logDirectory(dataDirectory), filename));
 }
 

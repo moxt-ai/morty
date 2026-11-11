@@ -252,7 +252,7 @@ export function createRelayRoutes() {
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(128 * 1024 * 1024)),
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
-            return await sessionOperations(context).readProjectSessionFile(
+            return await sessionOperations(context).readComputerSessionFile(
                 new ComputerScope(access.computerId),
                 decodeFileReadCommand(
                     JSON.stringify({
@@ -303,7 +303,7 @@ export function createRelayRoutes() {
                 throw new PairingDirectoryError("invalid_request", "The content name is invalid", { cause });
             }
             name = decodeSessionRequest(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
-            const available = await sessionOperations(context).writeProjectSessionContent(
+            const available = await sessionOperations(context).writeComputerSessionContent(
                 new ComputerScope(access.computerId),
                 decodeContentWriteCommand(
                     JSON.stringify({

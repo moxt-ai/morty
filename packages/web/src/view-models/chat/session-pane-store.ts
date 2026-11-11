@@ -14,7 +14,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { Clock } from "../../services/time/clock.ts";
-import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
+import { formatError, isRetryableComputerConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { agentQuestionAnswer, openAgentQuestions } from "./agent-question-answer.ts";
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
@@ -1117,7 +1117,7 @@ export function createSessionPaneModel(options: {
                         if (closure !== null) {
                             continue;
                         }
-                        const retryable = isRetryableRuntimeConnectionFailure(cause);
+                        const retryable = isRetryableComputerConnectionFailure(cause);
                         if (recoveryRequested) {
                             recoveryRequested = false;
                             consecutiveFailures = 0;

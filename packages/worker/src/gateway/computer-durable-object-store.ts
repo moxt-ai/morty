@@ -1,4 +1,4 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
+import type { ComputerLocationHint } from "@morty-build/client/protocol";
 import { PairingDirectoryError, type RuntimePairingRequest } from "@morty-build/relay-core/contracts";
 import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
@@ -11,22 +11,22 @@ import type { ComputerRelay } from "../do/computer-relay.ts";
 
 const OPERATION_TIMEOUT_MILLISECONDS = 15_000;
 
-type ProjectStub = DurableObjectStub<ComputerRelay>;
+type ComputerStub = DurableObjectStub<ComputerRelay>;
 
 /**
- * A Project's store reached through its Account Durable Object. Every operation executes there as one unit;
+ * A Computer's store reached through its Account Durable Object. Every operation executes there as one unit;
  * cancelling or timing out here stops waiting for the result but cannot undo an operation already delivered.
  */
 class ComputerDurableObjectStore implements ComputerManagementStore {
     readonly #namespace: DurableObjectNamespace<ComputerRelay>;
     readonly #computerId: string;
-    readonly #locationHint: ProjectLocationHint;
-    #stub: ProjectStub | null = null;
+    readonly #locationHint: ComputerLocationHint;
+    #stub: ComputerStub | null = null;
 
     constructor(
         namespace: DurableObjectNamespace<ComputerRelay>,
         computerId: string,
-        locationHint: ProjectLocationHint,
+        locationHint: ComputerLocationHint,
     ) {
         this.#namespace = namespace;
         this.#computerId = computerId;
@@ -35,7 +35,7 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
 
     private readonly call = async <Value>(
         operation: string,
-        invoke: (stub: ProjectStub, computerId: string) => Promise<Value>,
+        invoke: (stub: ComputerStub, computerId: string) => Promise<Value>,
         signal: AbortSignal,
     ): Promise<Value> => {
         signal.throwIfAborted();
@@ -70,11 +70,11 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
                     operation,
                     err: cause,
                 },
-                "Project database request failed",
+                "Computer database request failed",
             );
             throw new DatabaseError(
                 timeout.signal.aborted ? "database_timeout" : "database_unavailable",
-                "Project storage is unavailable",
+                "Computer storage is unavailable",
                 { cause },
             );
         } finally {
@@ -144,8 +144,8 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
 }
 
 /**
- * Locates Project stores. Inside a Account Durable Object its own Project resolves to the local store; every other
- * Project resolves to its own Durable Object.
+ * Locates Computer stores. Inside a Account Durable Object its own Computer resolves to the local store; every other
+ * Computer resolves to its own Durable Object.
  */
 export class ComputerDurableObjectStores implements ComputerManagementStores {
     readonly #namespace: DurableObjectNamespace<ComputerRelay>;
@@ -160,7 +160,7 @@ export class ComputerDurableObjectStores implements ComputerManagementStores {
         this.#local = local;
     }
 
-    readonly forProject: ComputerManagementStores["forProject"] = (computerId) => {
+    readonly forComputer: ComputerManagementStores["forComputer"] = (computerId) => {
         if (this.#local?.computerId === computerId) {
             return this.#local.store;
         }
@@ -170,12 +170,12 @@ export class ComputerDurableObjectStores implements ComputerManagementStores {
         }
         const placement = decodeComputerPlacement(computerId);
         if (placement === null) {
-            throw new PairingDirectoryError("directory_unavailable", "Project storage is unavailable");
+            throw new PairingDirectoryError("directory_unavailable", "Computer storage is unavailable");
         }
         const store = new ComputerDurableObjectStore(this.#namespace, computerId, placement.locationHint);
         this.#remote.set(computerId, store);
         return store;
     };
 
-    readonly resolve: ComputerManagementStores["resolve"] = (computerId) => this.forProject(computerId);
+    readonly resolve: ComputerManagementStores["resolve"] = (computerId) => this.forComputer(computerId);
 }

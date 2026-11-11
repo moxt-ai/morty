@@ -1,5 +1,5 @@
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import { computerDurableObjectMigrations } from "../generated/project-do-migrations.ts";
+import { computerDurableObjectMigrations } from "../generated/computer-relay-migrations.ts";
 
 type BoundValue = ArrayBuffer | string | number | null;
 

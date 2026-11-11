@@ -39,7 +39,7 @@ function allocateSessionId(): string {
 }
 
 /** Like Claude Code, a new session starts with the model its working directory's `.claude/settings.json` names. */
-function projectModel(cwd: string): string | undefined {
+function computerModel(cwd: string): string | undefined {
     const path = join(cwd, ".claude", "settings.json");
     if (!existsSync(path)) {
         return undefined;
@@ -56,7 +56,7 @@ export function registerNativeSessions(agent: ReturnType<typeof acp.agent>) {
             }
             const sessionId = allocateSessionId();
             acquireWriter(sessionId);
-            const state = new ControlledSessionState(0, projectModel(context.params.cwd));
+            const state = new ControlledSessionState(0, computerModel(context.params.cwd));
             nativeMetadata.set(sessionId, {
                 cwd: context.params.cwd,
                 title: "",

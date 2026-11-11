@@ -44,7 +44,7 @@ beforeAll(async () => {
             compatibilityDate: "2026-09-03",
             durableObjects: {
                 COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
-                UNAVAILABLE_PROJECT: { className: "UnavailableProject", useSQLite: true },
+                UNAVAILABLE_PROJECT: { className: "UnavailableComputer", useSQLite: true },
             },
             d1Databases: ["RELAY_DIRECTORY_DATABASE"],
             compatibilityFlags: ["nodejs_compat"],
@@ -113,7 +113,7 @@ async function api(
     return record(value);
 }
 
-async function provisionProject() {
+async function provisionComputer() {
     const owner = await api(
         "/identity/anonymous-users",
         {
@@ -128,7 +128,7 @@ async function provisionProject() {
 }
 
 async function pairRuntime() {
-    const { computerId, appCredential } = await provisionProject();
+    const { computerId, appCredential } = await provisionComputer();
     const pairing = await api(
         `/computers/${computerId}/management/pairing`,
         {
@@ -156,7 +156,7 @@ async function pairRuntime() {
 
 let loggingRuntime: Promise<{ readonly computerId: string }> | undefined;
 
-/** Internal Runtime Relay scenarios enter after public pairing registered the Runtime in an active Project. */
+/** Internal Runtime Relay scenarios enter after public pairing registered the Runtime in an active Computer. */
 function registeredLoggingRuntime() {
     loggingRuntime ??= pairRuntime().then(({ computerId }) => ({
         computerId,
@@ -268,8 +268,8 @@ it.each([
     },
 );
 
-// @no-uc: Technical regression; Project routing failures must identify the target DO and retain overload details.
-it("identifies a Project Relay overload through the public HTTP API", async () => {
+// @no-uc: Technical regression; Computer routing failures must identify the target DO and retain overload details.
+it("identifies a Computer Relay overload through the public HTTP API", async () => {
     const start = logs.length;
     const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
     await api(
@@ -289,7 +289,7 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
             cfRay: "project-failure-ray",
             err: expect.objectContaining({
                 overloaded: true,
-                message: expect.stringContaining("Project DO overloaded"),
+                message: expect.stringContaining("Computer DO overloaded"),
             }),
         }),
     );

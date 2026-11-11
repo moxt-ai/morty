@@ -1,6 +1,6 @@
 import { MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
 import { isApiConnectionError } from "../services/api/http-api-transport.ts";
-import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
+import { isComputerConnectionFailure } from "../services/management/management-api.ts";
 
 const runtimeDisconnectedFailure = {
     detail: "Start your Morty Runtime to reconnect, then try again.",
@@ -65,7 +65,7 @@ const retryableRuntimeFailureCodes = new Set([
  * cause falls back to the caller's context-specific message.
  */
 export function formatError(cause: unknown, fallback: string): string {
-    if (isRuntimeConnectionFailure(cause)) {
+    if (isComputerConnectionFailure(cause)) {
         return runtimeDisconnectedMessage;
     }
     return cause instanceof Error ? cause.message : fallback;
@@ -84,10 +84,10 @@ export function isSessionClosedFailure(cause: unknown): cause is MortyError {
  * Such failures heal once the Runtime returns (for example after a daemon
  * upgrade), so the Session keeps retrying them instead of settling as failed.
  */
-export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
+export function isRetryableComputerConnectionFailure(cause: unknown): boolean {
     if (
         isApiConnectionError(cause) ||
-        isRuntimeConnectionFailure(cause) ||
+        isComputerConnectionFailure(cause) ||
         (cause instanceof DOMException && cause.name === "TimeoutError")
     ) {
         return true;

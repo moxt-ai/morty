@@ -28,7 +28,7 @@ const shareInput = v.pipe(
 const transferInput = v.pipe(
     v.object({
         code: v.string(),
-        /** The credential this browser already holds for the link's Project, which the new one replaces. */
+        /** The credential this browser already holds for the link's Computer, which the new one replaces. */
         replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
         /** How the browser describes itself, such as "iPhone · Safari"; shown to the owner's other devices. */
         device: v.optional(v.pipe(v.string(), v.trim(), v.regex(/^[^\p{C}]{1,80}$/u))),

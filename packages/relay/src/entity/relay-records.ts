@@ -1,4 +1,4 @@
-import { PROJECT_LOCATION_HINTS } from "@morty-build/client/protocol";
+import { COMPUTER_LOCATION_HINTS } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 const nonNegativeInteger = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
@@ -18,8 +18,8 @@ export const AuditRowSchema = v.object({
 });
 type AuditRow = Readonly<v.InferOutput<typeof AuditRowSchema>>;
 
-/** A Relay audit event kept in its Project's own storage; its Tenant is the Project's. */
-export type ProjectAuditRow = AuditRow;
+/** A Relay audit event kept in its Computer's own storage; its Tenant is the Computer's. */
+export type ComputerAuditRow = AuditRow;
 
 export interface RelayAuditRecord {
     readonly action: string;
@@ -41,7 +41,7 @@ export const RelayComputerScopeRowSchema = v.object({
 });
 export type RelayComputerScopeRow = Readonly<v.InferOutput<typeof RelayComputerScopeRowSchema>>;
 
-export const ProjectRowSchema = v.object({
+export const ComputerRowSchema = v.object({
     user_id: v.string(),
     client_reference: v.string(),
     created_at: nonNegativeInteger,
@@ -49,8 +49,8 @@ export const ProjectRowSchema = v.object({
     display_name: v.string(),
     idempotency_key: v.string(),
     lifecycle,
-    location_hint: v.picklist(PROJECT_LOCATION_HINTS),
+    location_hint: v.picklist(COMPUTER_LOCATION_HINTS),
     computer_id: v.string(),
     updated_at: nonNegativeInteger,
 });
-export type ProjectRow = Readonly<v.InferOutput<typeof ProjectRowSchema>>;
+export type ComputerRow = Readonly<v.InferOutput<typeof ComputerRowSchema>>;

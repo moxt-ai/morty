@@ -6,7 +6,7 @@ import {
     parseAgents,
     RevokedPairingStatus,
 } from "./pairing.ts";
-import type { PairingChannelRow } from "./pairing-records.ts";
+import type { ComputerPairingDetails } from "./pairing-records.ts";
 
 export function runtimeRevokedAt(value: unknown): number | null {
     if (value === null) {
@@ -20,7 +20,7 @@ export function runtimeRevokedAt(value: unknown): number | null {
 
 // The v1 representation is a projection of facts. Passing the clock explicitly
 // makes expiry independent of polling, maintenance writes, and component order.
-export function projectRuntimePairingStatus(row: PairingChannelRow, now: number) {
+export function computerRuntimePairingStatus(row: ComputerPairingDetails, now: number) {
     const revokedAt = runtimeRevokedAt(row.revoked_at);
     if (revokedAt !== null) {
         return new RevokedPairingStatus(new Date(revokedAt).toISOString());

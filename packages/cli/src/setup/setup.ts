@@ -265,16 +265,16 @@ interface VerifiedIdentity {
 }
 
 /**
- * What setup did to this computer's Project. `replaced` ended every link and browser from the previous
- * Project, so the agent must tell the user; the saved replacement keeps that owed until a finished
- * setup reports it, even when the run that replaced the Project stopped first.
+ * What setup did to this computer's Computer. `replaced` ended every link and browser from the previous
+ * Computer, so the agent must tell the user; the saved replacement keeps that owed until a finished
+ * setup reports it, even when the run that replaced the Computer stopped first.
  */
-type ProjectOutcome = "created" | "reused" | "replaced";
+type ComputerOutcome = "created" | "reused" | "replaced";
 
 interface SetupIdentity {
     readonly kind: "setup";
     readonly context: Context;
-    readonly project: Exclude<ProjectOutcome, "replaced">;
+    readonly project: Exclude<ComputerOutcome, "replaced">;
 }
 
 interface SetupOptions {
@@ -284,8 +284,8 @@ interface SetupOptions {
     readonly cwd: string;
     readonly harness: string;
     readonly sessionId: string;
-    /** Explicit local approval applies only to this Project, never to a later replacement. */
-    readonly replaceProject: string | null;
+    /** Explicit local approval applies only to this Computer, never to a later replacement. */
+    readonly replaceComputer: string | null;
 }
 
 type ReplacementAccess =
@@ -295,7 +295,7 @@ type ReplacementAccess =
 
 type ReplacementReason = "managed_runtime_missing" | "replacement_result_unknown";
 
-class ProjectReplacementRequiredError extends Error {
+class ComputerReplacementRequiredError extends Error {
     readonly code = "PROJECT_REPLACEMENT_REQUIRED";
     readonly computerId: string;
     readonly reason: ReplacementReason;
@@ -304,9 +304,9 @@ class ProjectReplacementRequiredError extends Error {
         super(
             reason === "managed_runtime_missing"
                 ? "The saved connection is missing. Replacing it will revoke earlier sharing links and browser access."
-                : "An earlier replacement has an unknown result. Continue only with approval for that same Project.",
+                : "An earlier replacement has an unknown result. Continue only with approval for that same Computer.",
         );
-        this.name = "ProjectReplacementRequiredError";
+        this.name = "ComputerReplacementRequiredError";
         this.computerId = computerId;
         this.reason = reason;
     }
@@ -927,7 +927,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return value;
     }
 
-    /** Sends a request as the saved identity, to its Project unless the route names one. */
+    /** Sends a request as the saved identity, to its Computer unless the route names one. */
     async function request(context: Context, route: string, body?: unknown) {
         const headers: Record<string, string> = { authorization: `Bearer ${context.identity.userToken}` };
         if (route === "/management/computer/replacement") {
@@ -946,9 +946,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Ends the local identity of a Project this machine replaced. Setup keeps it with the successor's identity until
+     * Ends the local identity of a Computer this machine replaced. Setup keeps it with the successor's identity until
      * then, so a run that stops on the way ends it next time instead of leaving a credential that opens the replaced
-     * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
+     * Computer. Nothing else from that Computer opens it: its replacement ended everything shared from it.
      */
     async function retireReplacedIdentity<Retiring extends Context>(context: Retiring): Promise<Retiring> {
         const replacement = context.identity.replacement;
@@ -1038,7 +1038,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return {
             base: origin(values["base-url"]),
             deviceAccess: values["device-access"] ?? null,
-            replaceProject: values["replace-computer"] === undefined ? null : identifier(values["replace-computer"]),
+            replaceComputer: values["replace-computer"] === undefined ? null : identifier(values["replace-computer"]),
             cwd: text(values.cwd),
             harness,
             sessionId: currentSessionId(harness, values["session-id"]),
@@ -1262,7 +1262,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { runtime: selection, expiresAt };
     }
 
-    async function replaceProject(context: Context): Promise<Context> {
+    async function replaceComputer(context: Context): Promise<Context> {
         const previousComputerId = context.identity.computerId;
         // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
         const prepared = await commit(context, withReplacementRequested(context.identity));
@@ -1312,9 +1312,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 runtimeStateSource: process.env["MORTY_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
             });
             if (confirmedComputerId !== computerId) {
-                throw new ProjectReplacementRequiredError(computerId, reason);
+                throw new ComputerReplacementRequiredError(computerId, reason);
             }
-            return await pairRuntime(await replaceProject(context));
+            return await pairRuntime(await replaceComputer(context));
         };
         // A restored local pairing cannot settle whether a previous request revoked shared access.
         // Finish that idempotent operation with its original approval before reporting setup ready.
@@ -1742,7 +1742,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 message: "The QR image is unavailable. Use the handoff link instead.",
             });
         }
-        const project: ProjectOutcome = context.identity.replacement.kind === "revoked" ? "replaced" : identity;
+        const project: ComputerOutcome = context.identity.replacement.kind === "revoked" ? "replaced" : identity;
         emit({
             status: "ready",
             computerId: context.identity.computerId,
@@ -1831,7 +1831,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let machine = verified.context;
         emit({ status: "identity_ready", userId: machine.identity.userId, computerId: machine.identity.computerId });
-        const prepared = await prepareRuntime(machine, cwd, verified.runtimePairing, options.replaceProject);
+        const prepared = await prepareRuntime(machine, cwd, verified.runtimePairing, options.replaceComputer);
         machine = prepared.context;
         await startRuntime(machine, prepared.runtime, cwd, options.harness);
         await waitForRuntime(machine, prepared.runtime, options.harness, cwd);
@@ -1873,7 +1873,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                       : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
                 ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),
-                ...(cause instanceof ProjectReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
+                ...(cause instanceof ComputerReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
                 ...(cause instanceof SavedIdentityOriginError ? { savedIdentity: cause.diagnostic() } : {}),
                 ...replacementFailure(replacementAccess),
             },

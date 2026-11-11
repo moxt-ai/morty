@@ -14,7 +14,7 @@ import { runRuntime } from "./run.ts";
 
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 
-export interface MortyRuntimeConnection {
+export interface MortyComputerConnection {
     readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly relayUrl: string;
@@ -50,7 +50,7 @@ function validateRuntimeConfiguration(config: RuntimeConfig): void {
     validateRuntimeRelay(config.relayUrl);
 }
 
-function relayUrlFromConnection(connection: MortyRuntimeConnection): URL {
+function relayUrlFromConnection(connection: MortyComputerConnection): URL {
     let relayUrl: URL;
     try {
         relayUrl = new URL(connection.relayUrl);
@@ -83,7 +83,7 @@ async function resolveWorkspace(path: string): Promise<string> {
 
 interface PrepareProvidedRuntimeParams {
     readonly installation: RuntimeInstallationStore;
-    readonly connection: MortyRuntimeConnection;
+    readonly connection: MortyComputerConnection;
     readonly signal: AbortSignal;
     readonly agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
     readonly maxAcpProcesses: number;
@@ -198,7 +198,7 @@ export interface RuntimeLoopOptions {
     /**
      * State directory of the daemon processes supervising this Runtime. Passed
      * through to `runRuntime` so the local bug-report log can read the
-     * manager-written worker lifecycle and unhandled-rejection logs. Read-only.
+     * daemon lifecycle and unhandled-rejection logs. Read-only.
      */
     readonly processLogsDirectory?: string;
 }

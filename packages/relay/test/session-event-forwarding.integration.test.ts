@@ -49,17 +49,17 @@ class Inbox {
     };
 }
 
-interface RuntimeConnection {
+interface ComputerConnection {
     readonly inbox: Inbox;
     readonly socket: WebSocket;
 }
 
-async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<RuntimeConnection>) => Promise<void>) {
+async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<ComputerConnection>) => Promise<void>) {
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
     await registerRuntimeFixture(computerId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
-    const connect = async (path: string): Promise<RuntimeConnection> => {
+    const connect = async (path: string): Promise<ComputerConnection> => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
         const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
             headers: {

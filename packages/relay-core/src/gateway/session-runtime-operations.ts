@@ -9,12 +9,12 @@ export interface SessionRuntimeOperations {
         command: RuntimeControlCommand,
         signal: AbortSignal,
     ) => Promise<RuntimeControlResult>;
-    readonly readProjectSessionFile: (
+    readonly readComputerSessionFile: (
         scope: ComputerScope,
         command: FileReadCommand,
         signal: AbortSignal,
     ) => Promise<Response>;
-    readonly writeProjectSessionContent: (
+    readonly writeComputerSessionContent: (
         scope: ComputerScope,
         command: ContentWriteCommand,
         body: ReadableStream<Uint8Array>,

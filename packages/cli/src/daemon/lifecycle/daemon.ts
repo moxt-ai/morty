@@ -1,12 +1,12 @@
 import { refreshAgentCatalog } from "../../engine/runtime/catalog/refresh-agent-catalog.ts";
 import type { RuntimeConfig } from "../../engine/runtime/config.ts";
-import { prepareRuntimeConnection } from "../../engine/runtime/pairing.ts";
+import { prepareComputerConnection } from "../../engine/runtime/pairing.ts";
 import { RuntimeRelayRevokedError } from "../../engine/runtime/relay/runtime-revocation.ts";
 import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
 import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
-import { logDirectory, WORKER_LIFECYCLE_LOG_FILENAME } from "../../engine/storage/logs/log-files.ts";
+import { DAEMON_LIFECYCLE_LOG_FILENAME, logDirectory } from "../../engine/storage/logs/log-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 import { acquireDaemonLock } from "../../storage/daemon/daemon-lock.ts";
 import { resolveMaxAcpProcesses } from "../config.ts";
@@ -70,7 +70,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
         await runDaemonRuntime(version, combined, shutdown, rejectionGuard);
     } catch (cause) {
         const control = await openMortyInstallation(AbortSignal.timeout(5_000), process.env);
-        new BoundedLineLog(logDirectory(control.stateDirectory), WORKER_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
+        new BoundedLineLog(logDirectory(control.stateDirectory), DAEMON_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
             JSON.stringify({
                 kind: "daemon_failed",
                 message: cause instanceof Error ? cause.message : "Daemon failed",
@@ -96,7 +96,7 @@ async function runDaemonRuntime(
     }
     const lifecycleLog = new BoundedLineLog(
         logDirectory(control.stateDirectory),
-        WORKER_LIFECYCLE_LOG_FILENAME,
+        DAEMON_LIFECYCLE_LOG_FILENAME,
         512 * 1024,
     );
     lifecycleLog.record(
@@ -130,7 +130,7 @@ async function runDaemonRuntime(
             }
             if (connection?.activation === "active") {
                 try {
-                    const config = await prepareRuntimeConnection(
+                    const config = await prepareComputerConnection(
                         installation,
                         connection,
                         combined,

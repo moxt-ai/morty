@@ -2,10 +2,15 @@ import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
-import { browserCredential, browserDevice, continueLink, ownerCredential } from "../../../schema/project-do/index.ts";
+import {
+    browserCredential,
+    browserDevice,
+    continueLink,
+    ownerCredential,
+} from "../../../schema/computer-relay/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
-import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
+import { createComputerCredential, readComputerCredential } from "../entity/computer-credential.ts";
 import { type AnonymousIdentity, digest, requireIdentityDatabase } from "./identity-storage-common.ts";
 
 type IdentityDatabase = ReturnType<typeof requireIdentityDatabase>;
@@ -592,7 +597,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<string | null> => {
         signal.throwIfAborted();
-        const token = createProjectCredential("morty_recovery_v1", v.parse(v.string(), this.#computerId));
+        const token = createComputerCredential("morty_recovery_v1", v.parse(v.string(), this.#computerId));
         const database = requireIdentityDatabase(this.#database);
         const result = await database
             .insert(ownerCredential)
@@ -622,7 +627,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
+     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Computer: a browser
      * keeps one credential, so the new one replaces it at once and belongs to the same device while that device still
      * holds access; the device keeps the later of its term and this link's. A browser holding none, or whose device's
      * access ended, becomes a new device, described by this joining.
@@ -639,7 +644,7 @@ export class IdentityStorage {
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
-        const parsed = readProjectCredential(code);
+        const parsed = readComputerCredential(code);
         if (parsed?.kind !== "morty_transfer_v1" || parsed.computerId !== this.#computerId) {
             return null;
         }
@@ -699,7 +704,7 @@ export class IdentityStorage {
         );
         // The replaced credential may already be replaced by a concurrent or retried redemption in the same browser;
         // the device it belongs to is kept while that device holds access. The read and the writes below run with no
-        // other request in between: the Project's Durable Object runs its SQL synchronously.
+        // other request in between: the Computer's Durable Object runs its SQL synchronously.
         const kept =
             replacedHash === null
                 ? undefined
@@ -832,7 +837,7 @@ export class IdentityStorage {
         return true;
     };
 
-    readonly ownsProject = async (userId: string, computerId: string, signal: AbortSignal): Promise<boolean> => {
+    readonly ownsComputer = async (userId: string, computerId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
         if (this.#computerId !== computerId) {
             return false;

@@ -7,7 +7,7 @@ import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { readJsonBody } from "../../../middleware/body-parser.ts";
 import { anonymousCreationKey } from "../entity/computer-bootstrap.ts";
 import type { AccountProvisioner } from "../service/account-provisioning-service.ts";
-import { projectLocationHint } from "../util/project-location.ts";
+import { computerLocationHint } from "../util/computer-location.ts";
 
 const inputSchema = v.strictObject({
     creationKey: anonymousCreationKey,
@@ -40,19 +40,19 @@ export const anonymousUserRoutes = new Hono<{
     await admitAnonymousCreation(request, context.env);
     signal.throwIfAborted();
     const userId = await userIdFor(input.creationKey);
-    const project = await context.var.provisionAccount(
+    const computer = await context.var.provisionAccount(
         userId,
         userId,
-        input.locationHint ?? projectLocationHint(request) ?? "apac",
+        input.locationHint ?? computerLocationHint(request) ?? "apac",
         signal,
     );
-    const response = await computerObject(context.env, project.computerId).fetch(
+    const response = await computerObject(context.env, computer.computerId).fetch(
         new Request("https://computer.internal/__computer/bootstrap", {
             method: "POST",
             headers: { "content-type": "application/json" },
             signal,
             body: JSON.stringify({
-                computer: project,
+                computer: computer,
                 userId,
                 origin: { kind: "created", creationKey: input.creationKey },
             }),

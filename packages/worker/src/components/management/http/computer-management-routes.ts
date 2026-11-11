@@ -23,14 +23,14 @@ export function createComputerManagementRoutes() {
             const session = context.get("session");
             using deadline = new RequestDeadline(context.req.raw.signal, 15000);
             return json({
-                computer: await context.env.services.management.readProject(session.userId, deadline.signal),
+                computer: await context.env.services.management.readComputer(session.userId, deadline.signal),
             });
         })
         .post("/computer/replacement", async (context) => {
             using deadline = new RequestDeadline(context.req.raw.signal, 45000);
             const signal = deadline.signal;
             const { authentication, management } = context.env.services;
-            const local = await authentication.authorize(context.get("bearerToken"), "replaceProject", signal);
+            const local = await authentication.authorize(context.get("bearerToken"), "replaceComputer", signal);
             switch (local.kind) {
                 case "unauthenticated":
                 case "revoked":
@@ -38,7 +38,7 @@ export function createComputerManagementRoutes() {
                 case "forbidden":
                     throw new ManagementError(
                         "LOCAL_IDENTITY_REQUIRED",
-                        "Use the identity saved on the machine to replace its Project.",
+                        "Use the identity saved on the machine to replace its Computer.",
                         403,
                     );
                 case "authorized":
@@ -51,15 +51,15 @@ export function createComputerManagementRoutes() {
                 previousComputerId: context.env.config.bindings.CHAT_COMPUTER_ID,
                 setupRunId: setupRunId.success ? setupRunId.output : null,
             };
-            context.env.logger.info({ ...audit, stage: "requested" }, "Project replacement requested");
+            context.env.logger.info({ ...audit, stage: "requested" }, "Computer replacement requested");
             try {
-                const project = await management.replaceProject(local.credential.userId, signal);
+                const computer = await management.replaceComputer(local.credential.userId, signal);
                 // Repeating the same saved local identity reuses its successor credential, even if bootstrap
                 // committed only part of its data. An explicitly revoked successor credential is never reissued.
-                const response = await computerObject(context.env.config.bindings, project.computerId).fetch(
+                const response = await computerObject(context.env.config.bindings, computer.computerId).fetch(
                     new Request("https://computer.internal/__computer/bootstrap", {
                         body: JSON.stringify({
-                            computer: project,
+                            computer: computer,
                             userId: local.credential.userId,
                             origin: {
                                 kind: "replacement",
@@ -77,11 +77,11 @@ export function createComputerManagementRoutes() {
                     context.env.logger.warn(
                         {
                             ...audit,
-                            computerId: project.computerId,
+                            computerId: computer.computerId,
                             stage: "bootstrap_failed",
                             status: response.status,
                         },
-                        "Project replacement did not reach access revocation",
+                        "Computer replacement did not reach access revocation",
                     );
                     return response;
                 }
@@ -91,8 +91,8 @@ export function createComputerManagementRoutes() {
                     throw new ManagementError("UNAUTHENTICATED", "Local identity is no longer available.", 401);
                 }
                 context.env.logger.info(
-                    { ...audit, computerId: project.computerId, stage: "access_revoked" },
-                    "Earlier shared access revoked by Project replacement",
+                    { ...audit, computerId: computer.computerId, stage: "access_revoked" },
+                    "Earlier shared access revoked by Computer replacement",
                 );
                 return response;
             } catch (cause) {
@@ -100,7 +100,7 @@ export function createComputerManagementRoutes() {
                 // cannot prove whether a request already changed access, so leave the outcome unconfirmed.
                 context.env.logger.warn(
                     { ...audit, stage: "outcome_unconfirmed" },
-                    "Project replacement did not return a confirmed result",
+                    "Computer replacement did not return a confirmed result",
                 );
                 throw cause;
             }

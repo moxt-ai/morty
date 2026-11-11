@@ -14,7 +14,7 @@ export const d1DatabaseBindingSchema = v.custom<D1Database>((value) => hasMethod
 export const durableObjectNamespaceBindingSchema = <T extends Rpc.DurableObjectBranded | undefined = undefined>() =>
     v.custom<DurableObjectNamespace<T>>((value) => hasMethods(value, ["get", "idFromName"]));
 
-export const projectStorageBindingsSchema = v.pipe(
+export const computerStorageBindingsSchema = v.pipe(
     v.object({
         CHAT_COMPUTER_ID: v.string(),
         DATABASE: d1DatabaseBindingSchema,
@@ -22,7 +22,7 @@ export const projectStorageBindingsSchema = v.pipe(
     v.readonly(),
 );
 
-export type ProjectStorageBindings = v.InferOutput<typeof projectStorageBindingsSchema>;
+export type ComputerStorageBindings = v.InferOutput<typeof computerStorageBindingsSchema>;
 
 export interface CloudBindings {
     readonly COMPUTER_RELAY?: unknown;
@@ -38,7 +38,7 @@ export interface CloudBindings {
      * The computer closes the live connections the committed change ended; that never undoes or fails the change.
      */
     readonly CHAT_END_ACCESS?: (change: () => Promise<boolean>) => Promise<boolean>;
-    /** The Project object's own key for credentials that a repeated request derives again. */
+    /** The Computer object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
     readonly RELAY_DIRECTORY_DATABASE?: unknown;
     readonly MORTY_SESSION_SIGNING_SECRET?: unknown;

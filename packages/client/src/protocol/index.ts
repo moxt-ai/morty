@@ -1,21 +1,17 @@
+export type { ComputerLocationHint } from "./relay/computer-location.ts";
+export {
+    COMPUTER_LOCATION_HINTS,
+    isComputerLocationHint,
+} from "./relay/computer-location.ts";
+export type { ComputerPermissionName } from "./relay/computer-permission.ts";
+export {
+    COMPUTER_PERMISSION_NAMES,
+    RELAY_COMPUTER_PERMISSIONS,
+} from "./relay/computer-permission.ts";
 export {
     MORTY_API_PREFIX,
     mortyApiUrl,
 } from "./relay/morty-api.ts";
-
-export type { ProjectLocationHint } from "./relay/project-location.ts";
-
-export {
-    isProjectLocationHint,
-    PROJECT_LOCATION_HINTS,
-} from "./relay/project-location.ts";
-
-export type { ProjectPermissionName } from "./relay/project-permission.ts";
-
-export {
-    PROJECT_PERMISSION_NAMES,
-    RELAY_APP_PROJECT_PERMISSIONS,
-} from "./relay/project-permission.ts";
 export {
     isRuntimeCredentialSuccessor,
     RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,

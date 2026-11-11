@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
-import { VerifiedRuntimeConnection } from "../../src/engine/runtime/connection/runtime-connection.ts";
+import { VerifiedComputerConnection } from "../../src/engine/runtime/connection/computer-connection.ts";
 import {
     RuntimeInstallationStore,
     type RuntimeInstallationStoreError,
@@ -107,8 +107,8 @@ describe("Runtime installation storage", () => {
             const resumed = await moxt.readConnection(moxtConnection.pairingGeneration, signal);
 
             expect(resumed.computerId).toBe(computerId);
-            expect(resumed).toBeInstanceOf(VerifiedRuntimeConnection);
-            if (!(resumed instanceof VerifiedRuntimeConnection)) {
+            expect(resumed).toBeInstanceOf(VerifiedComputerConnection);
+            if (!(resumed instanceof VerifiedComputerConnection)) {
                 throw new Error("Expected a verified Runtime connection");
             }
             expect(resumed.computerId).toBe(computerId);

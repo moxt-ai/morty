@@ -13,7 +13,7 @@ import {
 import {
     type StoredAccessWriter,
     storedToken,
-    storedTokenForProject,
+    storedTokenForComputer,
     withStoredAccessLock,
 } from "./remembered-computers.ts";
 
@@ -32,11 +32,11 @@ const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 const identityFields = { token: tokenSchema, userId: userIdSchema, computerId: computerIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
 /**
- * The Project a well-formed transfer code names, or null when the code cannot
+ * The Computer a well-formed transfer code names, or null when the code cannot
  * name one. A code that was already redeemed in this browser still names its
- * Project, which is what lets a dead link fall back to the access it issued.
+ * Computer, which is what lets a dead link fall back to the access it issued.
  */
-export function transferCodeProject(code: string): string | null {
+export function transferCodeComputer(code: string): string | null {
     const parts = code.split(".");
     return parts.length === 3 && parts[0] === "morty_transfer_v1" ? (parts[1] ?? null) : null;
 }
@@ -218,7 +218,7 @@ export class AnonymousIdentityApi {
             },
         });
         try {
-            const computer = await management.readProject(signal);
+            const computer = await management.readComputer(signal);
             signal.throwIfAborted();
             if (computer === null) {
                 return { kind: "gone" };
@@ -264,7 +264,7 @@ export class AnonymousIdentityApi {
 
     /**
      * Opens a link in this browser. A browser keeps one access per user: the access it already holds for the link's
-     * Project is replaced by the new one, which also takes over the links it came from.
+     * Computer is replaced by the new one, which also takes over the links it came from.
      */
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> =>
         await withStoredAccessLock(signal, (access) => this.#redeemTransfer(code, signal, access));
@@ -274,8 +274,8 @@ export class AnonymousIdentityApi {
         signal: AbortSignal,
         access: StoredAccessWriter,
     ): Promise<AnonymousIdentity> => {
-        const computerId = transferCodeProject(code);
-        const replaces = computerId === null ? null : storedTokenForProject(computerId);
+        const computerId = transferCodeComputer(code);
+        const replaces = computerId === null ? null : storedTokenForComputer(computerId);
         const redemptionKey = transferRedemptionKey(code);
         const identity = v.parse(
             identitySchema,

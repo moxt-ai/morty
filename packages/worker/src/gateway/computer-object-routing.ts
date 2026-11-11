@@ -1,7 +1,7 @@
 import { logger } from "@morty-build/relay-core/logging";
 import * as v from "valibot";
 import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
-import { projectRegion } from "../components/management/entity/project-region.ts";
+import { computerRegion } from "../components/management/entity/computer-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
 export async function forwardComputerObject(
@@ -57,5 +57,5 @@ export function computerObject(bindings: CloudBindings, computerId: string) {
         throw new ComputerManagementError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
     }
     const namespace = parsed.output;
-    return namespace.get(namespace.idFromName(computerId), { locationHint: projectRegion(computerId) });
+    return namespace.get(namespace.idFromName(computerId), { locationHint: computerRegion(computerId) });
 }

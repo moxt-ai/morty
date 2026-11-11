@@ -44,7 +44,7 @@ class CreationBudget {
     readonly limit = async () => ({ success: this.remaining-- > 0 });
 }
 
-test("Given setup and a lost creation response, When setup retries across temporary failures, Then it finishes with the original identity, Project and Machine", {
+test("Given setup and a lost creation response, When setup retries across temporary failures, Then it finishes with the original identity, Computer and Machine", {
     timeout: 60_000,
 }, async () => {
     const setup = v.parse(setupModule, await import("../../cli/src/setup/setup.ts"));
