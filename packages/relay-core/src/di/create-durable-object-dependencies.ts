@@ -61,7 +61,7 @@ function createRuntimeRelayDependencies(cx: {
         authorizeViewer: async (identity, signal) => {
             return (await cx.gateways.projectCredentials.grantsSessionCredential(
                 identity.computerId,
-                identity.credential.holder,
+                identity.credential.grant,
                 [ProjectPermission.SessionRead],
                 signal,
             ))
