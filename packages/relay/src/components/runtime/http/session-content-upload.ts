@@ -1,7 +1,6 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { toHttpError } from "../../../entity/http-error.ts";
 import { validateIdentifier } from "../../management/entity/pairing.ts";
-import { ProjectPermission } from "../../management/entity/project-authentication.ts";
 import type { SessionAccessService } from "../service/session-access-service.ts";
 
 /** Shared by transport admission and execution; never executes a content write. */
@@ -46,7 +45,6 @@ export async function authorizeSessionContentUpload(request: Request, sessions: 
                 target,
             },
             credential,
-            ProjectPermission.SessionWrite,
             request.signal,
         );
         return { access, target, contentKey };

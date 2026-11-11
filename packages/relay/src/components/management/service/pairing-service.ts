@@ -78,18 +78,4 @@ export class PairingService {
 
     readonly authorizePairedHost = async (computerId: string, signal: AbortSignal) =>
         await this.#pairings.authorizePairedHost(computerId, signal);
-
-    readonly revokeProjectComputer = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        const revoked = await this.#pairings.revokeProjectComputer(computerId, signal);
-        try {
-            await this.#channels.disconnectComputer(revoked.access, signal);
-        } catch (cause) {
-            signal.throwIfAborted();
-            throw new PairingDirectoryError(
-                "computer_disconnect_failed",
-                "The Computer was revoked but its active connection could not be closed",
-                { cause },
-            );
-        }
-    };
 }

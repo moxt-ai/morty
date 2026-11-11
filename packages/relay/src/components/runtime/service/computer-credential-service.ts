@@ -1,4 +1,3 @@
-import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../../management/entity/project-authentication.ts";
 import type { BackendProjectAccess } from "../../management/service/backend-project-access.ts";
 import type { ComputerManagementStorageDirectory } from "../../management/service/computer-management-storage-directory.ts";
 import type { ComputerRelayStoreResolver } from "../../management/storage/computer-relay-store.ts";
@@ -41,31 +40,18 @@ export class ComputerCredentialService {
 
     readonly authorizeHostMessage = async (
         identity: Extract<ComputerSocketIdentity, { readonly role: "host" }>,
-        permission: ProjectPermission | null,
         signal: AbortSignal,
-    ): Promise<"granted" | "revoked" | "denied"> => {
-        if (
-            (await this.activeGeneration(identity, signal)) === null ||
-            !(await this.#access.grants(identity.computerId, PROJECT_HOST_PERMISSIONS, signal))
-        ) {
-            return "revoked";
-        }
-        if (permission === null || PROJECT_HOST_PERMISSIONS.includes(permission)) {
-            return "granted";
-        }
-        return (await this.#access.grants(identity.computerId, [permission], signal)) ? "granted" : "denied";
-    };
+    ): Promise<"granted" | "revoked"> =>
+        (await this.activeGeneration(identity, signal)) !== null &&
+        (await this.#access.grants(identity.computerId, signal))
+            ? "granted"
+            : "revoked";
 
     readonly authorizeViewer = async (
         identity: Extract<ComputerSocketIdentity, { readonly role: "viewer" }>,
         signal: AbortSignal,
     ): Promise<"granted" | "revoked"> =>
-        (await this.#access.grantsSessionCredential(
-            identity.computerId,
-            identity.credential.grant,
-            [ProjectPermission.SessionRead],
-            signal,
-        ))
+        (await this.#access.grantsSessionCredential(identity.computerId, identity.credential.grant, signal))
             ? "granted"
             : "revoked";
 }

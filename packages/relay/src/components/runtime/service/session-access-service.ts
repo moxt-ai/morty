@@ -6,7 +6,7 @@ import {
     type SessionAccessGrant,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
-import { ProjectAuthenticationError, ProjectPermission } from "../../management/entity/project-authentication.ts";
+import { ProjectAuthenticationError } from "../../management/entity/project-authentication.ts";
 import type { ComputerManagementService } from "../../management/service/computer-management-service.ts";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 
@@ -22,16 +22,7 @@ export interface SessionAccess {
     readonly grant: SessionAccessGrant;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
-    readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
-}
-
-/**
- * A Session credential confines every request to its own Session. An operation the Relay grants Computer-wide to Computer
- * read access, such as reading a Session's settings or native history, reads only that Session through it, which is
- * what Session read access permits.
- */
-function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
-    return permission === ProjectPermission.ComputerRead ? ProjectPermission.SessionRead : permission;
+    readonly authorize: (signal: AbortSignal) => Promise<void>;
 }
 
 export class SessionAccessService {
@@ -65,7 +56,7 @@ export class SessionAccessService {
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
-        await this.#control.authorizeProject(target.computerId, ProjectPermission.SessionWrite, signal);
+        await this.#control.authorizeProject(target.computerId, signal);
         const generation = await this.#control.currentSessionGeneration(target.computerId, holder, signal);
         if (generation === null) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
@@ -92,24 +83,22 @@ export class SessionAccessService {
         target: SessionAccessTarget,
         credentialValue: string,
         signal: AbortSignal,
-    ): Promise<SessionAccess> =>
-        await this.authorizeSession(target, credentialValue, ProjectPermission.SessionRead, signal);
+    ): Promise<SessionAccess> => await this.authorizeSession(target, credentialValue, signal);
 
     readonly authorizeSession = async (
         target: SessionAccessTarget,
         credentialValue: string,
-        permission: ProjectPermission,
         signal: AbortSignal,
     ): Promise<SessionAccess> => {
         signal.throwIfAborted();
         const access = await this.authenticate(target, credentialValue, signal);
-        await access.authorize(permission, signal);
+        await access.authorize(signal);
         return access;
     };
 
     /**
      * Verifies a Session credential for its selected Session without authorizing any operation. Each operation then
-     * authorizes the permission it needs through the Project routes, narrowed to the one Session the credential selects.
+     * authorizes the credential's current access before it runs.
      */
     readonly authenticate = async (
         target: SessionAccessTarget,
@@ -156,13 +145,8 @@ export class SessionAccessService {
             grant: claims.grant,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
-            authorize: async (permission, authorizationSignal) => {
-                await this.#control.authorizeSessionCredentialRecord(
-                    computerId,
-                    sessionScopedPermission(permission),
-                    claims.grant,
-                    authorizationSignal,
-                );
+            authorize: async (authorizationSignal) => {
+                await this.#control.authorizeSessionCredentialRecord(computerId, claims.grant, authorizationSignal);
             },
         };
     };

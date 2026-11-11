@@ -39,8 +39,6 @@ export {
 } from "./relay/morty-api.ts";
 export type { ProjectLocationHint } from "./relay/project-location.ts";
 export { PROJECT_LOCATION_HINTS } from "./relay/project-location.ts";
-export type { ProjectPermissionName } from "./relay/project-permission.ts";
-export { RELAY_APP_PROJECT_PERMISSIONS } from "./relay/project-permission.ts";
 
 export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
 

@@ -1,26 +1,5 @@
-import type { ProjectPermissionName } from "@morty-build/client/protocol";
 import type { HttpError } from "../../../entity/http-error.ts";
 import type { ComputerScope } from "../../runtime/entity/session.ts";
-
-export type ProjectPermission = ProjectPermissionName;
-
-export const ProjectPermission = {
-    ComputerPair: "computer:pair",
-    ComputerRead: "computer:read",
-    ComputerRevoke: "computer:revoke",
-    SessionRead: "session:read",
-    SessionWrite: "session:write",
-} as const satisfies Readonly<Record<string, ProjectPermission>>;
-
-/**
- * What a project credential must grant to open a Computer host connection and to keep using it. The connection
- * receives the Computer's status and every Session's traffic, so it needs to read both. Each command the connection
- * sends additionally needs that command's own permission.
- */
-export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.freeze([
-    ProjectPermission.ComputerRead,
-    ProjectPermission.SessionRead,
-]);
 
 export interface AuditActor {
     readonly actorId: string;
@@ -29,20 +8,16 @@ export interface AuditActor {
 
 export class ProjectAccessContext {
     readonly actor: AuditActor;
-    readonly permissions: ReadonlySet<ProjectPermission>;
     readonly scope: ComputerScope;
 
     get computerId(): string {
         return this.scope.computerId;
     }
 
-    constructor(scope: ComputerScope, permissions: ReadonlySet<ProjectPermission>, actor: AuditActor) {
+    constructor(scope: ComputerScope, actor: AuditActor) {
         this.scope = scope;
-        this.permissions = new Set(permissions);
         this.actor = actor;
     }
-
-    readonly permits = (permission: ProjectPermission): boolean => this.permissions.has(permission);
 }
 
 export class ProjectAuthenticationError extends Error implements HttpError {

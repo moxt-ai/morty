@@ -1,9 +1,4 @@
-import {
-    encodeSessionCloseNoticeEvent,
-    encodeSessionStatusChangedEvent,
-    isDirectoryPath,
-    type SessionAccessHolder,
-} from "@morty-build/client/protocol";
+import { isDirectoryPath, type SessionAccessHolder } from "@morty-build/client/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
@@ -14,12 +9,7 @@ import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { ComputerManagementError, relayIdentifier } from "../../management/entity/computer-management.ts";
 import { authenticatedSession, credentialRejected, localSession } from "../../management/http/authenticated-session.ts";
-import {
-    type ChatScope,
-    MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
-    type ManagedSessionEvent,
-    MINIMUM_SESSION_CREDENTIAL_SECONDS,
-} from "../service/chat-service.ts";
+import { type ChatScope, MINIMUM_SESSION_CREDENTIAL_SECONDS } from "../service/chat-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
@@ -123,61 +113,6 @@ function privateJson(value: unknown) {
     return response;
 }
 
-function encodeManagedSessionEvent(event: ManagedSessionEvent): string {
-    switch (event.kind) {
-        case MANAGED_SESSION_STATUSES_FOLLOWING_KIND:
-            return JSON.stringify({ kind: event.kind, sessions: event.sessions, statuses: event.statuses });
-        case "session.status.changed":
-            return encodeSessionStatusChangedEvent(event);
-        case "session.close.notice":
-            return encodeSessionCloseNoticeEvent(event);
-    }
-}
-
-function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Response {
-    const lifetime = new AbortController();
-    const abort = (): void => lifetime.abort(context.req.raw.signal.reason);
-    context.req.raw.signal.addEventListener("abort", abort, { once: true });
-    const encoder = new TextEncoder();
-    const body = new ReadableStream<Uint8Array>({
-        start: (controller) => {
-            void context.env.services.chat
-                .subscribeManagedSessionStatuses(
-                    context.get("chatScope"),
-                    async (event) => {
-                        // The stream outlives the authorization that opened it, so each event is sent only while that
-                        // access still holds; ending access ends the stream, and the reopened stream is refused.
-                        const access = await context.env.services.authentication.session(
-                            context.get("bearerToken"),
-                            lifetime.signal,
-                        );
-                        if (access.kind !== "authenticated") {
-                            lifetime.abort(credentialRejected(access.kind));
-                            return;
-                        }
-                        controller.enqueue(encoder.encode(`${encodeManagedSessionEvent(event)}\n`));
-                    },
-                    lifetime.signal,
-                )
-                .then(
-                    () => controller.close(),
-                    (cause: unknown) => {
-                        if (lifetime.signal.aborted) {
-                            controller.close();
-                        } else {
-                            controller.error(cause);
-                        }
-                    },
-                )
-                .finally(() => context.req.raw.signal.removeEventListener("abort", abort));
-        },
-        cancel: (reason) => lifetime.abort(reason),
-    });
-    return new Response(body, {
-        headers: { "Cache-Control": "no-store", "Content-Type": "application/x-ndjson" },
-    });
-}
-
 export function createBotChatRoutes() {
     return new Hono<AuthorizedChatEnvironment>()
         .use(
@@ -217,7 +152,6 @@ export function createBotChatRoutes() {
         .post("/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.managedSessions(context.get("chatScope")));
         })
-        .post("/managed-session/status-events", authenticatedSession, authorizedChat(), sessionStatusStream)
         .post(
             "/agent-settings",
             authenticatedSession,

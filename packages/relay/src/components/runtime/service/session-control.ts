@@ -17,22 +17,10 @@ import {
     type SessionPromptCommand,
 } from "@morty-build/client/protocol";
 import { PairingDirectoryError } from "../../management/entity/pairing.ts";
-import type { ProjectPermission } from "../../management/entity/project-authentication.ts";
-import {
-    computerControlPermission,
-    computerControlRegistry,
-    nativeSessionRequestPermission,
-} from "./computer-control-registry.ts";
 import type { ComputerControlCommand, ComputerControlResult } from "./computer-control-request.ts";
 
-/**
- * Runs one command of a Session operation on a Computer once the caller is authorized for `permission`, the operation's
- * own, and returns the Computer's answer.
- */
-export type ComputerControl = (
-    command: ComputerControlCommand,
-    permission: ProjectPermission,
-) => Promise<ComputerControlResult>;
+/** Runs one command of a Session operation on a Computer once the caller is authorized, and returns the answer. */
+export type ComputerControl = (command: ComputerControlCommand) => Promise<ComputerControlResult>;
 
 /** A Turn for an existing Session. The Computer runs it with the Agent and directory of the Session it holds. */
 export interface TurnSubmission {
@@ -69,8 +57,7 @@ export interface SessionConfiguration {
 /**
  * The operations every Session API offers on one Session. Each builds the Computer command for the Session's target
  * alone, runs it through the caller's authorized control and checks that the answer belongs to that command. The
- * Computer resolves the Session's Agent and directory from the Session it holds. An operation needs the permission of
- * the command it performs. Routes authenticate, decode their own request format and shape their own response; they do
+ * Computer resolves the Session's Agent and directory from the Session it holds. Routes authenticate, decode their own request format and shape their own response; they do
  * not repeat these rules.
  */
 export class SessionControl {
@@ -83,7 +70,6 @@ export class SessionControl {
     }
 
     readonly submitTurn = async (turn: TurnSubmission): Promise<TurnAdmission> => {
-        const permission = computerControlRegistry["session.prompt"].permission;
         let command: SessionPromptCommand;
         try {
             command = decodeSessionPromptCommand(
@@ -105,7 +91,7 @@ export class SessionControl {
             }
             throw error;
         }
-        const result = await this.#control(command, permission);
+        const result = await this.#control(command);
         if (result.kind !== "session.prompt.accepted" || result.requestId !== command.commandId) {
             throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid Turn");
         }
@@ -245,7 +231,6 @@ export class SessionControl {
                     target: this.#target,
                 }),
             ),
-            nativeSessionRequestPermission("active-turn"),
         );
         if (result.kind !== "native.session.result" || result.action !== "active-turn") {
             throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid active Turn");
@@ -295,7 +280,6 @@ export class SessionControl {
         return result.events.events;
     };
 
-    /** Runs an operation that is one command, under that command's own permission. */
     readonly #run = async (command: ComputerControlCommand): Promise<ComputerControlResult> =>
-        await this.#control(command, computerControlPermission(command));
+        await this.#control(command);
 }

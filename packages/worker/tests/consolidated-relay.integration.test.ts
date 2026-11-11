@@ -96,13 +96,6 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
     );
     expect(access.endpoint).toBe(bindings.origin);
     const session = `/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
-    expect((await request(`${session}/live-event-subscription-target`, access.credential)).status).toBe(200);
-    expect((await request(`${session}/live-event-subscription-target`)).status).toBe(401);
-    for (const path of [
-        "/dashboard/health",
-        "/dashboard/v1/machine-accounts",
-        `/v1/computers/${owner.computerId}/daemon/agents`,
-    ]) {
-        expect((await request(path)).status).toBe(404);
-    }
+    expect((await request(`${session}/configuration`, access.credential)).status).toBe(200);
+    expect((await request(`${session}/configuration`)).status).toBe(401);
 });

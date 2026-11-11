@@ -497,7 +497,7 @@ export async function requestComputerControl(
     command: ComputerControlCommand,
     signal: AbortSignal,
 ): Promise<ComputerControlResult> {
-    const { reply } = computerControlRegistry[command.kind];
+    const reply = computerControlRegistry[command.kind];
     const timeout = new AbortController();
     const timer = setTimeout(
         () => timeout.abort(new DOMException("Computer request timed out", "TimeoutError")),

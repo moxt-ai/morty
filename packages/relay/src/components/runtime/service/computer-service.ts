@@ -5,7 +5,6 @@ import {
     type ComputerLivenessReadyEvent,
     type DaemonToRelayMessage,
     decodeDaemonToRelayMessage,
-    decodeKnownServiceToDaemonMessage,
     encodeComputerStatusEvent,
     encodeServiceToDaemonMessage,
     type NativeSessionTarget,
@@ -14,10 +13,8 @@ import {
 } from "@morty-build/client/protocol";
 import { logger } from "../../../infra/logger.ts";
 import { PairingDirectoryError } from "../../management/entity/pairing.ts";
-import { ProjectPermission } from "../../management/entity/project-authentication.ts";
 import type { ComputerConnectionIdentity } from "../entity/computer-connection.ts";
 import { ComputerScope } from "../entity/session.ts";
-import { computerCommandPermission } from "./computer-control-registry.ts";
 import type { ComputerCredentialService } from "./computer-credential-service.ts";
 import { ComputerMessageScheduler, ComputerMessageSchedulerCapacityError } from "./computer-message-scheduler.ts";
 import type { ComputerRelayActor, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
@@ -47,10 +44,6 @@ export type ComputerSocketIdentity =
           readonly computerId: string;
 
           readonly sessionFilter: NativeSessionTarget;
-      }
-    | {
-          readonly role: "relay";
-          readonly computerId: string;
       }
     | {
           readonly role: "host";
@@ -248,7 +241,7 @@ export class ComputerService {
     };
 
     readonly acceptHost = (
-        identity: Extract<ComputerSocketIdentity, { readonly role: "host" | "relay" }>,
+        identity: Extract<ComputerSocketIdentity, { readonly role: "host" }>,
         signal: AbortSignal,
     ): Promise<ComputerAdmission> => {
         const scope = new ComputerScope(identity.computerId);
@@ -308,7 +301,7 @@ export class ComputerService {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
             if (
                 identity.role === "host" &&
-                (await this.#cx.services.credentials.authorizeHostMessage(identity, null, signal)) === "revoked"
+                (await this.#cx.services.credentials.authorizeHostMessage(identity, signal)) === "revoked"
             ) {
                 socket.close(1008, "Channel access revoked");
             }
@@ -379,42 +372,18 @@ export class ComputerService {
     ): Promise<void> => {
         signal.throwIfAborted();
         const scope = new ComputerScope(identity.computerId);
-        if (identity.role === "host" || identity.role === "relay" || identity.role === "viewer") {
+        if (identity.role === "host" || identity.role === "viewer") {
             // Closing first makes this command see the Computer as offline and fail at once; detaching
             // afterwards releases commands already sent into the silent connection.
             const silentDaemons = this.closeSilentDaemons();
             try {
-                if (identity.role === "relay") {
-                    const relay = this.relay(scope);
-                    if (typeof message !== "string") {
-                        relay.receiveHostChunk(socket, message);
-                        return;
-                    }
-                    await relay.receiveHostMessage(socket, message, signal);
-                    return;
-                }
                 if (identity.role === "viewer") {
                     socket.close(1008, "A live subscription cannot send commands");
                     return;
                 }
-                // Content bytes continue an upload, which needs Session write access like the content.write that
-                // started it. An unknown message needs only the connection's own access; the relay skips it.
-                const command = typeof message === "string" ? decodeKnownServiceToDaemonMessage(message) : null;
-                const permission =
-                    typeof message === "string"
-                        ? command === null
-                            ? null
-                            : computerCommandPermission(command)
-                        : ProjectPermission.SessionWrite;
-                switch (await this.#cx.services.credentials.authorizeHostMessage(identity, permission, signal)) {
-                    case "revoked":
-                        socket.close(1008, "Channel access revoked");
-                        return;
-                    case "denied":
-                        socket.close(1008, "project_permission_denied");
-                        return;
-                    case "granted":
-                        break;
+                if ((await this.#cx.services.credentials.authorizeHostMessage(identity, signal)) === "revoked") {
+                    socket.close(1008, "Channel access revoked");
+                    return;
                 }
                 const relay = this.relay(scope);
                 if (typeof message !== "string") {

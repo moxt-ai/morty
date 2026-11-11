@@ -5,7 +5,7 @@ import { computerPairing, daemonCredential } from "../../../schema/computer-rela
 import { validateIdentifier } from "../entity/pairing.ts";
 import type { ComputerIdentityCredential } from "../entity/pairing-identity.ts";
 import type { PairingScopeRow } from "../entity/pairing-records.ts";
-import { activeGeneration, currentGeneration } from "./computer-generation.ts";
+import { activeGeneration } from "./computer-generation.ts";
 
 /** The Projects in this storage whose credential matches. */
 export async function credentialMatches(
@@ -26,20 +26,6 @@ export async function credentialMatches(
                         eq(computerPairing.computerId, computerId),
                         eq(daemonCredential.tokenHash, credential.tokenHash),
                         inArray(daemonCredential.generation, activeGeneration(computerId)),
-                    ),
-                );
-        }
-        case "pairing": {
-            // Only the current generation's poll token reads the computer's pairing.
-            const computerId = validateIdentifier(credential.computerId, "computer_id");
-            return orm
-                .select({ computer_id: computerPairing.computerId })
-                .from(computerPairing)
-                .where(
-                    and(
-                        eq(computerPairing.computerId, computerId),
-                        eq(computerPairing.pollTokenHash, credential.tokenHash),
-                        inArray(computerPairing.generation, currentGeneration(computerId)),
                     ),
                 );
         }

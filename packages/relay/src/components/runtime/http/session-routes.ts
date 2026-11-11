@@ -45,7 +45,7 @@ function nativeTarget(request: { readonly param: (name: string) => string | unde
     };
 }
 
-/** Session operations through a Session credential, each authorized for its own permission on that Session. */
+/** Session operations through a Session credential, each authorized against that credential's current access. */
 function authorizedSessionControl(
     context: {
         readonly var: RelayHttpEnvironment["Variables"];
@@ -55,8 +55,8 @@ function authorizedSessionControl(
     sessionTarget: NativeSessionTarget,
 ): SessionControl {
     const scope = new ComputerScope(access.computerId);
-    return new SessionControl(async (command, permission) => {
-        await access.authorize(permission, context.req.raw.signal);
+    return new SessionControl(async (command) => {
+        await access.authorize(context.req.raw.signal);
         return await sessionOperations(context).requestComputerScopeControl(
             scope,
 
@@ -104,33 +104,6 @@ export function createRelayRoutes() {
                 ["authorization", "content-type", "x-morty-byte-length", "x-morty-content-kind", "x-morty-file-name"],
             ),
         )
-        .get("/:sessionId/live-event-subscription-target", sessionAccessTargetMiddleware, async (context) => {
-            const authorization = context.req.header("authorization") ?? "";
-            const credential = authorization.match(/^Bearer ([^\s]+)$/u)?.[1];
-            if (credential === undefined) {
-                return context.json(
-                    {
-                        error: {
-                            code: "session_access_required",
-                            message: "A live Session credential is required",
-                        },
-                    },
-                    401,
-                );
-            }
-            const target = await context.var.sessionAccess.authorizeLiveEvents(
-                context.var.sessionAccessTarget,
-                credential,
-                context.req.raw.signal,
-            );
-            context.header("Cache-Control", "no-store");
-            return context.json({
-                expiresAtEpochMilliseconds: target.expiresAtEpochMilliseconds,
-                issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
-                kind: "expiring",
-                computerId: target.computerId,
-            });
-        })
         .get("/:sessionId/configuration", sessionAccessTargetMiddleware, async (context) => {
             const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
             if (credential === undefined) {

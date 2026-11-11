@@ -9,12 +9,7 @@ import type { ComputerManagementStorageDirectory } from "./computer-management-s
 
 /** A credential that matches nothing, including one stored for a Project that is no longer served. */
 function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
-    const code =
-        credential.kind === "pairing"
-            ? "pairing_not_found"
-            : credential.kind === "pairing-code"
-              ? "invalid_pairing_code"
-              : "unauthorized";
+    const code = credential.kind === "pairing-code" ? "invalid_pairing_code" : "unauthorized";
     return new PairingDirectoryError(code, "A valid pairing or channel credential is required");
 }
 

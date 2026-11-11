@@ -2,7 +2,6 @@ import type { ProjectLocationHint, SessionAccessGrant, SessionAccessHolder } fro
 import { encodeRelayComputerId } from "../../computer/entity/computer-id.ts";
 import { ComputerManagementError, hasControlCharacters } from "../entity/computer-management.ts";
 import { createRandomToken, validateIdentifier } from "../entity/pairing.ts";
-import type { ProjectPermission } from "../entity/project-authentication.ts";
 import type { ProjectRow } from "../entity/relay-records.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { BackendProjectAccess } from "./backend-project-access.ts";
@@ -107,21 +106,13 @@ export class ComputerManagementService {
             signal,
         );
 
-    readonly authorizeProject = async (computerId: string, permission: ProjectPermission, signal: AbortSignal) => {
-        return await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), [permission], signal);
-    };
+    readonly authorizeProject = async (computerId: string, signal: AbortSignal) =>
+        await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), signal);
     readonly authorizeSessionCredentialRecord = async (
         computerId: string,
-        permission: ProjectPermission,
         grant: SessionAccessGrant,
         signal: AbortSignal,
-    ) =>
-        await this.#projectAccess.authorizeSession(
-            validateIdentifier(computerId, "computer_id"),
-            [permission],
-            grant,
-            signal,
-        );
+    ) => await this.#projectAccess.authorizeSession(validateIdentifier(computerId, "computer_id"), grant, signal);
     /** The active pairing under which the holder can receive a Session credential. */
     readonly currentSessionGeneration = async (
         computerId: string,
@@ -143,6 +134,6 @@ export class ComputerManagementService {
     };
 
     readonly requireActiveAccount = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), [], signal);
+        await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), signal);
     };
 }

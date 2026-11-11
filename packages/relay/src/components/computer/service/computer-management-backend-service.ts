@@ -28,8 +28,6 @@ export class ComputerManagementBackendService {
         );
     readonly readPairing = async (signal: AbortSignal) =>
         await this.context.services.computerPairings.readProjectComputerPairing(this.computerId, signal);
-    readonly revokeComputer = async (signal: AbortSignal) =>
-        await this.context.services.computerPairings.revokeProjectComputer(this.computerId, signal);
     readonly computers = async (signal: AbortSignal) =>
         await this.context.services.computerPairings.listProjectComputers(this.computerId, signal);
     readonly agents = async (signal: AbortSignal) =>

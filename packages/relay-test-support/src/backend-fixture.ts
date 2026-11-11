@@ -9,6 +9,7 @@ import {
     createHostedRelayAccess,
     createRelayPorts,
 } from "../../worker/src/composition/relay-services.ts";
+import { CloudflareComputerRelay } from "../../worker/src/gateway/cloudflare-computer-relay.ts";
 
 /** Exercises real services through the Cloudflare storage and Runtime boundaries. */
 export function createTestComputerBackend(env: RelayBindings, computerId: string) {
@@ -30,4 +31,19 @@ export async function requestTestComputerControl(
 ) {
     const socket = await createTestComputerBackend(env, computerId).openHost(signal);
     return requestComputerControl(socket, command, signal);
+}
+
+/**
+ * Seeds a revoked Computer: the Relay revokes one when its daemon credential is reused, which a scenario about the
+ * revoked state need not stage. The revocation commits in the Computer's storage and closes its daemon connection.
+ */
+export async function revokeTestComputer(env: RelayBindings, computerId: string, signal: AbortSignal) {
+    await env.COMPUTER_RELAY.getByName(computerId).revokeComputer(computerId, {
+        computerId,
+        now: Date.now(),
+        actorKind: "system",
+        actorId: computerId,
+        auditId: `test-revocation-${crypto.randomUUID()}`,
+    });
+    await new CloudflareComputerRelay(env.COMPUTER_RELAY).disconnectComputer({ computerId }, signal);
 }
