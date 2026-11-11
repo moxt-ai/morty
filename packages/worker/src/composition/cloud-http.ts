@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import * as v from "valibot";
-import type { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
+import type { ComputerBackendService } from "../../../relay/src/components/computer/service/computer-backend-service.ts";
 import { createChatApplication } from "../components/chat/http/index.ts";
 import { relayIdentifier } from "../components/management/entity/computer-management.ts";
 import { ManagementError } from "../components/management/entity/management-error.ts";

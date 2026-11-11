@@ -1,8 +1,8 @@
-import type { VerifiedComputerAccess } from "../../../relay-core/src/entity/pairing/pairing.ts";
-import type { ComputerRelayGateway } from "../../../relay-core/src/gateway/computer-relay-gateway.ts";
-import { requestLogContext } from "../../../relay-core/src/infra/log-diagnostics.ts";
-import { logger } from "../../../relay-core/src/infra/logger.ts";
-import { ComputerStatus } from "../../../relay-core/src/service/computer-relay/computer.ts";
+import type { VerifiedComputerAccess } from "../../../relay/src/components/management/entity/pairing.ts";
+import type { ComputerRelayGateway } from "../../../relay/src/components/runtime/gateway/computer-relay-gateway.ts";
+import { ComputerStatus } from "../../../relay/src/components/runtime/service/computer.ts";
+import { requestLogContext } from "../../../relay/src/infra/log-diagnostics.ts";
+import { logger } from "../../../relay/src/infra/logger.ts";
 
 export class CloudflareComputerRelay implements ComputerRelayGateway {
     readonly #namespace: DurableObjectNamespace;

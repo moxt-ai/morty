@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import type { ComputerManagementService } from "../../../../../relay/src/service/computer-management-service.ts";
+import type { ComputerManagementService } from "../../../../../relay/src/components/management/service/computer-management-service.ts";
 import { computerManagementSchema } from "../entity/computer-management.ts";
 import type { ProjectLocationHint } from "../util/project-location.ts";
 

@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
-import { errorMiddleware, rethrowHonoError } from "../../../relay-core/src/http/middleware/error-middleware.ts";
+import { errorMiddleware, rethrowHonoError } from "../../../relay/src/middleware/error-middleware.ts";
 import type { ConfiguredRelayBindings } from "../../../worker/src/composition/relay-bindings.ts";
 import { ComputerRelay as RelayComputerRelay } from "../../../worker/src/do/computer-relay.ts";
 import relay from "../../src/worker-entry.ts";

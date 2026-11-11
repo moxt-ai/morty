@@ -1,13 +1,13 @@
 import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { DurableObjectDatabaseAdapter } from "@morty-build/relay-core";
+import { DurableObjectDatabaseAdapter } from "@morty-build/relay";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { hashPairingCredential } from "../../relay-core/src/entity/pairing/pairing.ts";
-import { ComputerDirectoryStorage } from "../../relay-core/src/storage/computer-directory-storage.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
+import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
+import { hashPairingCredential } from "../src/components/management/entity/pairing.ts";
+import { ComputerDirectoryStorage } from "../src/components/management/storage/computer-directory-storage.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;

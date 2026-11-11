@@ -36,15 +36,15 @@ import {
     type NativeSessionTarget,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import { DurableObjectSqlDatabase, RelaySockets, SessionControl } from "@morty-build/relay-core";
+import { DurableObjectSqlDatabase, RelaySockets, SessionControl } from "@morty-build/relay";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { requestTestComputerControl } from "../../relay-test-support/src/backend-fixture.ts";
 import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
 import { createRelayDurableObjectContext } from "../../worker/src/composition/relay-durable-object-context.ts";
 import { ComputerRelay as RelayComputerRelay } from "../../worker/src/do/computer-relay.ts";
-import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
+import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
+import { createRuntimeContext } from "../src/components/runtime/runtime-context.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { computerManagementStore } from "./registered-computer.ts";
 
@@ -267,7 +267,7 @@ describe.sequential("Relay Session-only boundary", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "private-reconnect-computer" }),
+                    body: JSON.stringify({ idempotencyKey: "private-reconnect-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -789,7 +789,7 @@ describe.sequential("Relay Session-only boundary", () => {
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             // A delayed result after the caller has finished must not disconnect the Computer.
             daemon.send(historyPage);
-            // A Runtime that closed the Session refuses to load its history. The refusal is a typed conflict, so a
+            // A Computer that closed the Session refuses to load its history. The refusal is a typed conflict, so a
             // client can offer to reopen the Session instead of retrying the load.
             const closedHistoryResponse = worker.fetch(
                 new Request(
@@ -872,7 +872,7 @@ describe.sequential("Relay Session-only boundary", () => {
             transport.send(
                 JSON.stringify({
                     kind: "http.request",
-                    requestId: "computer-agents",
+                    requestId: "runtime-agents",
                     method: "GET",
                     path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`,
                     headers: [["authorization", `Bearer ${appCredential}`]],
@@ -881,7 +881,7 @@ describe.sequential("Relay Session-only boundary", () => {
             );
             expect(JSON.parse(await transportMessages.next())).toMatchObject({
                 kind: "http.error",
-                requestId: "computer-agents",
+                requestId: "runtime-agents",
                 code: "invalid_target",
                 status: 400,
             });
@@ -1002,7 +1002,7 @@ describe.sequential("Relay Session-only boundary", () => {
         }
     }, 180_000);
 
-    it("Given a machine with no discovered local Agent, When it redeems a Runtime pairing and publishes its catalog, Then pairing succeeds and the Runtime advertises an empty Agent directory", async () => {
+    it("Given a machine with no discovered local Agent, When it redeems a Computer pairing and publishes its catalog, Then pairing succeeds and the Computer advertises an empty Agent directory", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
@@ -1012,7 +1012,7 @@ describe.sequential("Relay Session-only boundary", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "unattended-computer" }),
+                    body: JSON.stringify({ idempotencyKey: "unattended-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -1097,7 +1097,7 @@ async function connectComputerDaemon(slug: string, options: { readonly anchorClo
         return new DaemonCredential(text(claimed, "computerCredential"));
     };
     const sessionId = `${slug}-session`;
-    const daemonCredential = await pairComputer(`${slug}-computer`);
+    const daemonCredential = await pairComputer(`${slug}-runtime`);
     const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
     if (daemonResponse.webSocket === null) {
         throw new Error("Expected the Computer socket");
@@ -1378,9 +1378,10 @@ it.each(["text", "binary"])(
                     storeFor: (computerId) => computerManagementStore(computerId, state.storage),
                 });
                 const relay = new RelaySockets(
-                    createDurableObjectDependencies({
+                    createRuntimeContext({
                         doDatabase: database,
                         storages: context.storages,
+                        services: context.services,
                         gateways: context.gateways,
                         utilities: {
                             waitUntil: (operation) => {
@@ -1477,7 +1478,7 @@ it("Given a Computer its owner revoked and then paired again, When the earlier d
     }
 });
 
-it("Given a Session credential with an open live view, When the owner revokes the Runtime and pairs the computer again, Then the credential is refused and its view closes while a credential issued under the new pairing opens a view", async () => {
+it("Given a Session credential with an open live view, When the owner revokes the Computer and pairs the computer again, Then the credential is refused and its view closes while a credential issued under the new pairing opens a view", async () => {
     const runtime = await connectComputerDaemon("session-pairing-generation");
     try {
         const subscribed = await runtime.subscribe();
@@ -1491,7 +1492,7 @@ it("Given a Session credential with an open live view, When the owner revokes th
         view.accept();
 
         expect((await runtime.revoke()).status).toBe(204);
-        // Runtime revocation and credential reauthorization can both close the view.
+        // Computer revocation and credential reauthorization can both close the view.
         expect(await viewClosed).toMatchObject({ code: 1008 });
         await expect(runtime.issueComputerCredential(runtime.computerId)).rejects.toMatchObject({
             code: "credential_revoked",
@@ -1523,7 +1524,7 @@ it("Given a Session credential with an open live view, When the owner revokes th
     }
 });
 
-it("Given Chat reads the Session execution naming an unconfirmed command, When the Runtime reports that command's delivery, Then the Relay returns the delivery", async () => {
+it("Given Chat reads the Session execution naming an unconfirmed command, When the Computer reports that command's delivery, Then the Relay returns the delivery", async () => {
     const runtime = await connectComputerDaemon("command-delivery");
     try {
         const response = runtime.readSessionExecution("unconfirmed-command");
@@ -2227,7 +2228,7 @@ describe.sequential("Relay Turn submission", () => {
             runtime.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a linked Runtime, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Runtime and the invalid Turn is rejected as a client error", async () => {
+    it("Given a linked Computer, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Computer and the invalid Turn is rejected as a client error", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
@@ -2237,7 +2238,7 @@ describe.sequential("Relay Turn submission", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "long-prompt-computer" }),
+                    body: JSON.stringify({ idempotencyKey: "long-prompt-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -2417,7 +2418,7 @@ describe.sequential("Relay Turn submission", () => {
                                 body: JSON.stringify({
                                     content: "describe this",
                                     disposition: "append",
-                                    idempotencyKey: "invalid-computer-turn",
+                                    idempotencyKey: "invalid-runtime-turn",
                                     attachments: [{ kind: "image" }],
                                     sessionConfigurations: [],
                                 }),
@@ -2466,7 +2467,7 @@ describe.sequential("Relay Turn submission", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "capability-gated-commands-computer" }),
+                    body: JSON.stringify({ idempotencyKey: "capability-gated-commands-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -2597,7 +2598,7 @@ describe.sequential("Relay Turn submission", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "malformed-capabilities-computer" }),
+                    body: JSON.stringify({ idempotencyKey: "malformed-capabilities-runtime" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),

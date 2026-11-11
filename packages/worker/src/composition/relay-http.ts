@@ -4,7 +4,7 @@ import {
     RequestAccessMetrics,
     relayErrorHandler,
     requestTimeoutMiddleware,
-} from "@morty-build/relay-core";
+} from "@morty-build/relay";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { routeComputerDurableObject } from "../gateway/computer-durable-object-routing.ts";
 import { routeComputerSessionRequest } from "../gateway/computer-session-routing.ts";

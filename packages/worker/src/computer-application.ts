@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
-import type { ComputerBackendService } from "../../relay/src/service/computer-backend-service.ts";
+import type { ComputerBackendService } from "../../relay/src/components/computer/service/computer-backend-service.ts";
 import { computerBootstrap } from "./components/management/entity/computer-bootstrap.ts";
 import { createApplicationDependencies, logger } from "./composition/application-context.ts";
 import { createCloudRoutes } from "./composition/cloud-http.ts";

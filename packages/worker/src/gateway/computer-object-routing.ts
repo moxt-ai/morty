@@ -1,4 +1,4 @@
-import { logger } from "@morty-build/relay-core/logging";
+import { logger } from "@morty-build/relay/logging";
 import * as v from "valibot";
 import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
 import { projectRegion } from "../components/management/entity/project-region.ts";

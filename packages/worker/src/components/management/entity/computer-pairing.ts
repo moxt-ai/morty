@@ -1,4 +1,4 @@
-import { PairingDirectoryError } from "@morty-build/relay-core/contracts";
+import { PairingDirectoryError } from "@morty-build/relay/contracts";
 
 /**
  * Where a computer's Runtime pairing stands, read from the Relay that owns it. A pending or expired pairing request

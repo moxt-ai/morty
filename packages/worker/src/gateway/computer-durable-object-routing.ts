@@ -1,7 +1,10 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { logger } from "@morty-build/relay-core/logging";
-import { encodeComputerDurableObjectPath } from "../../../relay/src/entity/computer-durable-object-path.ts";
-import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
+import { logger } from "@morty-build/relay/logging";
+import { encodeComputerDurableObjectPath } from "../../../relay/src/components/computer/entity/computer-durable-object-path.ts";
+import {
+    computerIdFromPrefixedValue,
+    decodeComputerPlacement,
+} from "../../../relay/src/components/computer/entity/computer-id.ts";
 import type { RelayBindings } from "../composition/relay-bindings.ts";
 
 function failure(code: string, status: number): Response {

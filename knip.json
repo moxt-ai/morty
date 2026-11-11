@@ -34,10 +34,7 @@
             "includeEntryExports": true
         },
         "packages/relay": {
-            "entry": ["src/schema/**/*.ts"],
-            "includeEntryExports": true
-        },
-        "packages/relay-core": {
+            "entry": ["src/schema/**/*.ts", "src/durable-object/computer-relay.ts"],
             "includeEntryExports": true
         },
         "packages/relay-test-support": {
