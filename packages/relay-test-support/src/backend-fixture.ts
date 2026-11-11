@@ -1,15 +1,27 @@
+import { isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import {
     type ComputerControlCommand,
     requestComputerControl,
 } from "../../worker/src/computer-relay/components/runtime/service/computer-control-request.ts";
-import {
-    computerInternalPath,
-    computerRegistrationsResponseSchema,
-} from "../../worker/src/contracts/computer-relay-http.ts";
+import { computerInternalPath } from "../../worker/src/contracts/computer-relay-http.ts";
 import { PairingDirectoryError, parseAgents } from "../../worker/src/contracts/relay/pairing.ts";
 import type { RelayBindings } from "../../worker/src/contracts/relay-bindings.ts";
 import { RequestDeadline } from "../../worker/src/http/request-deadline.ts";
+
+const identifier = v.custom<string>(isIdentifier);
+const timestamp = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
+const computerRegistrationsResponseSchema = v.object({
+    computers: v.array(
+        v.object({
+            computer_id: identifier,
+            claimed_at: timestamp,
+            agents_json: v.string(),
+            computer_name: v.string(),
+            workspace_name: v.string(),
+        }),
+    ),
+});
 
 /** A client of the owning object's production HTTP boundaries, never a second service composition. */
 export function createTestComputerBackend(env: RelayBindings, computerId: string) {

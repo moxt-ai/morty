@@ -9,7 +9,7 @@ import { computerPairing, computerRegistration } from "../../src/computer-relay/
 import { computerDirectoryDrizzle } from "../../src/directory/storage/relay-drizzle-database.ts";
 import { relayDrizzle } from "../../src/infra/drizzle-database.ts";
 import { computerAccount } from "../../src/schema/d1/index.ts";
-import { readComputerOwner } from "../../src/worker/composition/account-provisioning.ts";
+import { readComputerOwner } from "./directory-fixture.ts";
 
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
