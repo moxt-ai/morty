@@ -1,15 +1,15 @@
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { logger } from "../../../../infra/logger.ts";
 import type { ComputerReplyConnection } from "./computer-control-request.ts";
-import type { HistoryRequestKind, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
+import type { ComputerOperationSocket, HistoryRequestKind, RelayPeers } from "./computer-relay-actor.ts";
 
 class LocalComputerRequest extends EventTarget implements ComputerReplyConnection {
     #state: number = WebSocket.OPEN;
-    readonly #dispatch: (socket: RelaySocket, message: unknown) => Promise<void>;
+    readonly #dispatch: (socket: ComputerOperationSocket, message: unknown) => Promise<void>;
     readonly #release: () => void;
-    readonly server: RelaySocket;
+    readonly server: ComputerOperationSocket;
 
-    constructor(dispatch: (socket: RelaySocket, message: unknown) => Promise<void>, release: () => void) {
+    constructor(dispatch: (socket: ComputerOperationSocket, message: unknown) => Promise<void>, release: () => void) {
         super();
         this.#dispatch = dispatch;
         this.#release = release;
@@ -24,7 +24,6 @@ class LocalComputerRequest extends EventTarget implements ComputerReplyConnectio
             },
             isOpen: () => this.isOpen(),
             isSame: (socket) => socket === this.server,
-            permitsSessionHistory: () => true,
             bindHistoryRequest: (kind, requestId) => {
                 history = { kind, requestId };
             },
@@ -85,7 +84,7 @@ export class LocalComputerRequests {
     readonly open = (
         requestId: string,
         target: NativeSessionTarget | undefined,
-        dispatch: (socket: RelaySocket, message: unknown) => Promise<void>,
+        dispatch: (socket: ComputerOperationSocket, message: unknown) => Promise<void>,
     ) => {
         const connection = new LocalComputerRequest(dispatch, () => this.#routes.delete(route));
         const route = { socket: connection.server, requestId, target };

@@ -50,7 +50,7 @@ export function createProjectComputerPairingRoutes() {
                         return new Response("WebSocket upgrade required", { status: 426 });
                     }
                     const admitted = await context.var.relay.services.runtime.acceptDaemon(
-                        connection.access,
+                        connection.access.computerId,
                         request.signal,
                     );
                     return admitted.kind === "accepted"

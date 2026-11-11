@@ -1,4 +1,4 @@
-import type { BackendProjectAccess } from "../../../../directory/service/backend-project-access.ts";
+import type { ComputerAccessService } from "../../../../directory/service/computer-access-service.ts";
 import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import type { ComputerRelayStore } from "../../management/storage/computer-relay-store.ts";
 import type { ComputerSocketIdentity } from "./computer-service.ts";
@@ -6,12 +6,12 @@ import type { ComputerSocketIdentity } from "./computer-service.ts";
 export class ComputerCredentialService {
     readonly #store: Pick<ComputerRelayStore, "readActiveGeneration">;
     readonly #accounts: Pick<ComputerManagementService, "isActive">;
-    readonly #access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
+    readonly #access: Pick<ComputerAccessService, "grantsSessionCredential">;
 
     constructor(
         store: Pick<ComputerRelayStore, "readActiveGeneration">,
         accounts: Pick<ComputerManagementService, "isActive">,
-        access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">,
+        access: Pick<ComputerAccessService, "grantsSessionCredential">,
     ) {
         this.#store = store;
         this.#accounts = accounts;
@@ -32,15 +32,6 @@ export class ComputerCredentialService {
         signal.throwIfAborted();
         return generation;
     };
-
-    readonly authorizeHostMessage = async (
-        identity: Extract<ComputerSocketIdentity, { readonly role: "host" }>,
-        signal: AbortSignal,
-    ): Promise<"granted" | "revoked"> =>
-        (await this.activeGeneration(identity, signal)) !== null &&
-        (await this.#access.grants(identity.computerId, signal))
-            ? "granted"
-            : "revoked";
 
     readonly authorizeViewer = async (
         identity: Extract<ComputerSocketIdentity, { readonly role: "viewer" }>,

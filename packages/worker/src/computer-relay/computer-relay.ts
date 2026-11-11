@@ -199,7 +199,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
 
     /**
      * Commits an identity change that may end access to the computer, and with it the connection check that closes the
-     * live views and host connections the change no longer authorizes. Requests read the identities, so the committed
+     * live views the change no longer authorizes. Requests read the identities, so the committed
      * change is already in force; the check only ends the open connections, and the alarm retries it until it runs.
      */
     readonly #endAccess = async (change: () => Promise<boolean>): Promise<boolean> =>
@@ -244,17 +244,14 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
 
     /**
      * Sets the alarm for the earliest open connection check: a viewer's expiry, or the next re-authorization of the
-     * hosts and viewers. A pending check that is earlier is kept, so new connections never postpone it.
+     * viewers. A pending check that is earlier is kept, so new connections never postpone it.
      */
     readonly #scheduleConnectionChecks = async (): Promise<void> => {
         const viewers = this.#connectionsForComputer.context.gateways.peers
             .viewers()
             .filter(({ socket }) => socket.isOpen());
         const checks = viewers.map(({ expiresAt }) => expiresAt);
-        if (
-            viewers.length > 0 ||
-            this.#connectionsForComputer.context.gateways.peers.hosts().some((host) => host.isOpen())
-        ) {
+        if (viewers.length > 0) {
             checks.push(Date.now() + REAUTHORIZATION_INTERVAL_MILLISECONDS);
         }
         if (checks.length === 0) {

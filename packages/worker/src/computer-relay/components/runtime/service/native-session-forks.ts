@@ -2,7 +2,6 @@ import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import { decodeNativeSessionRequest, type NativeSessionResult } from "@morty-build/client/protocol";
 import { PairingDirectoryError } from "../../../../contracts/relay/pairing.ts";
-import type { ComputerScope } from "../../../../contracts/relay/session.ts";
 import type { ComputerControlCommand, ComputerControlResult } from "./computer-control-request.ts";
 
 async function waitForFork<T>(completion: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -35,18 +34,18 @@ export class NativeSessionForks {
     }
 
     readonly fork = async (
-        scope: ComputerScope,
+        computerId: string,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
         request: (
-            scope: ComputerScope,
+            computerId: string,
             command: ComputerControlCommand,
             signal: AbortSignal,
         ) => Promise<ComputerControlResult>,
         signal: AbortSignal,
     ): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
-        const key = JSON.stringify([scope.computerId, operationId]);
+        const key = JSON.stringify([computerId, operationId]);
         const requested = JSON.stringify([input.harness, input.sessionId, input.directory]);
         const running = this.#running.get(key);
         if (running !== undefined) {
@@ -61,7 +60,7 @@ export class NativeSessionForks {
         const completion = Promise.resolve().then(async (): Promise<NativeSessionResult> => {
             try {
                 const result = await request(
-                    scope,
+                    computerId,
                     decodeNativeSessionRequest(
                         JSON.stringify({
                             kind: "native.session.request",

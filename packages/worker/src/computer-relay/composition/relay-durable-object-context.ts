@@ -1,5 +1,5 @@
 import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
-import { BackendProjectAccess } from "../../directory/service/backend-project-access.ts";
+import { ComputerAccessService } from "../../directory/service/computer-access-service.ts";
 import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
 import { ComputerManagementStorage } from "../../directory/storage/computer-management-storage.ts";
 import type { ComputerManagementStore } from "../components/management/storage/computer-management-store.ts";
@@ -19,7 +19,6 @@ export function createRelayDurableObjectContext(
         forProject: storage.storeFor,
     };
     const controlStorage = new ComputerManagementStorage(storage.accounts, stores);
-    const computerAccounts = new ComputerManagementService(controlStorage);
     return createRuntimeContext({
         storages: {
             projectStore: {
@@ -27,7 +26,10 @@ export function createRelayDurableObjectContext(
                     storage.storeFor(computerId).readActiveGeneration(computerId, signal),
             },
         },
-        services: { computerAccounts, projectAccess: new BackendProjectAccess(controlStorage) },
+        services: {
+            computerAccounts: new ComputerManagementService(controlStorage),
+            projectAccess: new ComputerAccessService(controlStorage),
+        },
         gateways: { peers: new CloudflareRelayPeers(state) },
         utilities: { waitUntil: (operation) => state.waitUntil(operation) },
         doDatabase: storage.database,

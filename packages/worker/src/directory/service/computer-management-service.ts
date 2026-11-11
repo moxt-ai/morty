@@ -4,7 +4,7 @@ import { ComputerManagementError, hasControlCharacters } from "../../contracts/r
 import { PairingDirectoryError, validateIdentifier } from "../../contracts/relay/pairing.ts";
 import type { ProjectRow } from "../../contracts/relay/relay-records.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
-import { BackendProjectAccess } from "./backend-project-access.ts";
+import { ComputerAccessService } from "./computer-access-service.ts";
 
 function displayName(value: string): string {
     const normalized = value.trim();
@@ -37,10 +37,10 @@ function projectResource(row: ProjectRow): object {
 }
 
 export class ComputerManagementService {
-    readonly #projectAccess: BackendProjectAccess;
+    readonly #projectAccess: ComputerAccessService;
     readonly storage: ComputerManagementStorage;
     constructor(storage: ComputerManagementStorage) {
-        this.#projectAccess = new BackendProjectAccess(storage);
+        this.#projectAccess = new ComputerAccessService(storage);
         this.storage = storage;
     }
 

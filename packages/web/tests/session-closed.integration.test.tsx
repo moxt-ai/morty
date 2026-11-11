@@ -66,7 +66,7 @@ async function openSavedConversation(app: TestApp): Promise<string> {
     return sessionId;
 }
 
-test("Given an open conversation, When another client closes its Session and the browser resumes, Then Chat keeps it closed and offers to reopen it", {
+test("Given an open conversation, When its Computer closes the Session and the browser resumes, Then Chat keeps it closed and offers to reopen it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -203,7 +203,7 @@ test("Given a conversation whose Computer restarted and then closed its Session 
     );
 });
 
-test("Given a running reply, When another client closes the Session, Then it closes and reopens without a failed reply", async () => {
+test("Given a running reply, When the Computer closes the Session, Then it closes and reopens without a failed reply", async () => {
     const app = await createTestApp({ connectAgent: true });
     const sessionId = await openSavedConversation(app);
     const daemon = app.daemon;

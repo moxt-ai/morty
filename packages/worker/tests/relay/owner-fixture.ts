@@ -1,7 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import type { NativeSessionTarget, SessionAccessHolder } from "@morty-build/client/protocol";
-import { createTestComputerBackend } from "../../../relay-test-support/src/backend-fixture.ts";
+import * as v from "valibot";
 import { createTestOwner } from "../../../relay-test-support/src/identity-fixture.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { SessionAccessSigner } from "../../src/computer-relay/components/runtime/entity/session-access-credential.ts";
@@ -47,4 +47,85 @@ export async function issueSession(computerId: string, target: NativeSessionTarg
     ).issue({ kind: "session", computerId, target }, 900, await ownerHolder(computerId), AbortSignal.timeout(10_000));
 }
 
-export const computerBackend = (computerId: string) => createTestComputerBackend(env, computerId);
+export const computerBackend = (computerId: string) => {
+    const request = async (path: string, signal: AbortSignal) => {
+        const token = owners.get(computerId);
+        if (token === undefined) {
+            throw new Error("Expected a publicly created owner");
+        }
+        const response = await ownerRequest(
+            new Request(`${ownerOrigin}/morty/api/chat/computers/${computerId}/${path}`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            }),
+        );
+        if (!response.ok) {
+            throw new Error(`Computer read failed: ${response.status}`);
+        }
+        return response.json();
+    };
+    return {
+        computers: async (signal: AbortSignal) =>
+            v.parse(
+                v.object({
+                    computers: v.array(
+                        v.object({
+                            computerId: v.string(),
+                            computerName: v.string(),
+                            online: v.boolean(),
+                            agents: v.array(v.object({ harness: v.string(), label: v.string() })),
+                        }),
+                    ),
+                }),
+                await request("setup/computers", signal),
+            ).computers,
+        agents: async (signal: AbortSignal) =>
+            v.parse(
+                v.object({
+                    computer: v.object({
+                        computerId: v.string(),
+                        computerName: v.string(),
+                        online: v.boolean(),
+                        agents: v.array(v.object({ harness: v.string(), label: v.string() })),
+                    }),
+                }),
+                await request("workspace", signal),
+            ).computer,
+    };
+};
+
+/** Pairs through the public setup boundary and returns its current daemon credential. */
+export async function pairComputer(computerId: string) {
+    const token = owners.get(computerId);
+    if (token === undefined) {
+        throw new Error("Expected a publicly created owner");
+    }
+    const reservation = await ownerRequest(
+        new Request(`${ownerOrigin}/morty/api/computers/${computerId}/management/pairing`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+        }),
+    );
+    if (reservation.status !== 201) {
+        throw new Error(`Pairing failed: ${reservation.status}`);
+    }
+    const { pairingCode } = v.parse(v.object({ pairingCode: v.string() }), await reservation.json());
+    const redemption = await ownerRequest(
+        new Request(`${ownerOrigin}/morty/api/v1/pairings/${computerId}/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                pairingCode,
+                computerName: "Test computer",
+                workspaceName: "Test workspace",
+                agents: [],
+            }),
+        }),
+    );
+    if (redemption.status !== 200) {
+        throw new Error(`Redemption failed: ${redemption.status}`);
+    }
+    return v.parse(v.object({ computerCredential: v.string() }), await redemption.json()).computerCredential;
+}

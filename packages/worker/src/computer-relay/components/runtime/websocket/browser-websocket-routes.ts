@@ -9,7 +9,6 @@ import {
 import * as v from "valibot";
 import { toHttpError } from "../../../../contracts/http-error.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
-import { ComputerScope } from "../../../../contracts/relay/session.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import {
     decodeSessionRequest,
@@ -122,10 +121,9 @@ export function createBrowserWebSocketRoutes(ctx: {
             credential,
             request.signal,
         );
-        const scope = new ComputerScope(computerId);
         const control = new SessionControl(async (command) => {
             await access.authorize(request.signal);
-            return ctx.services.operations.requestComputerScopeControl(scope, command, request.signal);
+            return ctx.services.operations.requestControl(computerId, command, request.signal);
         }, target);
         switch (operation.kind) {
             case "content-write":
@@ -188,7 +186,7 @@ export function createBrowserWebSocketRoutes(ctx: {
                 await access.authorize(request.signal);
                 if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
                     return ctx.services.operations.openPublicSessionEvents(
-                        scope,
+                        computerId,
                         target,
                         {
                             signingKeyId: access.signingKeyId,
@@ -289,7 +287,7 @@ async function uploadContent(
     }
     name = decodeSessionRequest(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
     const available = await dependencies.operations.writeProjectSessionContent(
-        new ComputerScope(access.computerId),
+        access.computerId,
         decodeContentWriteCommand(
             JSON.stringify({
                 byteLength,

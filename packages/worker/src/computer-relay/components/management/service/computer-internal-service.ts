@@ -1,11 +1,7 @@
 import * as v from "valibot";
 import type { ComputerAccounts } from "../../../../contracts/computer-accounts.ts";
 import { ComputerManagementError } from "../../../../contracts/computer-management.ts";
-import {
-    computerAccessRequestSchema,
-    computerAuditRequestSchema,
-    computerRevocationRequestSchema,
-} from "../../../../contracts/computer-relay-http.ts";
+import { computerAccessRequestSchema, computerAuditRequestSchema } from "../../../../contracts/computer-relay-http.ts";
 import { ProjectRowSchema } from "../../../../contracts/relay/relay-records.ts";
 import type { ComputerManagementStore } from "../storage/computer-management-store.ts";
 
@@ -48,14 +44,6 @@ export class ComputerInternalService {
         const audit = decode(computerAuditRequestSchema, input);
         this.#authorize(audit.computerId);
         await this.#store.recordAudit(audit, signal);
-    };
-
-    readonly listComputers = (signal: AbortSignal) => this.#store.listComputers(signal);
-
-    readonly revokeComputer = async (input: unknown, signal: AbortSignal): Promise<void> => {
-        const revocation = decode(computerRevocationRequestSchema, input);
-        this.#authorize(revocation.computerId);
-        await this.#store.revokeComputer(revocation, signal);
     };
 
     readonly #authorize = (computerId: string): void => {

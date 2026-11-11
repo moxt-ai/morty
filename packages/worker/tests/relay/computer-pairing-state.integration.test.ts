@@ -4,12 +4,12 @@ import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
-import { revokeTestComputer } from "../../../relay-test-support/src/backend-fixture.ts";
 import { ComputerDirectoryStorage } from "../../src/computer-relay/components/management/storage/computer-directory-storage.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/computer-management.ts";
 import { hashPairingCredential } from "../../src/contracts/relay/pairing.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
+import { revokeTestComputer } from "./registered-computer.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({

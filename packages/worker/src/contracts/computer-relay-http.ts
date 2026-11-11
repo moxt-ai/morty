@@ -1,16 +1,9 @@
 import { isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import type { RevokeComputer } from "./relay/pairing-records.ts";
 import type { RelayAuditRecord } from "./relay/relay-records.ts";
 
 export const COMPUTER_INTERNAL_PREFIX = "/__computer/computers";
-export type ComputerInternalResource =
-    | "account"
-    | "active-generation"
-    | "access-check"
-    | "audit-events"
-    | "registrations"
-    | "revocations";
+export type ComputerInternalResource = "account" | "active-generation" | "access-check" | "audit-events";
 export const computerInternalPath = (computerId: string, resource: ComputerInternalResource): string =>
     `${COMPUTER_INTERNAL_PREFIX}/${encodeURIComponent(computerId)}/${resource}`;
 
@@ -40,13 +33,3 @@ export const computerAuditRequestSchema = v.pipe(
     }),
     v.readonly(),
 ) satisfies v.GenericSchema<unknown, RelayAuditRecord>;
-export const computerRevocationRequestSchema = v.pipe(
-    v.strictObject({
-        computerId: identifier,
-        now: timestamp,
-        actorKind: v.string(),
-        actorId: v.string(),
-        auditId: v.string(),
-    }),
-    v.readonly(),
-) satisfies v.GenericSchema<unknown, RevokeComputer>;

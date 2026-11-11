@@ -24,20 +24,13 @@ export class ComputerIdentityService {
         this.#accounts = accounts;
     }
 
-    readonly authenticateProject = async (
-        credential: ComputerIdentityCredential,
-        signal: AbortSignal,
-    ): Promise<VerifiedComputerAccess> => {
-        const identity = await this.authenticate(credential, signal);
+    readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal): Promise<void> => {
+        const identity = await this.#readIdentity(credential, signal);
         const active = await this.#accounts.isActive(identity.computerId, signal);
         signal.throwIfAborted();
         if (!active) {
             throw unmatchedCredential(credential);
         }
-        if (identity.computerId !== this.#computerId) {
-            throw new PairingDirectoryError("directory_unavailable", "Workspace storage is unavailable");
-        }
-        return identity;
     };
 
     /**
@@ -93,7 +86,7 @@ export class ComputerIdentityService {
         }
     };
 
-    private readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
+    readonly #readIdentity = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
             const rows = await this.#store.findCredential(credential, signal);
