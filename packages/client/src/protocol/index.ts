@@ -40,8 +40,6 @@ export {
 export type { ProjectLocationHint } from "./relay/project-location.ts";
 export { PROJECT_LOCATION_HINTS } from "./relay/project-location.ts";
 
-export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
-
 export type {
     SessionAccessClaims,
     SessionAccessGrant,

@@ -1,4 +1,3 @@
-import type { RuntimeUpgradeResult } from "@morty-build/client/protocol";
 import type { RuntimeAgentProcesses } from "../session/process/runtime-agent-processes.ts";
 import type { RuntimeConfig } from "./config.ts";
 import { runRuntime } from "./run.ts";
@@ -62,9 +61,6 @@ export class RuntimeLoop {
                 ...(this.#options.onConnectionStatus === undefined
                     ? {}
                     : { onConnectionStatus: this.#options.onConnectionStatus }),
-                ...(this.#options.reportUpgradeAvailability === undefined
-                    ? {}
-                    : { reportUpgradeAvailability: this.#options.reportUpgradeAvailability }),
                 ...(this.#options.processLogsDirectory === undefined
                     ? {}
                     : { processLogsDirectory: this.#options.processLogsDirectory }),
@@ -82,11 +78,6 @@ export interface RuntimeLoopOptions {
     readonly agentProcesses?: RuntimeAgentProcesses;
     readonly onConnectionStatus?: (status: "online" | "reconnecting") => void;
     readonly onExecutionCountChange?: (count: number) => void;
-    /** Reports a finished daemon upgrade to the relay. The daemon worker supplies it. */
-    readonly reportUpgradeAvailability?: (
-        send: (result: RuntimeUpgradeResult) => void,
-        signal: AbortSignal,
-    ) => Promise<void>;
     /**
      * State directory of the daemon processes supervising this Runtime. Passed
      * through to `runRuntime` so the local bug-report log can read the
