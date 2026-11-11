@@ -1,5 +1,6 @@
 import type { SessionNotification, SessionUpdate } from "@agentclientprotocol/sdk/unstable";
-import type { InProcessAcpEndpointOptions } from "../../agent/in-process-endpoint.ts";
+import type { NativeSessionInteractions } from "../../adapter/native-session-event.ts";
+import type { BackgroundActivity, PromptDelegationStage } from "../../agent/in-process-endpoint.ts";
 
 type MessageUpdate = Extract<
     SessionUpdate,
@@ -12,8 +13,14 @@ export type CodexSessionUpdate = CodexMessageUpdate | Exclude<SessionUpdate, Mes
 export interface CodexSessionNotification extends Omit<SessionNotification, "update"> {
     readonly update: CodexSessionUpdate;
 }
-export interface CodexEndpointOptions extends Omit<InProcessAcpEndpointOptions, "onSessionUpdate"> {
+export interface CodexClientOptions {
+    readonly command: string;
+    readonly cwd: string;
+    readonly environment: Readonly<Record<string, string>>;
+    readonly onBackgroundActivity?: (activity: BackgroundActivity) => void;
+    readonly onPromptDelegation?: (stage: PromptDelegationStage) => Promise<void>;
     readonly onSessionUpdate: (notification: CodexSessionNotification) => Promise<void>;
+    readonly interactions: Pick<NativeSessionInteractions, "onPermission" | "onElicitation">;
 }
 
 import { type PromptResponse, RequestError } from "@agentclientprotocol/sdk/unstable";

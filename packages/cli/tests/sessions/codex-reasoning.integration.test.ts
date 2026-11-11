@@ -24,7 +24,11 @@ it("Given Codex streams detailed reasoning and a summary, When Morty forwards th
     const agent = new CodexOwnedAcpAgent({
         client,
         close: async () => {},
-        connection: () => null,
+        signal: new AbortController().signal,
+        interactions: {
+            onPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+            onElicitation: async () => ({ action: "cancel" }),
+        },
         emit: async (update) => {
             updates.push(update);
         },

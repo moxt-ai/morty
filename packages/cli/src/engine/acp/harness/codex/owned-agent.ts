@@ -1,14 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import type {
-    AgentConnection,
-    ContentBlock,
-    PermissionOption,
-    PromptResponse,
-} from "@agentclientprotocol/sdk/unstable";
-import { methods } from "@agentclientprotocol/sdk/unstable";
+import type { ContentBlock, PermissionOption, PromptResponse } from "@agentclientprotocol/sdk/unstable";
 import type { AgentQuestion } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp-error.ts";
+import type { NativeSessionInteractions } from "../../adapter/native-session-event.ts";
 import {
     type AcpEndpointTermination,
     acpEndpointTerminationError,
@@ -73,7 +68,8 @@ interface OwnedAgentContext {
     readonly client: CodexAppServerClient;
     readonly settings: CodexSettings;
     readonly threadId: () => string;
-    readonly connection: () => AgentConnection | null;
+    readonly interactions: Pick<NativeSessionInteractions, "onPermission" | "onElicitation">;
+    readonly signal: AbortSignal;
     readonly emit: (update: CodexSessionUpdate) => Promise<void>;
     readonly close: () => Promise<void>;
 }
@@ -710,18 +706,13 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
         toolCallId: string,
         signal: AbortSignal,
     ): Promise<"accept" | "acceptForSession" | "decline" | "cancel"> => {
-        const connection = this.#context.connection();
-        if (connection === null) {
-            return "cancel";
-        }
-        const response = await connection.client.request(
-            methods.client.session.requestPermission,
+        const response = await this.#context.interactions.onPermission(
             {
                 options: [...APPROVAL_OPTIONS],
                 sessionId: this.#context.threadId(),
                 toolCall: { title, toolCallId },
             },
-            { cancellationSignal: signal },
+            AbortSignal.any([signal, this.#context.signal]),
         );
         return response.outcome.outcome === "selected" ? permissionDecision(response.outcome.optionId) : "cancel";
     };
@@ -750,14 +741,12 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
 
     readonly #requestUserInput = async (request: CodexAppServerServerRequest): Promise<void> => {
         const decoded = requestUserInputParamsSchema.safeParse(request.params);
-        const connection = this.#context.connection();
-        if (!decoded.success || connection === null) {
+        if (!decoded.success) {
             this.#appServer.respond(request.id, { answers: {} });
             return;
         }
         const questions = decoded.data.questions;
-        const response = await connection.client.request(
-            methods.client.elicitation.create,
+        const response = await this.#context.interactions.onElicitation(
             {
                 message: questions
                     .map((question) => question.question)
@@ -768,7 +757,7 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                 sessionId: this.#context.threadId(),
                 ...(decoded.data.itemId == null ? {} : { toolCallId: decoded.data.itemId }),
             },
-            { cancellationSignal: AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS) },
+            AbortSignal.any([this.#context.signal, AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS)]),
         );
         const content = response.action === "accept" ? Reflect.get(response, "content") : undefined;
         const answers: Record<string, unknown> = {};
@@ -782,16 +771,14 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
 
     readonly #requestMcpElicitation = async (request: CodexAppServerServerRequest): Promise<void> => {
         const decoded = mcpElicitationParamsSchema.safeParse(request.params);
-        const connection = this.#context.connection();
-        if (!decoded.success || connection === null) {
+        if (!decoded.success) {
             this.#appServer.respondWithError(request.id, -32_602, "Morty could not read the elicitation request");
             return;
         }
         const params: McpElicitationParams = decoded.data;
-        const signal = AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS);
+        const signal = AbortSignal.any([this.#context.signal, AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS)]);
         if (params.mode === "url" && params.url !== undefined) {
-            const response = await connection.client.request(
-                methods.client.elicitation.create,
+            const response = await this.#context.interactions.onElicitation(
                 {
                     elicitationId: `${this.#context.threadId()}-${String(request.id)}`,
                     message: params.message,
@@ -799,20 +786,19 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                     sessionId: this.#context.threadId(),
                     url: params.url,
                 },
-                { cancellationSignal: signal },
+                signal,
             );
             this.#appServer.respond(request.id, { action: response.action });
             return;
         }
-        const response = await connection.client.request(
-            methods.client.elicitation.create,
+        const response = await this.#context.interactions.onElicitation(
             {
                 message: params.message,
                 mode: "form",
                 requestedSchema: params.requestedSchema ?? { properties: {}, required: [], type: "object" },
                 sessionId: this.#context.threadId(),
             },
-            { cancellationSignal: signal },
+            signal,
         );
         const content = response.action === "accept" ? (Reflect.get(response, "content") ?? null) : null;
         this.#appServer.respond(request.id, { action: response.action, content });

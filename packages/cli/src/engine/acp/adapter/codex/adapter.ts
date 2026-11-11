@@ -1,289 +1,377 @@
 import { createHash } from "node:crypto";
-import { methods } from "@agentclientprotocol/sdk/unstable";
-import { decodeAcpSessionUpdate, type SessionEventPayload } from "@morty-build/client/protocol";
-import { z } from "zod";
-import { revalidateExecutable, stopProcessTree } from "../../../util/process/executable.ts";
+import { decodeAgentPromptResponse } from "@morty-build/client/protocol";
+import { revalidateExecutable } from "../../../util/process/executable.ts";
 import { runCleanup } from "../../../util/run-cleanup.ts";
-import { AcpExecutionError } from "../../acp-error.ts";
+import { truncate } from "../../../util/value-utils.ts";
+import { AcpConfigurationValueUnavailableError, AcpExecutionError } from "../../acp-error.ts";
 import type { AcpAgentDefinition } from "../../agent/agent-definition.ts";
-import type { AcpContentExternalizer } from "../../content/content-externalizer.ts";
-import { CodexAppServerClient } from "../../harness/codex/app-server-client.ts";
-import { replayCodexHistory } from "../../harness/codex/history.ts";
+import { buildPromptContent } from "../../client/prompt-content.ts";
+import { agentOperationError, waitForAgentOperation } from "../../connection/agent-operation.ts";
+import { CodexAcpAgent } from "../../harness/codex/agent.ts";
 import type {
     Adapter,
     AdapterDependencies,
     AdapterSessionCreateParams,
-    NativeSessionQuery,
-    SessionEventPage,
+    AdapterSessionOpenParams,
+    AdapterSessionTarget,
 } from "../../native-history/preview-contract.ts";
-import { sessionIdSchema } from "../../protocol/native-session.ts";
-import { AcpExecutionConnections } from "../execution-connections.ts";
-import {
-    createdSessionId,
-    normalizeOpenedSession,
-    sessionCreationResponse,
-    sessionWorkspace,
-} from "../lifecycle-output.ts";
+import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
+import { normalizeAcpCapabilities, restrictAcpSessionCapabilities } from "../../protocol/session-capabilities.ts";
+import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
+import { harnessSessionCallbacks } from "../harness-client-events.ts";
+import { HarnessHistoryPreviews } from "../harness-history-previews.ts";
+import { HarnessSession } from "../harness-session.ts";
+import { sessionCreationResponse } from "../lifecycle-output.ts";
 import { findNativeSession } from "../native-session-lookup.ts";
-import { openPreviewEventCache, type PreviewEventCache } from "../preview-event-cache.ts";
-import { AgentQueryProcesses } from "../query-processes.ts";
-import { AcpSessionConnector, type AdapterSessionConnection, withMortyFields } from "../session-events.ts";
-import { fitCodexToolEvent, prepareCodexToolUpdate } from "./tool-event.ts";
+import { openPreviewEventCache } from "../preview-event-cache.ts";
+import { codexClientCallbacks } from "./client-callbacks.ts";
+import { createCodexClient } from "./create-client.ts";
 
-/**
- * Previews saved Codex threads by reading the Codex app-server directly. The read is
- * short-lived and never resumes the source thread, so it needs no writer lock; ACP
- * `session/load` remains the fallback for resuming the conversation.
- */
-// The in-process harness says whether its connection runs the thread's turns or only queues input for their owner.
-const sessionTurnOwnershipSchema = z.object({
-    _meta: z.object({ codex: z.object({ runsTurns: z.boolean() }).optional() }).optional(),
-});
+const configuration = sessionConfigProtocolForAgent("codex");
+type CodexSession = HarnessSession<CodexAcpAgent>;
+type CodexOpened = Awaited<ReturnType<CodexAcpAgent["newSession"]>>;
 
+/** Codex owns thread access and process-tree cancellation; shared harnesses own accepted sessions. */
 export class CodexAdapter implements Adapter {
-    #agent: AcpAgentDefinition;
-    readonly #queryProcesses: AgentQueryProcesses;
-    readonly #connector: AcpSessionConnector;
-    readonly #executionConnections: AcpExecutionConnections;
-    readonly #queueingConnections = new WeakSet<AdapterSessionConnection>();
+    readonly #sessions = new Map<SessionId, CodexSession>();
+    readonly #lifetime = new AbortController();
+    readonly #previews: HarnessHistoryPreviews;
     readonly #dependencies: AdapterDependencies;
-    readonly #contentExternalizer: Pick<AcpContentExternalizer, "update">;
-    #previewCache: PreviewEventCache | null = null;
+    #agent: AcpAgentDefinition;
 
     constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
         this.#agent = agent;
         this.#dependencies = dependencies;
-        this.#contentExternalizer = {
-            update: async (sessionTarget, update, signal) => {
-                signal.throwIfAborted();
-                const prepared = prepareCodexToolUpdate(update);
-                signal.throwIfAborted();
-                return await dependencies.contentExternalizer.update(sessionTarget, prepared, signal);
-            },
-        };
-        this.#connector = new AcpSessionConnector(this.#contentExternalizer, fitCodexToolEvent);
-        this.#executionConnections = new AcpExecutionConnections(this.#contentExternalizer, fitCodexToolEvent);
-        this.#queryProcesses = new AgentQueryProcesses(agent, dependencies.processes, this.#connector);
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes, openPreviewEventCache);
     }
-
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
         this.#agent = agent;
-        this.#queryProcesses.refreshAgent(agent);
     };
-    readonly getCapabilities = async (query: NativeSessionQuery) => await this.#queryProcesses.capabilities(query);
-    readonly #executionParams = (params: AdapterSessionCreateParams): AdapterSessionCreateParams => {
-        const externalize = params.scope.externalizeUpdate;
-        return externalize === undefined
-            ? params
-            : {
-                  ...params,
-                  scope: {
-                      ...params.scope,
-                      externalizeUpdate: (sessionId, update, signal) =>
-                          externalize(sessionId, prepareCodexToolUpdate(update), signal),
-                  },
-              };
+    readonly #signal = (signal: AbortSignal, milliseconds = 60_000) =>
+        AbortSignal.any([signal, this.#lifetime.signal, AbortSignal.timeout(milliseconds)]);
+    readonly getCapabilities: Adapter["getCapabilities"] = async (query) => {
+        query.signal.throwIfAborted();
+        return normalizeAcpCapabilities(CodexAcpAgent.capabilities());
     };
-
-    readonly createSession: Adapter["createSession"] = (params) =>
-        this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
-            const { connection } = execution;
-            const response: unknown = await sessionCreationResponse(
-                connection.race(
-                    connection.connection.agent.request(methods.agent.session.new, sessionWorkspace(params.scope), {
-                        cancellationSignal: signal,
-                    }),
-                    "ACP agent exited while starting a session",
-                    signal,
-                ),
+    readonly #start = async (
+        params: AdapterSessionCreateParams,
+        open: (agent: CodexAcpAgent, signal: AbortSignal) => Promise<CodexOpened>,
+    ) => {
+        const runtime = this.#agent;
+        const signal = this.#signal(params.signal);
+        const { session, response } = await HarnessSession.start(
+            {
+                workspace: { cwd: params.scope.cwd },
                 signal,
-            );
-            const sessionId = createdSessionId(response);
-            this.#executionConnections.bind(execution, sessionId);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
+                create: async (lifetime) => {
+                    const callbacks = codexClientCallbacks(
+                        harnessSessionCallbacks(params, params.scope.externalizeUpdate),
+                        this.#dependencies.contentExternalizer,
+                        lifetime,
+                    );
+                    const agent = await createCodexClient(
+                        runtime,
+                        {
+                            cwd: params.scope.cwd,
+                            ...callbacks,
+                            onBackgroundActivity: (activity) => {
+                                if (!lifetime.signal.aborted) {
+                                    params.onBackgroundActivity?.(activity);
+                                }
+                            },
+                            onPromptDelegation: async (stage) => await params.onPromptDelegation?.(stage),
+                        },
+                        signal,
+                    );
+                    return { agent, drained: callbacks.drained };
+                },
+            },
+            open,
+        );
+        if (this.#lifetime.signal.aborted || this.#sessions.has(session.sessionId)) {
+            await session.dispose("graceful");
+            this.#lifetime.signal.throwIfAborted();
+            throw new AcpExecutionError("Another writer is using this session", {}, "session_busy");
+        }
+        this.#sessions.set(session.sessionId, session);
+        try {
+            return this.#opened(session, params, response);
+        } catch (cause) {
+            await this.#release(session.sessionId, "graceful");
+            throw cause;
+        }
+    };
+    readonly #opened = (session: CodexSession, params: AdapterSessionCreateParams, response: CodexOpened) => ({
+        sessionId: session.sessionId,
+        capabilities: restrictAcpSessionCapabilities(normalizeAcpCapabilities(CodexAcpAgent.capabilities()), response),
+        configOptions: configuration.normalizeLifecycle(response),
+        agentName: "Codex",
+        agentVersion: params.scope.agent.agentVersion || CodexAcpAgent.capabilities().agentInfo.version,
+        agentSettingsModelEffort: session.agent.agentSettingsModelEffort(),
+    });
+    readonly createSession: Adapter["createSession"] = (params) =>
+        this.#start(params, async (agent, signal) => {
+            const response = agent.newSession({ cwd: params.scope.cwd }, signal);
+            await sessionCreationResponse(response, signal);
+            return await response;
         });
     readonly forkSession: Adapter["forkSession"] = (params) =>
-        this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
-            const { connection } = execution;
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(
-                    methods.agent.session.fork,
-                    {
-                        ...sessionWorkspace(params.scope),
-                        sessionId: sessionIdSchema.parse(params.sourceSessionId),
-                    },
-                    { cancellationSignal: signal },
-                ),
-                "ACP agent exited while forking a session",
-                signal,
-            );
-            const sessionId = createdSessionId(response);
-            this.#executionConnections.bind(execution, sessionId);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
+        this.#start(params, async (agent, signal) => {
+            const source = sessionIdSchema.parse(params.sourceSessionId);
+            const response = await agent.forkSession({ cwd: params.scope.cwd, sessionId: source }, signal);
+            if (response.sessionId === source) {
+                throw new AcpExecutionError(
+                    "Codex did not create an independent fork",
+                    {},
+                    "invalid_native_session_response",
+                );
+            }
+            return response;
         });
-    readonly openSession: Adapter["openSession"] = (params) =>
-        this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
-            const { connection } = execution;
-            const sessionId = sessionIdSchema.parse(params.sessionId);
-            this.#executionConnections.bind(execution, sessionId);
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(
-                    methods.agent.session.resume,
-                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
-                    { cancellationSignal: signal },
-                ),
-                "ACP agent exited while resuming a session",
-                signal,
-            );
-            this.#recordTurnOwnership(connection, response);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
-        });
-    readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) =>
-        this.#executionConnections.withConnection(this.#executionParams(params), async (execution, signal) => {
-            const { connection } = execution;
-            const sessionId = sessionIdSchema.parse(params.sessionId);
-            this.#executionConnections.bind(execution, sessionId);
-            const response: unknown = await connection.race(
-                connection.connection.agent.request(
-                    methods.agent.session.load,
-                    { ...sessionWorkspace(params.scope), sessionId: sessionId },
-                    { cancellationSignal: signal },
-                ),
-                "ACP agent exited while loading a session",
-                signal,
-            );
-            await connection.race(connection.events.drained(), "ACP agent exited while loading a session", signal);
-            this.#recordTurnOwnership(connection, response);
-            return normalizeOpenedSession(execution, sessionId, response, signal);
-        });
-    readonly cancel: Adapter["cancel"] = async (params) => {
-        const connection = this.#executionConnections.connection(params);
-        if (connection !== undefined && this.#queueingConnections.has(connection)) {
-            // Another Codex client owns this thread and the processes of its turns. This connection only queues
-            // input and follows the owner, so ending it would stop nothing but the following.
-            return await this.#executionConnections.cancel(params);
+    readonly openSession: Adapter["openSession"] = (params) => this.#open(params, false);
+    readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) => this.#open(params, true);
+    readonly #open = async (params: AdapterSessionOpenParams, replay: boolean) => {
+        const sessionId = sessionIdSchema.parse(params.sessionId);
+        const request = { cwd: params.scope.cwd, sessionId };
+        const existing = this.#sessions.get(sessionId);
+        existing?.assertWorkspace(params.scope);
+        if (existing?.available) {
+            try {
+                const signal = this.#signal(params.signal);
+                // Replaying on the current app-server preserves its writer/borrower access mode.
+                if (replay) {
+                    await waitForAgentOperation(existing.agent.readHistory(sessionId, signal), signal);
+                }
+                await existing.drained(signal);
+                return this.#opened(existing, params, existing.agent.sessionState());
+            } catch (cause) {
+                await this.#release(sessionId, "force");
+                params.signal.throwIfAborted();
+                throw agentOperationError(cause);
+            }
         }
-        // turn/interrupt leaves unified-exec commands alive, including tools whose
-        // startup notification can arrive after the interrupted turn completes.
-        // The session's owned process tree is the authoritative stop boundary.
-        await this.#executionConnections.closeSession(params);
+        await this.#release(sessionId, "graceful");
+        return await this.#start(params, (agent, signal) =>
+            replay ? agent.loadSession(request, signal) : agent.resumeSession(request, signal),
+        );
+    };
+    readonly #session = (target: AdapterSessionTarget): CodexSession => {
+        this.#lifetime.signal.throwIfAborted();
+        const session = this.#sessions.get(sessionIdSchema.parse(target.sessionId));
+        if (session === undefined) {
+            throw new AcpExecutionError("The session is not active", {}, "invalid_agent_session");
+        }
+        session.assertWorkspace(target);
+        if (!session.available) {
+            throw new AcpExecutionError("The Codex session is unavailable", {}, "session_busy");
+        }
+        return session;
+    };
+    readonly prompt: Adapter["prompt"] = async (params) => {
+        const response = await this.#session(params).prompt(
+            { prompt: buildPromptContent(params.content, normalizeAcpCapabilities(CodexAcpAgent.capabilities())) },
+            params.signal,
+        );
+        try {
+            const decoded = decodeAgentPromptResponse(response);
+            return {
+                stopReason: decoded.stopReason,
+                ...(decoded.usage === undefined ? {} : { usage: decoded.usage }),
+                ...(decoded._meta === undefined ? {} : { _meta: decoded._meta }),
+            };
+        } catch (cause) {
+            throw new AcpExecutionError(
+                "The harness returned an invalid prompt response",
+                { cause },
+                "acp_invalid_prompt_response",
+            );
+        }
+    };
+    readonly steer: Adapter["steer"] = async (params) => {
+        const session = this.#session(params);
+        if (!session.agent.runsTurns()) {
+            throw new AcpExecutionError(
+                "The selected agent does not support mid-turn steering",
+                {},
+                "steering_unsupported",
+            );
+        }
+        const signal = this.#signal(params.signal, 30_000);
+        const response = await waitForAgentOperation(
+            session.agent.steer(
+                {
+                    sessionId: session.sessionId,
+                    prompt: buildPromptContent(params.content, normalizeAcpCapabilities(CodexAcpAgent.capabilities())),
+                    _meta: { steering: { idleBehavior: "promptRequired" } },
+                },
+                signal,
+            ),
+            signal,
+        );
+        if (response.outcome === "promptRequired") {
+            throw new AcpExecutionError(
+                "The target turn finished before steering could be injected",
+                {},
+                "steering_target_unavailable",
+            );
+        }
+        return response;
+    };
+    readonly cancel: Adapter["cancel"] = async (params) => {
+        const session = this.#session(params);
+        params.signal.throwIfAborted();
+        if (!session.agent.runsTurns()) {
+            return await session.cancel(params.signal);
+        }
+        await this.#release(session.sessionId, "force");
         return "closed";
     };
-    /** A connection keeps the turn ownership its harness chose while opening the thread. */
-    readonly #recordTurnOwnership = (connection: AdapterSessionConnection, response: unknown): void => {
-        if (sessionTurnOwnershipSchema.parse(response)._meta?.codex?.runsTurns === false) {
-            this.#queueingConnections.add(connection);
+    readonly #release = async (id: SessionId, mode: "graceful" | "force"): Promise<void> => {
+        const session = this.#sessions.get(id);
+        if (session !== undefined) {
+            this.#sessions.delete(id);
+            await session.dispose(mode);
         }
     };
-    readonly closeSession: Adapter["closeSession"] = (...args) => this.#executionConnections.closeSession(...args);
-    readonly releaseSession: Adapter["releaseSession"] = (params) => this.#executionConnections.releaseSession(params);
-    // Codex admits one active writer per thread; another client borrows the thread instead.
+    readonly releaseSession: Adapter["releaseSession"] = async (params) => {
+        const id = sessionIdSchema.parse(params.sessionId);
+        this.#sessions.get(id)?.assertWorkspace(params);
+        await this.#release(id, "graceful");
+        params.signal.throwIfAborted();
+    };
+    readonly closeSession: Adapter["closeSession"] = this.releaseSession;
     readonly readNativeHistoryRevision: Adapter["readNativeHistoryRevision"] = async ({ signal }) => {
         signal.throwIfAborted();
         return { kind: "untracked" };
     };
-    readonly prompt: Adapter["prompt"] = (...args) => this.#executionConnections.prompt(...args);
-    readonly steer: Adapter["steer"] = (...args) => this.#executionConnections.steer(...args);
-    readonly renameSession: Adapter["renameSession"] = (...args) => this.#executionConnections.renameSession(...args);
-    readonly configureSession: Adapter["configureSession"] = (...args) =>
-        this.#executionConnections.configureSession(...args);
-    readonly listSessions: Adapter["listSessions"] = async ({ query, cursor }) =>
-        await this.#queryProcesses.listNativeSessions(query, cursor);
-    readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
-        findNativeSession(this.listSessions, query, sessionId, budget);
-    readonly close = async (): Promise<void> => {
-        await runCleanup(
-            () => this.#queryProcesses.close(),
-            () => this.#executionConnections.close(),
-            () => this.#previewCache?.close(),
+    readonly renameSession: Adapter["renameSession"] = async (params) => {
+        this.#session(params);
+        if (!truncate(params.title, 500)) {
+            throw new AcpExecutionError("The Session title cannot be empty", {}, "invalid_session_title");
+        }
+        return { nativeRenameApplied: false };
+    };
+    readonly configureSession: Adapter["configureSession"] = async (params) => {
+        params.signal.throwIfAborted();
+        const session = this.#session(params);
+        const { selection } = params;
+        const current = configuration.normalizeLifecycle(session.agent.sessionConfiguration());
+        const option = current.find((option) => option.id === selection.configId);
+        if (!option || option.type !== selection.type || (option.type === "select" && option.values.length < 2)) {
+            throw new AcpExecutionError(
+                "The requested configuration option is unavailable",
+                {},
+                "invalid_session_configuration",
+            );
+        }
+        if (
+            option.type === "select" &&
+            selection.type === "select" &&
+            !option.values.some((value) => value.value === selection.value)
+        ) {
+            throw new AcpConfigurationValueUnavailableError(
+                selection.configId,
+                selection.value,
+                option.values.map((value) => value.value),
+            );
+        }
+        if (option.category === "mode" && selection.type === "select") {
+            session.agent.setSessionMode({ modeId: selection.value });
+        } else {
+            session.agent.setSessionConfigOption({
+                configId: selection.configId,
+                value: selection.type === "boolean" ? selection.booleanValue : selection.value,
+            });
+        }
+        const applied = configuration.normalizeLifecycle(session.agent.sessionConfiguration());
+        if (
+            !applied.some(
+                (value) =>
+                    value.id === selection.configId &&
+                    value.type === selection.type &&
+                    (value.type === "boolean" && selection.type === "boolean"
+                        ? value.booleanValue === selection.booleanValue
+                        : value.type === "select" &&
+                          selection.type === "select" &&
+                          value.currentValue === selection.value),
+            )
+        ) {
+            throw new AcpExecutionError(
+                "The Agent did not apply the requested session configuration",
+                {},
+                "invalid_session_configuration",
+            );
+        }
+        return applied;
+    };
+    readonly listSessions: Adapter["listSessions"] = async ({ query, cursor }) => {
+        const signal = this.#signal(query.signal, 30_000);
+        const agent = this.#agent;
+        return await this.#dependencies.processes.runTransient(
+            signal,
+            async () => {
+                const reject = async (): Promise<never> => {
+                    throw new AcpExecutionError(
+                        "Catalog queries cannot request interaction",
+                        {},
+                        "invalid_agent_session",
+                    );
+                };
+                const client = await createCodexClient(
+                    agent,
+                    {
+                        cwd: query.cwd,
+                        onSessionUpdate: reject,
+                        interactions: { onPermission: reject, onElicitation: reject },
+                    },
+                    signal,
+                );
+                return { client, closeProcess: () => client.dispose("force") };
+            },
+            async ({ client }) => nativeSessionPageSchema.parse(await client.listSessions(cursor, signal)),
+            (runtime) => runtime.closeProcess(),
         );
     };
-
-    readonly readSessionHistory: Adapter["readSessionHistory"] = async ({
-        query,
-        request,
-    }): Promise<SessionEventPage> => {
-        const { agent, cwd } = query;
-        const signal = AbortSignal.any([query.signal, AbortSignal.timeout(60_000)]);
-        const target = { harness: agent.harness, sessionId: request.sessionId };
-        signal.throwIfAborted();
+    readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
+        findNativeSession(this.listSessions, query, sessionId, budget);
+    readonly readSessionHistory: Adapter["readSessionHistory"] = async ({ query, request }) => {
+        const runtime = this.#agent;
+        query.signal.throwIfAborted();
         sessionIdSchema.parse(request.sessionId);
-        if (agent.harness !== "codex") {
+        if (query.agent.harness !== "codex" || runtime.harness !== "codex") {
             throw new AcpExecutionError(
                 "The Codex adapter cannot preview history for another agent.",
                 {},
                 "agent_adapter_mismatch",
             );
         }
-        if (!(await revalidateExecutable(agent.agentIdentity))) {
+        if (!(await revalidateExecutable(runtime.agentIdentity))) {
             throw new AcpExecutionError(
                 "The local Codex executable changed. Restart Morty to discover it again.",
                 {},
                 "agent_executable_changed",
             );
         }
-        this.#previewCache ??= openPreviewEventCache();
-        const events: SessionEventPayload[] = [];
-        await this.#dependencies.processes.runTransient(
-            signal,
-            async () => {
-                const client = new CodexAppServerClient({
-                    command: agent.command,
-                    cwd,
-                    environment: agent.environment,
-                    handlers: {
-                        onNotification: async () => undefined,
-                        onServerRequest: async () => {
-                            throw new AcpExecutionError(
-                                "Unexpected request while reading saved history",
-                                {},
-                                "invalid_native_session_response",
-                            );
-                        },
-                    },
-                });
-                return {
-                    client,
-                    closeProcess: async () => {
-                        client.detach();
-                        await stopProcessTree(client.child());
-                    },
-                };
+        return this.#previews.read({
+            query: { ...query, agent: runtime, signal: this.#signal(query.signal) },
+            request,
+            // Unchanged native content keeps the same event identities across refreshed pages.
+            identity: {
+                kind: "content",
+                generationId: (sessionId, events) =>
+                    createHash("sha256").update(sessionId).update("\0").update(JSON.stringify(events)).digest("hex"),
             },
-            async ({ client }) => {
-                await client.initialize(signal);
-                return await replayCodexHistory(
-                    client,
-                    request.sessionId,
-                    async (update) => {
-                        const externalized =
-                            query.externalizeUpdate === undefined
-                                ? await this.#contentExternalizer.update(target, update, signal)
-                                : await query.externalizeUpdate(
-                                      request.sessionId,
-                                      prepareCodexToolUpdate(update),
-                                      signal,
-                                  );
-                        for (const event of externalized.events) {
-                            events.push({
-                                type: "acp",
-                                payload: decodeAcpSessionUpdate(
-                                    JSON.stringify(fitCodexToolEvent(withMortyFields(update, event))),
-                                ),
-                            });
-                        }
-                    },
-                    signal,
-                );
+            create: async (params, lifetime, signal) => {
+                const callbacks = codexClientCallbacks(params, this.#dependencies.contentExternalizer, lifetime);
+                const client = await createCodexClient(runtime, { cwd: query.cwd, ...callbacks }, signal);
+                return { client, load: (id, signal) => client.readHistory(id, signal), drained: callbacks.drained };
             },
-            async (runtime) => await runtime.closeProcess(),
+        });
+    };
+    readonly close = async (): Promise<void> => {
+        this.#lifetime.abort(new DOMException("The Codex adapter closed", "AbortError"));
+        await runCleanup(...[...this.#sessions.keys()].map((id) => () => this.#release(id, "graceful")), () =>
+            this.#previews.close(),
         );
-        const generationId = createHash("sha256")
-            .update(request.sessionId)
-            .update("\0")
-            .update(JSON.stringify(events))
-            .digest("hex");
-        this.#previewCache.events.materialize(target, generationId, events);
-        return this.#previewCache.events.page(target, request.eventLimit, request.cursor);
     };
 }

@@ -14,6 +14,7 @@ import type {
     AdapterSessionOpenParams,
     AdapterSessionTarget,
 } from "../../native-history/preview-contract.ts";
+import { memoryHistoryPreviewSnapshot } from "../../native-history/preview-snapshots.ts";
 import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
 import { normalizeAcpCapabilities } from "../../protocol/session-capabilities.ts";
 import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
@@ -39,7 +40,7 @@ export class ClaudeAdapter implements Adapter {
     constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
         this.dependencies = dependencies;
         this.#agent = agent;
-        this.#previews = new HarnessHistoryPreviews(dependencies.processes);
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes, memoryHistoryPreviewSnapshot);
     }
 
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
@@ -392,6 +393,7 @@ export class ClaudeAdapter implements Adapter {
         const runtime = this.#agent;
         const scoped = { ...query, agent: runtime, signal: this.#signal(query.signal) };
         return this.#previews.read({
+            identity: { kind: "fresh" },
             query: scoped,
             request,
             create: async (params, lifetime, signal) => {

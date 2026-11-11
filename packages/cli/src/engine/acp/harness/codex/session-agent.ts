@@ -2,7 +2,7 @@ import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk/unst
 import type { AcpEndpointTermination } from "../../agent/in-process-endpoint.ts";
 import type { CodexAppServerServerRequest } from "./app-server-client.ts";
 
-/** Session behavior selected after opening; transport ownership stays with the ACP endpoint. */
+/** Session behavior selected after opening; transport ownership stays with the native client. */
 export interface CodexSessionAgent {
     readonly steeringSupported: boolean;
     /** False when another Codex client owns the thread and this connection only queues input for it. */
