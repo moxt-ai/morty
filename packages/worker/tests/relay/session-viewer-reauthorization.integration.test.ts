@@ -10,7 +10,7 @@ import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts"
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/computer-management.ts";
-import { readComputerOwner } from "./computer-directory.ts";
+import { readComputerOwner } from "../../src/worker/composition/account-provisioning.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { registerComputerFixture } from "./registered-computer.ts";
 
