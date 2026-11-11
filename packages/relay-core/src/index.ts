@@ -14,7 +14,7 @@ export { ComputerScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { isHttpError, toHttpError } from "./entity/http-error.ts";
 export { createRandomToken, hashSecret, PairingDirectoryError, validateIdentifier } from "./entity/pairing/pairing.ts";
 export { runtimeConnectionDurableObjectMigrations } from "./generated/runtime-connection-do-migrations.ts";
-export { errorMiddleware, rethrowHonoError } from "./http/middleware/error-middleware.ts";
+export { errorMiddleware, relayErrorHandler, rethrowHonoError } from "./http/middleware/error-middleware.ts";
 export { requestTimeoutMiddleware } from "./http/middleware/request-timeout-middleware.ts";
 export {
     decodeSessionRequest,

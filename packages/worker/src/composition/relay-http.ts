@@ -2,6 +2,7 @@ import {
     errorMiddleware,
     instrumentD1Database,
     RequestAccessMetrics,
+    relayErrorHandler,
     requestTimeoutMiddleware,
 } from "@morty-build/relay-core";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
@@ -69,9 +70,7 @@ export function createPublicRelayRoutes() {
     };
     const timeout = requestTimeoutMiddleware<PublicEnvironment>(30_000);
     return new Hono<PublicEnvironment>()
-        .onError((error) => {
-            throw error;
-        })
+        .onError(relayErrorHandler)
         .use("/morty/api/v1/*", measureRequest, errorMiddleware, timeout, initialize)
         .use("/morty/api/channels/*", measureRequest, errorMiddleware, timeout, initialize)
         .route("/", createRelayRoutes());
@@ -80,9 +79,7 @@ export function createPublicRelayRoutes() {
 /** Computer-targeted requests never pass through public dispatch again. Authorization still runs in the routes. */
 export function createComputerRelayRoutes() {
     return new Hono<ComputerEnvironment>()
-        .onError((error) => {
-            throw error;
-        })
+        .onError(relayErrorHandler)
         .use("*", measureRequest, errorMiddleware)
         .use("*", requestTimeoutMiddleware<ComputerEnvironment>(30_000))
         .use("*", async (context, next) => {
