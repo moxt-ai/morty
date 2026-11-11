@@ -20,12 +20,19 @@ export class StateRootError extends Error {
 
 async function owningRoot(directory: string): Promise<string | null> {
     if (basename(directory) === "machine") {
-        try {
-            await access(join(dirname(directory), "morty-installation.json"));
-            return dirname(directory);
-        } catch (error) {
-            if (!isNodeError(error, "ENOENT")) {
-                throw error;
+        // Recognize actual setup or daemon state instead of maintaining a separate ownership marker.
+        for (const path of [
+            join(dirname(directory), "config.json"),
+            join(directory, "pairing.json"),
+            join(directory, "daemon.lock.sqlite"),
+        ]) {
+            try {
+                await access(path);
+                return dirname(directory);
+            } catch (error) {
+                if (!isNodeError(error, "ENOENT")) {
+                    throw error;
+                }
             }
         }
     }
