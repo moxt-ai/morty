@@ -61,12 +61,7 @@ running it. Read it yourself before you paste the prompt.
   on your computer, not a cloud sandbox. When the computer sleeps the session pauses with
   it, and the browser shows no history until it reconnects.
 
-## Installing the launch release
-
-The launch release uses a fresh Morty installation and identity. Earlier test
-releases, local state and browser links are unsupported; install and pair again
-using the setup prompt above. Morty does not adopt `.mobius` state or operate
-Moxt services. Agent-owned conversation history remains on the machine.
+## Stopping Morty
 
 `npx --yes @morty-build/cli@latest stop` stops Morty and retains your pairing and Agent history.
 
