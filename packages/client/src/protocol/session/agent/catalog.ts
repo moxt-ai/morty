@@ -15,8 +15,6 @@ const catalogedAgentSchema = z
     })
     .readonly();
 
-export type CatalogedAgent = z.infer<typeof catalogedAgentSchema>;
-
 const agentCatalogDiscoverCommandSchema = z
     .object({
         kind: z.literal(AGENT_CATALOG_DISCOVER_KIND),

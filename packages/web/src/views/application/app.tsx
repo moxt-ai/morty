@@ -1,9 +1,10 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import { ArrowLeft, ArrowUpRight, Unplug } from "lucide-react";
 import { SetupConnectionGraphic } from "../../components/setup/setup-connection-graphic.tsx";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { ExternalLink } from "../../components/ui/external-link.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
-import { Button, Spinner } from "../../index.ts";
+import { Spinner } from "../../components/ui/spinner.tsx";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import type { SetupHandoffModel } from "../../view-models/send-link-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
