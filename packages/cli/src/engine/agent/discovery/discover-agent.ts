@@ -150,7 +150,7 @@ export async function discoverAgent(
             continue;
         }
         try {
-            const launchEnvironment = await specification.createLaunchEnvironment(agent, context);
+            const launchEnvironment = await specification.createLaunchEnvironment(context);
             const buildDefinition = (capabilities: SessionCapabilities): AcpAgentDefinition =>
                 new AcpAgentDefinition(
                     specification.harness,

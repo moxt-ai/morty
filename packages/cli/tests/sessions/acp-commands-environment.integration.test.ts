@@ -109,15 +109,19 @@ describe("acp commands environment", () => {
                 signal: new AbortController().signal,
             });
 
-            expect(observer.commands.at(-1)?.commands).toEqual([
+            expect(
+                observer
+                    .acpUpdates()
+                    .filter((update) => update.sessionUpdate === "available_commands_update")
+                    .at(-1)?.availableCommands,
+            ).toEqual([
                 {
                     description: "Review the current workspace",
-                    inputHint: "optional focus",
+                    input: { hint: "optional focus" },
                     name: "review",
                 },
                 {
                     description: "Compact the current conversation",
-                    inputHint: "",
                     name: "compact",
                 },
             ]);

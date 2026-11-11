@@ -29,7 +29,10 @@ import type {
     ExternalizeSessionUpdate,
 } from "../../../src/engine/acp/content/content-externalizer.ts";
 import { restrictAcpSessionCapabilities } from "../../../src/engine/acp/protocol/session-capabilities.ts";
-import { sessionConfigProtocolForAgent } from "../../../src/engine/acp/protocol/session-config-protocol.ts";
+import {
+    normalizeSessionConfiguration,
+    normalizeSessionConfigurationUpdate,
+} from "../../../src/engine/acp/protocol/session-configuration.ts";
 import { truncate } from "../../../src/engine/util/value-utils.ts";
 import { ControlledSessionUpdates } from "./controlled-session-updates.ts";
 
@@ -253,20 +256,22 @@ export class AdapterSessionConnection {
     readonly commitLifecycle = (response: unknown): AdapterSessionSnapshot => {
         const state = this.#ready();
         const capabilities = restrictAcpSessionCapabilities(state.snapshot.capabilities, response);
-        this.commitConfiguration(sessionConfigProtocolForAgent(this.#agent.harness).normalizeLifecycle(response));
+        this.commitConfiguration(normalizeSessionConfiguration(response));
         this.#state = { ...this.#ready(), snapshot: { capabilities, configOptions: this.snapshot().configOptions } };
         return this.snapshot();
     };
 
     readonly #applyConfigurationUpdate = (value: unknown): void => {
         const state = this.#ready();
-        const protocol = sessionConfigProtocolForAgent(this.#agent.harness);
-        const configOptions = protocol.normalizeUpdate(state.snapshot.configOptions, value);
+        const configOptions = normalizeSessionConfigurationUpdate(state.snapshot.configOptions, value);
         const operation: ConfigurationOperation =
             state.operation.kind === "pending"
                 ? {
                       kind: "pending",
-                      changes: recordConfigurationOptions(state.operation.changes, protocol.normalizeUpdate([], value)),
+                      changes: recordConfigurationOptions(
+                          state.operation.changes,
+                          normalizeSessionConfigurationUpdate([], value),
+                      ),
                   }
                 : state.operation;
         this.#state = { ...state, snapshot: { ...state.snapshot, configOptions }, operation };

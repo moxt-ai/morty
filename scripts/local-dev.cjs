@@ -12,8 +12,8 @@
 //   node scripts/local-dev.cjs logs    --state-dir <dir> [options]
 //   node scripts/local-dev.cjs remove  --state-dir <dir> [options]
 //
-// `prepare` starts an isolated Chat Worker plus the local Relay fixture it
-// authenticates against, then prints a single JSON descriptor on stdout. All
+// `prepare` starts one isolated Morty Worker serving the website and Relay,
+// then prints a single JSON descriptor on stdout. All
 // human-readable progress goes to stderr so stdout stays machine-parseable.
 
 const { spawn } = require("node:child_process");
@@ -29,9 +29,8 @@ const hostPlatform = require("./platform/index.cjs");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
-const MORTY_ROOT = REPO_ROOT;
-const MORTY_LOCKFILE = path.join(MORTY_ROOT, "pnpm-lock.yaml");
-const MORTY_INSTALLED_LOCKFILE = path.join(MORTY_ROOT, "node_modules", ".pnpm", "lock.yaml");
+const MORTY_LOCKFILE = path.join(REPO_ROOT, "pnpm-lock.yaml");
+const MORTY_INSTALLED_LOCKFILE = path.join(REPO_ROOT, "node_modules", ".pnpm", "lock.yaml");
 /** Fixed non-production Session signing secret, matching the e2e local stack. */
 const LOCAL_SESSION_SIGNING_SECRET = "local-development-only-session-signing-secret";
 /** An identifier the CLI and Relay accept for a harness or native session. */
@@ -134,7 +133,7 @@ function parseArguments(argv) {
 
 async function localLaunch(command, args) {
     const { executableLaunch, findExecutableOnPath, resolveExecutablePath } = await import(
-        pathToFileURL(path.join(MORTY_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
+        pathToFileURL(path.join(REPO_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
     const executable = path.isAbsolute(command)
         ? await resolveExecutablePath(command)
@@ -166,7 +165,7 @@ async function runOwnedCommand(command, args, options) {
     options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
     const { stopProcessTree, spawnProcess, platformSpawnOptions, ProcessExecutionError } = await import(
-        pathToFileURL(path.join(MORTY_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
+        pathToFileURL(path.join(REPO_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
     options.signal?.throwIfAborted();
     const environment = { ...process.env, ...options.env };
@@ -535,7 +534,7 @@ async function prepare(options) {
 const SETUP_READY_TIMEOUT_MILLISECONDS = 300_000;
 
 async function installLocalCli(stack) {
-    const cliDirectory = path.join(MORTY_ROOT, "packages/cli");
+    const cliDirectory = path.join(REPO_ROOT, "packages/cli");
     const manifest = JSON.parse(fs.readFileSync(path.join(cliDirectory, "package.json"), "utf8"));
     if (
         manifest.name !== "@morty-build/cli" ||
@@ -864,7 +863,7 @@ async function stopRecorded(stack) {
                 }
                 await run(
                     process.execPath,
-                    [path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"), "pair", "stop"],
+                    [path.join(REPO_ROOT, "packages/cli/src/cli/entrypoint.ts"), "pair", "stop"],
                     { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
                 );
             } catch (cause) {
@@ -876,7 +875,7 @@ async function stopRecorded(stack) {
     if (fs.existsSync(runtimeStateDirectory)) {
         log(`stopping the Morty manager at ${runtimeStateDirectory}`);
         try {
-            await run(process.execPath, [path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"), "quit"], {
+            await run(process.execPath, [path.join(REPO_ROOT, "packages/cli/src/cli/entrypoint.ts"), "quit"], {
                 env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory },
             });
         } catch (cause) {

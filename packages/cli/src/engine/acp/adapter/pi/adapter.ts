@@ -18,7 +18,7 @@ import type {
 import { memoryHistoryPreviewSnapshot } from "../../native-history/preview-snapshots.ts";
 import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
 import { normalizeAcpCapabilities } from "../../protocol/session-capabilities.ts";
-import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
+import { normalizeSessionConfiguration } from "../../protocol/session-configuration.ts";
 import { HarnessHistoryPreviews } from "../harness-history-previews.ts";
 import type { HarnessSession } from "../harness-session.ts";
 import { sessionCreationResponse } from "../lifecycle-output.ts";
@@ -28,7 +28,6 @@ import { createPiCatalogClient, createPiClient, type PiClientRuntime, piRuntime 
 import { type PiWorkspace, startPiSession } from "./pi-session.ts";
 
 const START_TIMEOUT_MILLISECONDS = 60_000;
-const configurationProtocol = sessionConfigProtocolForAgent("pi");
 
 /** The fields of Pi's new/fork/resume/load responses that describe the opened session. */
 interface PiSessionResponse {
@@ -157,7 +156,7 @@ export class PiAdapter implements Adapter {
         return {
             sessionId: session.sessionId,
             capabilities: normalizeAcpCapabilities(initialized),
-            configOptions: configurationProtocol.normalizeLifecycle(response),
+            configOptions: normalizeSessionConfiguration(response),
             agentName: truncate(initialized.agentInfo?.title ?? initialized.agentInfo?.name ?? "pi", 255),
             agentVersion: params.scope.agent.agentVersion,
             agentSettingsModelEffort: null,
@@ -278,9 +277,9 @@ export class PiAdapter implements Adapter {
         const selection = params.selection;
         const configure = async (): Promise<readonly SessionConfigOption[]> => {
             const configuration = await agent.sessionConfiguration(sessionId);
-            const option = configurationProtocol
-                .normalizeLifecycle(configuration)
-                .find((option) => option.id === selection.configId);
+            const option = normalizeSessionConfiguration(configuration).find(
+                (option) => option.id === selection.configId,
+            );
             if (
                 option === undefined ||
                 option.type !== "select" ||
@@ -310,7 +309,7 @@ export class PiAdapter implements Adapter {
                 });
             }
             const applied = await agent.sessionConfiguration(sessionId);
-            const configOptions = configurationProtocol.normalizeLifecycle(applied);
+            const configOptions = normalizeSessionConfiguration(applied);
             if (
                 !configOptions.some(
                     (option) => option.id === selection.configId && option.currentValue === selection.value,

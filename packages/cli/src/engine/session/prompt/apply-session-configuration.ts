@@ -7,26 +7,11 @@ import type {
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
 import type { Adapter } from "../../acp/native-history/preview-contract.ts";
-import { applyAgentLaunchSettings } from "../../agent/settings/agent-settings-adapter.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import { inDependencyOrder } from "../settings/configuration-dependencies.ts";
 
 function invalidSessionConfiguration(message: string): AcpExecutionError {
     return new AcpExecutionError(message, {}, "invalid_session_configuration");
-}
-
-export function agentForSessionConfiguration(
-    agent: AcpAgentDefinition,
-    selections: readonly SessionConfigurationSelection[],
-): ReturnType<typeof applyAgentLaunchSettings> {
-    try {
-        return applyAgentLaunchSettings(agent, selections);
-    } catch (error) {
-        if (error instanceof Error) {
-            throw invalidSessionConfiguration(error.message);
-        }
-        throw error;
-    }
 }
 
 function validateSessionConfigurationSelection(

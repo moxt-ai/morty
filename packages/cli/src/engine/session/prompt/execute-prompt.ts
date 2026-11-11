@@ -7,7 +7,7 @@ import type { StoredSession } from "../record/session-store.ts";
 import { isWithdrawn, type PromptDispatch } from "../turn/active-turn.ts";
 import { resolveSessionDirectory } from "../workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
-import { agentForSessionConfiguration, applyCompleteSessionConfiguration } from "./apply-session-configuration.ts";
+import { applyCompleteSessionConfiguration } from "./apply-session-configuration.ts";
 import { PromptArtifactError, type ReadPromptArtifact, resolvePromptArtifacts } from "./prompt-artifacts.ts";
 import type { PromptLifecycle } from "./prompt-lifecycle.ts";
 
@@ -62,17 +62,11 @@ export async function executePrompt({
         if (dispatch.kind === "steer" && !sessions.acceptsSteering(command.target, dispatch.targetCommandId)) {
             throw new AcpExecutionError("The steering target is unavailable", {}, "steering_target_unavailable");
         }
-        const appliedSettings =
-            command.sessionConfigurations === undefined
-                ? undefined
-                : agentForSessionConfiguration(agent, command.sessionConfigurations);
-        const executionAgent = appliedSettings?.agent ?? agent;
-        const sessionConfigurations = appliedSettings?.sessionConfigurations;
         const recovery = { kind: "interactive-only" } as const;
         const preparation = {
             adapter,
             ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-            agent: executionAgent,
+            agent,
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -87,9 +81,9 @@ export async function executePrompt({
             await applyCompleteSessionConfiguration(
                 sessions,
                 prepared.configOptions,
-                sessionConfigurations ?? [],
+                command.sessionConfigurations,
                 "ignore",
-                executionAgent,
+                agent,
                 adapter,
                 resolved.cwd,
                 command.commandId,
@@ -117,7 +111,7 @@ export async function executePrompt({
             await sessions.steerPrompt({
                 adapter,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-                agent: executionAgent,
+                agent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,
                 images: attachments.images,
@@ -133,7 +127,7 @@ export async function executePrompt({
             const result = await sessions.runPrompt({
                 adapter,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
-                agent: executionAgent,
+                agent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,
                 images: attachments.images,

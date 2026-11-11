@@ -32,7 +32,6 @@ export abstract class LocalAgentSpecification {
     readonly versionProbeTimeoutMilliseconds: number = VERSION_PROBE_TIMEOUT_MILLISECONDS;
 
     readonly createLaunchEnvironment = async (
-        _agent: ResolvedExecutable,
         _context: LocalAgentDiscoveryContext,
     ): Promise<Readonly<Record<string, string>>> => Object.freeze({});
 

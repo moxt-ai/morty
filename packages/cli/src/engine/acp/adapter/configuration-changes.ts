@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@morty-build/client/protocol";
-import { MAXIMUM_CONFIG_OPTIONS } from "../protocol/session-config-protocol.ts";
+import { MAXIMUM_CONFIG_OPTIONS } from "../protocol/session-configuration.ts";
 
 type ModeSelection = { readonly kind: "unchanged" } | { readonly kind: "selected"; readonly modeId: string };
 

@@ -17,7 +17,7 @@ import type {
 import { memoryHistoryPreviewSnapshot } from "../../native-history/preview-snapshots.ts";
 import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
 import { normalizeAcpCapabilities } from "../../protocol/session-capabilities.ts";
-import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
+import { normalizeSessionConfiguration } from "../../protocol/session-configuration.ts";
 import { harnessSessionCallbacks } from "../harness-client-events.ts";
 import { HarnessHistoryPreviews } from "../harness-history-previews.ts";
 import { HarnessSession } from "../harness-session.ts";
@@ -26,7 +26,6 @@ import { findNativeSession } from "../native-session-lookup.ts";
 import { claudeClientCallbacks } from "./client-callbacks.ts";
 import { createClaudeCatalogClient, createClaudeClient, initializeClaudeClient } from "./create-client.ts";
 
-const configuration = sessionConfigProtocolForAgent("claude");
 type ClaudeSession = HarnessSession<ClaudeAcpAgent>;
 
 /** Claude-specific operations; shared harness ownership handles delivery, cancellation and retirement. */
@@ -122,7 +121,7 @@ export class ClaudeAdapter implements Adapter {
         return {
             sessionId: session.sessionId,
             capabilities: normalizeAcpCapabilities(initialized),
-            configOptions: configuration.normalizeLifecycle(response),
+            configOptions: normalizeSessionConfiguration(response),
             agentName: truncate(initialized.agentInfo?.title ?? initialized.agentInfo?.name ?? "claude", 255),
             agentVersion: params.scope.agent.agentVersion,
             agentSettingsModelEffort: null,
@@ -320,7 +319,7 @@ export class ClaudeAdapter implements Adapter {
         const session = this.#session(params);
         const { selection } = params;
         const configure = async () => {
-            const current = configuration.normalizeLifecycle(session.agent.sessionConfiguration(session.sessionId));
+            const current = normalizeSessionConfiguration(session.agent.sessionConfiguration(session.sessionId));
             const option = current.find((option) => option.id === selection.configId);
             if (!option || option.type !== selection.type || (option.type === "select" && option.values.length < 2)) {
                 throw new AcpExecutionError(
@@ -351,7 +350,7 @@ export class ClaudeAdapter implements Adapter {
                         : { value: selection.value }),
                 });
             }
-            const applied = configuration.normalizeLifecycle(session.agent.sessionConfiguration(session.sessionId));
+            const applied = normalizeSessionConfiguration(session.agent.sessionConfiguration(session.sessionId));
             const value = applied.find((value) => value.id === selection.configId);
             if (
                 !value ||

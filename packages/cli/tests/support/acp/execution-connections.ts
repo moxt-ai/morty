@@ -13,11 +13,8 @@ import type {
     AdapterSessionTarget,
 } from "../../../src/engine/acp/native-history/preview-contract.ts";
 import { sessionIdSchema } from "../../../src/engine/acp/protocol/native-session.ts";
-import {
-    SessionConfigProtocolError,
-    sessionConfigProtocolForAgent,
-} from "../../../src/engine/acp/protocol/session-config-protocol.ts";
 import { isRecord, truncate } from "../../../src/engine/util/value-utils.ts";
+import { configureControlledSession, SessionConfigProtocolError } from "./configure-controlled-session.ts";
 import { AdapterSessionConnection } from "./session-events.ts";
 
 export interface AcpExecutionConnection {
@@ -355,7 +352,7 @@ export class AcpExecutionConnections {
         ...target
     }): Promise<readonly SessionConfigOption[]> => {
         signal.throwIfAborted();
-        const { connection, scope } = this.#resolve(target);
+        const { connection } = this.#resolve(target);
         const current = connection.snapshot().configOptions;
         const existing = current.find((option) => option.id === selection.configId);
         if (
@@ -382,7 +379,7 @@ export class AcpExecutionConnections {
         }
         connection.beginStateChange();
         try {
-            const configured = await sessionConfigProtocolForAgent(scope.agent.harness).configure(
+            const configured = await configureControlledSession(
                 current,
                 {
                     booleanValue: selection.type === "boolean" ? selection.booleanValue : false,

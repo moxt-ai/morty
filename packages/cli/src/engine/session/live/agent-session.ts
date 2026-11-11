@@ -4,8 +4,6 @@ import {
     type AgentModelEffort,
     isIdentifier,
     type NativeSessionTarget,
-    SESSION_COMMANDS_UPDATED_KIND,
-    SESSION_CONFIG_UPDATED_KIND,
     SESSION_INFO_UPDATED_KIND,
     type SessionCapabilities,
     type SessionCommand,
@@ -29,7 +27,7 @@ import type {
 } from "../../acp/native-history/preview-contract.ts";
 import type { NativeSessionOrigin } from "../../acp/protocol/native-session.ts";
 import { unsupportedSessionCapabilities } from "../../acp/protocol/session-capabilities.ts";
-import type { SessionConfigurationSelection } from "../../acp/protocol/session-config-protocol.ts";
+import type { SessionConfigurationSelection } from "../../acp/protocol/session-configuration.ts";
 import type { OperationMetrics } from "../../infra/operation-metrics.ts";
 import { SerialTaskQueue } from "../../util/serial-task-queue.ts";
 import { recordsEqual, truncate } from "../../util/value-utils.ts";
@@ -172,7 +170,6 @@ export class AgentSession {
             target: () => this.target,
             commandId: () => this.#agentCommand() ?? SESSION_CONTROL_COMMAND_ID,
             assertNativeSession: this.assertNativeSession,
-            observer,
             recordSessionEvent: this.recordLifecycleEvent,
         });
         this.#scope = {
@@ -774,7 +771,6 @@ export class AgentSession {
             },
         });
         await this.#observer.onSessionEvent?.(event);
-        await this.emitConfigUpdate();
     };
 
     readonly #target = (): AdapterSessionTarget => ({
@@ -1087,15 +1083,9 @@ export class AgentSession {
                 return;
             case "commands":
                 this.#commands = event.commands;
-                await this.#observer.onCommands({
-                    commands: this.#commands,
-                    kind: SESSION_COMMANDS_UPDATED_KIND,
-                    target: this.target,
-                });
                 return;
             case "configuration":
             case "mode":
-                await this.emitConfigUpdate();
                 return;
             case "info": {
                 for (const change of event.changes) {
@@ -1157,15 +1147,5 @@ export class AgentSession {
         if (this.#identity.kind !== "bound" || sessionId !== this.#identity.target.sessionId) {
             throw new AcpExecutionError("ACP agent referenced an unknown session", {}, "invalid_agent_session");
         }
-    };
-
-    readonly emitConfigUpdate = async (): Promise<void> => {
-        await this.#observer.onConfig({
-            configOptions: this.#configOptions,
-            configurationRevision: configurationRevision(this.#configOptions),
-            kind: SESSION_CONFIG_UPDATED_KIND,
-            requestId: `agent-update-${crypto.randomUUID()}`,
-            target: this.target,
-        });
     };
 }
