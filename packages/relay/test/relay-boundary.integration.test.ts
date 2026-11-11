@@ -565,12 +565,7 @@ describe.sequential("Relay Session-only boundary", () => {
             );
             // Computer and Session lanes can overtake each other. Keep this barrier
             // on the settings response's Computer lane to detect a dropped route.
-            const settingsBarrier = {
-                kind: "agent.settings.discovery.failed",
-                requestId: "settings-response-barrier",
-                code: "probe_failed",
-                message: "Controlled barrier",
-            };
+            const settingsBarrier = { kind: "computer.pong", requestId: "settings-response-barrier" };
             daemon.send(JSON.stringify(settingsBarrier));
             expect(JSON.parse(await hostMessages.next())).toMatchObject({
                 kind: "agent.settings.discovery.failed",
