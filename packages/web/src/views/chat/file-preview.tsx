@@ -171,7 +171,6 @@ export function FilePreview({
                 <button
                     aria-label="Close file preview"
                     className="inline-flex size-9 items-center justify-center rounded-md hover:bg-muted keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70"
-                    data-testid={dataTestId.closeFilePreview}
                     onClick={onClose}
                     data-preview-initial-focus=""
                     type="button"

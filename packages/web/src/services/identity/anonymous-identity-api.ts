@@ -214,7 +214,7 @@ export class AnonymousIdentityApi {
             },
         });
         try {
-            const computer = await management.readProject(signal);
+            const computer = await management.readComputer(signal);
             signal.throwIfAborted();
             if (computer === null) {
                 return { kind: "gone" };

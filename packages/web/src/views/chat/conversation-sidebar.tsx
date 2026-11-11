@@ -252,10 +252,7 @@ function ManagedSessionDirectoryList({
                     <MortyAlert>{directory.message}</MortyAlert>
                 ))}
             {directory.kind === "setup-required" && (
-                <div
-                    className="flex flex-col items-center rounded-xl border border-border/70 bg-white/55 px-4 py-5 text-center shadow-[0_1px_3px_rgba(17,24,20,0.04)]"
-                    data-testid={dataTestId.conversationSetupRequired}
-                >
+                <div className="flex flex-col items-center rounded-xl border border-border/70 bg-white/55 px-4 py-5 text-center shadow-[0_1px_3px_rgba(17,24,20,0.04)]">
                     <span className="mb-2 flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                         <MessageSquare aria-hidden="true" className="size-4" />
                     </span>
@@ -375,7 +372,6 @@ function ManagedSessionDirectoryList({
                                         >
                                             <ContextMenu.Item
                                                 className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
-                                                data-testid={dataTestId.archiveConversation}
                                                 disabled={archive.kind === "archiving"}
                                                 onSelect={() => {
                                                     void archiveSession(session.target, operationsSignal());

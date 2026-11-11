@@ -13,12 +13,9 @@ export type SetupHandoffModel =
 
 /**
  * Sends Morty's address to another device through the system share sheet. The application owns it: `close` ends
- * its lifetime, after which a share sheet that is still open can no longer change state or count a send.
+ * its lifetime, after which a share sheet that is still open can no longer change state.
  */
-function createSendLinkStore(port: {
-    readonly share: (data: ShareData) => Promise<void>;
-    readonly onSent: () => void;
-}) {
+function createSendLinkStore(share: (data: ShareData) => Promise<void>) {
     const lifetime = new AbortController();
     return createStore<{
         readonly state: SendLinkState;
@@ -33,13 +30,12 @@ function createSendLinkStore(port: {
             }
             set({ state: { kind: "sending" } });
             // Runs synchronously from the click, so the browser still sees the person's activation.
-            void port.share(data).then(
+            void share(data).then(
                 () => {
                     if (lifetime.signal.aborted) {
                         return;
                     }
                     set({ state: { kind: "idle" } });
-                    port.onSent();
                 },
                 (cause: unknown) => {
                     if (lifetime.signal.aborted) {
@@ -55,14 +51,14 @@ function createSendLinkStore(port: {
     }));
 }
 
-/** The view model for this device's setup handoff; a share sheet gets a store that counts each completed send. */
-export function setupHandoffModel(handoff: SetupHandoff, onSent: () => void): SetupHandoffModel {
+/** The view model for this device's setup handoff; a share sheet gets a store that tracks its send. */
+export function setupHandoffModel(handoff: SetupHandoff): SetupHandoffModel {
     switch (handoff.kind) {
         case "copy-prompt":
             return { kind: "copy-prompt" };
         case "send-link":
             return handoff.share === null
                 ? { kind: "copy-link" }
-                : { kind: "share", sendLink: createSendLinkStore({ onSent, share: handoff.share }) };
+                : { kind: "share", sendLink: createSendLinkStore(handoff.share) };
     }
 }

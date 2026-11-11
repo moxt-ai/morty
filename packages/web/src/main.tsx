@@ -1,13 +1,7 @@
 import "./monitoring.ts";
-import { installMortyDebugBridge } from "./debug-bridge.ts";
-import { createConfiguredGoogleAnalytics } from "./services/analytics/google-analytics.ts";
 import { HttpApiTransport } from "./services/api/http-api-transport.ts";
 import { mountMorty } from "./views/bootstrap.tsx";
 import "./styles.css";
-
-installMortyDebugBridge();
-const analytics = createConfiguredGoogleAnalytics();
-analytics?.trackPageView(window.location.pathname);
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {
@@ -15,7 +9,6 @@ if (rootElement === null) {
 }
 
 const morty = mountMorty({
-    analytics,
     element: rootElement,
     origin: window.location.origin,
     transport: new HttpApiTransport(window.location.origin),

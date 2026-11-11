@@ -6,7 +6,6 @@ import { ImageDownloadProvider } from "../components/images/image-download.tsx";
 import { ImageViewerProvider } from "../components/images/image-gallery.tsx";
 import { ToastProvider } from "../components/ui/toast.tsx";
 import { installInputModalityTracking } from "../input-modality.ts";
-import type { PageAnalytics } from "../services/analytics/google-analytics.ts";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import type { SetupHandoff } from "../services/device/setup-handoff.ts";
 import type { Clock } from "../services/time/clock.ts";
@@ -26,14 +25,12 @@ import { SessionApplication } from "./authentication/session-application.tsx";
  * is what the page does.
  */
 export function assembleMorty(options: {
-    readonly analytics?: PageAnalytics | null;
     readonly transport: ApiTransport;
     readonly origin: string;
     readonly clock?: Clock;
     readonly setupHandoff?: SetupHandoff;
 }): {
     readonly application: MortyApplication;
-    readonly disposeAnalytics: () => void;
     readonly element: React.ReactElement;
 } {
     installInputModalityTracking();
@@ -45,7 +42,6 @@ export function assembleMorty(options: {
         origin: options.origin,
         transport: options.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
-        ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
         ...(options.setupHandoff === undefined ? {} : { setupHandoff: options.setupHandoff }),
     });
     // The signed-in router is assembled once with the application: its inputs
@@ -53,13 +49,6 @@ export function assembleMorty(options: {
     // application's lifetime, so no component rebuilds it while rendering.
     const signedInRouter = createSignedInRouter(application);
     const continuationRouter = createContinuationRouter();
-    const analytics = application.analytics;
-    const analyticsSubscriptions =
-        analytics === null
-            ? []
-            : [signedInRouter, continuationRouter].map((router) =>
-                  router.subscribe("onRendered", ({ toLocation }) => analytics.trackPageView(toLocation.pathname)),
-              );
     const element = (
         <MortyApplicationProvider application={application}>
             <ImageDownloadProvider createStore={createImageDownloadStore}>
@@ -81,11 +70,6 @@ export function assembleMorty(options: {
     );
     return {
         application,
-        disposeAnalytics: () => {
-            for (const unsubscribe of analyticsSubscriptions) {
-                unsubscribe();
-            }
-        },
         element,
     };
 }
@@ -96,7 +80,6 @@ export function assembleMorty(options: {
  * renderer instead and share every other step of the assembly.
  */
 export function mountMorty(options: {
-    readonly analytics?: PageAnalytics | null;
     readonly element: HTMLElement;
     readonly transport: ApiTransport;
     readonly origin: string;
@@ -107,8 +90,7 @@ export function mountMorty(options: {
     /** Releases the application's resources after its last unmount. */
     readonly dispose: () => void;
 } {
-    const { application, disposeAnalytics, element } = assembleMorty({
-        ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
+    const { application, element } = assembleMorty({
         origin: options.origin,
         transport: options.transport,
     });
@@ -125,7 +107,6 @@ export function mountMorty(options: {
             void root.unmount();
         },
         dispose: () => {
-            disposeAnalytics();
             application.dispose();
         },
     };

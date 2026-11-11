@@ -1,9 +1,7 @@
 /**
  * Centered overlay and anchored-panel width ladder for Morty Web.
  *
- * Adjust `overlayWidthPx` when design changes a tier; class helpers below stay in sync.
- *
- * Dialog rungs (desktop): 520 → 680 → 840 → 1024 (+160, +160, +184).
+ * Dialog rungs (desktop): standard 520 → medium 680 → large 840 → wide 1024; the agent configuration popover is 360.
  *
  * Not in this ladder:
  * - Mobile bottom sheets (full viewport width)
@@ -11,56 +9,8 @@
  * - Setup page cards (`setup-card-shell`: 460 / 960) — page layout, not Dialog
  */
 
-export const overlayWidthPx = {
-    /** Agent configuration popover on desktop (anchor panel, not centered Dialog). */
-    popoverConfig: 360,
-    /** Default centered dialog (`size="standard"`). */
-    dialogStandard: 520,
-    /** Roomier forms and two-column content (`size="medium"`). */
-    dialogMedium: 680,
-    /** Session lists and dense tables (`size="large"`). */
-    dialogLarge: 840,
-    /** Full-width dialog layouts (`size="wide"`). */
-    dialogWide: 1024,
-} as const;
-
-export type OverlayWidthToken = keyof typeof overlayWidthPx;
-
-/** Shared {@link Dialog} width; setup appearance always uses {@link overlayWidthPx.dialogStandard}. */
+/** Shared {@link Dialog} width; setup appearance always uses the standard width. */
 export type DialogSize = "standard" | "medium" | "large" | "wide";
-
-/** Design / Playground reference — sorted narrow → wide. */
-export const overlayWidthLadder: readonly {
-    readonly token: OverlayWidthToken;
-    readonly label: string;
-    readonly usage: string;
-}[] = [
-    {
-        token: "popoverConfig",
-        label: "Popover · config",
-        usage: "Agent configuration (desktop, anchored)",
-    },
-    {
-        token: "dialogStandard",
-        label: "Dialog · standard",
-        usage: "Bug report, sharing, latency, cwd, devices, setup pairing, execution details, …",
-    },
-    {
-        token: "dialogMedium",
-        label: "Dialog · medium",
-        usage: 'Continue on another device (`variant="identitySharing"`), denser default forms',
-    },
-    {
-        token: "dialogLarge",
-        label: "Dialog · large",
-        usage: "Open Session (desktop)",
-    },
-    {
-        token: "dialogWide",
-        label: "Dialog · wide",
-        usage: 'Maximum dialog width (`size="wide"`)',
-    },
-];
 
 /** Side inset for centered modals: 1rem each → usable width is viewport minus 2rem. */
 export const centeredOverlayHorizontalInsetClassName = "w-[calc(100%-2rem)]";
@@ -89,8 +39,6 @@ export function sharedDialogDesktopMaxWidthClassName(size: DialogSize): string {
 export function sharedDialogMobileSheetDesktopMaxWidthClassName(size: DialogSize): string {
     return dialogMobileSheetDesktopMaxWidthClassNameBySize[size];
 }
-
-export const executionDetailsDialogWidthPx = overlayWidthPx.dialogStandard;
 
 export const executionDetailsDialogDesktopWidthClassName = "sm:w-[520px]";
 

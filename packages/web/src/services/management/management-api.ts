@@ -2,8 +2,8 @@ import { decodeIdentifier, type Identifier, isIdentifier } from "@morty-build/cl
 import * as v from "valibot";
 
 const identifier = v.custom<Identifier>(isIdentifier);
-const projectSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
-export type ManagedProject = v.InferOutput<typeof projectSchema>;
+const computerSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
+type ManagedComputer = v.InferOutput<typeof computerSchema>;
 const machineSchema = v.object({ computerPairing: v.picklist(["unpaired", "paired", "revoked"]) });
 
 /**
@@ -44,35 +44,22 @@ export class ManagementApi {
         this.#credentialRejected = options.credentialRejected;
     }
 
-    readonly readProject = async (signal: AbortSignal): Promise<ManagedProject | null> =>
-        v.parse(
-            v.object({ computer: v.nullable(projectSchema) }),
-            await this.#request("/computer", "GET", undefined, signal),
-        ).computer;
+    readonly readComputer = async (signal: AbortSignal): Promise<ManagedComputer | null> =>
+        v.parse(v.object({ computer: v.nullable(computerSchema) }), await this.#request("/computer", signal)).computer;
 
     readonly readComputerPairing = async (signal: AbortSignal): Promise<ComputerPairing> =>
-        v.parse(machineSchema, await this.#request("/machine", "GET", undefined, signal)).computerPairing;
+        v.parse(machineSchema, await this.#request("/machine", signal)).computerPairing;
 
-    readonly #request = async (
-        path: string,
-        method: "GET" | "POST",
-        body: object | undefined,
-        requestSignal: AbortSignal,
-    ): Promise<unknown> => {
+    readonly #request = async (path: string, requestSignal: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
         const token = await this.#getToken(signal);
         if (token === null) {
-            throw new CloudApiError("UNAUTHENTICATED", "Sign in to continue.");
+            throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
         const response = await this.#fetchRequest(
             new Request(managementUrl(this.#origin, this.#computerId, path), {
-                method,
                 signal,
-                headers: {
-                    authorization: `Bearer ${token}`,
-                    ...(body === undefined ? {} : { "content-type": "application/json" }),
-                },
-                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+                headers: { authorization: `Bearer ${token}` },
             }),
         );
         const value: unknown = response.status === 204 ? null : await response.json();
