@@ -12,8 +12,10 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "devDependencies": {
+        "@morty-build/runtime-test-support": "workspace:*",
         "@playwright/test": "catalog:",
         "@types/ws": "^8.18.2",
+        "playwright-core": "catalog:",
         "ws": "^8.22.1"
     }
 }

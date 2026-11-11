@@ -19,7 +19,7 @@ type Connection = Readonly<{
 }>;
 
 /** An installed Agent the machine's Morty cannot offer, as `morty agents` reports it. */
-export interface UnavailableAgentReport {
+interface UnavailableAgentReport {
     readonly harness: string;
     readonly label: string;
     readonly status: string;
