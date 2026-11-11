@@ -77,11 +77,13 @@ export {
 export type {
     SessionAccessClaims,
     SessionAccessCredential,
+    SessionAccessGrant,
     SessionAccessHolder,
 } from "./session/access/index.ts";
 
 export {
     decodeSessionAccessCredential,
+    decodeSessionAccessGrant,
     decodeSessionAccessHolder,
     isSessionAccessHolder,
 } from "./session/access/index.ts";

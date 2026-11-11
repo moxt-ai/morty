@@ -1224,12 +1224,12 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
         pairAgain: pairComputer,
         connect: (credential: DaemonCredential) => credential.connect((request) => worker.fetch(request, environment)),
-        subscribe: () =>
+        subscribe: (credential = text(sessionAccess, "credential")) =>
             worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
                     {
-                        headers: { authorization: `Bearer ${text(sessionAccess, "credential")}`, Upgrade: "websocket" },
+                        headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" },
                     },
                 ),
                 environment,
@@ -1551,6 +1551,52 @@ it("Given a Runtime its owner revoked and then paired again, When the earlier da
         const messages = new SocketMessages(daemon);
         daemon.accept();
         expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+        daemon.close(1000, "Test complete");
+    } finally {
+        runtime.daemon.close(1000, "Test complete");
+    }
+});
+
+it("Given a Session credential with an open live view, When the owner revokes the Runtime and pairs the computer again, Then the credential is refused and its view closes while a credential issued under the new pairing opens a view", async () => {
+    const runtime = await connectRuntimeDaemon("session-pairing-generation");
+    try {
+        const subscribed = await runtime.subscribe();
+        const view = subscribed.webSocket;
+        if (view === null) {
+            throw new Error("Expected the live Session view");
+        }
+        const viewClosed = new Promise<CloseEvent>((resolve) =>
+            view.addEventListener("close", resolve, { once: true }),
+        );
+        view.accept();
+
+        expect((await runtime.revoke()).status).toBe(204);
+        // Runtime revocation and credential reauthorization can both close the view.
+        expect(await viewClosed).toMatchObject({ code: 1008 });
+        await expect(runtime.issueRuntimeCredential(runtime.computerId)).rejects.toMatchObject({
+            code: "credential_revoked",
+        });
+        const replacement = await runtime.connect(await runtime.pairAgain("session-pairing-generation-replacement"));
+        const daemon = replacement.webSocket;
+        if (daemon === null) {
+            throw new Error("Expected the paired Runtime socket");
+        }
+        const messages = new SocketMessages(daemon);
+        daemon.accept();
+        expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+
+        expect(await responseJson(await runtime.subscribe(), 401)).toMatchObject({
+            error: { code: "credential_revoked" },
+        });
+        expect(await responseJson(await runtime.appSessionRequest("/events-v2", { method: "GET" }), 401)).toMatchObject(
+            {
+                error: { code: "credential_revoked" },
+            },
+        );
+        const reopened = await runtime.subscribe(await runtime.issueRuntimeCredential(runtime.computerId));
+        expect(reopened.status).toBe(101);
+        reopened.webSocket?.accept();
+        reopened.webSocket?.close(1000, "Test complete");
         daemon.close(1000, "Test complete");
     } finally {
         runtime.daemon.close(1000, "Test complete");

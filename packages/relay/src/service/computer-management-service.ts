@@ -1,4 +1,4 @@
-import type { ProjectLocationHint, SessionAccessHolder } from "@morty-build/client/protocol";
+import type { ProjectLocationHint, SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
 import {
     createRandomToken,
     type MachineAccountDirectory,
@@ -118,22 +118,26 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
     readonly authorizeSessionCredentialRecord = async (
         computerId: string,
         permission: ProjectPermission,
-        holder: SessionAccessHolder,
+        grant: SessionAccessGrant,
         signal: AbortSignal,
     ) =>
         await this.#projectAccess.authorizeSession(
             validateIdentifier(computerId, "computer_id"),
             [permission],
-            holder,
+            grant,
             signal,
         );
-    /** Whether `holder`'s access to the computer holds now; a Session credential is issued for it only while it does. */
-    readonly holdsAccess = async (
+    /** The active pairing under which the holder can receive a Session credential. */
+    readonly currentSessionGeneration = async (
         computerId: string,
         holder: SessionAccessHolder,
         signal: AbortSignal,
-    ): Promise<boolean> =>
-        await this.storage.holdsAccess(validateIdentifier(computerId, "computer_id"), holder, signal);
+    ): Promise<number | null> =>
+        await this.#projectAccess.currentSessionGeneration(
+            validateIdentifier(computerId, "computer_id"),
+            holder,
+            signal,
+        );
     /** The active computer's owner, read from the authoritative directory. */
     readonly readComputerOwner = async (computerId: string, signal: AbortSignal): Promise<string | null> => {
         const account = await this.storage.readActiveComputerScope(

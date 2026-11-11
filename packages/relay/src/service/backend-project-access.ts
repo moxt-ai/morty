@@ -1,4 +1,8 @@
-import { RELAY_APP_PROJECT_PERMISSIONS, type SessionAccessHolder } from "@morty-build/client/protocol";
+import {
+    RELAY_APP_PROJECT_PERMISSIONS,
+    type SessionAccessGrant,
+    type SessionAccessHolder,
+} from "@morty-build/client/protocol";
 import {
     AuditActor,
     ComputerScope,
@@ -44,17 +48,30 @@ export class BackendProjectAccess implements ProjectCredentialAuthority {
     readonly authorizeSession = async (
         computerId: string,
         requiredPermissions: readonly ProjectPermission[],
-        holder: SessionAccessHolder,
+        grant: SessionAccessGrant,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> => {
-        const [access, holdsAccess] = await Promise.all([
+        const [access, generation] = await Promise.all([
             this.authorize(computerId, requiredPermissions, signal),
-            this.storage.holdsAccess(computerId, holder, signal),
+            this.currentSessionGeneration(computerId, grant.holder, signal),
         ]);
-        if (!holdsAccess) {
+        if (generation !== grant.generation) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session credential has been revoked");
         }
         return access;
+    };
+
+    /** Resolves current authority without storing another copy of pairing state. */
+    readonly currentSessionGeneration = async (
+        computerId: string,
+        holder: SessionAccessHolder,
+        signal: AbortSignal,
+    ): Promise<number | null> => {
+        const [holds, generation] = await Promise.all([
+            this.storage.holdsAccess(computerId, holder, signal),
+            this.storage.projects.forProject(computerId).readActiveGeneration(computerId, signal),
+        ]);
+        return holds ? generation : null;
     };
 
     readonly grants: ProjectCredentialAuthority["grants"] = async (computerId, required, signal) =>
@@ -62,10 +79,10 @@ export class BackendProjectAccess implements ProjectCredentialAuthority {
 
     readonly grantsSessionCredential: ProjectCredentialAuthority["grantsSessionCredential"] = async (
         computerId,
-        holder,
+        grant,
         required,
         signal,
-    ) => await this.#granted(() => this.authorizeSession(computerId, required, holder, signal));
+    ) => await this.#granted(() => this.authorizeSession(computerId, required, grant, signal));
 
     readonly #granted = async (authorize: () => Promise<ProjectAccessContext>): Promise<boolean> => {
         try {
