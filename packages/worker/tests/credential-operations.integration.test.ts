@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { computerDirectoryDrizzle } from "../../relay/src/components/management/storage/relay-drizzle-database.ts";
-import { machineAccount } from "../../relay/src/schema/d1/index.ts";
+import { computerAccount } from "../../relay/src/schema/d1/index.ts";
 import worker, { fetchPublicApplication } from "../src/application.ts";
 import { d1DatabaseBindingSchema } from "../src/infra/cloud-bindings.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
@@ -91,7 +91,7 @@ test("Given local, browser and recovery credentials, When their operations end a
     }
 });
 
-test("Given a browser that joined through a link, When it asks for recovery access, a Computer pairing or the Machine's binding, Then only the machine's local credential may issue them", async () => {
+test("Given a browser that joined through a link, When it asks for recovery access, a Computer pairing or the Computer's binding, Then only the computer's local credential may issue them", async () => {
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         fetchPublicApplication(
@@ -251,9 +251,9 @@ test("Given a saved owner credential, When the directory no longer assigns that 
         v.parse(v.object({ RELAY_DIRECTORY_DATABASE: d1DatabaseBindingSchema }), environment).RELAY_DIRECTORY_DATABASE,
     );
     await directory
-        .update(machineAccount)
+        .update(computerAccount)
         .set({ userId: `usr_${crypto.randomUUID()}` })
-        .where(eq(machineAccount.computerId, owner.computerId))
+        .where(eq(computerAccount.computerId, owner.computerId))
         .run();
     expect((await request()).status).toBe(401);
 });

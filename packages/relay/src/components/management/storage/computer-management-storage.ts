@@ -1,6 +1,6 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq } from "drizzle-orm";
-import { machineAccount } from "../../../schema/d1/index.ts";
+import { computerAccount } from "../../../schema/d1/index.ts";
 import {
     type ProjectRow,
     ProjectRowSchema,
@@ -15,16 +15,16 @@ import { computerDirectoryDrizzle } from "./relay-drizzle-database.ts";
 import { projectServed } from "./relay-lifecycle.ts";
 
 const projectRow = {
-    computer_id: machineAccount.computerId,
-    user_id: machineAccount.userId,
-    display_name: machineAccount.displayName,
-    client_reference: machineAccount.clientReference,
-    idempotency_key: machineAccount.idempotencyKey,
-    lifecycle: machineAccount.lifecycle,
-    location_hint: machineAccount.locationHint,
-    created_at: machineAccount.createdAt,
-    updated_at: machineAccount.updatedAt,
-    deleted_at: machineAccount.deletedAt,
+    computer_id: computerAccount.computerId,
+    user_id: computerAccount.userId,
+    display_name: computerAccount.displayName,
+    client_reference: computerAccount.clientReference,
+    idempotency_key: computerAccount.idempotencyKey,
+    lifecycle: computerAccount.lifecycle,
+    location_hint: computerAccount.locationHint,
+    created_at: computerAccount.createdAt,
+    updated_at: computerAccount.updatedAt,
+    deleted_at: computerAccount.deletedAt,
 };
 
 export class ComputerManagementStorage {
@@ -44,8 +44,8 @@ export class ComputerManagementStorage {
             () =>
                 computerDirectoryDrizzle(this.database)
                     .select(projectRow)
-                    .from(machineAccount)
-                    .where(and(eq(machineAccount.userId, userId), eq(machineAccount.idempotencyKey, key)))
+                    .from(computerAccount)
+                    .where(and(eq(computerAccount.userId, userId), eq(computerAccount.idempotencyKey, key)))
                     .limit(1),
             signal,
         );
@@ -60,12 +60,12 @@ export class ComputerManagementStorage {
             () =>
                 computerDirectoryDrizzle(this.database)
                     .select({
-                        user_id: machineAccount.userId,
-                        computer_id: machineAccount.computerId,
-                        lifecycle: machineAccount.lifecycle,
+                        user_id: computerAccount.userId,
+                        computer_id: computerAccount.computerId,
+                        lifecycle: computerAccount.lifecycle,
                     })
-                    .from(machineAccount)
-                    .where(and(eq(machineAccount.computerId, computerId), projectServed))
+                    .from(computerAccount)
+                    .where(and(eq(computerAccount.computerId, computerId), projectServed))
                     .limit(1),
             signal,
         );
@@ -81,11 +81,11 @@ export class ComputerManagementStorage {
     readonly recordAudit = async (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
         await this.projects.forProject(audit.computerId).recordAudit(audit, signal);
 
-    readonly registerMachineAccount = async (project: ProjectRow, signal: AbortSignal): Promise<boolean> => {
+    readonly registerComputerAccount = async (project: ProjectRow, signal: AbortSignal): Promise<boolean> => {
         const result = await waitForD1(
             () =>
                 computerDirectoryDrizzle(this.database)
-                    .insert(machineAccount)
+                    .insert(computerAccount)
                     .values({
                         computerId: project.computer_id,
                         userId: project.user_id,

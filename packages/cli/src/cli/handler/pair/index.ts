@@ -7,7 +7,7 @@ import { registerPairRemoveCommand } from "./remove.ts";
 import { registerPairStopCommand } from "./stop.ts";
 
 export function registerPairHandlers(program: Command, context: CliContext): void {
-    const pair = program.command("pair").description("pair this machine or manage saved pairings");
+    const pair = program.command("pair").description("pair this computer or manage saved pairings");
     registerPairAction(pair, context);
     registerPairListCommand(pair, context);
     registerPairStopCommand(pair, context);

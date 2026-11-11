@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
-import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-computer.ts";
 import type { CliContext } from "../../context.ts";
 
 export function registerPairRemoveCommand(command: Command, context: CliContext): void {
@@ -12,7 +12,7 @@ export function registerPairRemoveCommand(command: Command, context: CliContext)
             const installation = await openMortyInstallation(context.shutdownSignal, process.env);
             const pairing = await installation.currentConnection(context.shutdownSignal);
             if (pairing === null) {
-                command.error("No machine is paired. Run Morty setup first.", { code: "connection_not_found" });
+                command.error("No computer is paired. Run Morty setup first.", { code: "connection_not_found" });
             }
             await installation.removeConnection(pairing.pairingGeneration, context.shutdownSignal);
             await reloadDaemon(installation.stateDirectory, context.shutdownSignal);

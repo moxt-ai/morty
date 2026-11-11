@@ -106,10 +106,10 @@ export function createComputerSwitcher(options: {
                                 }
                                 const configuration = await requests.computerConfiguration(signal);
                                 signal.throwIfAborted();
-                                rememberComputerName(identity, configuration.computer.machineName);
+                                rememberComputerName(identity, configuration.computer.computerName);
                                 return {
                                     ...choice,
-                                    name: configuration.computer.machineName || choice.name,
+                                    name: configuration.computer.computerName || choice.name,
                                     status: configuration.computer.online ? "online" : "offline",
                                 };
                             } finally {

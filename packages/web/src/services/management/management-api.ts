@@ -4,17 +4,17 @@ import * as v from "valibot";
 const identifier = v.custom<Identifier>(isIdentifier);
 const computerSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
 type ManagedComputer = v.InferOutput<typeof computerSchema>;
-const machineSchema = v.object({ computerPairing: v.picklist(["unpaired", "paired", "revoked"]) });
+const pairingStateSchema = v.object({ computerPairing: v.picklist(["unpaired", "paired", "revoked"]) });
 
 /**
- * Where the Machine's Runtime pairing stands: not yet paired (or its pairing request is pending or expired), paired,
- * or revoked until setup pairs it again. The Relay owns this fact; the Worker reads it for the Machine.
+ * Where the Computer's Runtime pairing stands: not yet paired (or its pairing request is pending or expired), paired,
+ * or revoked until setup pairs it again. The Relay owns this fact; the Worker reads it for the Computer.
  */
-export type ComputerPairing = v.InferOutput<typeof machineSchema>["computerPairing"];
+export type ComputerPairing = v.InferOutput<typeof pairingStateSchema>["computerPairing"];
 
-/** The Machine resource, read by setup and the page and polled by the browser for pairing changes. */
-export function machineUrl(origin: string, computerId: string): URL {
-    return managementUrl(origin, decodeIdentifier(computerId), "/machine");
+/** The Computer resource, read by setup and the page and polled by the browser for pairing changes. */
+export function computerPairingUrl(origin: string, computerId: string): URL {
+    return managementUrl(origin, decodeIdentifier(computerId), "/computer/pairing-state");
 }
 
 function managementUrl(origin: string, computerId: Identifier, path: string): URL {
@@ -48,7 +48,7 @@ export class ManagementApi {
         v.parse(v.object({ computer: v.nullable(computerSchema) }), await this.#request("/computer", signal)).computer;
 
     readonly readComputerPairing = async (signal: AbortSignal): Promise<ComputerPairing> =>
-        v.parse(machineSchema, await this.#request("/machine", signal)).computerPairing;
+        v.parse(pairingStateSchema, await this.#request("/computer/pairing-state", signal)).computerPairing;
 
     readonly #request = async (path: string, requestSignal: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);

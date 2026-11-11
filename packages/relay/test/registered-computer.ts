@@ -10,7 +10,7 @@ import { SqliteComputerManagementStore } from "../src/components/management/stor
 import { relayDrizzle } from "../src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../src/infra/durable-object-sql-database.ts";
 import { computerPairing, computerRegistration } from "../src/schema/computer-relay-do/index.ts";
-import { machineAccount } from "../src/schema/d1/index.ts";
+import { computerAccount } from "../src/schema/d1/index.ts";
 
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
@@ -37,7 +37,7 @@ export async function registerComputerFixture(computerId: string): Promise<void>
     const directory = computerDirectoryDrizzle(env.RELAY_DIRECTORY_DATABASE);
     await directory.batch([
         directory
-            .insert(machineAccount)
+            .insert(computerAccount)
             .values({
                 computerId,
                 userId,
@@ -69,7 +69,7 @@ export async function registerComputerFixture(computerId: string): Promise<void>
             await database.insert(computerRegistration).values({
                 generation: pairing.generation,
                 claimedAt: registeredAt,
-                machineName: "Registered test Runtime",
+                computerName: "Registered test Runtime",
                 workspaceName: "Registered test workspace",
                 agentsJson: "[]",
             });

@@ -34,7 +34,7 @@ export class ComputerManagementService {
         this.storage = storage;
     }
 
-    readonly provisionMachineAccount = async (
+    readonly provisionComputerAccount = async (
         userId: string,
         requestedDisplayName: string,
         idempotencyKey: string,
@@ -74,7 +74,7 @@ export class ComputerManagementService {
             computer_id: encodeRelayComputerId(placement, createRandomToken(18)),
             updated_at: now,
         };
-        if (!(await this.storage.registerMachineAccount(project, signal))) {
+        if (!(await this.storage.registerComputerAccount(project, signal))) {
             const duplicate = await this.storage.readProjectByIdempotencyKey(user, normalizedIdempotencyKey, signal);
             if (duplicate !== null && sameRequest(duplicate)) {
                 await this.#recordAccountCreation(duplicate, signal);
@@ -82,7 +82,7 @@ export class ComputerManagementService {
             }
             throw new ComputerManagementError(
                 "idempotency_conflict",
-                "The machine account reference is already in use",
+                "The computer account reference is already in use",
                 409,
             );
         }

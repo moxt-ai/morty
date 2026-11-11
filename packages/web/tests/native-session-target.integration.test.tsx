@@ -4,14 +4,14 @@ import { dataTestId } from "../src/data-testid.ts";
 import { openExecutionDetails } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
-test("Given two Machines contain the same native pair, When I draft on one and open the other, Then each Machine keeps its own composer draft", {
+test("Given two Computers contain the same native pair, When I draft on one and open the other, Then each Computer keeps its own composer draft", {
     timeout: 30_000,
 }, async () => {
     vi.useFakeTimers({ now: new Date("2026-11-09T00:00:00Z"), toFake: ["Date"] });
     onTestFinished(() => {
         vi.useRealTimers();
     });
-    const sessionId = "shared-machine-native-session";
+    const sessionId = "shared-computer-native-session";
     const open = async (app: TestApp) => {
         await app.queryElementByTestId(
             dataTestId.messageComposer,
@@ -41,7 +41,7 @@ test("Given two Machines contain the same native pair, When I draft on one and o
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
-    await first.user.type(composer, "Private draft on the first Machine");
+    await first.user.type(composer, "Private draft on the first Computer");
     await first.close();
     const second = await createTestApp({ connectAgent: true, sessionIds: new Set([sessionId]) });
     await open(second);
@@ -50,14 +50,14 @@ test("Given two Machines contain the same native pair, When I draft on one and o
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     expect(otherComposer).toHaveProperty("value", "");
-    await second.user.type(otherComposer, "Draft on the second Machine");
+    await second.user.type(otherComposer, "Draft on the second Computer");
     const reloaded = await second.reload();
     expect(
         await reloaded.queryElementByTestId(
             dataTestId.messageComposer,
             (element) => element instanceof HTMLTextAreaElement && !element.disabled,
         ),
-    ).toHaveProperty("value", "Draft on the second Machine");
+    ).toHaveProperty("value", "Draft on the second Computer");
 });
 
 test.each([

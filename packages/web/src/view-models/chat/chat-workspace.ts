@@ -175,7 +175,7 @@ export function createChatWorkspace(options: {
                 }
             }
             if (options.rememberedIdentity !== undefined) {
-                rememberComputerName(options.rememberedIdentity, configuration.computer.machineName);
+                rememberComputerName(options.rememberedIdentity, configuration.computer.computerName);
             }
             computerRecovery.observe(configuration.computer.online, observation);
         },
@@ -185,7 +185,7 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         onComputerReplaced: () => {
-            // A Session belongs to the Computer that held it, so the page starts over on the Machine's new conversation.
+            // A Session belongs to the Computer that held it, so the page starts over on the Computer's new conversation.
             const url = new URL(window.location.href);
             url.searchParams.delete("harness");
             url.searchParams.delete("sessionId");

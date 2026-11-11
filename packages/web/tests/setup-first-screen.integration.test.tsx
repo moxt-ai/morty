@@ -115,7 +115,7 @@ test("Given a new visitor, When they copy the instruction, Then the clipboard ho
     await app.user.click(copy);
     const instruction = await navigator.clipboard.readText();
     expect(instruction).toBe(
-        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`,
+        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this computer.`,
     );
     const nextStep = getByRole(document.body, "status", { name: "Setup next step" });
     expect(nextStep.textContent).toContain("Paste into your agent, then open the link it returns.");

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
- * A credential the computer's owner holds: the machine's own (`local`) or a recovery credential. It grants its own
+ * A credential the computer's owner holds: the computer's own (`local`) or a recovery credential. It grants its own
  * access until it is revoked; revoked access never resumes.
  */
 export const ownerCredential = sqliteTable(

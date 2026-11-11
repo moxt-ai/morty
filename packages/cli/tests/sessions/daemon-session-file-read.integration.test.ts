@@ -151,7 +151,7 @@ async function readSessionFile(
     }
 }
 
-test("Given a session with a working directory, When a client reads a root-relative or bare-relative file reference, Then the daemon resolves it against the session directory before the machine root", async () => {
+test("Given a session with a working directory, When a client reads a root-relative or bare-relative file reference, Then the daemon resolves it against the session directory before the computer root", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-session-file-read-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
@@ -206,12 +206,12 @@ if (process.argv.includes("--version")) {
                 }
 
                 // Root-relative agent references resolve against the session
-                // working directory, not the machine root.
+                // working directory, not the computer root.
                 const rootRelative = await readSessionFile(peer, peer.target, "/index.html");
                 expect(rootRelative.kind).toBe("streamed");
                 expect(rootRelative.bytes.toString("utf8")).toContain("<title>Todo</title>");
 
-                // Absolute machine paths keep working.
+                // Absolute computer paths keep working.
                 const absolute = await readSessionFile(peer, peer.target, join(workspace, "index.html"));
                 expect(absolute.kind).toBe("streamed");
                 expect(absolute.bytes.toString("utf8")).toContain("<title>Todo</title>");
@@ -228,7 +228,7 @@ if (process.argv.includes("--version")) {
                 const missing = await readSessionFile(peer, peer.target, "/missing-file.html");
                 expect(missing.kind).toBe("failed");
 
-                // Explicit file URLs always mean their machine-absolute target,
+                // Explicit file URLs always mean their computer-absolute target,
                 // even when a working-directory-first interpretation would
                 // select a different existing file.
                 const urlRead = await readSessionFile(peer, peer.target, pathToFileURL(outsideTarget).href);

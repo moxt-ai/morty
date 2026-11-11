@@ -34,7 +34,7 @@ export interface ClaimPairing {
     readonly codeHash: string;
     readonly daemonHash: string;
     readonly now: number;
-    readonly machineName: string;
+    readonly computerName: string;
     readonly workspaceName: string;
     readonly agents: string;
     readonly auditId: string;

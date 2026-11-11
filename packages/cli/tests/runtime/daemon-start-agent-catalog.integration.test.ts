@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
-import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-computer.ts";
 
 const temporaryDirectories: string[] = [];
 

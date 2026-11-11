@@ -437,7 +437,7 @@ export function createSessionPaneModel(options: {
      */
     readonly onReleased?: ((activity: SessionActivityState | null) => void) | undefined;
     readonly titles: SessionTitlesStore;
-    /** Whether the connection header reports this Session's connection available, network and Machine included. */
+    /** Whether the connection header reports this Session's connection available, network and Computer included. */
     readonly connectionAvailable: (connection: SessionConnection) => boolean;
     /** The connection reached the Session through the Computer. */
     readonly onConnected: () => void;

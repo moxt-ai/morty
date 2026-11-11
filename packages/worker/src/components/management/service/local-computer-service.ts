@@ -136,9 +136,9 @@ export class LocalComputerService {
         await this.#run(computerId, signal, (computer, signal) => computer.revokeComputer(signal), 15_000);
     readonly chatComputers = async (computerId: string, signal: AbortSignal) => {
         const computers = await this.#run(computerId, signal, (computer, signal) => computer.computers(signal), 15_000);
-        return computers.map(({ computerId, machineName, online, agents }) => ({
+        return computers.map(({ computerId, computerName, online, agents }) => ({
             computerId,
-            machineName,
+            computerName,
             online,
             agents: agents.map(({ harness, label }) => ({ harness, label })),
         }));

@@ -10,7 +10,7 @@ export class ComputerStatus {
 
 export class ComputerSummary {
     readonly agents: ComputerDescriptor["agents"];
-    readonly machineName: string;
+    readonly computerName: string;
     readonly online: boolean;
     readonly computerId: string;
     readonly workspaceName: string;
@@ -18,7 +18,7 @@ export class ComputerSummary {
     constructor(relay: ComputerDescriptor, status: ComputerStatus) {
         this.agents = relay.agents;
         this.computerId = relay.computerId;
-        this.machineName = relay.machineName;
+        this.computerName = relay.computerName;
         this.online = status.online;
         this.workspaceName = relay.workspaceName;
     }

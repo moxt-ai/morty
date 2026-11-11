@@ -89,7 +89,7 @@ test("Given Pi is not installed on the Computer, When the user opens Open Sessio
     await app.user.click(pi);
     await app.waitForView(() => {
         expect(dialog.textContent).toContain("Pi is not installed");
-        expect(dialog.textContent).toContain("Install it on this machine to browse saved sessions.");
+        expect(dialog.textContent).toContain("Install it on this computer to browse saved sessions.");
     });
 });
 

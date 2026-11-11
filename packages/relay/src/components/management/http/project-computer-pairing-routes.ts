@@ -14,14 +14,14 @@ export function createProjectComputerPairingRoutes() {
         .use("/pairings/:computerId/redeem", pairingTimeoutMiddleware("Computer pairing redemption timed out"))
         .post(
             "/pairings/:computerId/redeem",
-            bodyParser<RelayHttpEnvironment>(["agents", "machineName", "pairingCode", "workspaceName"]),
+            bodyParser<RelayHttpEnvironment>(["agents", "computerName", "pairingCode", "workspaceName"]),
             async (context) => {
                 const body = context.req.valid("json");
                 const agents = validateAgents(body["agents"]);
                 const redeemed = await context.var.relay.services.computerPairings.redeemComputerPairing(
                     validateIdentifier(context.req.param("computerId"), "computer_id"),
                     validatePairingCode(body["pairingCode"]),
-                    validateDisplayName(body["machineName"], "machine_name"),
+                    validateDisplayName(body["computerName"], "computer_name"),
                     validateDisplayName(body["workspaceName"], "workspace_name"),
                     agents,
                     context.var.signal,

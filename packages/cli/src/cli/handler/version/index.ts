@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { readDaemonVersion } from "../../../daemon/lifecycle/daemon-client.ts";
-import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-computer.ts";
 import type { CliContext } from "../../context.ts";
 
 async function reportInstallationVersion(context: CliContext): Promise<void> {

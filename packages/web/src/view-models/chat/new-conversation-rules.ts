@@ -6,7 +6,7 @@ import { composerHasMessage } from "./session-operation-rules.ts";
  * and `createConversation` refuses through the same rule over the same facts, so the two cannot disagree.
  */
 export interface NewConversationFacts {
-    /** The network and the Machine are available, as the connection header reports. */
+    /** The network and the Computer are available, as the connection header reports. */
     readonly connectionAvailable: boolean;
     /** Entry, pairing and the Computer's Agents let this page start a Session. */
     readonly startable: boolean;
@@ -17,7 +17,7 @@ export interface NewConversationFacts {
     readonly creation: ConversationCreationState["kind"];
 }
 
-/** Creating a Session needs the draft page, ready to start one, with its settings loaded and its Machine reachable. */
+/** Creating a Session needs the draft page, ready to start one, with its settings loaded and its Computer reachable. */
 function pageCanCreate(facts: NewConversationFacts): boolean {
     return facts.connectionAvailable && facts.startable && facts.draftSelected && facts.settingsReady;
 }

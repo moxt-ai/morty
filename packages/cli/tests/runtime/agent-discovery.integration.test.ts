@@ -83,7 +83,7 @@ if (process.argv.includes("--version")) {
         }
     });
 
-    it("Given PATH contains an Agent in the default working directory, When the paired machine discovers Agents, Then the working directory does not exclude that executable", async () => {
+    it("Given PATH contains an Agent in the default working directory, When the paired computer discovers Agents, Then the working directory does not exclude that executable", async () => {
         const workspace = await mkdtemp(join(tmpdir(), "morty-path-boundary-"));
         const codexPath = join(workspace, "codex");
         try {

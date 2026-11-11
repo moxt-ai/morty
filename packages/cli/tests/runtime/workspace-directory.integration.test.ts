@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { WorkspaceDirectoryService } from "../../src/engine/session/workspace/workspace-directory.ts";
 
-describe("machine directory selection", () => {
-    it("Given a paired machine and a default workspace, When the browser browses or directly enters a displayed home path, Then accessible canonical directories are available without granting another workspace", async () => {
+describe("computer directory selection", () => {
+    it("Given a paired computer and a default workspace, When the browser browses or directly enters a displayed home path, Then accessible canonical directories are available without granting another workspace", async () => {
         const temporaryDirectory = await mkdtemp(join(homedir(), ".morty-workspace-"));
         const defaultWorkspace = join(temporaryDirectory, "default");
         const outside = join(temporaryDirectory, "outside");

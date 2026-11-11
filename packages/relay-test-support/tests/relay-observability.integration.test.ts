@@ -144,7 +144,7 @@ async function pairComputer() {
             method: "POST",
             body: JSON.stringify({
                 agents: [],
-                machineName: "Logging test",
+                computerName: "Logging test",
                 workspaceName: "workspace",
                 pairingCode: text(pairing, "pairingCode"),
             }),

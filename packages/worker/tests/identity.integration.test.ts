@@ -31,7 +31,7 @@ function creationRequest(headers: Readonly<Record<string, string>> = {}): Reques
     });
 }
 
-test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Project and Machine", async () => {
+test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Project and Computer", async () => {
     const environment = fixture.environment();
     const creationKey = anonymousCreationKey();
     const create = async () => {
@@ -174,7 +174,7 @@ test("Given a device that shared links before and after renewing its credential,
     expect((await redeem(unusedAfterRenewal)).status).toBe(410);
 });
 
-test("Given links shared by a recovery credential and by the machine's own credential, When each sharing credential is revoked, Then its unused links add no device while links shared by access still held keep working", async () => {
+test("Given links shared by a recovery credential and by the computer's own credential, When each sharing credential is revoked, Then its unused links add no device while links shared by access still held keep working", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET", body?: object) =>
@@ -334,7 +334,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         accessExpiresAt: null,
     });
     const served = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer/pairing-state`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
@@ -364,7 +364,7 @@ test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists 
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const served = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer/pairing-state`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
@@ -385,7 +385,7 @@ test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists 
     expect(await response.json()).toEqual({ computers: [] });
 });
 
-test("Given an anonymous user, When machine access is shared, Then the link adds one device within ten minutes and that device keeps access for a day until it ends it", async () => {
+test("Given an anonymous user, When computer access is shared, Then the link adds one device within ten minutes and that device keeps access for a day until it ends it", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const created = await worker.fetch(
@@ -454,11 +454,11 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
     expect((await worker.fetch(accountRequest(owner.token, owner.computerId), environment)).status).toBe(200);
 });
 
-test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the same computer identity", async () => {
+test("Given an anonymous user with a Computer, When a transfer link is redeemed, Then the redemption returns the same computer identity", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const servedResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/machine`, {
+        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer/pairing-state`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
@@ -568,7 +568,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
     expect(revoked.status).toBe(200);
     const management = (token: string) =>
         worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/management/machine`, {
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/management/computer/pairing-state`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
             environment,
