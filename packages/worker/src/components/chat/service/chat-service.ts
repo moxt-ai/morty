@@ -10,9 +10,9 @@ import {
     type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
-import type { ComputerManagementGateway } from "../../../gateway/computer-management-gateway.ts";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
 import { runtimeRevoked } from "../../management/entity/runtime-pairing.ts";
+import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
 
@@ -122,16 +122,16 @@ function notInRecentSessions(): never {
  */
 export class ChatService {
     readonly #identities: IdentityStorage;
-    readonly #relay: ComputerManagementGateway;
+    readonly #relay: LocalComputerService;
     readonly #sessionOperations: ManagedSessionOperations | undefined;
 
     constructor(cx: {
         readonly sessionOperations: ManagedSessionOperations | undefined;
-        readonly gateways: { readonly computerManagements: ComputerManagementGateway };
+        readonly services: { readonly computers: LocalComputerService };
         readonly storages: { readonly identities: IdentityStorage };
     }) {
         this.#identities = cx.storages.identities;
-        this.#relay = cx.gateways.computerManagements;
+        this.#relay = cx.services.computers;
         this.#sessionOperations = cx.sessionOperations;
     }
 
@@ -166,15 +166,7 @@ export class ChatService {
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
         await this.#requirePairedRuntime(scope);
-        const [mortyRelayLatencyMs, relayRuntimeLatencyMs] = await Promise.all([
-            this.#relay.measureRelayLatency(scope.computerId, scope.signal),
-            this.#relay.measureRuntimeLatency(scope.computerId, scope.signal),
-        ]);
-        return {
-            relayOrigin: this.#relay.configuration().origin,
-            relayRuntimeLatencyMs,
-            mortyRelayLatencyMs,
-        };
+        return { runtimeLatencyMs: await this.#relay.measureRuntimeLatency(scope.computerId, scope.signal) };
     };
 
     readonly setupRuntimes = async (scope: ChatScope) => ({

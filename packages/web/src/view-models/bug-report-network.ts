@@ -79,21 +79,7 @@ export async function collectNetworkDiagnostics(
         server === null
             ? Promise.resolve(unavailable("NO_ACTIVE_RUNTIME"))
             : probe(() => server.readNetwork(signal), signal, parent);
-    async function measureBrowserRelay(): Promise<Probe<number>> {
-        const hops = await hopsResult;
-        if (hops.kind !== "available") {
-            return unavailable(hops.code);
-        }
-        if (browser === null) {
-            return unavailable("NO_ACTIVE_TRANSPORT");
-        }
-        return await probe(() => browser.measureRelayLatency(hops.value.relayOrigin, signal), signal, parent);
-    }
-    const [browserMorty, hops, browserRelay] = await Promise.all([
-        browserMortyResult,
-        hopsResult,
-        measureBrowserRelay(),
-    ]);
+    const [browserMorty, hops] = await Promise.all([browserMortyResult, hopsResult]);
     parent.throwIfAborted();
     return {
         capturedAt,
@@ -101,15 +87,8 @@ export async function collectNetworkDiagnostics(
         connection,
         measurements: {
             browserMorty: latency(browserMorty),
-            browserRelay: latency(browserRelay),
-            mortyRelay:
-                hops.kind === "available"
-                    ? latency({ kind: "available", value: hops.value.mortyRelayLatencyMs })
-                    : hops,
-            relayRuntime:
-                hops.kind === "available"
-                    ? latency({ kind: "available", value: hops.value.relayRuntimeLatencyMs })
-                    : hops,
+            mortyRuntime:
+                hops.kind === "available" ? latency({ kind: "available", value: hops.value.runtimeLatencyMs }) : hops,
         },
     };
 }

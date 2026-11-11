@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
+import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { expect, it } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
 
@@ -10,15 +11,7 @@ for (const client of ["SDK", "HTTP"] as const) {
         const cancellation = new AbortController();
         await using relay = await startTestRelay();
         try {
-            const project = await relay.service.createProject(
-                {
-                    clientReference: `client-${crypto.randomUUID()}`,
-                    displayName: "Runtime Session directory",
-                    idempotencyKey: `project-${crypto.randomUUID()}`,
-                    locationHint: "wnam",
-                },
-                cancellation.signal,
-            );
+            const project = await relay.createOwner();
             const runtime = await relay.connectAgent(project.computerId);
             const request = {
                 harness: "claude",
@@ -29,24 +22,30 @@ for (const client of ["SDK", "HTTP"] as const) {
             };
             const ready =
                 client === "SDK"
-                    ? await runtime.client.sessions.create(request, cancellation.signal)
+                    ? await runtime.createSession(request, cancellation.signal)
                     : await (async () => {
                           const response = await relay.app.request(
-                              new Request(
-                                  `${relay.baseUrl}/morty/api/v1/computers/${project.computerId}/daemon/sessions`,
-                                  {
-                                      method: "POST",
-                                      headers: {
-                                          authorization: `Bearer ${relay.appCredential}`,
-                                          "content-type": "application/json",
-                                      },
-                                      body: JSON.stringify(request),
-                                      signal: cancellation.signal,
+                              new Request(`${relay.baseUrl}/morty/api/chat/computers/${project.computerId}/access`, {
+                                  method: "POST",
+                                  headers: {
+                                      authorization: `Bearer ${project.token}`,
+                                      "content-type": "application/json",
                                   },
-                              ),
+                                  body: JSON.stringify({
+                                      harness: request.harness,
+                                      configurations: request.configurations,
+                                      workspaceRef: request.directory,
+                                      conversationKey: request.operationId,
+                                  }),
+                                  signal: cancellation.signal,
+                              }),
                           );
                           expect(response.status).toBe(200);
-                          return decodeSessionReadyEvent(await response.text());
+                          const access: unknown = await response.json();
+                          if (typeof access !== "object" || access === null || !("ready" in access)) {
+                              throw new Error("Missing Session access");
+                          }
+                          return decodeSessionReadyEvent(JSON.stringify(access.ready));
                       })();
             const { target: sessionTarget } = ready;
             expect(ready).toMatchObject({
@@ -55,7 +54,7 @@ for (const client of ["SDK", "HTTP"] as const) {
                 harness: "claude",
                 directory: ".",
             });
-            await runtime.client.turns.submitToRuntime(
+            await (await runtime.sessionClient(sessionTarget, cancellation.signal)).turns.submit(
                 sessionTarget,
                 {
                     attachments: [],
@@ -65,9 +64,8 @@ for (const client of ["SDK", "HTTP"] as const) {
                 cancellation.signal,
             );
 
-            await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
+            await expect(runtime.api.managedSessions(cancellation.signal)).resolves.toEqual([
                 expect.objectContaining({
-                    harness: "claude",
                     directory: expect.any(String),
                     prompted: true,
                     target: sessionTarget,
@@ -85,15 +83,7 @@ for (const client of ["SDK", "HTTP"] as const) {
 it("Given long ASCII and multibyte directory references, When the SDK browses them, Then the local filesystem remains the authority for directory availability", async () => {
     await using relay = await startTestRelay();
     const signal = AbortSignal.timeout(30_000);
-    const project = await relay.service.createProject(
-        {
-            clientReference: `client-${crypto.randomUUID()}`,
-            displayName: "Long directory references",
-            idempotencyKey: `project-${crypto.randomUUID()}`,
-            locationHint: "wnam",
-        },
-        signal,
-    );
+    const project = await relay.createOwner();
     const runtime = await relay.connectAgent(project.computerId);
     for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         const path = join(
@@ -103,9 +93,8 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
         );
         const directory = path;
         expect(directory.length).toBeGreaterThan(2048);
-        await expect(runtime.client.runtimes.listWorkspace(directory, signal)).rejects.toMatchObject({
+        await expect(runtime.api.directory(directory, signal)).rejects.toMatchObject({
             code: "local_authorization_failed",
-            message: "This directory is missing or unavailable to your user account",
         });
     }
 });
@@ -121,23 +110,15 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         const canonical = await realpath(path);
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.service.createProject(
-            {
-                clientReference: `client-${crypto.randomUUID()}`,
-                displayName: "Long project",
-                idempotencyKey: `project-${crypto.randomUUID()}`,
-                locationHint: "wnam",
-            },
-            signal,
-        );
+        const project = await relay.createOwner();
         const runtime = await relay.connectAgent(project.computerId);
         const directory = canonical;
-        const listing = await runtime.client.runtimes.listWorkspace(directory, signal);
+        const listing = await runtime.api.directory(directory, signal);
         expect(listing.directory).toBe(directory);
         expect(listing.directoryLabel).toBe(canonical);
         expect(listing.parentDirectory).toBe(dirname(canonical));
         const identity = { harness: "claude", directory };
-        const { target: sessionTarget } = await runtime.client.sessions.create(
+        const { target: sessionTarget } = await runtime.createSession(
             {
                 ...identity,
                 configurations: [],
@@ -146,7 +127,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        await runtime.client.turns.submitToRuntime(
+        await (await runtime.sessionClient(sessionTarget, signal)).turns.submit(
             sessionTarget,
             {
                 content: "Remember the long workspace conversation",
@@ -155,10 +136,11 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             },
             signal,
         );
-        expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
+        expect(await runtime.api.managedSessions(signal)).toContainEqual(
             expect.objectContaining({ target: sessionTarget, directory, directoryLabel: canonical, prompted: true }),
         );
-        const discovery = await runtime.client.runtimes.nativeSessions(
+        const discovery = await runtime.api.nativeSessions(
+            runtime.computerId,
             { ...identity, action: "list", cursor: null },
             signal,
         );
@@ -170,10 +152,9 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             directory,
             directoryLabel: canonical,
         });
-        const events = await runtime.client.sessions.previewRuntimeNativeEvents(
-            sessionTarget,
-            directory,
-            { cursor: null, eventLimit: 100 },
+        const events = await runtime.api.nativeSession(
+            runtime.computerId,
+            { harness: sessionTarget.harness, sessionId: sessionTarget.sessionId, directory: directory },
             signal,
         );
         expect(JSON.stringify(events)).toContain("Remember the long workspace conversation");
@@ -182,24 +163,16 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
     }
 });
 
-it("Given a Session in a selected workspace, When the App prompts it naming only the Session, Then the Runtime runs the Turn in the Session's own workspace", async () => {
+it("Given a Session in a selected workspace, When the App prompts it and reads its execution naming only the Session, Then the Runtime runs the Turn in the Session's own workspace", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "morty-session-workspace-"));
     try {
         const directoryLabel = await realpath(workspace);
         const directory = directoryLabel;
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.service.createProject(
-            {
-                clientReference: `client-${crypto.randomUUID()}`,
-                displayName: "Session binding",
-                idempotencyKey: `project-${crypto.randomUUID()}`,
-                locationHint: "wnam",
-            },
-            signal,
-        );
+        const project = await relay.createOwner();
         const runtime = await relay.connectAgent(project.computerId);
-        const { target: sessionTarget } = await runtime.client.sessions.create(
+        const { target: sessionTarget } = await runtime.createSession(
             {
                 harness: "claude",
                 configurations: [],
@@ -209,7 +182,15 @@ it("Given a Session in a selected workspace, When the App prompts it naming only
             },
             signal,
         );
-        await runtime.client.turns.submitToRuntime(
+        const access = await runtime.api.access(signal, sessionTarget);
+        const session = new MortyClient({
+            endpoint: relay.baseUrl,
+            computerId: project.computerId,
+            credentialProvider: new StaticMortyCredentialProvider(access.credential),
+            transport: { fetch: async (request: Request) => await relay.app.request(request) },
+        });
+
+        const turn = await session.turns.submit(
             sessionTarget,
             {
                 attachments: [],
@@ -218,10 +199,12 @@ it("Given a Session in a selected workspace, When the App prompts it naming only
             },
             signal,
         );
+        await expect(session.sessions.readSessionExecution(sessionTarget, signal, turn.turnId)).resolves.toHaveProperty(
+            "command",
+        );
 
-        expect(await runtime.client.runtimes.listSessions(100, signal)).toContainEqual(
+        expect(await runtime.api.managedSessions(signal)).toContainEqual(
             expect.objectContaining({
-                harness: "claude",
                 directory,
                 directoryLabel,
                 prompted: true,

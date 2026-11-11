@@ -5,17 +5,9 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
     const cancellation = new AbortController();
     await using relay = await startTestRelay();
     try {
-        const project = await relay.service.createProject(
-            {
-                clientReference: `client-${crypto.randomUUID()}`,
-                displayName: "Runtime Session rename",
-                idempotencyKey: `project-${crypto.randomUUID()}`,
-                locationHint: "wnam",
-            },
-            cancellation.signal,
-        );
+        const project = await relay.createOwner();
         const runtime = await relay.connectAgent(project.computerId);
-        const { target: sessionTarget } = await runtime.client.sessions.create(
+        const { target: sessionTarget } = await runtime.createSession(
             {
                 harness: "claude",
                 configurations: [],
@@ -25,7 +17,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             },
             cancellation.signal,
         );
-        await runtime.client.turns.submitToRuntime(
+        await (await runtime.sessionClient(sessionTarget, cancellation.signal)).turns.submit(
             sessionTarget,
             {
                 content: "Remember this conversation",
@@ -36,8 +28,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         );
 
         await expect(
-            runtime.client.sessions.rename(
-                runtime.computerId,
+            (await runtime.sessionClient(sessionTarget, cancellation.signal)).sessions.rename(
                 sessionTarget,
                 "Renamed by the developer",
                 cancellation.signal,
@@ -50,9 +41,8 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             }),
         );
 
-        await expect(runtime.client.runtimes.listSessions(100, cancellation.signal)).resolves.toEqual([
+        await expect(runtime.api.managedSessions(cancellation.signal)).resolves.toEqual([
             expect.objectContaining({
-                harness: "claude",
                 prompted: true,
                 target: sessionTarget,
                 status: { kind: "idle" },
@@ -62,7 +52,8 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
 
         // The controlled Agent harness received the rename: its own native
         // Session listing reports the new title instead of the first prompt.
-        const discovery = await runtime.client.runtimes.nativeSessions(
+        const discovery = await runtime.api.nativeSessions(
+            runtime.computerId,
             {
                 action: "list",
                 harness: "claude",

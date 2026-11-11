@@ -1,3 +1,4 @@
+import type { ForkMortyNativeSessionRequest, NativeSessionRequest } from "@morty-build/client";
 import {
     HttpTransport,
     MortyClient,
@@ -12,6 +13,7 @@ import {
     decodeNativeSessionEvents,
     decodeNativeSessionResult,
     decodeRuntimeDiagnosticsResult,
+    decodeSessionAccessCredential,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
     type Identifier,
@@ -28,13 +30,24 @@ import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-ca
 import { CloudApiError, ManagementApi, machineUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
+const sessionCredentialSchema = v.pipe(
+    v.string(),
+    v.check((credential) => {
+        try {
+            decodeSessionAccessCredential(credential);
+            return true;
+        } catch {
+            return false;
+        }
+    }, "Invalid Session credential"),
+);
 const nativeSessionTargetSchema = v.pipe(v.strictObject({ harness: identifier, sessionId: identifier }), v.readonly());
 const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
         computerId: identifier,
         target: nativeSessionTargetSchema,
-        credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
+        credential: sessionCredentialSchema,
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         ready: v.unknown(),
         harness: identifier,
@@ -47,7 +60,7 @@ const managedSessionStatusSchema = v.variant("kind", [
     v.pipe(
         v.object({
             kind: v.literal("idle"),
-            /** The Runtime's account that the Session's last turn failed; Runtimes before it existed omit it. */
+            /** Present when the Runtime reports that the Session's last turn failed. */
             failedTurn: v.optional(
                 v.pipe(v.object({ code: v.string(), commandId: identifier, message: v.string() }), v.readonly()),
             ),
@@ -85,9 +98,7 @@ const chatRuntimeSchema = v.object({
 export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
 const runtimeConfigurationSchema = v.object({ runtime: chatRuntimeSchema });
 const networkDiagnosticSchema = v.strictObject({
-    relayRuntimeLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
-    relayOrigin: v.pipe(v.string(), v.url()),
-    mortyRelayLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    runtimeLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
 export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
 export type ChatAgentSelection = {
@@ -96,6 +107,16 @@ export type ChatAgentSelection = {
     readonly harness: Identifier;
     readonly label: string;
 };
+/**
+ * Whether the Runtime can take a new conversation now. The setup notice and the draft's settings both follow this one
+ * rule, so they never disagree about why a draft cannot start.
+ */
+export function runtimeAgentAvailability(runtime: ChatRuntime): "no-agent" | "offline" | "available" {
+    if (runtime.agents.length === 0) {
+        return "no-agent";
+    }
+    return runtime.online ? "available" : "offline";
+}
 export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
     return runtime.online
         ? runtime.agents.map((agent) => ({
@@ -121,7 +142,7 @@ export type ConversationActiveTurn =
 const sessionAccessSchema = v.object({
     target: nativeSessionTargetSchema,
     computerId: identifier,
-    credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
+    credential: sessionCredentialSchema,
     expiresAt: v.pipe(v.string(), v.isoTimestamp()),
     endpoint: v.pipe(v.string(), v.url()),
 });
@@ -443,10 +464,10 @@ export class BotChatApi {
     readonly forkNativeSession = async (
         computerId: string,
         operationId: string,
-        input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[1],
+        input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
-    ) =>
-        decodeNativeSessionResult(
+    ) => {
+        const result = decodeNativeSessionResult(
             JSON.stringify(
                 await this.#request(
                     `native-session-forks/${encodeURIComponent(operationId)}`,
@@ -455,10 +476,25 @@ export class BotChatApi {
                 ),
             ),
         );
+        if (
+            result.action !== "fork" ||
+            !sameNativeSession(result.ready.target, result.target) ||
+            result.target.harness !== input.harness ||
+            result.target.sessionId === input.sessionId
+        ) {
+            throw new CloudApiError("INVALID_SESSION", "The Runtime returned an invalid fork.");
+        }
+        return result;
+    };
 
     readonly nativeSessions = async (
         computerId: string,
-        input: Parameters<MortyClient["runtimes"]["nativeSessions"]>[0],
+        input:
+            | Omit<Extract<NativeSessionRequest, { readonly action: "list" }>, "kind" | "requestId">
+            | (Omit<
+                  Extract<NativeSessionRequest, { readonly action: "import" | "fork" }>,
+                  "kind" | "requestId" | "action"
+              > & { readonly action: "import" }),
         signal: AbortSignal,
     ) => {
         if (input.action === "list") {

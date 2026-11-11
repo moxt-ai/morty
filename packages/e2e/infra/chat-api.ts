@@ -2,7 +2,6 @@ interface RequestOptions {
     readonly body?: unknown;
     readonly project?: string;
     readonly token?: string;
-    readonly provider?: string;
     readonly signal: AbortSignal;
 }
 
@@ -30,17 +29,10 @@ export function anonymousCreationKey(): string {
     return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }
 
-export async function jsonRequest(
-    origin: string,
-    path: string,
-    { body, project, token, provider, signal }: RequestOptions,
-) {
+export async function jsonRequest(origin: string, path: string, { body, project, token, signal }: RequestOptions) {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (token !== undefined) {
         headers["authorization"] = `Bearer ${token}`;
-    }
-    if (provider !== undefined) {
-        headers["x-morty-oidc-provider"] = provider;
     }
     const scopedPath =
         project !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/computers/")

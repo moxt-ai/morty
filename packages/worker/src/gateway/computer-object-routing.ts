@@ -1,22 +1,14 @@
+import { logger } from "@morty-build/relay-core/logging";
 import * as v from "valibot";
 import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
 import { projectRegion } from "../components/management/entity/project-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
-export async function routeComputerObject(
+export async function forwardComputerObject(
     request: Request,
     bindings: CloudBindings,
-    computerId: string | null,
-): Promise<Response | null> {
-    if (computerId === null) {
-        return null;
-    }
-    if (bindings.CHAT_COMPUTER_ID !== undefined) {
-        if (bindings.CHAT_COMPUTER_ID !== computerId) {
-            throw new ComputerManagementError("PROJECT_CONTEXT_MISMATCH", "The Morty context is invalid.", 400);
-        }
-        return null;
-    }
+    computerId: string,
+): Promise<Response> {
     const stub = computerObject(bindings, computerId);
     request.signal.throwIfAborted();
     const deadline = new AbortController();
@@ -35,6 +27,19 @@ export async function routeComputerObject(
         );
     } catch (cause) {
         request.signal.throwIfAborted();
+        logger.error(
+            {
+                event: "project_relay_request_failed",
+                durableObjectClass: "ComputerRelay",
+                durableObjectId: stub.id.toString(),
+                computerId,
+                cfRay: request.headers.get("cf-ray")?.slice(0, 128) ?? null,
+                method: request.method,
+                path: new URL(request.url).pathname,
+                err: cause,
+            },
+            "Computer request failed",
+        );
         throw new ComputerManagementError(
             deadline.signal.aborted ? "PROJECT_OBJECT_TIMEOUT" : "PROJECT_OBJECT_UNAVAILABLE",
             "Morty storage is unavailable.",

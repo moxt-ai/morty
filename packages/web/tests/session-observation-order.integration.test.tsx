@@ -107,7 +107,7 @@ test("Given a directory refresh already read an open session, When I close it be
         throw new Error("Expected a connected session");
     }
     // The directory is the Runtime's Session list.
-    const held = app.executionNetwork.holdNextResponse("/daemon/sessions");
+    const held = app.executionNetwork.holdNextResponse("/managed-sessions");
     await app.user.click(getByRole(document.body, "button", { name: "Refresh sessions" }));
     const release = await held;
     onTestFinished(release);

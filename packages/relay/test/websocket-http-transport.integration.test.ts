@@ -35,7 +35,41 @@ function nextMessage(socket: WebSocket): Promise<string> {
     });
 }
 
-it("Given a browser connection, When it heartbeats through the public Relay transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
+it("Given a browser connection, When it requests a retired private Runtime API, Then the transport rejects the target rather than routing it as a supported operation", async () => {
+    const computerId = "prj_ap_01_000000000000000000000001";
+    const response = await SELF.fetch(`https://relay.test/morty/api/v1/computers/${computerId}/transport`, {
+        headers: { Upgrade: "websocket" },
+    });
+    expect(response.status).toBe(101);
+    const socket = response.webSocket;
+    if (socket === null) {
+        throw new Error("Expected the public WebSocket transport");
+    }
+    socket.accept();
+    try {
+        const answer = nextMessage(socket);
+        socket.send(
+            JSON.stringify({
+                kind: "http.request",
+                requestId: "retired-private-runtime",
+                method: "GET",
+                path: `/morty/api/v1/computers/${computerId}/daemon/agents`,
+                headers: [],
+                body: "",
+            }),
+        );
+        expect(JSON.parse(await answer)).toMatchObject({
+            kind: "http.error",
+            requestId: "retired-private-runtime",
+            code: "invalid_target",
+            status: 400,
+        });
+    } finally {
+        socket.close(1000, "Test complete");
+    }
+});
+
+it("Given a browser connection, When it heartbeats through the public Relay transport, Then the Runtime acknowledges it and an unauthenticated Session request is rejected", async () => {
     const response = await SELF.fetch(
         "https://relay.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
@@ -58,15 +92,16 @@ it("Given a browser connection, When it heartbeats through the public Relay tran
                 kind: "http.request",
                 requestId: "after-heartbeat",
                 method: "GET",
-                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/daemon/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000001/harnesses/codex/sessions/example/active-turn",
                 headers: [],
                 body: "",
             }),
         );
         expect(JSON.parse(await result)).toMatchObject({
-            kind: "http.response",
+            kind: "http.error",
             requestId: "after-heartbeat",
-            status: 401,
+            status: 400,
+            code: "invalid_target",
         });
     } finally {
         socket.close();
@@ -93,7 +128,7 @@ it("Given a Runtime-bound browser, When it addresses another computer, Then the 
                 kind: "http.request",
                 requestId: "request-identity",
                 method: "GET",
-                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000002/daemon/diagnostics",
+                path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000002/harnesses/codex/sessions/example/active-turn",
                 headers: [],
                 body: "",
             }),

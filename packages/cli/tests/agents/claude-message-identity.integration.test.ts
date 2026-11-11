@@ -139,7 +139,7 @@ test("Given real Claude streams a message, When its harness emits chunks and rep
             expect.arrayContaining([expect.objectContaining({ uuid: steering.messageId })]),
         );
     } finally {
-        await claude.agent()?.dispose();
+        await claude.agent()?.dispose("graceful");
         connection.close();
         await rm(cwd, { recursive: true, force: true });
     }

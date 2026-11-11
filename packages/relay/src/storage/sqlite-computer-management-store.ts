@@ -35,7 +35,6 @@ export class SqliteComputerManagementStore extends SqliteProjectStore implements
             .values({
                 auditId: audit.action === "project.created" ? `pae_created_${this.#computerId}` : audit.auditId,
                 category: "computer_management",
-                serviceId: audit.appId,
                 computerId: this.#computerId,
                 actorKind: audit.actorKind,
                 actorId: audit.actorId,
@@ -62,7 +61,6 @@ export class SqliteComputerManagementStore extends SqliteProjectStore implements
                 actor_id: row.actorId,
                 actor_kind: row.actorKind,
                 actor_ref: row.actorRef,
-                app_id: row.serviceId,
                 audit_id: row.auditId,
                 details_json: row.detailsJson,
                 outcome: row.outcome,

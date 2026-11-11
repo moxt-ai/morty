@@ -82,7 +82,7 @@ behavior tests. Follow the [Code of Conduct](../CODE_OF_CONDUCT.md); use
 
 Production builds load content-addressed JavaScript and CSS from an
 append-only R2 bucket. Deployments upload new assets before activating
-Workers so an open page can still load its original chunks. Never delete these
+the Worker so an open page can still load its original chunks. Never delete these
 objects during ordinary deployment. Provision resources using the independent
 Morty production target. Local development uses isolated local resources without
 production credentials. Hosted staging and benchmark environments are retired.
@@ -98,7 +98,7 @@ Keep setup intent (identity and Bot configuration) separate from daemon-owned pa
 and connection state.
 
 The CD token needs R2 object write permission on the existing attachments bucket. CD
-uploads the generated bundle before deploying Workers. To seed or refresh local
+uploads the generated bundle before deploying the Worker. To seed or refresh local
 development R2:
 
 ```sh

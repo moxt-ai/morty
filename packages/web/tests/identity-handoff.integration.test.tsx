@@ -198,9 +198,7 @@ test("Given the Morty access was redeemed and opening the original session faile
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("The native session was not found");
-    expect(getByRole(document.body, "heading", { name: "Morty could not complete Runtime setup" })).toBeInstanceOf(
-        HTMLElement,
-    );
+    expect(getByRole(document.body, "heading", { name: "Couldn't open this session" })).toBeInstanceOf(HTMLElement);
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
     expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
 
@@ -296,7 +294,7 @@ test("Given shared Morty access, When the user opens the user menu, Then replaci
     expect(queryByRole(document.body, "menuitem", { name: "Replace current user" })).toBeNull();
 });
 
-test("Given connected shared Morty access, When the user refreshes Network latency, Then every network hop latency updates", {
+test("Given one Morty Worker and a connected Runtime, When the user refreshes Network latency, Then browser-to-Morty and Morty-to-Runtime measurements update without retired Relay hops", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -311,13 +309,11 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     await app.waitForView(() => {
         expect(dialog.textContent).toContain("Relay location: Western North America");
         expect(dialog.textContent).toContain("Browser ↔ Morty");
-        expect(dialog.textContent).toContain("Browser ↔ Relay");
-        expect(dialog.textContent).toContain("Morty ↔ Relay");
-        expect(dialog.textContent).toContain("Relay ↔ Daemon");
+        expect(dialog.textContent).not.toContain("Browser ↔ Relay");
+        expect(dialog.textContent).not.toContain("Morty ↔ Relay");
+        expect(dialog.textContent).toContain("Morty ↔ Runtime");
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to Runtime latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 
     await app.user.click(getByRole(dialog, "button", { name: "Refresh network latency" }));
@@ -325,9 +321,7 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
     await app.waitForView(() => {
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to Runtime latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 });
 

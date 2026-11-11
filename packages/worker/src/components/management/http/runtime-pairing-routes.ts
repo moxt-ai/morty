@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
+import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import { relayIdentifier } from "../entity/computer-management.ts";
 import { ManagementError } from "../entity/management-error.ts";
@@ -28,7 +29,8 @@ export function createRuntimePairingRoutes() {
             bodyParser<ManagementHttpEnvironment, typeof pairingInput>(pairingInput),
             async (context) => {
                 const session = context.get("session");
-                const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
+                using deadline = new RequestDeadline(context.req.raw.signal, 15000);
+                const signal = deadline.signal;
                 const input = context.req.valid("json");
                 const pairing = await context.env.services.management.createRuntimePairing(
                     session.userId,
@@ -41,7 +43,8 @@ export function createRuntimePairingRoutes() {
         )
         .get("/pairing", authenticatedSession, async (context) => {
             const session = context.get("session");
-            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
+            using deadline = new RequestDeadline(context.req.raw.signal, 15000);
+            const signal = deadline.signal;
             return json(await context.env.services.management.readRuntimePairing(session.userId, signal));
         });
 }

@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mortyApiPath } from "@morty-build/client/protocol";
-import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import * as v from "valibot";
+import { createOwnerApi } from "../../../../tests/support/owner-api.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { type RunRuntimeOptions, runRuntime } from "../../src/engine/runtime/run.ts";
 import {
@@ -74,7 +74,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             runtimePairingSchema,
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
+                    new Request(`${options.origin}/morty/api/computers/${options.computerId}/management/pairing`, {
                         body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                         headers: {
                             authorization: `Bearer ${options.credential}`,
@@ -146,15 +146,31 @@ export async function createFakeAgentHarnessRuntime(options: {
         } finally {
             startup.removeEventListener("abort", abort);
         }
-        const client = new MortyClient({
-            endpoint: options.origin,
+        const owner = createOwnerApi({
+            origin: options.origin,
             computerId: pairing.computerId,
-            credentialProvider: new StaticMortyCredentialProvider(options.credential),
-            transport: { fetch: async (request: Request) => await options.server.request(request) },
+            credential: options.credential,
+            request: async (request) => await options.server.request(request),
         });
+        const selected = harnesses[0];
+        if (selected !== undefined) {
+            const setup = await options.server.request(
+                new Request(`${options.origin}/morty/api/chat/computers/${pairing.computerId}/setup`, {
+                    method: "POST",
+                    signal,
+                    headers: { authorization: `Bearer ${options.credential}`, "content-type": "application/json" },
+                    body: JSON.stringify({ computerId: pairing.computerId, harness: selected.harness }),
+                }),
+            );
+            if (setup.status !== 202) {
+                throw new Error(`Runtime setup failed (${setup.status})`);
+            }
+        }
         let disposed = false;
         return {
-            client,
+            api: owner.api,
+            createSession: owner.createSession,
+            sessionClient: owner.sessionClient,
             /** The controlled Agent's native history can be removed independently of Morty's receipts. */
             removeNativeSession: async (sessionId: string): Promise<void> => {
                 await rm(join(harnessState, `${encodeURIComponent(sessionId)}.json`));
@@ -166,6 +182,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                     return;
                 }
                 disposed = true;
+                owner.close();
                 cancellation.abort(new Error("Controlled Agent harness Runtime stopped"));
                 await runtime?.catch(() => undefined);
                 await rm(directory, { recursive: true, force: true });

@@ -2,19 +2,19 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import {
     createFakeDaemon,
     type FakeAgentHarnessOptions,
     type HarnessReplyPlan,
 } from "@morty-build/runtime-test-support/fake-daemon";
 import * as v from "valibot";
-import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
 import type { RuntimeCredentials } from "../../../packages/cli/src/engine/runtime/connection/runtime-credentials.ts";
 import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
+import { acpAdapters } from "../../../packages/cli/tests/support/acp-adapters.ts";
 import { memoryRuntimeCredentials } from "../../../packages/cli/tests/support/runtime-credentials.ts";
+import { createOwnerApi } from "../owner-api.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
@@ -71,34 +71,11 @@ function controlledRuntime(
 ): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => RuntimeLoop } {
     const config = createRuntimeConfig(
         connection,
-        new RuntimeAgentDependencies(agents),
+        new RuntimeAgentDependencies(agents, acpAdapters),
         new RuntimeLocalContext(directory, process.env),
     );
     return {
-        start: (onConnectionStatus) =>
-            new RuntimeLoop(
-                async () => ({
-                    ...config,
-                    // Every injected peer speaks ACP, regardless of its catalog label. Use the production
-                    // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
-                    // Alias only adapter selection; catalog and session identities stay intact.
-                    adapters: (agent, dependencies) =>
-                        config.adapters(
-                            new AcpAgentDefinition(
-                                "claude",
-                                agent.label,
-                                agent.command,
-                                (options) => agent.createConnection(options),
-                                agent.environment,
-                                agent.agentVersion,
-                                agent.agentIdentity,
-                                agent.capabilities,
-                            ),
-                            dependencies,
-                        ),
-                }),
-                { onConnectionStatus },
-            ),
+        start: (onConnectionStatus) => new RuntimeLoop(async () => config, { onConnectionStatus }),
     };
 }
 
@@ -300,7 +277,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/pairing`, {
+                new Request(`${options.origin}/morty/api/computers/${options.computerId}/management/pairing`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,
@@ -340,15 +317,21 @@ export async function createControlledAgentRuntime(options: {
         },
         signal: options.signal,
     });
-    const client = new MortyClient({
-        credentialProvider: new StaticMortyCredentialProvider(options.credential),
-        endpoint: options.origin,
+    const owner = createOwnerApi({
+        credential: options.credential,
+        origin: options.origin,
         computerId: pairing.computerId,
-        transport: { fetch: async (request: Request) => await options.server.request(request) },
+        request: async (request) => await options.server.request(request),
     });
     return {
         ...connected,
-        client,
+        api: owner.api,
+        createSession: owner.createSession,
+        sessionClient: owner.sessionClient,
+        [Symbol.asyncDispose]: async () => {
+            owner.close();
+            await connected[Symbol.asyncDispose]();
+        },
         computerId: claim.computerId,
     };
 }

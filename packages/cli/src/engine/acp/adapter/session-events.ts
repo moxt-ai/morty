@@ -1,5 +1,4 @@
 import { setImmediate as yieldToRuntime } from "node:timers/promises";
-import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import {
     decodeAcpSessionUpdate,
     type SessionCapabilities,
@@ -24,7 +23,12 @@ import {
     recordConfigurationMode,
     recordConfigurationOptions,
 } from "./configuration-changes.ts";
-import type { NativeSessionEvent, NativeSessionInfoChange, NativeSessionInteractions } from "./native-session-event.ts";
+import {
+    type NativeSessionEvent,
+    type NativeSessionInfoChange,
+    type NativeSessionInteractions,
+    withMortyFields,
+} from "./native-session-event.ts";
 
 interface SessionConnectionScope {
     readonly agent: AcpAgentDefinition;
@@ -65,24 +69,7 @@ type ExecutionState =
  * Moves the Morty fields a harness carries in ACP `_meta` onto the event update the protocol defines them on. Every
  * reader that turns a harness update into a Session event applies it.
  */
-export function withMortyFields(update: SessionUpdate, eventUpdate: unknown): unknown {
-    if (typeof eventUpdate !== "object" || eventUpdate === null) {
-        return eventUpdate;
-    }
-    switch (update.sessionUpdate) {
-        case "tool_call":
-        case "tool_call_update": {
-            const backgroundTask = update._meta?.["morty.backgroundTask"];
-            return backgroundTask === undefined ? eventUpdate : { ...eventUpdate, backgroundTask };
-        }
-        case "agent_message_chunk": {
-            const questions = update._meta?.["morty.questions"];
-            return questions === undefined ? eventUpdate : { ...eventUpdate, questions };
-        }
-        default:
-            return eventUpdate;
-    }
-}
+export { withMortyFields } from "./native-session-event.ts";
 
 /** ACP subscription lifetime, ordered delivery and harness normalization belong to the adapter. */
 export class AdapterSessionConnection {

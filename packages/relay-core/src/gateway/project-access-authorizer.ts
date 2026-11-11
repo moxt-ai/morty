@@ -1,13 +1,11 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import type { ProjectAccessContext, ProjectPermission } from "../entity/authentication/project-authentication.ts";
 
-/** The host authenticates an opaque credential and authorizes a resolved Project. */
+/** Internal authorization of an already selected computer at the execution boundary. */
 export interface ProjectAccessAuthorizer {
     readonly authorizeProject: (
         computerId: string,
-        credentialValue: string,
         requiredPermission: ProjectPermission,
-        actorReference: string,
         signal: AbortSignal,
     ) => Promise<ProjectAccessContext>;
 }
@@ -19,7 +17,6 @@ export interface ProjectAccessAuthorizer {
 export interface ProjectCredentialAuthority {
     readonly grants: (
         computerId: string,
-        credentialId: string,
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,
     ) => Promise<boolean>;
@@ -30,7 +27,6 @@ export interface ProjectCredentialAuthority {
      */
     readonly grantsSessionCredential: (
         computerId: string,
-        credentialId: string,
         holder: SessionAccessHolder,
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,

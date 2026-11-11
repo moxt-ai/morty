@@ -115,8 +115,8 @@ with `cf o11y telemetry values`. Inspect either command with `cf schema` or
 Paginate using the last event's `$metadata.id` only when needed.
 
 Once one event is identified, query the same request ID with the `invocations`
-view to collect all logs from that invocation. Follow trace IDs across services
-when the failure crosses Chat and Platform Workers. Preserve timestamps, service,
+view to collect all logs from that invocation. Follow trace IDs across the Morty
+Worker, ComputerRelay and Runtime boundaries. Preserve timestamps, service,
 script version, status, request/Ray/trace IDs, message, error type, and stack
 location. Do not retain request bodies, credentials, cookies, authorization
 headers, pairing tickets, transfer codes, or user content.
@@ -144,10 +144,9 @@ Map the observed route to the Worker handler and validation schema. For a generi
 guessing from the sanitized response. Compare all deployed boundaries involved:
 
 1. Browser request construction and serialized byte size.
-2. Chat Worker's global body limit, route body limit, and schema.
-3. Platform gateway request construction.
-4. Platform Worker's body parser and schema.
-5. Runtime or agent protocol validation.
+2. Morty Worker's global body limit, route body limit, and schema.
+3. ComputerRelay authorization and local relay operations.
+4. Runtime or Agent protocol validation.
 
 Check the deployed script version against the archived release revision and Git history.
 Do not assume the current checkout was deployed at the failure time. Distinguish

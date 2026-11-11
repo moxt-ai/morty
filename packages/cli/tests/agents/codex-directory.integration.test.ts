@@ -1,10 +1,43 @@
-import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { copyFile, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { harnessAdapters } from "../../src/engine/acp/adapter/registry.ts";
 import { codexFixture } from "../support/agents/codex-native.ts";
 import { previewCodexHistory } from "../support/codex-history-preview.ts";
 import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
+
+it("Given multiple Codex rollout files share an indexed session identity, When the native session directory is listed, Then the conversation appears only once", async () => {
+    const f = await codexFixture();
+    try {
+        const sessionId = await f.seed("Indexed conversation");
+        const home = f.agent.environment["CODEX_HOME"];
+        if (home === undefined) {
+            throw new Error("Missing isolated Codex home");
+        }
+        const directory = join(home, "sessions");
+        const rollout = (await readdir(directory, { recursive: true })).find((file) =>
+            file.endsWith(`${sessionId}.jsonl`),
+        );
+        if (rollout === undefined) {
+            throw new Error("Missing saved Codex rollout");
+        }
+        for (let index = 0; index < 2; index++) {
+            await copyFile(
+                join(directory, rollout),
+                join(directory, rollout.replace(/\.jsonl$/u, `_${randomUUID()}.jsonl`)),
+            );
+        }
+
+        const result = await f.list();
+
+        expect(result.entries.map((entry) => entry.sessionId)).toEqual([sessionId]);
+        expect(result.entries[0]?.title).toBe("Indexed conversation");
+        expect(result.nextCursor).toBeNull();
+    } finally {
+        await f.close();
+    }
+});
 
 it("Given a saved Codex conversation with an active writer, When it is previewed, Then history keeps the harness message identities and the writer can continue", async () => {
     const f = await codexFixture("PREVIEW_REPLY", {}, harnessAdapters);

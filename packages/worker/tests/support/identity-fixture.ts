@@ -51,23 +51,28 @@ async function startIdentityFixture(
         options.relayAllowedOrigins === undefined ? {} : { allowedOrigins: options.relayAllowedOrigins },
         createBindings,
     );
-    // The public Chat and Relay origins are distinct while their requests share the same Computer namespace.
-    const chatNetwork = options.listenOnLoopback === true ? await createResponseLossProxy(relay.baseUrl) : null;
-    const network = options.loseTurnResponses === true ? await createResponseLossProxy(relay.baseUrl) : null;
     const executionNetwork =
         options.delayExecutionReads === true ? await createSessionExecutionProxy(relay.baseUrl) : null;
+    const network =
+        options.loseTurnResponses === true
+            ? await createResponseLossProxy(executionNetwork?.origin ?? relay.baseUrl)
+            : null;
+    const chatNetwork =
+        options.listenOnLoopback === true
+            ? await createResponseLossProxy(network?.origin ?? executionNetwork?.origin ?? relay.baseUrl)
+            : null;
     try {
         const cloudflare = relay.cloudflare;
-        const ready = new URL(chatNetwork?.origin ?? relay.baseUrl);
+        const ready = new URL(chatNetwork?.origin ?? network?.origin ?? executionNetwork?.origin ?? relay.baseUrl);
         const baseConfiguration = {
-            APP_ORIGIN: options.listenOnLoopback === true ? ready.origin : APP_ORIGIN,
-            MORTY_SERVICE_SECRET: relay.appCredential,
-            MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? relay.baseUrl,
+            APP_ORIGIN: ready.origin,
         };
         await relay.configure(baseConfiguration);
         let cloudBindings = await cloudflare.getBindings();
         let computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
         const chatProjects = {
+            getByName: (name: string, options?: Parameters<typeof computerObjects.get>[1]) =>
+                computerObjects.get(computerObjects.idFromName(name), options),
             idFromName: (name: string) => computerObjects.idFromName(name),
             get: (
                 id: ReturnType<typeof computerObjects.idFromName>,
@@ -91,7 +96,7 @@ async function startIdentityFixture(
                 };
             },
         };
-        const environment = (appOrigin = APP_ORIGIN) => ({
+        const environment = (appOrigin = baseConfiguration.APP_ORIGIN) => ({
             ...cloudBindings,
             ...baseConfiguration,
             APP_ORIGIN: appOrigin,
@@ -120,6 +125,16 @@ async function startIdentityFixture(
             );
         };
         return {
+            reload: reconfigure,
+            revokeRuntime: async (computerId: string) => {
+                const object = computerObjects.get(computerObjects.idFromName(computerId));
+                const response = await object.fetch("https://computer.internal/revoked-runtime", {
+                    method: "POST",
+                    body: computerId,
+                    signal: AbortSignal.timeout(15_000),
+                });
+                expect(response.status).toBe(204);
+            },
             baseConfiguration,
             network,
             executionNetwork,
@@ -129,16 +144,9 @@ async function startIdentityFixture(
             dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
             environment,
             origin: ready.origin,
+            directOrigin: relay.baseUrl,
             changeAppOrigin: async (origin: string) => {
                 baseConfiguration.APP_ORIGIN = origin;
-                await reconfigure();
-            },
-            changeRelayCredential: async (credential: string) => {
-                baseConfiguration.MORTY_SERVICE_SECRET = credential;
-                await reconfigure();
-            },
-            changeRelayOrigin: async (origin: string) => {
-                baseConfiguration.MORTY_RELAY_URL = origin;
                 await reconfigure();
             },
             close: async () => {

@@ -60,7 +60,7 @@ const pairingAudit = (event: {
     detailsJson: bound(event.details, "details_json"),
     recordedAt: event.recordedAt,
     actorRef: bound(null, "actor_ref"),
-    serviceId: bound(null, "service_id"),
+    historicalServiceId: bound(null, "service_id"),
     subjectId: bound(null, "subject_id"),
     outcome: bound(null, "outcome"),
 });
