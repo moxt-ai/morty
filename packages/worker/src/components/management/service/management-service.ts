@@ -1,8 +1,8 @@
+import { decodeComputerPlacement } from "../../../../../relay/src/components/computer/entity/computer-id.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import type { BootstrapOrigin } from "../entity/computer-bootstrap.ts";
 import { type ComputerManagement, ComputerManagementError } from "../entity/computer-management.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { AccountProvisioner } from "./account-provisioning-service.ts";
@@ -72,7 +72,11 @@ export class ManagementService {
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
         const reference = `${userId}.${previous.computerId}`;
-        const project = await this.#provisionAccount(userId, reference, projectRegion(previous.computerId), signal);
+        const placement = decodeComputerPlacement(previous.computerId);
+        if (placement === null) {
+            throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Project ID is invalid.", 400);
+        }
+        const project = await this.#provisionAccount(userId, reference, placement.locationHint, signal);
         return project;
     };
 

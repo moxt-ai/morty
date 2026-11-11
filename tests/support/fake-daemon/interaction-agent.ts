@@ -6,8 +6,8 @@ import {
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@morty-build/runtime-test-support/fake-daemon";
-import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import type { AgentTermination } from "../../../packages/cli/src/engine/acp/agent/agent-lifecycle.ts";
+import { createControlledAgent } from "../../../packages/cli/tests/support/agents/controlled-agent-definition.ts";
 
 /** A stateful ACP peer injected through the production daemon's Agent port. */
 export function createInteractionAgent(onBackgroundPermissionReady?: (request: () => Promise<void>) => void) {
@@ -307,12 +307,12 @@ export function createInteractionAgent(onBackgroundPermissionReady?: (request: (
             },
         };
     };
-    return new AcpAgentDefinition(
+    return createControlledAgent(
+        (options) =>
+            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         "interaction-test",
         "Interaction Agent",
         process.execPath,
-        (options) =>
-            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
         "controlled-harness",
         undefined,

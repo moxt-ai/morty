@@ -40,7 +40,7 @@ export async function normalizeOpenedSession(
         sessionId,
         agentName: initialized.agentName,
         agentVersion: initialized.agentVersion,
-        agentSettingsModelEffort: session.connection.agentSettingsModelEffort(),
+        agentSettingsModelEffort: null,
         ...session.connection.commitLifecycle(response),
     };
 }

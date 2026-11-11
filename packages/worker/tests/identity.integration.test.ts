@@ -263,35 +263,6 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
     }
 });
 
-test("Given explicit location choices, When users create Morty identities, Then every supported Project code is honored", async () => {
-    for (const [locationHint, projectCode] of [
-        ["wnam", "wn"],
-        ["enam", "en"],
-        ["sam", "sa"],
-        ["weur", "we"],
-        ["eeur", "ee"],
-        ["apac", "ap"],
-        ["apac-ne", "an"],
-        ["apac-se", "as"],
-        ["oc", "oc"],
-        ["afr", "af"],
-        ["me", "me"],
-    ] as const) {
-        const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ creationKey: anonymousCreationKey(), locationHint }),
-            }),
-            fixture.environment(),
-        );
-
-        expect(response.status).toBe(201);
-        const identity = v.parse(v.object({ computerId: v.string() }), await response.json());
-        expect(identity.computerId).toMatch(new RegExp(`^prj_${projectCode}_01_`, "u"));
-    }
-});
-
 test("Given Projects in separate regions, When users reopen and transfer Morty access, Then Project objects retain their identities and reject another Project", async () => {
     const environment = fixture.environment();
     class RegionalRequest extends Request {

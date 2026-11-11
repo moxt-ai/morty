@@ -1,7 +1,7 @@
 import { logger } from "@morty-build/relay/logging";
 import * as v from "valibot";
+import { decodeComputerPlacement } from "../../../relay/src/components/computer/entity/computer-id.ts";
 import { ComputerManagementError } from "../components/management/entity/computer-management.ts";
-import { projectRegion } from "../components/management/entity/project-region.ts";
 import { type CloudBindings, durableObjectNamespaceBindingSchema } from "../infra/cloud-bindings.ts";
 
 export async function forwardComputerObject(
@@ -56,6 +56,10 @@ export function computerObject(bindings: CloudBindings, computerId: string) {
     if (!parsed.success) {
         throw new ComputerManagementError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
     }
+    const placement = decodeComputerPlacement(computerId);
+    if (placement === null) {
+        throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Project ID is invalid.", 400);
+    }
     const namespace = parsed.output;
-    return namespace.get(namespace.idFromName(computerId), { locationHint: projectRegion(computerId) });
+    return namespace.get(namespace.idFromName(computerId), { locationHint: placement.locationHint });
 }

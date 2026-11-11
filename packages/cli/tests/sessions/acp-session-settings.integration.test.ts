@@ -1,13 +1,12 @@
 import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
@@ -35,10 +34,7 @@ describe("Agent setting capabilities", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -49,6 +45,9 @@ describe("Agent setting capabilities", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
         const session = await manager.createSession({
             agent,
@@ -112,10 +111,7 @@ describe("Agent setting capabilities", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -126,6 +122,9 @@ describe("Agent setting capabilities", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
         const session = await manager.createSession({
             agent,
@@ -172,10 +171,7 @@ describe("Agent setting capabilities", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "pi",
-            "Pi",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -186,6 +182,9 @@ describe("Agent setting capabilities", () => {
                     },
                     options,
                 ),
+            "pi",
+            "Pi",
+            process.execPath,
         );
 
         try {
@@ -230,10 +229,7 @@ describe("Agent setting capabilities", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "fake",
-            "Fake",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -244,6 +240,9 @@ describe("Agent setting capabilities", () => {
                     },
                     options,
                 ),
+            "fake",
+            "Fake",
+            process.execPath,
         );
         const session = await manager.createSession({
             agent,

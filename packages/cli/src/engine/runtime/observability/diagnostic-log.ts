@@ -26,7 +26,6 @@ const REMOTE_DIAGNOSTIC_FIELDS = [
     "proxyRoute",
     "timestamp",
     "event",
-    "computerId",
     "requestId",
     "commandId",
     "sessionId",

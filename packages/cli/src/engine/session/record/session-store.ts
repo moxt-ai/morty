@@ -35,29 +35,11 @@ export class StoredSession {
     }
 }
 
-export abstract class StoredSessionLookup {
-    abstract readonly found: boolean;
-}
-
-export class MissingStoredSession extends StoredSessionLookup {
-    readonly found = false;
-}
-
-export class FoundStoredSession extends StoredSessionLookup {
-    readonly found = true;
-    readonly session: StoredSession;
-
-    constructor(session: StoredSession) {
-        super();
-        this.session = session;
-    }
-}
-
 export interface SessionStore {
     readonly close: () => void;
     readonly events: SessionEventStore;
     readonly list: () => readonly StoredSession[];
-    readonly read: (target: NativeSessionTarget) => StoredSessionLookup;
+    readonly read: (target: NativeSessionTarget) => StoredSession | undefined;
     readonly remove: (target: NativeSessionTarget) => void;
     readonly write: (session: StoredSession) => void;
 }
@@ -78,10 +60,8 @@ export class MemorySessionStore implements SessionStore {
     readonly list = (): readonly StoredSession[] =>
         [...this.#sessions.values()].toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
-    readonly read = (target: NativeSessionTarget): StoredSessionLookup => {
-        const session = this.#sessions.get(nativeSessionKey(target));
-        return session === undefined ? new MissingStoredSession() : new FoundStoredSession(session);
-    };
+    readonly read = (target: NativeSessionTarget): StoredSession | undefined =>
+        this.#sessions.get(nativeSessionKey(target));
 
     readonly remove = (target: NativeSessionTarget): void => {
         this.#sessions.delete(nativeSessionKey(target));
@@ -125,9 +105,9 @@ export class SqliteSessionStore implements SessionStore {
 
     readonly list = (): readonly StoredSession[] => this.#table.list().map(decodeStoredSession);
 
-    readonly read = (target: NativeSessionTarget): StoredSessionLookup => {
+    readonly read = (target: NativeSessionTarget): StoredSession | undefined => {
         const row = this.#table.read(target);
-        return row === undefined ? new MissingStoredSession() : new FoundStoredSession(decodeStoredSession(row));
+        return row === undefined ? undefined : decodeStoredSession(row);
     };
 
     readonly remove = (target: NativeSessionTarget): void => {

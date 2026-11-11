@@ -14,7 +14,6 @@ import { LocalAgentSpecification } from "../agent-specification.ts";
 const ACP_PROBE_TIMEOUT_MILLISECONDS = 30_000;
 
 export class PiAgentSpecification extends LocalAgentSpecification {
-    readonly createConnection = null;
     override readonly acpProbeTimeoutMilliseconds = ACP_PROBE_TIMEOUT_MILLISECONDS;
     readonly agentExecutable = "pi";
 

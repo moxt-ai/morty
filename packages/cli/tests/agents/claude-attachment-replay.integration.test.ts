@@ -9,9 +9,9 @@ import {
     encodeSessionPreviewHistoryPageLoad,
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
-import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";
 import { type ClaudeSessionUpdate, createClaudeAcpApp } from "../../src/engine/acp/harness/claude/upstream/dist/lib.js";
 import { ClaudeCodeAgentSpecification } from "../../src/engine/agent/specification/vendors/claude-code-agent.ts";
+import { createAcpClient } from "../support/acp/create-client.ts";
 import { ClaudeFixture } from "../support/agents/claude.ts";
 import { waitForSavedClaudeMessage } from "../support/agents/claude-transcript.ts";
 import { withRealDaemon } from "../support/agents/real-daemon.ts";

@@ -10,12 +10,12 @@ import type {
     NativeSessionPreviewRequest,
     NativeSessionQuery,
     SessionEventPage,
-    SessionEventStore,
 } from "../../src/engine/acp/native-history/preview-contract.ts";
 import {
     memoryHistoryPreviewSnapshot,
     NativeHistoryPreviewSnapshots,
 } from "../../src/engine/acp/native-history/preview-snapshots.ts";
+import type { SessionEventStore } from "../../src/engine/session/history/session-event-store.ts";
 import type { AgentProcessPool } from "../../src/engine/session/process/agent-process-pool.ts";
 import type { AcpSessionConnector, AdapterSessionConnection } from "./acp/session-events.ts";
 

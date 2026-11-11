@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeContentAvailableEvent,
@@ -37,12 +36,13 @@ import {
 import { listen, port, sendBinary, sendText } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
+import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtime/relay/session-event-publisher.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -255,10 +255,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     });
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-    const agent = new AcpAgentDefinition(
-        "controlled-acp",
-        "Controlled ACP",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -269,6 +266,9 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
                 },
                 options,
             ),
+        "controlled-acp",
+        "Controlled ACP",
+        process.execPath,
         { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
     );
     const config = createRuntimeConfig(

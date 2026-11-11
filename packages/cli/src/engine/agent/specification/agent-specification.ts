@@ -1,5 +1,4 @@
 import type { SessionCapabilities } from "@morty-build/client/protocol";
-import type { AgentConnectionFactory } from "../../acp/connection/agent-connection.ts";
 import type { ResolvedExecutable } from "../../util/process/executable.ts";
 import type { LocalAgentDiscoveryContext } from "../discovery/agent-discovery-context.ts";
 import type { AgentReadinessProbeParams } from "../discovery/agent-readiness.ts";
@@ -15,7 +14,6 @@ const ACP_PROBE_TIMEOUT_MILLISECONDS = 60_000;
 
 export abstract class LocalAgentSpecification {
     abstract readonly probeReadiness: (params: AgentReadinessProbeParams) => Promise<SessionCapabilities>;
-    abstract readonly createConnection: AgentConnectionFactory | null;
     abstract readonly agentExecutable: string;
     readonly agentOverrideVariable: string;
 

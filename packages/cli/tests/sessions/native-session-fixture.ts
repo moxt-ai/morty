@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AcpSessionUpdate, NativeSessionCommand, SessionLiveEvent } from "@morty-build/client/protocol";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import type { AdapterResolver } from "../../src/engine/acp/native-history/preview-contract.ts";
 import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
@@ -17,6 +16,7 @@ import { openAcpSessionDatabase } from "../../src/engine/storage/sqlite/local-da
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
@@ -81,10 +81,7 @@ export async function fixture(
     const executable = join(temporary, "agent.mjs");
     await writeFile(executable, `#!${process.execPath}\nawait import(${JSON.stringify(acpUrl)});\n`, { mode: 0o700 });
     const harness = label === "Claude Code" ? "claude" : label === "Codex" ? "codex" : "pi";
-    const agent = new AcpAgentDefinition(
-        harness,
-        label,
-        executable,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -109,6 +106,9 @@ export async function fixture(
                 },
                 options,
             ),
+        harness,
+        label,
+        executable,
     );
     const store = new MemorySessionStore();
     const observer = new NativeSessionObserver();

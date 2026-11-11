@@ -1,15 +1,13 @@
 import type { AgentApp, ClientConnection } from "@agentclientprotocol/sdk/unstable";
-import type { AgentModelEffort } from "@morty-build/client/protocol";
 import type { AgentTermination } from "../../../cli/src/engine/acp/agent/agent-lifecycle.ts";
-import type { AgentConnection } from "../../../cli/src/engine/acp/connection/agent-connection.ts";
 import { raceAgentOperation } from "../../../cli/src/engine/acp/connection/agent-operation.ts";
-import { type AcpClientHandler, createAcpClient } from "../../../cli/src/engine/acp/connection/create-client.ts";
+import { type AcpClientHandler, createAcpClient } from "../../../cli/tests/support/acp/create-client.ts";
+import type { AgentConnection } from "../../../cli/tests/support/agents/agent-connection.ts";
 
 /** A stateful controlled peer, injected only by ACP boundary scenarios. */
 export interface ControlledAcpPeer {
     readonly terminated: Promise<AgentTermination>;
     readonly app: () => AgentApp;
-    readonly agentSettingsModelEffort?: () => AgentModelEffort;
     readonly initialize: (signal: AbortSignal) => Promise<void>;
     readonly close: () => Promise<void>;
 }
@@ -28,7 +26,6 @@ export class ControlledEndpointConnection implements AgentConnection {
     }
 
     readonly initialize = async (signal: AbortSignal): Promise<void> => await this.#peer.initialize(signal);
-    readonly agentSettingsModelEffort = () => this.#peer.agentSettingsModelEffort?.() ?? null;
     readonly closeProcess = (): Promise<void> => {
         this.#closePromise ??= (async () => {
             try {

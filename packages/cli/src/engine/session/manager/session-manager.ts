@@ -21,12 +21,7 @@ import { replaySessionConfigurations, storedSessionConfiguration } from "../live
 import { nativeSessionQuery } from "../native/native-query.ts";
 import type { AgentProcessPool, AgentProcessRetention } from "../process/agent-process-pool.ts";
 import { RetainedAgentProcesses } from "../process/retained-agent-processes.ts";
-import {
-    FoundStoredSession,
-    MemorySessionStore,
-    type SessionStore,
-    type StoredSession,
-} from "../record/session-store.ts";
+import { MemorySessionStore, type SessionStore, type StoredSession } from "../record/session-store.ts";
 import { isModelOption } from "../settings/configuration-dependencies.ts";
 import { ActiveExecutions } from "../turn/active-executions.ts";
 import type { SettledTurn } from "../turn/execution-receipts.ts";
@@ -138,7 +133,7 @@ export class SessionManager {
     };
 
     #isHeld(target: NativeSessionTarget): boolean {
-        return this.#store.read(target) instanceof FoundStoredSession;
+        return this.#store.read(target) !== undefined;
     }
 
     /** Admits an operation the lifecycle rule answers at once; a refusal throws its typed error. */
@@ -239,7 +234,7 @@ export class SessionManager {
         const stored = this.#store.read(options.target);
         // Discovery may acquire a pooled reader: do it before reserving execution capacity.
         const capabilities =
-            options.origin !== undefined || stored instanceof FoundStoredSession
+            options.origin !== undefined || stored !== undefined
                 ? await options.adapter.getCapabilities(nativeSessionQuery(options))
                 : unsupportedSessionCapabilities();
         const runtime = await this.#processes.startRetained(
@@ -913,16 +908,16 @@ export class SessionManager {
     readonly findSessions = (targets: readonly NativeSessionTarget[]) =>
         targets.flatMap((target) => {
             const stored = this.#store.read(target);
-            return stored instanceof FoundStoredSession ? [stored.session] : [];
+            return stored !== undefined ? [stored] : [];
         });
 
     /** The Session this Runtime holds for `target`, which a command naming only the target uses; none is refused. */
     readonly heldSession = (target: NativeSessionTarget): StoredSession => {
         const stored = this.#store.read(target);
-        if (!(stored instanceof FoundStoredSession)) {
+        if (stored === undefined) {
             throw new AcpExecutionError("The Session was not found", {}, "session_not_found");
         }
-        return stored.session;
+        return stored;
     };
 
     readonly sessionStatus = (target: NativeSessionTarget): SessionStatus =>

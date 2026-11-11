@@ -39,24 +39,24 @@ async function runCli(
     return { code, stderr, stdout };
 }
 
-/** Write one installation's logs, mirroring the store's `<root>/installations/<appId>/<id>/logs` layout. */
-async function writeInstallationLog(stateDirectory: string, filename: string, lines: readonly string[]): Promise<void> {
+/** Write the Computer's logs, mirroring the store's `<root>/computer/logs` layout. */
+async function writeComputerLog(stateDirectory: string, filename: string, lines: readonly string[]): Promise<void> {
     const logs = join(stateDirectory, "computer", "logs");
     await mkdir(logs, { mode: 0o700, recursive: true });
     await writeFile(join(logs, filename), `${lines.join("\n")}\n`, { mode: 0o600 });
 }
 
 describe("Morty logs command", () => {
-    // @no-uc: Technical regression; a bug report must collect logs from every installation, not just the active one.
-    it("Given a stopped daemon with logs from both the Computer and its manager, When the user collects them for a bug report, Then every installation's log is printed with its state-relative path", async () => {
+    // @no-uc: Technical regression; a bug report must include both Computer diagnostics and worker lifecycle evidence.
+    it("Given a stopped daemon with logs from both the Computer and its manager, When the user collects them for a bug report, Then both logs are printed with its state-relative path", async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "daemon-lifecycle.log", [
+        await writeComputerLog(stateDirectory, "daemon-lifecycle.log", [
             'Morty worker lifecycle {"kind":"worker_started","pid":4242,"version":"0.0.272"}',
             'Morty worker lifecycle {"kind":"worker_exited","pid":4242,"exitCode":137,"signal":"SIGKILL","stderr":"/home/user/secret-path boom"}',
         ]);
-        await writeInstallationLog(stateDirectory, "daemon.log", [
+        await writeComputerLog(stateDirectory, "daemon.log", [
             'Morty relay diagnostic {"event":"relay_connection_opened","computerId":"channel-1"}',
         ]);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateDirectory };
@@ -80,7 +80,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "daemon.log", [
+        await writeComputerLog(stateDirectory, "daemon.log", [
             "oldest-line-should-be-dropped",
             "newest-line-should-be-kept",
         ]);
@@ -102,7 +102,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
+        await writeComputerLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
 
         const result = await runCli(
             ["logs", "--json", "--state-directory", stateDirectory],
@@ -124,7 +124,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
+        await writeComputerLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
         const logPath = join(stateDirectory, "computer", "logs", "daemon.log");
         const directoryPath = dirname(logPath);
         // Widen both deliberately: `validateLocalPath(path, ..., privateAccess: true)`
@@ -149,7 +149,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
+        await writeComputerLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
         const logPath = join(stateDirectory, "computer", "logs", "daemon.log");
         // Simulates the read-only mount or failing-disk case the export has to
         // survive: the file is present but this user cannot read it.
@@ -192,7 +192,7 @@ describe("Morty logs command", () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
-        await writeInstallationLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
+        await writeComputerLog(stateDirectory, "daemon.log", ['{"event":"relay_connection_opened"}']);
         // The logs directory exists and holds a readable file, but cannot be
         // enumerated: an owner-writable, not owner-readable mode (0o300). Treating
         // this as "no logs here" is what hid the evidence before.
