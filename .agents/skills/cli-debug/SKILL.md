@@ -66,11 +66,8 @@ Event families written to the log:
 | --- | --- |
 | `relay_connection_opened` / `relay_connection_closed` / `relay_connection_failed` | relay WebSocket lifecycle, including close code, reason, and source |
 | `relay_heartbeat_timed_out` | liveness deadline expired; daemon reconnected |
-| `relay_reconciliation_abandoned` | daemon gave up on turns the Relay already settled |
 | `agent_settings_discovery_failed`, `agent_settings_model_unsupported` | Agent settings discovery failures and unsupported model selections |
-| `agent_catalog_refresh_failed` | local Agent catalog refresh failure |
 | `native_session_operation_failed` | native session list/find/preview/import/fork failure |
-| `native_session_turn_fork_failed` | turn-scoped fork failure |
 
 For failure events, read the cause chain fields `failureName`,
 `failureMessage`, `failureCode`, then `cause1*`, `cause2*` for the underlying
@@ -81,8 +78,8 @@ their origin, and the line is truncated. Treat redaction markers (`[redacted]`,
 
 Note what is intentionally not in the log: full stdout/stderr of child Agents,
 prompt content, and session transcripts. Do not try to recover those from this
-file; the per-channel audit database under `<state directory>/audit/` and
-`channels/` remains the deeper local store when a fix needs more evidence.
+file. Conversation history belongs to the Agent; inspect its native history only
+when the user has authorized that investigation.
 
 ## Correlate a remote failure
 
