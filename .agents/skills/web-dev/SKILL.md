@@ -7,7 +7,7 @@ description: Serve the Morty SPA from this checkout with hot reload while the de
 
 Serve the browser app from this checkout so edits under `packages/web/src`
 hot-reload, while every `/morty/api` request and the `/morty/ws` bridge are
-answered by the **deployed Worker**. The designer sees their real Project,
+answered by the **deployed Worker**. The designer sees their paired computer,
 sessions, and connected Runtime while iterating on markup, styling, and
 interaction.
 
@@ -16,9 +16,9 @@ remote: the deployed Worker origin (default `https://morty.build`), which owns
 identity, sessions, and the WebSocket bridge. Nothing here deploys or mutates
 the deployed Worker's configuration.
 
-Use `chat-local-full-dev` when the Chat Worker and Platform must run locally,
+Use `chat-local-full-dev` when the Morty Worker must run locally,
 and `agent-verify-user-journey` for a full generation-journey verification. This
-skill needs no `.dev.vars`, no local Worker, and no Platform credential.
+skill needs no `.dev.vars`, no local Worker, and no cloud deployment credential.
 
 ## Prerequisites
 

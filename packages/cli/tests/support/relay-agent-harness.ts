@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mortyApiPath } from "@morty-build/client/protocol";
+import { mortyApiUrl } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { createOwnerApi } from "../../../../tests/support/owner-api.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
@@ -104,7 +104,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                 )
             ).json(),
         );
-        const relayUrl = new URL(mortyApiPath("/v1/runtimes/connect"), options.relayOrigin ?? options.origin);
+        const relayUrl = mortyApiUrl(options.relayOrigin ?? options.origin, "/v1/runtimes/connect");
         relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
         const localContext = new RuntimeLocalContext(directory, process.env);
         const config = createRuntimeConfig(

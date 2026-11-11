@@ -1,5 +1,4 @@
 import type { SessionInfoUpdatedEvent, SessionLiveEvent } from "@morty-build/client/protocol";
-import type { BackgroundActivity } from "../../acp/agent/agent-lifecycle.ts";
 import { AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { CommandLedgerTable } from "../../storage/session/command-ledger-table.ts";
 import { LiveEventPositionTable } from "../../storage/session/live-event-position-table.ts";
@@ -20,7 +19,6 @@ import { PromptLifecycle } from "../prompt/prompt-lifecycle.ts";
 import { SessionCreations } from "../record/session-creations.ts";
 import { SqliteSessionStore } from "../record/session-store.ts";
 import { ExecutionReceipts } from "../turn/execution-receipts.ts";
-import type { RuntimeTurnActivity } from "../turn/runtime-turn-activity.ts";
 import { SessionTurns } from "../turn/session-turns.ts";
 import { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import type { ResolveAgent, SessionEventSink } from "./session-api.ts";
@@ -28,14 +26,14 @@ import { NullSessionObserver } from "./session-api.ts";
 
 /** Records live session events through the projection and publishes info updates through the sink. */
 class SessionLayerObserver extends NullSessionObserver {
-    readonly #backgroundActivity: (source: object, activity: BackgroundActivity) => void;
+    readonly #backgroundActivity: () => void;
     readonly #publishInfo: (event: SessionInfoUpdatedEvent) => void;
     readonly #record: (event: SessionLiveEvent) => void;
 
     constructor(
         record: (event: SessionLiveEvent) => void,
         publishInfo: (event: SessionInfoUpdatedEvent) => void,
-        backgroundActivity: (source: object, activity: BackgroundActivity) => void = () => {},
+        backgroundActivity: () => void = () => {},
     ) {
         super();
         this.#backgroundActivity = backgroundActivity;
@@ -43,8 +41,8 @@ class SessionLayerObserver extends NullSessionObserver {
         this.#record = record;
     }
 
-    override readonly onBackgroundActivity = (source: object, activity: BackgroundActivity): void => {
-        this.#backgroundActivity(source, activity);
+    override readonly onBackgroundActivity = (): void => {
+        this.#backgroundActivity();
     };
 
     override readonly onSessionEvent = (event: SessionLiveEvent): Promise<void> => {
@@ -61,7 +59,6 @@ class SessionLayerObserver extends NullSessionObserver {
 /** What the session layer needs to wire itself: the runtime's identity, its agent source, and its sink. */
 export interface SessionLayerOptions {
     readonly processes: AgentProcessPool;
-    readonly turnActivity?: RuntimeTurnActivity;
     readonly onExecutionCountChange?: (count: number) => void;
 
     readonly computerId: string;
@@ -90,11 +87,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         throw error;
     }
     const sessionStore = new SqliteSessionStore(new AcpSessionTable(sessionDatabase), events);
-    const activeSessions = new SessionTurns(
-        operations,
-        (target, commandId) => manager.executes(target, commandId),
-        options.turnActivity,
-    );
+    const activeSessions = new SessionTurns(operations, (target, commandId) => manager.executes(target, commandId));
     const sessionCreations = new SessionCreations(new SessionCreationTable(sessionDatabase));
     const directories = new WorkspaceDirectoryService(defaultWorkspace);
     const manager = new SessionManager({
@@ -104,10 +97,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
                 eventProjection.record(event);
             },
             sink.publishInfo,
-            (source, activity) => {
-                options.turnActivity?.setBackgroundActivity(source, activity);
-                options.processes.notifyChanged();
-            },
+            options.processes.notifyChanged,
         ),
         store: sessionStore,
         processes: options.processes,

@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { ComputerManagementError } from "../entity/computer-management.ts";
 
 interface BrowserCorsEnvironment {
-    readonly Bindings: { readonly allowedOrigins?: ReadonlySet<string> };
+    readonly Variables: { readonly allowedOrigins: ReadonlySet<string> };
 }
 
 function browserCorsHeaders(origin: string, methods: readonly string[], headers: readonly string[]): Headers {
@@ -17,14 +17,10 @@ function browserCorsHeaders(origin: string, methods: readonly string[], headers:
     });
 }
 
-export function createBrowserCors(
-    methods: readonly string[],
-    headers: readonly string[],
-    configuredOrigins?: ReadonlySet<string>,
-) {
+export function createBrowserCors(methods: readonly string[], headers: readonly string[]) {
     return createMiddleware<BrowserCorsEnvironment>(async (context, next) => {
         const origin = context.req.header("origin") ?? "";
-        const allowedOrigins = configuredOrigins ?? context.env.allowedOrigins ?? new Set<string>();
+        const allowedOrigins = context.var.allowedOrigins;
         if (origin.length > 0 && !allowedOrigins.has("*") && !allowedOrigins.has(origin)) {
             throw new ComputerManagementError("browser_origin_denied", "The browser origin is not allowed", 403);
         }

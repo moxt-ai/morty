@@ -1,5 +1,5 @@
 import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client";
-import type { ElicitationResponseRequest } from "@morty-build/client/channel";
+
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 
 type PermissionInteractionDetails = Pick<
@@ -32,12 +32,12 @@ type ElicitationInteractionDetails = Pick<
 type ElicitationInteractionState =
     | { readonly kind: "pending" }
     | {
-          readonly action: ElicitationResponseRequest["action"];
+          readonly action: ElicitationInteractionResponse["action"];
           readonly content: string;
           readonly kind: "submitted";
       }
     | {
-          readonly action: ElicitationResponseRequest["action"] | "complete";
+          readonly action: ElicitationInteractionResponse["action"] | "complete";
           readonly content: string;
           readonly kind: "resolved";
       };
@@ -59,7 +59,7 @@ export interface PermissionInteractionResponse {
 }
 
 export interface ElicitationInteractionResponse {
-    readonly action: ElicitationResponseRequest["action"];
+    readonly action: "accept" | "decline" | "cancel";
     readonly content: string;
     readonly interactionId: string;
     readonly target: NativeSessionTarget;

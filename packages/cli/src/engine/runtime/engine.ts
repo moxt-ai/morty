@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
 import { waitForSharedOperation } from "../session/manager/operation-drain.ts";
-import { ConnectionManager } from "./connection/connection-manager.ts";
 import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
 import { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 import { type MortyRuntimePairingOptions, pairRuntimeConnection, prepareRuntimeConnection } from "./pairing.ts";
@@ -17,7 +16,7 @@ export interface MortyRuntimeEngineParams {
     readonly maxAcpProcesses?: number;
 }
 
-export type EngineLoopConnection =
+type EngineLoopConnection =
     | { readonly kind: "saved"; readonly pairingGeneration: string }
     | { readonly kind: "provided"; readonly connection: MortyRuntimeConnection };
 
@@ -35,14 +34,12 @@ export class MortyRuntimeEngine {
     readonly #engineDataDir: string;
     readonly #agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
     readonly #maxAcpProcesses: number;
-    readonly #connections: ConnectionManager;
     #installation: InstallationState = { kind: "uninitialized" };
 
     constructor(params: MortyRuntimeEngineParams) {
         this.#engineDataDir = resolve(params.engineDataDir);
         this.#agentLaunchEnvironment = Object.freeze({ ...params.agentLaunchEnvironment });
         this.#maxAcpProcesses = params.maxAcpProcesses ?? 1000;
-        this.#connections = new ConnectionManager(this.#ensureInstallation);
     }
 
     readonly #ensureInstallation = async (signal: AbortSignal): Promise<RuntimeInstallationStore> => {
@@ -80,8 +77,6 @@ export class MortyRuntimeEngine {
             }
         }
     };
-
-    readonly getConnectionManager = (): ConnectionManager => this.#connections;
 
     readonly pair = async (
         input: MortyRuntimePairingOptions,
@@ -126,9 +121,6 @@ export class MortyRuntimeEngine {
     };
 }
 
-export type { ConnectionManager } from "./connection/connection-manager.ts";
-export type { RuntimeConnectionInput, VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
-export type { RuntimeCredentialRotation, RuntimeCredentials } from "./connection/runtime-credentials.ts";
+export type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+
 export type { MortyRuntimePairingOptions } from "./pairing.ts";
-export { RuntimeRelayRevokedError } from "./relay/runtime-revocation.ts";
-export type { MortyRuntimeConnection } from "./runtime-loop.ts";

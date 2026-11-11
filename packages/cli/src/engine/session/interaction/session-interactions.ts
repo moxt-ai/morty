@@ -26,6 +26,16 @@ import { readString, truncate } from "../../util/value-utils.ts";
 import type { ElicitationResponseOptions, PermissionResponseOptions, SessionObserver } from "../api/session-api.ts";
 import { PendingElicitation, PendingPermission } from "./pending-interactions.ts";
 
+type ElicitationAnswer =
+    | { readonly action: "accept"; readonly mode: "form"; readonly schema: unknown; readonly content: string }
+    | { readonly action: "accept"; readonly mode: "url" }
+    | { readonly action: "decline" | "cancel" | "complete" };
+
+// Form fields are scalar values or arrays. Field order and JSON whitespace do not change an answer.
+function formAnswer(content: ReturnType<typeof validateElicitationContent>): string {
+    return JSON.stringify(Object.entries(content).sort(([left], [right]) => left.localeCompare(right)));
+}
+
 interface SessionInteractionContext {
     readonly target: () => NativeSessionTarget;
     readonly cwd: () => string;
@@ -45,6 +55,7 @@ export class SessionInteractions {
     // A bounded receipt window for answers in this live Session. Eviction or Session replacement makes an
     // old answer unavailable, never implicitly successful. These are completed decisions, not pending requests.
     readonly #permissionAnswers = new Map<string, SessionPermissionResolvedEvent>();
+    readonly #elicitationAnswers = new Map<string, ElicitationAnswer>();
     readonly #pendingPermissions = new Map<string, PendingPermission>();
     readonly #pendingElicitations = new Map<string, PendingElicitation>();
     readonly #acceptedUrlElicitations = new Map<string, SessionElicitationRequestedEvent>();
@@ -143,6 +154,22 @@ export class SessionInteractions {
     };
 
     readonly respondElicitation = async (options: ElicitationResponseOptions): Promise<void> => {
+        const answered = this.#elicitationAnswers.get(options.interactionId);
+        if (answered !== undefined) {
+            if (
+                answered.action === options.action &&
+                (answered.action !== "accept" ||
+                    answered.mode === "url" ||
+                    answered.content === formAnswer(validateElicitationContent(options.content, answered.schema)))
+            ) {
+                return;
+            }
+            throw new AcpExecutionError(
+                "The elicitation request has a different recorded answer",
+                {},
+                "elicitation_response_conflict",
+            );
+        }
         const pending = this.#pendingElicitations.get(options.interactionId);
         if (pending === undefined) {
             throw new AcpExecutionError(
@@ -152,18 +179,29 @@ export class SessionInteractions {
             );
         }
         let resolved = false;
+        let answer: ElicitationAnswer;
         if (options.action === "accept") {
             if (pending.elicitationId.length > 0) {
+                answer = { action: "accept", mode: "url" };
                 resolved = pending.accept({});
                 if (resolved) {
                     this.#acceptedUrlElicitations.set(pending.elicitationId, { ...pending.request, accepted: true });
                 }
             } else {
-                resolved = pending.accept(validateElicitationContent(options.content, pending.requestedSchema));
+                const content = validateElicitationContent(options.content, pending.requestedSchema);
+                answer = {
+                    action: "accept",
+                    mode: "form",
+                    schema: pending.requestedSchema,
+                    content: formAnswer(content),
+                };
+                resolved = pending.accept(content);
             }
         } else if (options.action === "decline") {
+            answer = { action: "decline" };
             resolved = pending.decline();
         } else {
+            answer = { action: options.action };
             resolved = pending.cancel();
         }
         if (!resolved) {
@@ -174,6 +212,13 @@ export class SessionInteractions {
             );
         }
         this.#pendingElicitations.delete(options.interactionId);
+        this.#elicitationAnswers.set(options.interactionId, answer);
+        if (this.#elicitationAnswers.size > 256) {
+            const oldest = this.#elicitationAnswers.keys().next().value;
+            if (oldest !== undefined) {
+                this.#elicitationAnswers.delete(oldest);
+            }
+        }
         await this.#notifyElicitationResolved({
             action: options.action,
             interactionId: options.interactionId,

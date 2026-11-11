@@ -23,7 +23,6 @@ import {
     encodeSessionHistoryPageLoaded,
     encodeSessionInfoUpdatedEvent,
     encodeSessionOperationFailedEvent,
-    encodeSessionPreviewHistoryPageLoaded,
     encodeSessionPromptAcceptedEvent,
     encodeSessionPromptCommand,
     encodeSessionRenamedEvent,
@@ -42,9 +41,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
-import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
-import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/relay-worker.ts";
+import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
+import { createRelayDurableObjectContext } from "../../worker/src/composition/relay-durable-object-context.ts";
+import { ComputerRelay as RelayRuntimeRelay } from "../../worker/src/do/computer-relay.ts";
+import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { computerManagementStore } from "./registered-runtime.ts";
 
@@ -121,7 +121,7 @@ class DaemonCredential {
     };
 }
 
-function bindings(): RelayRelayBindings {
+function bindings(): RelayBindings {
     return {
         RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
@@ -214,10 +214,7 @@ afterAll(async () => {
 describe.sequential("Relay Session-only boundary", () => {
     it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Relay permits Session authorization without advertising retired identity providers", async () => {
         const browserOrigin = "https://chat.test";
-        const worker = createTestMortyRelayApp(
-            new RelayAuthenticationConfiguration(new Set([browserOrigin])),
-            createRelayGateways,
-        );
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(new Set([browserOrigin])));
         const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
 
         const response = await worker.fetch(
@@ -243,7 +240,7 @@ describe.sequential("Relay Session-only boundary", () => {
     });
 
     it("Given a Session route the Relay no longer serves, When an app requests pending interactions, Then the Relay answers with a typed JSON not_found error", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
 
         const response = await worker.fetch(
@@ -261,7 +258,7 @@ describe.sequential("Relay Session-only boundary", () => {
 
     it("Given a linked Codex Runtime with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
         vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -792,83 +789,6 @@ describe.sequential("Relay Session-only boundary", () => {
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             // A delayed result after the caller has finished must not disconnect the Runtime.
             daemon.send(historyPage);
-            const previewHistoryResponse = worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?directory=root&eventLimit=50`,
-                    { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
-                ),
-                environment,
-            );
-            const previewHistoryLoad = decodeServiceToDaemonMessage(await daemonMessages.next());
-            if (previewHistoryLoad.kind !== "session.preview-history.page.load") {
-                throw new Error("Expected a native Session preview history request");
-            }
-
-            const previewHistoryPage = encodeSessionPreviewHistoryPageLoaded({
-                events: {
-                    events: {
-                        sessionGenerationId: "native-session-generation-1",
-                        events: [rawEvent],
-                        nextCursor: null,
-                        tailCursor: rawEvent.eventId,
-                        throughPosition: "1",
-                        truncated: false,
-                        version: 2,
-                    },
-                    queuedPromptRequests: [],
-                },
-                kind: "session.preview-history.page.loaded",
-                requestId: previewHistoryLoad.requestId,
-                target: nativeTarget(sessionId),
-            });
-            daemon.send(previewHistoryPage);
-            expect(await responseJson(await previewHistoryResponse, 200)).toEqual({
-                events: {
-                    sessionGenerationId: "native-session-generation-1",
-                    events: [historicalEvent],
-                    nextCursor: null,
-                    tailCursor: rawEvent.eventId,
-                    throughPosition: "1",
-                    truncated: false,
-                    version: 2,
-                },
-                queuedPromptRequests: [],
-            });
-            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            // A delayed result after the caller has finished must not disconnect the Runtime.
-            daemon.send(previewHistoryPage);
-            const failedPreviewHistoryResponse = worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?directory=root&eventLimit=50`,
-                    { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
-                ),
-                environment,
-            );
-            const failedPreviewHistoryLoad = decodeServiceToDaemonMessage(await daemonMessages.next());
-            if (failedPreviewHistoryLoad.kind !== "session.preview-history.page.load") {
-                throw new Error("Expected a native Session preview history request");
-            }
-            daemon.send(
-                encodeSessionOperationFailedEvent({
-                    code: "native_history_unavailable",
-                    kind: "session.operation.failed",
-                    message: "The Codex thread is not loaded",
-                    requestId: failedPreviewHistoryLoad.requestId,
-                    target: nativeTarget(sessionId),
-                }),
-            );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
-                code: "native_history_unavailable",
-                kind: "session.operation.failed",
-                message: "The Codex thread is not loaded",
-                requestId: failedPreviewHistoryLoad.requestId,
-            });
-            expect(await responseJson(await failedPreviewHistoryResponse, 503)).toEqual({
-                error: {
-                    code: "native_history_unavailable",
-                    message: "The Codex thread is not loaded",
-                },
-            });
             // A Runtime that closed the Session refuses to load its history. The refusal is a typed conflict, so a
             // client can offer to reopen the Session instead of retrying the load.
             const closedHistoryResponse = worker.fetch(
@@ -1083,7 +1003,7 @@ describe.sequential("Relay Session-only boundary", () => {
     }, 180_000);
 
     it("Given a machine with no discovered local Agent, When it redeems a Runtime pairing and publishes its catalog, Then pairing succeeds and the Runtime advertises an empty Agent directory", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -1141,7 +1061,7 @@ describe.sequential("Relay Session-only boundary", () => {
  * before the Session credential is issued, so later times are explicit offsets from it.
  */
 async function connectRuntimeDaemon(slug: string, options: { readonly anchorClockToHeartbeat?: boolean } = {}) {
-    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const environment = bindings();
     const owner = await createOwner();
     const { computerId } = owner;
@@ -1224,12 +1144,12 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
         pairAgain: pairComputer,
         connect: (credential: DaemonCredential) => credential.connect((request) => worker.fetch(request, environment)),
-        subscribe: () =>
+        subscribe: (credential = text(sessionAccess, "credential")) =>
             worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/events-v2`,
                     {
-                        headers: { authorization: `Bearer ${text(sessionAccess, "credential")}`, Upgrade: "websocket" },
+                        headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" },
                     },
                 ),
                 environment,
@@ -1551,6 +1471,52 @@ it("Given a Runtime its owner revoked and then paired again, When the earlier da
         const messages = new SocketMessages(daemon);
         daemon.accept();
         expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+        daemon.close(1000, "Test complete");
+    } finally {
+        runtime.daemon.close(1000, "Test complete");
+    }
+});
+
+it("Given a Session credential with an open live view, When the owner revokes the Runtime and pairs the computer again, Then the credential is refused and its view closes while a credential issued under the new pairing opens a view", async () => {
+    const runtime = await connectRuntimeDaemon("session-pairing-generation");
+    try {
+        const subscribed = await runtime.subscribe();
+        const view = subscribed.webSocket;
+        if (view === null) {
+            throw new Error("Expected the live Session view");
+        }
+        const viewClosed = new Promise<CloseEvent>((resolve) =>
+            view.addEventListener("close", resolve, { once: true }),
+        );
+        view.accept();
+
+        expect((await runtime.revoke()).status).toBe(204);
+        // Runtime revocation and credential reauthorization can both close the view.
+        expect(await viewClosed).toMatchObject({ code: 1008 });
+        await expect(runtime.issueRuntimeCredential(runtime.computerId)).rejects.toMatchObject({
+            code: "credential_revoked",
+        });
+        const replacement = await runtime.connect(await runtime.pairAgain("session-pairing-generation-replacement"));
+        const daemon = replacement.webSocket;
+        if (daemon === null) {
+            throw new Error("Expected the paired Runtime socket");
+        }
+        const messages = new SocketMessages(daemon);
+        daemon.accept();
+        expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+
+        expect(await responseJson(await runtime.subscribe(), 401)).toMatchObject({
+            error: { code: "credential_revoked" },
+        });
+        expect(await responseJson(await runtime.appSessionRequest("/events-v2", { method: "GET" }), 401)).toMatchObject(
+            {
+                error: { code: "credential_revoked" },
+            },
+        );
+        const reopened = await runtime.subscribe(await runtime.issueRuntimeCredential(runtime.computerId));
+        expect(reopened.status).toBe(101);
+        reopened.webSocket?.accept();
+        reopened.webSocket?.close(1000, "Test complete");
         daemon.close(1000, "Test complete");
     } finally {
         runtime.daemon.close(1000, "Test complete");
@@ -2262,7 +2228,7 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
     it("Given a linked Runtime, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Runtime and the invalid Turn is rejected as a client error", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -2491,7 +2457,7 @@ describe.sequential("Relay Turn submission", () => {
         if (gatedAgent === undefined) {
             throw new Error("Expected the shared Agent directory entry");
         }
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -2622,7 +2588,7 @@ describe.sequential("Relay Turn submission", () => {
     });
 
     it("Given an Agent advertisement carrying fields and capability values the Relay cannot interpret, When it pairs, Then pairing rejects the invalid capabilities", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;

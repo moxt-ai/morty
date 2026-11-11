@@ -7,7 +7,6 @@
             "morty": "morty-production",
             "morty_origin": "https://morty.build",
             "buckets": {
-                "attachments": "morty-production-apac-attachments",
                 "web_assets": "morty-production-web-assets"
             },
             "asset_origin": "https://assets.morty.build"

@@ -13,7 +13,7 @@ export const SESSION_ELICITATION_RESPOND_KIND = "session.elicitation.respond";
 export const SESSION_ELICITATION_RESOLVED_KIND = "session.elicitation.resolved";
 export const SESSION_INTERACTION_ANSWERED_KIND = "session.interaction.answered";
 
-export const permissionOptionSchema = z
+const permissionOptionSchema = z
     .object({
         kind: z.enum(["allow_once", "allow_always", "reject_once", "reject_always"]),
         name: z.string().min(1).max(255),
@@ -33,7 +33,7 @@ const elicitationOptionSchema = z
 
 export type SessionElicitationOption = z.infer<typeof elicitationOptionSchema>;
 
-export const elicitationFieldSchema = z
+const elicitationFieldSchema = z
     .object({
         defaultBooleanValue: z.boolean(),
         defaultNumberValue: z.number().finite(),

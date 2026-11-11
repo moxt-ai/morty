@@ -1,9 +1,5 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import { AuditActorKind, type HttpError } from "@morty-build/relay-core/contracts";
-
-export class RelayAuditActorKind extends AuditActorKind {
-    static readonly Application = new RelayAuditActorKind("application");
-}
+import type { HttpError } from "@morty-build/relay-core/contracts";
 
 export class ComputerManagementError extends Error implements HttpError {
     readonly code: string;

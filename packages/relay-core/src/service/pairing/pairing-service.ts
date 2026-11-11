@@ -2,7 +2,7 @@ import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import type { AgentSettingsDiscoverCommand, WorkspaceListCommand } from "@morty-build/client/protocol";
 import { decodeRuntimeDiagnosticsRequest } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
-import { PairingDirectoryError, VerifiedChannelAccess } from "../../entity/pairing/pairing.ts";
+import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 import type { ChannelGateway } from "../../gateway/channel-gateway.ts";
 import { RuntimeDescriptor } from "../channel/channel.ts";
 import type { LocalSessionOperations } from "../channel/local-session-operations.ts";
@@ -53,10 +53,7 @@ export class PairingService {
                 async (channel) =>
                     new RuntimeDescriptor(
                         channel,
-                        await this.#channels.readRuntimeStatus(
-                            new VerifiedChannelAccess(channel.computerId, []),
-                            signal,
-                        ),
+                        await this.#channels.readRuntimeStatus({ computerId: channel.computerId }, signal),
                     ),
             ),
         );
@@ -77,7 +74,7 @@ export class PairingService {
         }
         return new RuntimeDescriptor(
             channel,
-            await this.#channels.readRuntimeStatus(new VerifiedChannelAccess(channel.computerId, []), signal),
+            await this.#channels.readRuntimeStatus({ computerId: channel.computerId }, signal),
         );
     };
 

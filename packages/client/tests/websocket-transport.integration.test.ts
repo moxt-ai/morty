@@ -1,13 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, expect, it, vi } from "vitest";
-import {
-    MortyClient,
-    MortyConnectionError,
-    type MortyWebSocketConnector,
-    StaticMortyCredentialProvider,
-    WsTransport,
-} from "../src/index.ts";
+import { MortyClient, MortyConnectionError, type MortyWebSocketConnector, WsTransport } from "../src/index.ts";
 
 // The transport routes by the claims it decodes; only the Relay verifies the signature.
 const sessionClaims = btoa(
@@ -16,7 +10,7 @@ const sessionClaims = btoa(
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
         computerId: "project-1",
-        holder: { kind: "credential", credentialId: "owner-1" },
+        grant: { holder: { kind: "credential", credentialId: "owner-1" }, generation: 1 },
         target: { harness: "claude", sessionId: "session-1" },
     }),
 )
@@ -340,7 +334,12 @@ it("Given an idle Session stream and a brief network interruption, When connecti
     const connector = new BrowserWebSocketConnector(6);
     const transport = new WsTransport({ connector });
     const client = new MortyClient({
-        credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
+        credentialProvider: {
+            credential: async (signal: AbortSignal) => {
+                signal.throwIfAborted();
+                return sessionCredential;
+            },
+        },
         endpoint: "https://relay.example.test",
         computerId: "project-1",
         transport,
@@ -378,7 +377,12 @@ it("Given a live Session stream cannot reconnect, When its retry budget expires,
     const connector = new BrowserWebSocketConnector(1);
     const transport = new WsTransport({ connector });
     const client = new MortyClient({
-        credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
+        credentialProvider: {
+            credential: async (signal: AbortSignal) => {
+                signal.throwIfAborted();
+                return sessionCredential;
+            },
+        },
         endpoint: "https://relay.example.test",
         maxStreamReconnectAttempts: 1,
         computerId: "project-1",
@@ -406,7 +410,12 @@ it("Given caller-owned Session recovery, When its live stream disconnects, Then 
     const connector = new BrowserWebSocketConnector();
     const transport = new WsTransport({ connector });
     const client = new MortyClient({
-        credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
+        credentialProvider: {
+            credential: async (signal: AbortSignal) => {
+                signal.throwIfAborted();
+                return sessionCredential;
+            },
+        },
         endpoint: "https://relay.example.test",
         maxStreamReconnectAttempts: 0,
         computerId: "project-1",
@@ -439,7 +448,12 @@ it("Given caller-owned Session recovery, When its live stream receives nothing p
     const connector = new BrowserWebSocketConnector();
     const transport = new WsTransport({ connector, idleTimeoutMilliseconds: 1_000 });
     const client = new MortyClient({
-        credentialProvider: new StaticMortyCredentialProvider(sessionCredential),
+        credentialProvider: {
+            credential: async (signal: AbortSignal) => {
+                signal.throwIfAborted();
+                return sessionCredential;
+            },
+        },
         endpoint: "https://relay.example.test",
         maxStreamReconnectAttempts: 0,
         computerId: "project-1",

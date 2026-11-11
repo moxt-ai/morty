@@ -14,7 +14,8 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
+import { MortyRuntimeEngine, type RunLoopParams } from "../../src/engine/runtime/engine.ts";
 import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 test.for(["saved", "provided"] as const)(
@@ -92,7 +93,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
             },
         });
         try {
-            const saved = await engine.getConnectionManager().save(
+            const saved = await (
+                await RuntimeInstallationStore.open(join(directory, "data"), AbortSignal.timeout(5_000))
+            ).saveConnection(
                 {
                     computerId: "environment-channel",
                     defaultWorkspace: workspace,

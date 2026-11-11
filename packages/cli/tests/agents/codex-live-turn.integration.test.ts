@@ -161,11 +161,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             let completed = false;
             let sequence = 0;
             let thought = "";
-            let _recoveryPosition: {
-                readonly commandId: string;
-                readonly epoch: string;
-                readonly sequence: number;
-            } | null = null;
             let snapshotVerified = false;
             let queuedCancelled = false;
             let queuedAdmitted = false;
@@ -217,13 +212,6 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                     expect(result).toMatchObject({ queued: [] });
                     expect(result.action).toBe("active-turn");
                     if (result.action === "active-turn") {
-                        if (result.turn !== null) {
-                            _recoveryPosition = {
-                                commandId: result.turn.commandId,
-                                epoch: result.turn.epoch,
-                                sequence: result.turn.sequence,
-                            };
-                        }
                         expect(result.turn).toMatchObject({
                             commandId,
                             epoch: expect.any(String),

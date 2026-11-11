@@ -1,9 +1,8 @@
-import type { RuntimeAccessContext } from "../entity/authentication/project-authentication.ts";
-import type { VerifiedChannelAccess } from "../entity/pairing/pairing.ts";
-import { requestLogContext } from "../infra/log-diagnostics.ts";
-import { logger } from "../infra/logger.ts";
-import { RuntimeStatus } from "../service/channel/channel.ts";
-import type { ChannelGateway } from "./channel-gateway.ts";
+import type { VerifiedChannelAccess } from "../../../relay-core/src/entity/pairing/pairing.ts";
+import type { ChannelGateway } from "../../../relay-core/src/gateway/channel-gateway.ts";
+import { requestLogContext } from "../../../relay-core/src/infra/log-diagnostics.ts";
+import { logger } from "../../../relay-core/src/infra/logger.ts";
+import { RuntimeStatus } from "../../../relay-core/src/service/channel/channel.ts";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
@@ -19,7 +18,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     }
 
     readonly acceptDaemon = async (
-        access: RuntimeAccessContext,
+        access: VerifiedChannelAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -109,7 +108,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     private readonly fetchRuntime = async (
-        access: Pick<VerifiedChannelAccess, "computerId" | "computerId"> & { readonly computerId?: string },
+        access: VerifiedChannelAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {

@@ -13,7 +13,7 @@ import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 /** Prepare once per suite run; only immutable code is shared, never a runtime or its storage. */
 export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
     const bundle = await build({
-        entryPoints: [workerEntryPoint ?? fileURLToPath(new NodeURL("./relay-worker-entry.ts", import.meta.url))],
+        entryPoints: [workerEntryPoint ?? fileURLToPath(new NodeURL("./worker-entry.ts", import.meta.url))],
         bundle: true,
         external: ["cloudflare:*", "node:*"],
         loader: { ".txt": "text", ".sql": "text" },
@@ -38,7 +38,6 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
         compatibilityDate: "2026-09-07",
         compatibilityFlags: ["nodejs_compat"],
         d1Databases: ["RELAY_DIRECTORY_DATABASE"],
-        r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
         ratelimits: {
             ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
         },

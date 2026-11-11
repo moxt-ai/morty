@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
+import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
 
 interface PairingRelay {
     readonly claims: Array<Readonly<Record<string, unknown>>>;
@@ -143,7 +144,7 @@ describe("pairing a machine without a local Agent", () => {
         const relay = await createPairingRelay();
 
         try {
-            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const { MortyRuntimeEngine } = await import("../../src/engine/runtime/engine.ts");
             const engine = new MortyRuntimeEngine({
                 engineDataDir: stateDirectory,
                 agentLaunchEnvironment: agentlessEnvironment(stateDirectory),
@@ -160,7 +161,10 @@ describe("pairing a machine without a local Agent", () => {
             );
 
             expect(
-                await engine.getConnectionManager().read(paired.pairingGeneration, AbortSignal.timeout(5_000)),
+                await (await RuntimeInstallationStore.open(stateDirectory, AbortSignal.timeout(5_000))).readConnection(
+                    paired.pairingGeneration,
+                    AbortSignal.timeout(5_000),
+                ),
             ).toMatchObject({
                 computerId: "unattended-computer",
             });
@@ -181,7 +185,7 @@ describe("pairing a machine without a local Agent", () => {
         const environment = agentlessEnvironment(stateDirectory);
 
         try {
-            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const { MortyRuntimeEngine } = await import("../../src/engine/runtime/engine.ts");
             const engine = new MortyRuntimeEngine({
                 engineDataDir: stateDirectory,
                 agentLaunchEnvironment: environment,
@@ -196,12 +200,9 @@ describe("pairing a machine without a local Agent", () => {
                 AbortSignal.timeout(20_000),
             );
 
-            const resumed = await new MortyRuntimeEngine({
-                engineDataDir: stateDirectory,
-                agentLaunchEnvironment: environment,
-            })
-                .getConnectionManager()
-                .read(paired.pairingGeneration, AbortSignal.timeout(20_000));
+            const resumed = await (
+                await RuntimeInstallationStore.open(stateDirectory, AbortSignal.timeout(20_000))
+            ).readConnection(paired.pairingGeneration, AbortSignal.timeout(20_000));
 
             expect(resumed.pairingGeneration).toBe(paired.pairingGeneration);
             expect(resumed).toEqual(paired);

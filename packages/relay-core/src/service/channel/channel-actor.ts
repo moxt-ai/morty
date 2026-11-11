@@ -55,7 +55,6 @@ import {
 } from "@morty-build/client/protocol";
 import { SessionRuntimeError } from "../../entity/do/session.ts";
 import { logger } from "../../infra/logger.ts";
-import type { SessionStatusNotifications } from "../../infra/session-status-notifications.ts";
 import { SessionLiveEventRelay } from "./session-live-event-relay.ts";
 
 function sessionErrorCloseCode(error: SessionRuntimeError): 1008 | 1013 {
@@ -151,14 +150,13 @@ export class ChannelActor {
         readonly config: { readonly computerId: string };
         readonly gateways: {
             readonly peers: ChannelPeers;
-            readonly notifications?: SessionStatusNotifications;
         };
     }) {
         const { computerId } = cx.config;
-        const { peers, notifications } = cx.gateways;
+        const { peers } = cx.gateways;
         this.#peers = peers;
         this.#computerId = computerId;
-        this.#liveEvents = new SessionLiveEventRelay(computerId, peers, notifications);
+        this.#liveEvents = new SessionLiveEventRelay(peers);
     }
 
     readonly attachDaemon = async (replacedExistingConnection: boolean, _signal: AbortSignal): Promise<void> => {

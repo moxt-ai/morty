@@ -3,7 +3,7 @@ import type { SessionCapabilities } from "@morty-build/client/protocol";
 import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/agent-lifecycle.ts";
 import type { FakeAgentHarnessOptions, HarnessOutput, HarnessReplyPlan } from "./model.ts";
 
-export type FakeHarnessEndpointTermination = { readonly kind: "closed" };
+type FakeHarnessEndpointTermination = { readonly kind: "closed" };
 
 export interface FakeHarnessEndpoint {
     readonly terminated: Promise<FakeHarnessEndpointTermination>;

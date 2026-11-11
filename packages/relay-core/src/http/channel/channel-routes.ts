@@ -11,7 +11,7 @@ export function createChannelRoutes() {
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .put("/:computerId/catalog", bodyParser<RelayHttpEnvironment>(["agents"]), async (context) => {
-            const useCases = context.env.services.channels;
+            const useCases = context.var.relay.services.channels;
             const body = context.req.valid("json");
             const agents = validateAgents(body["agents"]);
             await useCases.updateAgentCatalog(

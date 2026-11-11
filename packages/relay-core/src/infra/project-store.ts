@@ -8,7 +8,6 @@ import type {
     RuntimeDirectoryRow,
     RuntimePairingRow,
 } from "../entity/pairing/pairing-records.ts";
-import type { ProjectStoragePlacement } from "./project-storage-directory.ts";
 
 export interface RequestRuntimePairing {
     readonly computerId: string;
@@ -82,8 +81,8 @@ export interface ProjectStore {
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
     /**
-     * Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. Session
-     * credentials carry their holder's access, not the Runtime's, so they are unaffected.
+     * Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. Ending its
+     * pairing generation also ends the Session credentials issued under it.
      */
     readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
@@ -99,5 +98,5 @@ export interface ProjectStore {
 }
 
 export interface ProjectStoreResolver {
-    readonly resolve: (placement: ProjectStoragePlacement) => ProjectStore;
+    readonly resolve: (computerId: string) => ProjectStore;
 }

@@ -31,7 +31,6 @@ import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.
 import type { IdentifiedSessionNotification } from "../../src/engine/acp/connection/session-notification.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
-import { RuntimeTurnActivity } from "../../src/engine/session/turn/runtime-turn-activity.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
@@ -280,7 +279,19 @@ async function startRuntime() {
     await listen(http);
     const timer = new ManualTimer();
     const producer = new StreamingAgent();
-    const activity = new RuntimeTurnActivity();
+    let executionCount = 0;
+    const settledWaiters = new Set<() => void>();
+    const onExecutionCountChange = (count: number): void => {
+        executionCount = count;
+        if (count === 0) {
+            for (const resolve of settledWaiters) {
+                resolve();
+            }
+            settledWaiters.clear();
+        }
+    };
+    const whenSettled = (): Promise<void> =>
+        executionCount === 0 ? Promise.resolve() : new Promise((resolve) => settledWaiters.add(resolve));
     const config = createRuntimeConfig(
         {
             computerId: "disconnected-output",
@@ -300,7 +311,7 @@ async function startRuntime() {
         new RuntimeLocalContext(directory, {}),
     );
     let cancellation = new AbortController();
-    let runtime = runRuntime(config, cancellation.signal, timer, { turnActivity: activity });
+    let runtime = runRuntime(config, cancellation.signal, timer, { onExecutionCountChange });
     const nextPeer = (): Promise<RelayPeer> => {
         const peer = peers.shift();
         return peer === undefined ? new Promise((resolve) => waiters.push(resolve)) : Promise.resolve(peer);
@@ -308,10 +319,7 @@ async function startRuntime() {
     const initial = await nextPeer();
     await initial.barrier();
     return {
-        activity,
-        get cancellation() {
-            return cancellation;
-        },
+        whenSettled,
         initial,
         producer,
         timer,
@@ -355,7 +363,7 @@ async function startRuntime() {
             cancellation.abort();
             await runtime;
             cancellation = new AbortController();
-            runtime = runRuntime(config, cancellation.signal, timer, { turnActivity: activity });
+            runtime = runRuntime(config, cancellation.signal, timer, { onExecutionCountChange });
             const peer = await nextPeer();
             await peer.barrier();
             return peer;
@@ -513,7 +521,7 @@ test.each([
             break;
         }
         turn.finish();
-        await runtime.activity.whenIdle(runtime.cancellation.signal);
+        await runtime.whenSettled();
         const nativeThought = runtime.initial.events.find(
             (event) => event.type === "acp" && event.payload.sessionUpdate === "agent_thought_chunk",
         );
@@ -570,7 +578,7 @@ test("Given oversized reasoning chunks, When the daemon streams them to the Rela
     await turn.writeThought(`prefix${"y".repeat(24 * 1024)}`);
     await turn.write(oversized);
     turn.finish();
-    await runtime.activity.whenIdle(runtime.cancellation.signal);
+    await runtime.whenSettled();
     (await runtime.timer.next(100)).run();
     await runtime.initial.barrier();
     const thoughts = runtime.initial.events.flatMap((event) =>
@@ -609,7 +617,7 @@ test.each([true, false])(
         }
         await turn.write("the final 161 characters remain available.");
         turn.finish();
-        await runtime.activity.whenIdle(runtime.cancellation.signal);
+        await runtime.whenSettled();
         const reconnect = runtime.nextPeer();
         retry.run();
         const resumed = await reconnect;
@@ -630,7 +638,7 @@ test("Given a daemon restarted with a retained outcome, When the Relay reconnect
     const turn = await runtime.prompt(runtime.initial, "restarted-session");
     await turn.write("Finished before the restart.");
     turn.finish();
-    await runtime.activity.whenIdle(runtime.cancellation.signal);
+    await runtime.whenSettled();
 
     const connections = [await runtime.restart()];
     // Each reconnection first hands over what the previous connection left unsent.
@@ -668,7 +676,7 @@ test("Given concurrent Sessions produce an offline burst, When the Runtime recon
     }
     first.finish();
     second.finish();
-    await runtime.activity.whenIdle(runtime.cancellation.signal);
+    await runtime.whenSettled();
     const reconnect = runtime.nextPeer();
     retry.run();
     const resumed = await reconnect;
@@ -711,9 +719,15 @@ test("Given an outage exhausts the bounded output buffer, When the Relay reconne
     expect(resumed.batches.reduce((bytes, batch) => bytes + batch.bytes, 0)).toBeLessThanOrEqual(32 * 1024 * 1024);
     await turn.write("streaming continues after the outage");
     turn.finish();
-    await runtime.activity.whenIdle(runtime.cancellation.signal);
-    (await runtime.timer.next(100)).run();
-    await resumed.barrier();
+    await runtime.whenSettled();
+    do {
+        (await runtime.timer.next(100)).run();
+        await resumed.barrier();
+    } while (
+        !resumed.events.some(
+            (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed",
+        )
+    );
     expect(answer(resumed.events, turn.sessionTarget)).toBe(`${offlineAnswer}streaming continues after the outage`);
     expect(
         resumed.events.filter(

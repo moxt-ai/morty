@@ -108,6 +108,22 @@ describe("acp interactions", () => {
             _meta: { messageId: "user-1" },
         });
         expect(result.text).toContain("main");
+        const retry = {
+            action: "accept" as const,
+            content: ' { "branch" : "main" } ',
+            interactionId: result.elicitation.interactionId,
+            target: session.request.target,
+        };
+        await expect(session.manager.respondElicitation(retry)).resolves.toBeUndefined();
+        await expect(
+            session.manager.respondElicitation({ ...retry, content: '{"branch":"other"}' }),
+        ).rejects.toMatchObject({
+            code: "elicitation_response_conflict",
+        });
+        await expect(session.manager.respondElicitation({ ...retry, action: "decline" })).rejects.toMatchObject({
+            code: "elicitation_response_conflict",
+        });
+
         expect(
             session.observer.events.flatMap(({ event }) =>
                 event.type === "lifecycle-metadata" ? [event.payload.kind] : [],
@@ -156,6 +172,14 @@ describe("acp interactions", () => {
             stopReason: "end_turn",
             _meta: { messageId: "user-1" },
         });
+        await expect(
+            session.manager.respondElicitation({
+                action: "accept",
+                content: "",
+                interactionId: elicitation.interactionId,
+                target: session.request.target,
+            }),
+        ).resolves.toBeUndefined();
         expect(session.observer.elicitationResolutions.map((event) => event.action)).toEqual(["accept", "complete"]);
     });
 });

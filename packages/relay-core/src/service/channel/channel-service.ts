@@ -1,5 +1,4 @@
-import type { RuntimeAccessContext } from "../../entity/authentication/project-authentication.ts";
-import type { AgentDescriptor } from "../../entity/pairing/pairing.ts";
+import type { AgentDescriptor, VerifiedChannelAccess } from "../../entity/pairing/pairing.ts";
 import type { ChannelGateway } from "../../gateway/index.ts";
 import { logger } from "../../infra/logger.ts";
 import type { PairingOperations } from "../pairing/pairing-operations.ts";
@@ -32,7 +31,9 @@ export class ChannelService {
         token: string,
         successor: string,
         signal: AbortSignal,
-    ): Promise<{ readonly kind: "accepted"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }> => {
+    ): Promise<
+        { readonly kind: "accepted"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
+    > => {
         const rotation = await this.#pairings.rotateRuntimeCredential(token, successor, signal);
         switch (rotation.kind) {
             case "rotated":

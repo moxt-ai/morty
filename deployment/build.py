@@ -54,7 +54,6 @@ def main():
     morty = overlay(ROOT / 'wrangler.jsonc', environment)
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
-    morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
     morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_ALLOWED_ORIGINS': json.dumps([spec['morty_origin']])}
     morty['d1_databases'] = [{'binding': 'RELAY_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
     morty['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
