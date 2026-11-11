@@ -32,6 +32,8 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
         });
         const sync = () => {
             const log = pane.querySelector('[role="log"]');
+            // ScrollArea puts the log role on its viewport; the stable anchor is outside its root.
+            const scrollFrame = log?.closest('[data-slot="scroll-area"]') ?? log;
             // The pane clips its overflow, so the room between the pane top and
             // the form is all the floating notice can ever show; anything taller
             // scrolls inside its own slot instead of losing its actions at the edge.
@@ -49,8 +51,8 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
             // below that anchor and would inflate the gap.
             const noticeTop = element.getBoundingClientRect().top;
             const anchorBottom =
-                log instanceof HTMLElement && log.parentElement !== null
-                    ? log.parentElement.getBoundingClientRect().bottom
+                scrollFrame instanceof HTMLElement && scrollFrame.parentElement !== null
+                    ? scrollFrame.parentElement.getBoundingClientRect().bottom
                     : noticeTop;
             pane.style.setProperty("--composer-overlay-block", `${Math.max(0, anchorBottom - noticeTop)}px`);
         };
