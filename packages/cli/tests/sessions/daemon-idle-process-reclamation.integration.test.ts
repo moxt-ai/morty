@@ -37,7 +37,6 @@ class IdleAgentSpecification extends ControlledAcpSpecification {
     readonly harness = "claude";
     readonly label = "Controlled ACP";
     override readonly minimumSupportedAgentVersion = "1.0.0";
-    override readonly maximumTestedAgentVersion = "1.0.0";
 
     constructor() {
         super("MORTY_TEST_CONTROLLED_ACP_PATH", []);
@@ -482,7 +481,6 @@ class RetiringIdleAgentSpecification extends InProcessAcpAgentSpecification {
     readonly harness = "claude";
     readonly label = "Controlled retiring Agent";
     override readonly minimumSupportedAgentVersion = process.versions.node;
-    override readonly maximumTestedAgentVersion = process.versions.node;
     readonly sessions = new ControlledSessionAgent();
     readonly createConnection = this.sessions.createConnection;
 

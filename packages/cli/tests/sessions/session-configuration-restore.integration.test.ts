@@ -22,7 +22,6 @@ class ModelDependentSettingsAgent extends ControlledAcpSpecification {
     readonly agentExecutable = "node";
     readonly harness = "controlled-acp";
     readonly label = "Controlled model-dependent settings";
-    override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
 
     constructor() {

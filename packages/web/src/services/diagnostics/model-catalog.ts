@@ -79,7 +79,7 @@ export const diagnosticVersion = (value: string): string | null =>
     )?.[1] ?? null;
 
 export const diagnosticAgent = (value: string): string =>
-    ["codex", "claude", "opencode", "pi"].includes(value) ? value : "custom";
+    ["codex", "claude", "pi"].includes(value) ? value : "custom";
 
 export function modelDiagnosticProjection() {
     const aliases = new Map<string, string>();

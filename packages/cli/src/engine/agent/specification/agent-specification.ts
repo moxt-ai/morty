@@ -1,5 +1,3 @@
-import type { ClientConnection, InitializeResponse } from "@agentclientprotocol/sdk/unstable";
-
 import type { AgentConnectionFactory } from "../../acp/connection/agent-connection.ts";
 import type { ResolvedExecutable } from "../../util/process/executable.ts";
 import { type AgentReadinessProbeParams, probeAcpReadiness } from "../discovery/acp-readiness-probe.ts";
@@ -18,14 +16,12 @@ export abstract class LocalAgentSpecification {
     readonly probeReadiness = (params: AgentReadinessProbeParams) =>
         probeAcpReadiness(this, params.agent, params.environment, params.defaultWorkspace, params.signal);
     abstract readonly createConnection: AgentConnectionFactory | null;
-    abstract readonly adapterOverrideVariable: string;
     abstract readonly adapterVersion: string;
     abstract readonly agentExecutable: string;
     abstract readonly agentOverrideVariable: string;
     abstract readonly harness: string;
     abstract readonly label: string;
     readonly minimumSupportedAgentVersion: string = "0.0.0";
-    readonly maximumTestedAgentVersion: string = "0.0.0";
     readonly acpProbeTimeoutMilliseconds: number = ACP_PROBE_TIMEOUT_MILLISECONDS;
     readonly authenticationCommand = (): string => "";
     readonly adapterVersionArguments: readonly string[] = ["--version"];
@@ -44,13 +40,6 @@ export abstract class LocalAgentSpecification {
     readonly resolveInstalledAgentExecutables = (
         _context: LocalAgentDiscoveryContext,
     ): Promise<readonly ResolvedExecutable[]> => Promise.resolve([]);
-
-    readonly verifyAcp = (
-        _connection: ClientConnection,
-        _initialized: InitializeResponse,
-        _defaultWorkspace: string,
-        _signal: AbortSignal,
-    ): Promise<void> => Promise.resolve();
 }
 
 /**
@@ -63,13 +52,11 @@ export abstract class LocalAgentSpecification {
  * readiness with direct harness operations, independently of their session adapter implementation.
  */
 export abstract class InProcessAcpAgentSpecification extends LocalAgentSpecification {
-    readonly adapterOverrideVariable: string;
     readonly adapterVersion = "in-process";
     readonly agentOverrideVariable: string;
 
     protected constructor(executableOverrideVariable: string) {
         super();
-        this.adapterOverrideVariable = executableOverrideVariable;
         this.agentOverrideVariable = executableOverrideVariable;
     }
 }

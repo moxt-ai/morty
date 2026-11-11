@@ -48,7 +48,7 @@ interface SessionInteractionContext {
     readonly getToolCall: (toolCallId: string) => ProjectedToolCall | undefined;
     readonly commandId: () => string;
     readonly assertNativeSession: (sessionId: string) => void;
-    readonly observer: () => SessionObserver;
+    readonly observer: SessionObserver;
     readonly recordSessionEvent: (event: SessionEventPayload) => Promise<void>;
 }
 export class SessionInteractions {
@@ -74,28 +74,28 @@ export class SessionInteractions {
             payload: { event, kind: "session.permission.requested" },
             type: "lifecycle-metadata",
         });
-        await this.#context.observer().onPermission(event);
+        await this.#context.observer.onPermission(event);
     };
     readonly #notifyPermissionResolved = async (event: SessionPermissionResolvedEvent): Promise<void> => {
         await this.#context.recordSessionEvent({
             payload: { event, kind: "session.permission.resolved" },
             type: "lifecycle-metadata",
         });
-        await this.#context.observer().onPermissionResolved(event);
+        await this.#context.observer.onPermissionResolved(event);
     };
     readonly #notifyElicitationRequested = async (event: SessionElicitationRequestedEvent): Promise<void> => {
         await this.#context.recordSessionEvent({
             payload: { event, kind: "session.elicitation.requested" },
             type: "lifecycle-metadata",
         });
-        await this.#context.observer().onElicitation(event);
+        await this.#context.observer.onElicitation(event);
     };
     readonly #notifyElicitationResolved = async (event: SessionElicitationResolvedEvent): Promise<void> => {
         await this.#context.recordSessionEvent({
             payload: { event, kind: "session.elicitation.resolved" },
             type: "lifecycle-metadata",
         });
-        await this.#context.observer().onElicitationResolved(event);
+        await this.#context.observer.onElicitationResolved(event);
     };
     readonly respondPermission = async (options: PermissionResponseOptions): Promise<void> => {
         const answered = this.#permissionAnswers.get(options.interactionId);

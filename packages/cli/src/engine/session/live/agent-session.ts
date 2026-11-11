@@ -125,7 +125,7 @@ export class AgentSession {
     readonly #harness: string;
     readonly #cwd: string;
     readonly #environment: Readonly<Record<string, string>>;
-    readonly #getObserver: () => SessionObserver;
+    readonly #observer: SessionObserver;
     readonly #agentCommand: () => string | undefined;
     readonly #settledTurns: () => readonly SettledTurn[];
     readonly #interactions: SessionInteractions;
@@ -148,7 +148,7 @@ export class AgentSession {
         agent: AcpAgentDefinition,
         cwd: string,
         identity: UnboundIdentity,
-        getObserver: () => SessionObserver,
+        observer: SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
         metrics: OperationMetrics,
@@ -165,14 +165,14 @@ export class AgentSession {
         this.#identity = identity;
         this.#metrics = metrics;
         this.#store = store;
-        this.#getObserver = getObserver;
+        this.#observer = observer;
         this.#interactions = new SessionInteractions({
             cwd: () => this.#cwd,
             getToolCall: (toolCallId) => this.#store.events.getToolCall(this.target, toolCallId),
             target: () => this.target,
             commandId: () => this.#agentCommand() ?? SESSION_CONTROL_COMMAND_ID,
             assertNativeSession: this.assertNativeSession,
-            observer: getObserver,
+            observer,
             recordSessionEvent: this.recordLifecycleEvent,
         });
         this.#scope = {
@@ -195,7 +195,7 @@ export class AgentSession {
             onBackgroundActivity: (activity) => {
                 const previous = this.#backgroundActivity;
                 this.#backgroundActivity = activity;
-                this.#getObserver().onBackgroundActivity?.(this, activity);
+                this.#observer.onBackgroundActivity?.(this, activity);
                 if (previous !== "none" && activity === "none") {
                     // Background work may have appended to native history on this process's behalf.
                     void this.#recordNativeHistoryRevision();
@@ -222,7 +222,7 @@ export class AgentSession {
     static async #start(
         options: SessionCreationOptions,
         identity: UnboundIdentity,
-        getObserver: () => SessionObserver,
+        observer: SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
         initialize: (runtime: AgentSession) => Promise<void>,
@@ -241,7 +241,7 @@ export class AgentSession {
                         options.agent,
                         options.cwd,
                         identity,
-                        getObserver,
+                        observer,
                         execution,
                         store,
                         metrics,
@@ -280,7 +280,7 @@ export class AgentSession {
     static readonly start = async (
         options: SessionPrepareOptions,
         recovery: SessionRecovery,
-        getObserver: () => SessionObserver,
+        observer: SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
         metrics: OperationMetrics,
@@ -290,7 +290,7 @@ export class AgentSession {
         await AgentSession.#start(
             options,
             { kind: "expected", target: options.target },
-            getObserver,
+            observer,
             execution,
             store,
             async (runtime) => {
@@ -305,7 +305,7 @@ export class AgentSession {
 
     static readonly create = async (
         options: SessionCreationOptions,
-        getObserver: () => SessionObserver,
+        observer: SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
         metrics: OperationMetrics,
@@ -313,7 +313,7 @@ export class AgentSession {
         await AgentSession.#start(
             options,
             { kind: "awaiting", origin: "created" },
-            getObserver,
+            observer,
             execution,
             store,
             async (runtime) => {
@@ -333,7 +333,7 @@ export class AgentSession {
         options: SessionCreationOptions,
         origin: Extract<NativeSessionOrigin, { readonly kind: "fork" }>,
         capabilities: SessionCapabilities,
-        getObserver: () => SessionObserver,
+        observer: SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
         metrics: OperationMetrics,
@@ -341,7 +341,7 @@ export class AgentSession {
         await AgentSession.#start(
             options,
             { kind: "awaiting", origin: "forked" },
-            getObserver,
+            observer,
             execution,
             store,
             async (runtime) => {
@@ -773,7 +773,7 @@ export class AgentSession {
                 })),
             },
         });
-        await this.#getObserver().onSessionEvent?.(event);
+        await this.#observer.onSessionEvent?.(event);
         await this.emitConfigUpdate();
     };
 
@@ -1005,7 +1005,7 @@ export class AgentSession {
             return;
         }
         const liveEvent = this.#sessionLoad.history.recordLifecycle(event);
-        await this.#getObserver().onSessionEvent?.(liveEvent);
+        await this.#observer.onSessionEvent?.(liveEvent);
     };
 
     /**
@@ -1078,7 +1078,7 @@ export class AgentSession {
             this.#sessionLoad.history.replay(event.payload);
         } else if (this.#sessionLoad.kind === "loaded") {
             await this.#sessionLoad.history.record(event.payload, async (liveEvent) => {
-                await this.#getObserver().onSessionEvent?.(liveEvent);
+                await this.#observer.onSessionEvent?.(liveEvent);
             });
         }
         switch (event.kind) {
@@ -1087,7 +1087,7 @@ export class AgentSession {
                 return;
             case "commands":
                 this.#commands = event.commands;
-                await this.#getObserver().onCommands({
+                await this.#observer.onCommands({
                     commands: this.#commands,
                     kind: SESSION_COMMANDS_UPDATED_KIND,
                     target: this.target,
@@ -1112,7 +1112,7 @@ export class AgentSession {
                 if (this.#identity.kind === "bound") {
                     this.writeStoredSession(updatedAt);
                 }
-                await this.#getObserver().onInfo({
+                await this.#observer.onInfo({
                     kind: SESSION_INFO_UPDATED_KIND,
                     target: this.target,
                     title: this.#sessionTitle,
@@ -1160,7 +1160,7 @@ export class AgentSession {
     };
 
     readonly emitConfigUpdate = async (): Promise<void> => {
-        await this.#getObserver().onConfig({
+        await this.#observer.onConfig({
             configOptions: this.#configOptions,
             configurationRevision: configurationRevision(this.#configOptions),
             kind: SESSION_CONFIG_UPDATED_KIND,
