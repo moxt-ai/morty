@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const lifecycleResponse = z
+const lifecycleResponse = z
     .discriminatedUnion("kind", [
         z.strictObject({
             kind: z.literal("status"),

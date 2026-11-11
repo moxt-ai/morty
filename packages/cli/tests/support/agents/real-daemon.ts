@@ -24,7 +24,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { collectLocalDaemonLogs } from "../../../src/cli/handler/logs/logic/collect-local-logs.ts";
 import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";
 import { sendLocalRequest } from "../../../src/daemon/control/local-client.ts";
-import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
+import { decodeLifecycleResponse } from "../../../src/daemon/control/protocol.ts";
 import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-computer.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
@@ -315,7 +315,7 @@ async function withDaemonConnection(
                 if (launch === "managed") {
                     if (mode === "crash") {
                         const control = await openMortyInstallation(signal, cliEnvironment);
-                        const status = lifecycleResponse.parse(
+                        const status = decodeLifecycleResponse(
                             await sendLocalRequest(control.stateDirectory, { kind: "status" }, signal),
                         );
                         if (status.kind !== "status") {

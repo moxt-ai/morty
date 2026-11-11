@@ -2202,7 +2202,6 @@ describe.sequential("Relay Turn submission", () => {
         const owner = await createOwner();
         const { computerId } = owner;
         const appCredential = owner.token;
-        const _backend = computerBackend(computerId);
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
@@ -2562,7 +2561,6 @@ describe.sequential("Relay Turn submission", () => {
         const owner = await createOwner();
         const { computerId } = owner;
         const appCredential = owner.token;
-        const _backend = computerBackend(computerId);
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
