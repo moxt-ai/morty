@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { MortyClient } from "@morty-build/client";
 import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
 
 for (const client of ["SDK", "HTTP"] as const) {
@@ -192,8 +192,8 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
                     return access.credential;
                 },
             },
-            transport: { fetch: async (request: Request) => await relay.app.request(request) },
         });
+        onTestFinished(() => session.close());
 
         const turn = await session.turns.submit(
             sessionTarget,

@@ -25,7 +25,7 @@ for (const target of ["immediate", "queued"] as const) {
                 target === "queued" ? "wait for steering" : "Established session",
             );
             if (target === "queued") {
-                await app.queryElementByTestId(dataTestId.sessionStatus);
+                await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
             } else {
                 await app.waitForView(() => {
                     expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
@@ -171,7 +171,9 @@ test("Given an unconfirmed message after a reload, When another device runs a tu
         expect(button.hasAttribute("disabled")).toBe(false);
         return button;
     });
+    const arriving = network.nextSubmission(AbortSignal.timeout(15_000));
     await reloaded.user.click(retry);
+    expect(JSON.parse(await arriving)).toEqual(original);
     await reloaded.waitForView(() =>
         expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull(),
     );

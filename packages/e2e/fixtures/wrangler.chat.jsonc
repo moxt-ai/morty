@@ -13,7 +13,7 @@
             "binding": "RELAY_DIRECTORY_DATABASE",
             "database_name": "morty-local-e2e-directory",
             "database_id": "00000000-0000-0000-0000-000000000102",
-            "migrations_dir": "../../relay/migrations/d1"
+            "migrations_dir": "../../worker/migrations/d1"
         }
     ],
     "ratelimits": [

@@ -1,3 +1,4 @@
+import { EventEmitter, once } from "node:events";
 import { createServer, request } from "node:http";
 import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
 import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
@@ -101,12 +102,21 @@ export async function createResponseLossProxy(upstream: string) {
         null;
     let holdConfiguration: { readonly resolve: () => void } | null = null;
     const sockets = new Set<WebSocket>();
+    const browserSockets = new Set<WebSocket>();
     const webSockets = new WebSocketServer({ server });
     let armed: "before-acceptance" | "after-acceptance" | "held" | null = null;
+    let lostSubmission: { readonly client: WebSocket; readonly requestId: string } | null = null;
     // A held submission reaches the service only when the scenario releases it, as a slow network would deliver it.
-    const held: { readonly remote: WebSocket; readonly data: Buffer; readonly binary: boolean }[] = [];
+    const held: { readonly release: () => void }[] = [];
     let reconnectsBlocked = false;
     const submissions: string[] = [];
+    const turnArrivals = new EventEmitter();
+    const interruptBrowserNetwork = () => {
+        reconnectsBlocked = true;
+        for (const socket of browserSockets) {
+            socket.terminate();
+        }
+    };
     webSockets.on("connection", (client, incoming) => {
         const computer = new URL(incoming.url ?? "/", upstream).pathname.endsWith("/computers/connect");
         if (reconnectsBlocked && !computer) {
@@ -114,6 +124,10 @@ export async function createResponseLossProxy(upstream: string) {
             return;
         }
         sockets.add(client);
+        if (!computer) {
+            browserSockets.add(client);
+            turnArrivals.emit("browser-connections", browserSockets.size);
+        }
         const target = new URL(incoming.url ?? "/", upstream);
         target.protocol = "ws:";
         const remote = new WebSocket(target, {
@@ -140,8 +154,14 @@ export async function createResponseLossProxy(upstream: string) {
         });
         sockets.add(remote);
         let configurationResponse: { readonly requestId: string; readonly ready: () => void } | null = null;
-        let lostRequestId: string | null = null;
         const pending: { readonly data: Buffer; readonly binary: boolean }[] = [];
+        const forward = (data: Buffer, binary: boolean) => {
+            if (remote.readyState === WebSocket.OPEN) {
+                remote.send(data, { binary });
+            } else {
+                pending.push({ data, binary });
+            }
+        };
         client.on("message", (data, binary) => {
             const bytes = Buffer.isBuffer(data)
                 ? data
@@ -184,29 +204,24 @@ export async function createResponseLossProxy(upstream: string) {
                     typeof frame.body === "string"
                 ) {
                     submissions.push(frame.body);
+                    turnArrivals.emit("submission", frame.body);
                     if (armed === "held") {
                         armed = null;
-                        held.push({ remote, data: bytes, binary });
+                        held.push({ release: () => forward(bytes, binary) });
                         return;
                     }
                     if (armed !== null) {
                         const delivery = armed;
                         armed = null;
                         if (delivery === "before-acceptance") {
-                            reconnectsBlocked = true;
-                            client.terminate();
-                            remote.terminate();
+                            interruptBrowserNetwork();
                             return;
                         }
-                        lostRequestId = frame.requestId;
+                        lostSubmission = { client, requestId: frame.requestId };
                     }
                 }
             }
-            if (remote.readyState === WebSocket.OPEN) {
-                remote.send(bytes, { binary });
-            } else {
-                pending.push({ data: bytes, binary });
-            }
+            forward(bytes, binary);
         });
         remote.on("open", () => {
             for (const frame of pending.splice(0)) {
@@ -231,7 +246,8 @@ export async function createResponseLossProxy(upstream: string) {
                 }
             }
 
-            if (lostRequestId !== null) {
+            // A separate viewing connection must not confirm the delivery whose response this fault loses.
+            if (!computer && lostSubmission !== null) {
                 const frame = binary ? null : jsonFrame(data.toString());
                 if (
                     typeof frame === "object" &&
@@ -239,12 +255,11 @@ export async function createResponseLossProxy(upstream: string) {
                     "kind" in frame &&
                     frame.kind === "http.response" &&
                     "requestId" in frame &&
-                    frame.requestId === lostRequestId
+                    lostSubmission.client === client &&
+                    frame.requestId === lostSubmission.requestId
                 ) {
                     // The service accepted the request. Lose its response and any confirming live events.
-                    reconnectsBlocked = true;
-                    client.terminate();
-                    remote.terminate();
+                    interruptBrowserNetwork();
                 }
                 return;
             }
@@ -256,6 +271,8 @@ export async function createResponseLossProxy(upstream: string) {
         remote.on("error", () => client.terminate());
         client.on("close", () => {
             sockets.delete(client);
+            browserSockets.delete(client);
+            turnArrivals.emit("browser-connections", browserSockets.size);
             remote.terminate();
         });
         remote.on("close", () => {
@@ -267,6 +284,37 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
+        waitForBrowserConnections: async (count: number, signal: AbortSignal): Promise<void> => {
+            signal.throwIfAborted();
+            if (browserSockets.size === count) {
+                return;
+            }
+            await new Promise<void>((resolve, reject) => {
+                const cleanup = () => {
+                    turnArrivals.removeListener("browser-connections", changed);
+                    signal.removeEventListener("abort", aborted);
+                };
+                const changed = (connected: number) => {
+                    if (connected === count) {
+                        cleanup();
+                        resolve();
+                    }
+                };
+                const aborted = () => {
+                    cleanup();
+                    reject(signal.reason);
+                };
+                turnArrivals.on("browser-connections", changed);
+                signal.addEventListener("abort", aborted, { once: true });
+            });
+        },
+        nextSubmission: async (signal: AbortSignal): Promise<string> => {
+            const [body]: unknown[] = await once(turnArrivals, "submission", { signal });
+            if (typeof body !== "string") {
+                throw new Error("Expected an arriving Turn submission");
+            }
+            return body;
+        },
         /** Holds a committed Chat sharing response, then loses it when the scenario disconnects the network. */
         holdNextSharingResponse: () => {
             const received = Promise.withResolvers<string>();
@@ -316,10 +364,11 @@ export async function createResponseLossProxy(upstream: string) {
         },
         releaseHeldTurn: () => {
             for (const request of held.splice(0)) {
-                request.remote.send(request.data, { binary: request.binary });
+                request.release();
             }
         },
         reconnect: () => {
+            lostSubmission = null;
             reconnectsBlocked = false;
         },
         close: async () => {

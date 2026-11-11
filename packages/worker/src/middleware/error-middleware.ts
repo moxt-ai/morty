@@ -1,28 +1,34 @@
-import type { Context, Env, ErrorHandler } from "hono";
-import { ValiError } from "valibot";
-import { json } from "../infra/http.ts";
-import { isHttpError } from "../infra/http-error.ts";
+import type { Context } from "hono";
+import { createMiddleware } from "hono/factory";
+import { toHttpError } from "../contracts/http-error.ts";
+import { requestLogContext } from "../infra/log-diagnostics.ts";
+import { logger } from "../infra/logger.ts";
 
-interface ErrorLogger {
-    readonly error: (value: Readonly<Record<string, unknown>>, message: string) => void;
+export function rethrowHonoError(error: Error): never {
+    throw error;
 }
 
-/** Hono's error boundary replaces even a response prepared before a final authorization check failed. */
-export function errorHandler<TEnvironment extends Env>(
-    getLogger: (context: Context<TEnvironment>) => ErrorLogger,
-): ErrorHandler<TEnvironment> {
-    return (error, context) => {
-        if (context.req.raw.signal.aborted) {
-            throw error;
-        }
-        getLogger(context).error({ err: error }, "Application request failed");
-        if (error instanceof ValiError) {
-            return json({ error: { code: "INVALID_REQUEST", message: "The request is invalid." } }, 400);
-        }
-        if (isHttpError(error)) {
-            const response = error.toHttpJson();
-            return json(response.body, response.status, response.headers);
-        }
-        return json({ error: { code: "INTERNAL_ERROR", message: "The request could not be completed." } }, 500);
-    };
+/** Mounted routes need an error handler: the host can consume exceptions before upstream middleware sees them. */
+export function relayErrorHandler(error: unknown, context: Context): Response {
+    logger.error(
+        { ...requestLogContext(context.req.raw), err: error, event: "request_failed" },
+        "Morty request failed",
+    );
+    if (context.req.raw.signal.aborted) {
+        throw error;
+    }
+    const response = toHttpError(error);
+    const result = Response.json(response.body, {
+        status: response.status,
+        headers: response.headers ?? {},
+    });
+    return context.newResponse(result.body, result);
 }
+
+export const errorMiddleware = createMiddleware(async (context, next) => {
+    try {
+        return await next();
+    } catch (error) {
+        return relayErrorHandler(error, context);
+    }
+});

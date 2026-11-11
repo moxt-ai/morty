@@ -53,7 +53,6 @@ async function writeMigrationModule(
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli");
-const relay = join(root, "packages/relay");
 const worker = join(root, "packages/worker");
 
 await writeMigrationModule(
@@ -67,17 +66,17 @@ await writeMigrationModule(
     await sqlFiles(join(cli, "migrations/session-event-cache")),
 );
 await writeMigrationModule(
-    join(relay, "src/generated/relay-operations-do-migrations.ts"),
+    join(worker, "src/computer-relay/generated/connection-do-migrations.ts"),
     "relayOperationsDurableObjectMigrations",
-    await sqlFiles(join(relay, "migrations/relay-operations-do")),
+    await sqlFiles(join(worker, "migrations/connection-do")),
 );
 await writeMigrationModule(
-    join(relay, "src/generated/computer-relay-do-migrations.ts"),
+    join(worker, "src/computer-relay/generated/pairing-do-migrations.ts"),
     "computerDurableObjectMigrations",
-    await sqlFiles(join(relay, "migrations/computer-relay-do")),
+    await sqlFiles(join(worker, "migrations/pairing-do")),
 );
 await writeMigrationModule(
-    join(worker, "src/generated/computer-relay-do-migrations.ts"),
+    join(worker, "src/computer-relay/generated/computer-relay-do-migrations.ts"),
     "computerDurableObjectMigrations",
     await sqlFiles(join(worker, "migrations/computer-relay-do")),
 );

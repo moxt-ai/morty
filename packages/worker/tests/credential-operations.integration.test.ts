@@ -2,10 +2,10 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { computerDirectoryDrizzle } from "../../relay/src/components/management/storage/relay-drizzle-database.ts";
-import { computerAccount } from "../../relay/src/schema/d1/index.ts";
-import worker, { fetchPublicApplication } from "../src/application.ts";
-import { d1DatabaseBindingSchema } from "../src/infra/cloud-bindings.ts";
+import { d1DatabaseBindingSchema } from "../src/contracts/cloud-bindings.ts";
+import { computerDirectoryDrizzle } from "../src/directory/storage/relay-drizzle-database.ts";
+import { computerAccount } from "../src/schema/d1/index.ts";
+import worker, { fetchPublicApplication } from "../src/worker/application.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;

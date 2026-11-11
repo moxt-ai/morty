@@ -4,9 +4,9 @@ import { execFileSync } from "node:child_process";
 // production ran before, on the database its migrations already changed. A migration may therefore drop or rename
 // only what those production Workers no longer use: stop using it in one release, then drop or rename it in a later one.
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", timeout: 60000, maxBuffer: 64 * 1024 * 1024 });
-const migrations = "packages/relay/migrations/d1";
-const workerSources = ["packages/relay/src", "packages/worker/src"];
-const schema = "packages/relay/src/schema/d1";
+const migrations = "packages/worker/migrations/d1";
+const workerSources = ["packages/worker/src"];
+const schema = "packages/worker/src/schema/d1";
 
 function productionRevision() {
     const supplied = process.argv[2];

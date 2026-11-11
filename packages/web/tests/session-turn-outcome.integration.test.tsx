@@ -176,8 +176,9 @@ test("Given a turn that fails while I am in another Session, When I return, Then
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
     });
     network.holdNextTurn();
+    const arriving = network.nextSubmission(AbortSignal.timeout(15_000));
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "fail this turn explicitly");
-    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("fail this turn explicitly"));
+    expect(await arriving).toContain("fail this turn explicitly");
 
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     network.releaseHeldTurn();
@@ -245,8 +246,9 @@ test("Given my last turn completed while I was away after an earlier failure, Wh
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "fail this turn explicitly");
     await app.waitForView(() => expect(entryStatus(app, "Established session")).toBe("Session failed"));
     network.holdNextTurn();
+    const arriving = network.nextSubmission(AbortSignal.timeout(15_000));
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Finish while away");
-    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("Finish while away"));
+    expect(await arriving).toContain("Finish while away");
 
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     network.releaseHeldTurn();

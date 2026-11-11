@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { expect, test } from "vitest";
-import worker from "../src/application.ts";
+import worker from "../src/worker/application.ts";
 
 const bundle = await build({
     entryPoints: [fileURLToPath(new URL("../src/index.ts", import.meta.url))],

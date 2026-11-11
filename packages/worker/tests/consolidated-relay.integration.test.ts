@@ -1,3 +1,4 @@
+import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import { prepareTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
 import * as v from "valibot";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
@@ -12,7 +13,7 @@ beforeAll(async () => {
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-10T00:00:00Z") }));
 afterEach(() => vi.useRealTimers());
 
-test("Given one Morty Worker, When an owner pairs their Computer and opens a Session, Then Computer credentials, discovery and signed browser access work while retired backend endpoints are absent", async () => {
+test("Given the default SDK transport and caller-neutral Morty API paths, When a client pairs, operates a Session and downloads a file, Then commands use WS and downloads use HTTP", async () => {
     await using bindings = await createBindings();
     await bindings.configure({ APP_ORIGIN: bindings.origin });
     const signal = AbortSignal.timeout(45_000);
@@ -32,6 +33,7 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
         creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),
     });
     expect(created.status).toBe(201);
+    expect(created.headers.has("server-timing")).toBe(false);
     const owner = v.parse(v.object({ token: v.string(), computerId: v.string() }), await created.json());
     const paired = await request(`/computers/${owner.computerId}/management/pairing`, owner.token, {
         idempotencyKey: "single-worker",
@@ -39,7 +41,12 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
     expect(paired.status).toBe(201);
     const pairing = v.parse(v.object({ pairingCode: v.string(), relayUrl: v.string() }), await paired.json());
     expect(pairing.relayUrl).toBe(bindings.origin);
-    const behavior = { harness: "codex", agentName: "Controlled Codex", reply: mortyReply };
+    const behavior = {
+        harness: "codex",
+        agentName: "Controlled Codex",
+        reply: mortyReply,
+        files: new Map([["/workspace/entrypoint.txt", { content: "HTTP download", mediaType: "text/plain" }]]),
+    };
     const harness = createMortyFakeDaemon(behavior);
     const redeemed = await request(`/v1/pairings/${owner.computerId}/redeem`, undefined, {
         pairingCode: pairing.pairingCode,
@@ -96,6 +103,74 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
     );
     expect(access.endpoint).toBe(bindings.origin);
     const session = `/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
-    expect((await request(`${session}/configuration`, access.credential)).status).toBe(200);
-    expect((await request(`${session}/configuration`)).status).toBe(401);
+    const client = new MortyClient({
+        endpoint: access.endpoint,
+        computerId: owner.computerId,
+        credentialProvider: { credential: async () => access.credential },
+    });
+    try {
+        expect(await client.events.list(access.target, new MortyPageRequest(1, ""), signal)).toBeDefined();
+        expect(await client.sessions.readConfiguration(access.target, signal)).toMatchObject({ target: access.target });
+        expect(await client.sessions.rename(access.target, "SDK transport session", signal)).toMatchObject({
+            title: "SDK transport session",
+        });
+        const bytes = new TextEncoder().encode("WebSocket upload");
+        const contentKey = Buffer.from(await crypto.subtle.digest("SHA-256", bytes)).toString("hex");
+        const attachment = await client.sessions.uploadContent(
+            access.target,
+            {
+                bytes,
+                contentKey,
+                kind: "resource",
+                mediaType: "text/plain",
+                name: "upload.txt",
+                uri: "file:///upload.txt",
+            },
+            signal,
+        );
+        expect(attachment).toMatchObject({ contentKey, name: "upload.txt", byteLength: bytes.byteLength });
+        const accepted = await client.turns.submit(
+            access.target,
+            {
+                content: "Reply through the owning DO",
+                attachments: [],
+                idempotencyKey: "entrypoint-turn",
+            },
+            signal,
+        );
+        expect(accepted).toMatchObject({ turnId: "entrypoint-turn", target: access.target });
+        const live = await client.events.subscribeLive(
+            access.target,
+            { receive: async () => true, reconcile: async () => undefined },
+            signal,
+        );
+        live.close();
+        const file = await request(`${session}/files/content?path=entrypoint.txt`, access.credential);
+        expect(file.status).toBe(200);
+        expect(file.headers.has("server-timing")).toBe(false);
+        expect(await file.text()).toBe("HTTP download");
+        for (const operation of ["configuration", "active-turn", "events-v2"]) {
+            const response = await request(`${session}/${operation}`, access.credential);
+            expect(response.status, operation).toBe(404);
+            expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
+        }
+        const turns = await request(`${session}/turns`, access.credential, {});
+        expect(turns.status).toBe(404);
+        const downloaded = await client.sessions.readFile(access.target, "entrypoint.txt", signal);
+        expect(new TextDecoder().decode(downloaded.bytes)).toBe("HTTP download");
+        expect(downloaded).toMatchObject({ name: "entrypoint.txt", mediaType: "application/octet-stream" });
+        const audienceEndpoint = await bindings.request(
+            new Request(`${bindings.origin}/morty/api/web/identity/anonymous-users`, {
+                method: "POST",
+                body: JSON.stringify({
+                    creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),
+                }),
+                headers: { "content-type": "application/json" },
+                signal,
+            }),
+        );
+        expect(audienceEndpoint.status).toBe(404);
+    } finally {
+        client.close();
+    }
 });

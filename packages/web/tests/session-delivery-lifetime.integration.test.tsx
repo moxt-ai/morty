@@ -135,8 +135,9 @@ test("Given a message on its way to the Computer, When Chat remounts, Then it is
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
     });
     network.holdNextTurn();
+    const arriving = network.nextSubmission(AbortSignal.timeout(15_000));
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Survive the remount");
-    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("Survive the remount"));
+    expect(await arriving).toContain("Survive the remount");
     const submissions = network.submissions.length;
 
     app.remount();
@@ -166,6 +167,33 @@ function sessionEntry(app: TestApp, title: string): HTMLElement {
     return entry;
 }
 
+test("Given four completed Sessions visited in turn, When I leave each Session for New Session, Then its browser connection closes instead of accumulating heartbeat transports", {
+    timeout: dedicatedEnvironmentTimeout,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const network = app.network;
+    if (network === null) {
+        throw new Error("Expected the observable network boundary");
+    }
+    for (const title of [
+        "First completed Session",
+        "Second completed Session",
+        "Third completed Session",
+        "Fourth completed Session",
+    ]) {
+        await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), title);
+        await app.waitForView(() => {
+            expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(title);
+            expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+        });
+        await network.waitForBrowserConnections(1, AbortSignal.timeout(10_000));
+        await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+        await network.waitForBrowserConnections(0, AbortSignal.timeout(10_000));
+    }
+});
+
 test("Given a message the network has not delivered yet, When I switch to another Session, it finishes in the background and I switch back, Then it shows once with its reply and I can keep chatting", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
@@ -183,8 +211,9 @@ test("Given a message the network has not delivered yet, When I switch to anothe
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
     });
     network.holdNextTurn();
+    const arriving = network.nextSubmission(AbortSignal.timeout(15_000));
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
-    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("hold after first delta"));
+    expect(await arriving).toContain("hold after first delta");
     const submissions = network.submissions.length;
 
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));

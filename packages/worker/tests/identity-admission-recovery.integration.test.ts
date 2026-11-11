@@ -8,7 +8,7 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
-import worker from "../src/application.ts";
+import worker from "../src/worker/application.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
 interface SetupModule {

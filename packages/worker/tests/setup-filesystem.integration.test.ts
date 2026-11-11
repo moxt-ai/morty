@@ -10,7 +10,7 @@ import { beforeAll, expect, test } from "vitest";
 import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
-import worker from "../src/application.ts";
+import worker from "../src/worker/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
 async function writeCliFixture(bin: string, body: string): Promise<string> {

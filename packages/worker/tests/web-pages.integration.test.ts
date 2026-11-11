@@ -144,7 +144,9 @@ test("Given a browser, When a script, API call or form submission misses, Then i
     });
     expect(script.status).toBe(404);
     expect(await script.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
-    const api = await runtime.dispatchFetch("https://morty.example/morty/api/unknown", { headers: browserNavigation });
+    const api = await runtime.dispatchFetch("https://morty.example/morty/api/unknown", {
+        headers: browserNavigation,
+    });
     expect(api.status).toBe(404);
     expect(await api.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     const post = await runtime.dispatchFetch("https://morty.example/privacy", {

@@ -1,6 +1,7 @@
 import { requestTestComputerControl } from "../../../relay-test-support/src/backend-fixture.ts";
-import type { ConfiguredRelayBindings } from "../../src/composition/relay-bindings.ts";
-import { ComputerRelay as ProductionComputerRelay } from "../../src/do/computer-relay.ts";
+import { ComputerRelay as ProductionComputerRelay } from "../../src/computer-relay/computer-relay.ts";
+import { computerInternalPath } from "../../src/contracts/computer-relay-http.ts";
+import type { ConfiguredRelayBindings } from "../../src/contracts/relay-bindings.ts";
 import chat from "../../src/index.ts";
 
 // The public Worker reaches the production ComputerRelay namespace.
@@ -32,13 +33,23 @@ export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
         if (request.url === "https://computer.internal/revoked-computer" && request.method === "POST") {
             const computerId = await request.text();
-            await this.revokeComputer(computerId, {
-                computerId,
-                now: Date.now(),
-                actorKind: "system",
-                actorId: computerId,
-                auditId: `test-revocation-${crypto.randomUUID()}`,
-            });
+            const revoked = await super.fetch(
+                new Request(new URL(computerInternalPath(computerId, "revocations"), request.url), {
+                    method: "POST",
+                    signal: request.signal,
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                        computerId,
+                        now: Date.now(),
+                        actorKind: "system",
+                        actorId: computerId,
+                        auditId: `test-revocation-${crypto.randomUUID()}`,
+                    }),
+                }),
+            );
+            if (revoked.status !== 204) {
+                return revoked;
+            }
             return await super.fetch(
                 new Request(`https://computer-relay.internal/computers/${computerId}/computer/revoke`, {
                     method: "DELETE",

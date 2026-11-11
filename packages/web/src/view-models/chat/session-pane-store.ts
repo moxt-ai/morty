@@ -486,8 +486,8 @@ export function createSessionPaneModel(options: {
         }
     };
     /**
-     * Submits through the client the attempt started with. Closing a client ends only its live subscriptions, so the
-     * attempt keeps its requests when this pane reconnects or stops.
+     * Submits through the client its owner keeps alive for the attempt. The pane releases its viewing client when
+     * it stops; delivery independently releases its own client when the attempt settles.
      */
     const submitTurn =
         (connected: MortyClient | null): SubmitTurn =>
@@ -817,12 +817,18 @@ export function createSessionPaneModel(options: {
             const { commandId } = message;
             welcome.getState().dismiss();
             const sentAt = Date.now();
-            const connected = client;
+            const observed = client;
+            let deliveryClient: MortyClient | null = null;
+            const releaseClients: (() => void)[] = [];
             const sending = delivery.getState().send(message, {
                 prepare: async ({ attachments, content }, attemptSignal) => {
-                    if (connected === null) {
+                    if (observed === null) {
                         throw new Error("The Session is not connected.");
                     }
+                    // Delivery outlives the viewing pane and owns its transport until the attempt settles.
+                    const connected = await requests.connectSession(sessionTarget, attemptSignal);
+                    deliveryClient = connected;
+                    releaseClients.push(() => connected.close());
                     const uploadedAttachments =
                         attachments.kind === "uploaded"
                             ? attachments.values
@@ -838,7 +844,9 @@ export function createSessionPaneModel(options: {
                         content: content.trim(),
                     };
                 },
-                submit: submitCommand(connected, commandId, sentAt),
+                submit: async (request, signal) => {
+                    return await submitCommand(deliveryClient, commandId, sentAt)(request, signal);
+                },
             });
             // Only a message taken from the composer leaves it.
             if (source === "composer") {
@@ -849,7 +857,18 @@ export function createSessionPaneModel(options: {
             }
             set({ followRevision: get().followRevision + 1 });
             // The retained submission owns its failure; the composer keeps the next draft.
-            await sending;
+            try {
+                await sending;
+            } catch (cause) {
+                if (observed !== null) {
+                    failedThrough(observed, cause);
+                }
+                throw cause;
+            } finally {
+                for (const release of releaseClients) {
+                    release();
+                }
+            }
         };
         /** The message that answers a still open question message with the answers picked for it, if they are complete. */
         const pickedAnswer = (messageId: string): string | null => {
@@ -1096,7 +1115,9 @@ export function createSessionPaneModel(options: {
                         const cause = running.signal.aborted ? running.signal.reason : failure;
                         running.abort();
                         attempt = null;
-                        client?.close();
+                        if (client !== null) {
+                            options.sessionPage.connection.release(client);
+                        }
                         client = null;
                         if (signal.aborted) {
                             return;
@@ -1281,7 +1302,21 @@ export function createSessionPaneModel(options: {
                     execution.getState().apply({ kind: "turn-submitted" });
                 }
                 // Without a record of when this browser sent it, the retry dates the command's work.
-                const retrying = submitCommand(client, pending.commandId, Date.now());
+                const observed = client;
+                const startedAt = Date.now();
+                const retrying: SubmitTurn = async (request, signal) => {
+                    const connected = await requests.connectSession(sessionTarget, signal);
+                    try {
+                        return await submitCommand(connected, pending.commandId, startedAt)(request, signal);
+                    } catch (cause) {
+                        if (observed !== null) {
+                            failedThrough(observed, cause);
+                        }
+                        throw cause;
+                    } finally {
+                        connected.close();
+                    }
+                };
                 await delivery.getState().retry(retrying);
             },
             retryFailedMessage: async () => {

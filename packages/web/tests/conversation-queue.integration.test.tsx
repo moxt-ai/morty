@@ -583,21 +583,17 @@ test("Given a follow-up with a file was queued from another browser, When this v
 
     // Leaving the Session and returning opens a new pane on it; the edited message and its explanation stay.
     const edited = viewerComposer.value;
+    const sessionId = new URL(window.location.href).searchParams.get("sessionId");
+    expect(sessionId).not.toBeNull();
     await viewer.user.click(await viewer.queryElementByTestId(dataTestId.newConversation));
     await viewer.waitForView(() =>
         expect(document.body.textContent).not.toContain("Files attached to this message could not be restored here."),
     );
-    const conversation = await viewer.waitForView(() => {
-        const entry = viewer
-            .elementsByTestId(dataTestId.managedConversation)
-            .find((element) => element.textContent?.includes("wait for steering"));
-        if (entry === undefined) {
-            throw new Error("Expected the running Session in the directory");
-        }
-        return entry;
-    });
+    // This scenario has one Session. Its native title need not equal its first prompt.
+    const conversation = await viewer.queryElementByTestId(dataTestId.managedConversation);
     await viewer.user.click(conversation);
     await viewer.waitForView(() => {
+        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
         expect(viewer.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", edited);
         expect(document.body.textContent).toContain("Files attached to this message could not be restored here.");
     });

@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import worker from "../src/application.ts";
+import worker from "../src/worker/application.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const replacementSchema = v.object({

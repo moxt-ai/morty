@@ -40,12 +40,8 @@ import type {
     SubmitMortyTurnRequest,
 } from "./resources.ts";
 
-import {
-    HttpTransport,
-    isMortyLiveEventTransport,
-    type MortyHttpTransport,
-    type MortyTransportSessionEvent,
-} from "./transport/http-transport.ts";
+import type { MortyTransportSessionEvent } from "./transport/http-transport.ts";
+import { WsTransport } from "./transport/ws-transport.ts";
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
 const DEFAULT_STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
@@ -148,11 +144,12 @@ export interface MortyEndpointOptions {
     readonly observeResponse?: (metadata: MortyResponseMetadata) => void;
     readonly operationTimeoutMilliseconds?: number;
     readonly streamConnectionTimeoutMilliseconds?: number;
-    readonly transport?: MortyHttpTransport;
 }
 
 export interface MortyClientOptions extends MortyEndpointOptions {
     readonly computerId: string;
+    /** Releases the owner's registration after this client's resources close. */
+    readonly onClose?: () => void;
 }
 
 function validatePositiveInteger(value: number, name: string): number {
@@ -338,7 +335,7 @@ export class MortyRequestExecutor {
     readonly #operationTimeoutMilliseconds: number;
     readonly #observeResponse: ((metadata: MortyResponseMetadata) => void) | undefined;
     readonly #streamConnectionTimeoutMilliseconds: number;
-    readonly #transport: MortyHttpTransport;
+    readonly #transport = new WsTransport();
 
     constructor(options: MortyEndpointOptions) {
         this.#credentialProvider = options.credentialProvider;
@@ -352,8 +349,9 @@ export class MortyRequestExecutor {
             options.streamConnectionTimeoutMilliseconds ?? DEFAULT_STREAM_CONNECTION_TIMEOUT_MILLISECONDS,
             "stream connection timeout",
         );
-        this.#transport = options.transport ?? new HttpTransport();
     }
+
+    readonly close = (): void => this.#transport.close();
 
     readonly get = async (path: string, signal: AbortSignal): Promise<unknown> =>
         await this.request(path, "GET", "", false, signal);
@@ -474,9 +472,6 @@ export class MortyRequestExecutor {
     };
 
     readonly openLiveEventStream = async (path: string, signal: AbortSignal): Promise<LiveEventConnection> => {
-        if (!isMortyLiveEventTransport(this.#transport)) {
-            throw new MortyValidationError("The configured transport does not support live Session events");
-        }
         const controller = new AbortController();
         const abort = (): void => controller.abort(signal.reason);
         signal.addEventListener("abort", abort, { once: true });
@@ -1045,6 +1040,9 @@ export class MortyEventResources {
 }
 
 export class MortyClient {
+    readonly #executor: MortyRequestExecutor;
+    readonly #onClose: (() => void) | undefined;
+    #lifecycle: "open" | "closed" = "open";
     readonly events: MortyEventResources;
     readonly interactions: MortyInteractionResources;
     readonly sessions: MortySessionResources;
@@ -1052,6 +1050,8 @@ export class MortyClient {
 
     constructor(options: MortyClientOptions) {
         const executor = new MortyRequestExecutor(options);
+        this.#executor = executor;
+        this.#onClose = options.onClose;
         const reconnectAttempts = options.maxStreamReconnectAttempts ?? DEFAULT_STREAM_RECONNECT_ATTEMPTS;
         if (!Number.isSafeInteger(reconnectAttempts) || reconnectAttempts < 0) {
             throw new MortyValidationError("The stream reconnect attempt limit is invalid");
@@ -1063,6 +1063,12 @@ export class MortyClient {
     }
 
     readonly close = (): void => {
+        if (this.#lifecycle === "closed") {
+            return;
+        }
+        this.#lifecycle = "closed";
         this.events.close();
+        this.#executor.close();
+        this.#onClose?.();
     };
 }

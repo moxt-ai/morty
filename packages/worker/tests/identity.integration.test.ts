@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import worker, { fetchPublicApplication } from "../src/application.ts";
+import worker, { fetchPublicApplication } from "../src/worker/application.ts";
 import { APP_ORIGIN, accountRequest, anonymousCreationKey, createIdentityFixture } from "./support/identity-fixture.ts";
 
 function sharingRequest(): RequestInit {

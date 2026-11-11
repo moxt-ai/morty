@@ -80,7 +80,7 @@ async function createRelayBindings(script: string, allowedOrigins: ReadonlySet<s
     try {
         const ready = await runtime.ready;
         const env = await runtime.getBindings<TestRelayBindings>();
-        await migrate(env.RELAY_DIRECTORY_DATABASE, new NodeURL("../../relay/migrations/d1", import.meta.url));
+        await migrate(env.RELAY_DIRECTORY_DATABASE, new NodeURL("../../worker/migrations/d1", import.meta.url));
         const request = async (input: Request): Promise<Response> => {
             const body = input.body === null ? undefined : await input.arrayBuffer();
             const result = await runtime.dispatchFetch(input.url, {

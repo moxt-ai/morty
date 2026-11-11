@@ -172,6 +172,7 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     await expect(composer).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Keep this draft across a healthy resume.");
+    expect(connections).toBe(before);
     // Complete a user-visible round trip before advancing the transport's virtual deadline.
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
@@ -180,7 +181,8 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
-    expect(connections).toBe(before);
+    // The new submission owns one delivery connection; foreground recovery adds none.
+    expect(connections).toBe(before + 1);
 });
 
 test("Given an interrupted browser connection, when a task completes before foreground recovery, then the interruption stays neutral and its result is restored", async ({

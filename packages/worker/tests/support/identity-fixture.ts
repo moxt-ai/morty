@@ -4,7 +4,7 @@ import { createResponseLossProxy } from "@morty-build/relay-test-support/respons
 import * as v from "valibot";
 import { expect } from "vitest";
 import { createSessionExecutionProxy } from "../../../../tests/support/session-execution-proxy.ts";
-import worker from "../../src/application.ts";
+import worker from "../../src/worker/application.ts";
 
 /** A fresh client-held key naming one anonymous user creation. */
 export const anonymousCreationKey = (): string =>

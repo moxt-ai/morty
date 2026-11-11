@@ -44,7 +44,7 @@ beforeAll(async () => {
             compatibilityDate: "2026-09-03",
             durableObjects: {
                 COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
-                UNAVAILABLE_PROJECT: { className: "UnavailableProject", useSQLite: true },
+                UNAVAILABLE_COMPUTER: { className: "UnavailableComputer", useSQLite: true },
             },
             d1Databases: ["RELAY_DIRECTORY_DATABASE"],
             compatibilityFlags: ["nodejs_compat"],
@@ -64,7 +64,7 @@ beforeAll(async () => {
     );
     await runtime.ready;
     const bindings = await runtime.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
-    const directory = fileURLToPath(new URL("../../relay/migrations/d1", import.meta.url));
+    const directory = fileURLToPath(new URL("../../worker/migrations/d1", import.meta.url));
     for (const migration of await readD1Migrations(directory)) {
         await bindings.RELAY_DIRECTORY_DATABASE.batch(
             migration.queries.map((sql) => bindings.RELAY_DIRECTORY_DATABASE.prepare(sql)),
@@ -113,7 +113,7 @@ async function api(
     return record(value);
 }
 
-async function provisionProject() {
+async function provisionComputer() {
     const owner = await api(
         "/identity/anonymous-users",
         {
@@ -128,7 +128,7 @@ async function provisionProject() {
 }
 
 async function pairComputer() {
-    const { computerId, appCredential } = await provisionProject();
+    const { computerId, appCredential } = await provisionComputer();
     const pairing = await api(
         `/computers/${computerId}/management/pairing`,
         {
@@ -156,7 +156,7 @@ async function pairComputer() {
 
 let loggingComputer: Promise<{ readonly computerId: string }> | undefined;
 
-/** Internal Computer Relay scenarios enter after public pairing registered the Computer in an active Project. */
+/** Internal Computer Relay scenarios enter after public pairing registered the computer. */
 function registeredLoggingComputer() {
     loggingComputer ??= pairComputer().then(({ computerId }) => ({
         computerId,
@@ -235,19 +235,19 @@ it("identifies the failing Computer Durable Object through the public pairing an
             "cf-ray": "computer-failure-ray",
         },
     });
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
-        error: { code: "internal_error", message: "The request could not be completed" },
+        error: { code: "PROJECT_OBJECT_UNAVAILABLE", message: "Morty storage is unavailable." },
     });
     await expect
-        .poll(() => logs.slice(start).find((log) => log["event"] === "computer_relay_request_failed"))
+        .poll(() => logs.slice(start).find((log) => log["event"] === "project_relay_request_failed"))
         .toBeDefined();
     expect(logs.slice(start)).toContainEqual(
         expect.objectContaining({
-            event: "computer_relay_request_failed",
+            event: "project_relay_request_failed",
             durableObjectId: expect.any(String),
             computerId,
-            path: `/computers/${computerId}/daemon`,
+            path: "/morty/api/v1/computers/connect",
             cfRay: "computer-failure-ray",
             err: expect.objectContaining({ message: expect.stringContaining("Computer DO overloaded") }),
         }),
@@ -261,20 +261,20 @@ it.each([
 ])(
     "Given an overloaded computer, When $method $path enters the production Worker, Then the relay error contract is preserved",
     async ({ method, path }) => {
-        const response = await api(path, { method, headers: { "x-test-project-failure": "1" } }, 500);
+        const response = await api(path, { method, headers: { "x-test-routing-failure": "1" } }, 503);
         expect(response).toEqual({
-            error: { code: "internal_error", message: "The request could not be completed" },
+            error: { code: "PROJECT_OBJECT_UNAVAILABLE", message: "Morty storage is unavailable." },
         });
     },
 );
 
-// @no-uc: Technical regression; Project routing failures must identify the target DO and retain overload details.
-it("identifies a Project Relay overload through the public HTTP API", async () => {
+// @no-uc: Technical regression; computer routing failures must identify the target DO and retain overload details.
+it("identifies a Computer Relay overload through the public HTTP API", async () => {
     const start = logs.length;
     const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
     await api(
         `/computers/${computerId}/management/computer`,
-        { headers: { "x-test-project-failure": "1", "cf-ray": "project-failure-ray" } },
+        { headers: { "x-test-routing-failure": "1", "cf-ray": "computer-routing-failure-ray" } },
         503,
     );
     await expect
@@ -286,10 +286,10 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
             durableObjectClass: "ComputerRelay",
             durableObjectId: expect.any(String),
             computerId,
-            cfRay: "project-failure-ray",
+            cfRay: "computer-routing-failure-ray",
             err: expect.objectContaining({
                 overloaded: true,
-                message: expect.stringContaining("Project DO overloaded"),
+                message: expect.stringContaining("Computer DO overloaded"),
             }),
         }),
     );

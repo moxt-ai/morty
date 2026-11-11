@@ -1,7 +1,7 @@
 import { MortyClient, MortyPageRequest, WsTransport } from "@morty-build/client";
 import * as v from "valibot";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import worker from "../src/application.ts";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
+import worker from "../src/worker/application.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
 beforeEach(() => {
@@ -138,8 +138,10 @@ test("Given a device with an open Session, When its owner disconnects it while t
             }),
             await opened.json(),
         );
+        const transport = new WsTransport();
+        onTestFinished(() => transport.close());
         const readAccess = () =>
-            cloud.relayRequest(
+            transport.fetch(
                 new Request(
                     `${cloud.origin}/morty/api/v1/computers/${window.computerId}/harnesses/${window.target.harness}/sessions/${window.target.sessionId}/configuration`,
                     { headers: { authorization: `Bearer ${window.credential}` }, signal: AbortSignal.timeout(15_000) },
@@ -218,8 +220,8 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
             endpoint: window.endpoint,
             computerId: window.computerId,
             credentialProvider: { credential: async () => window.credential },
-            transport: new WsTransport(),
         });
+        onTestFinished(() => client.close());
         const readConversation = () =>
             client.events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
         await readConversation();

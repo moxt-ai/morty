@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
-import worker from "../src/application.ts";
+import worker from "../src/worker/application.ts";
 import { APP_ORIGIN, anonymousCreationKey, createIdentityFixture } from "./support/identity-fixture.ts";
 
 // A stateful external admission service: tests control quota explicitly rather than waiting for a clock window.
