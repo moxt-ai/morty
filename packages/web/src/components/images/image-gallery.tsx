@@ -182,7 +182,7 @@ function ImageTrigger({
                 <span
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-0 rounded-[inherit]"
-                    style={{ boxShadow: "inset 0 0 0 0.5px color-mix(in srgb, var(--foreground) 5%, transparent)" }}
+                    style={{ boxShadow: "inset 0 0 0 0.5px color-mix(in srgb, var(--foreground) 50%, transparent)" }}
                 />
             )}
         </button>
