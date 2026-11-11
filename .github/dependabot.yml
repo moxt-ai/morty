@@ -22,7 +22,6 @@ updates:
         patterns:
           - "@anthropic-ai/*"
           - "@agentclientprotocol/*"
-          - "@openai/*"
         update-types:
           - minor
           - patch

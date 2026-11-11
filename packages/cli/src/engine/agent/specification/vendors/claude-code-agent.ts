@@ -12,7 +12,6 @@ import { LocalAgentSpecification } from "../agent-specification.ts";
 
 export class ClaudeCodeAgentSpecification extends LocalAgentSpecification {
     readonly agentExecutable = "claude";
-    readonly createConnection = null;
     readonly harness = "claude";
     readonly label = "Claude Code";
     override readonly minimumSupportedAgentVersion = "2.1.273";

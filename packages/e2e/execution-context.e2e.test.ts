@@ -1,8 +1,8 @@
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-const machineName = "Browser test Runtime — Engineering workstation with a long machine name";
-test.use({ runtimeMachineName: machineName });
+const computerName = "Browser test Runtime — Engineering workstation with a long computer name";
+test.use({ runtimeComputerName: computerName });
 
 for (const viewport of [
     { width: 1440, height: 900 },
@@ -18,11 +18,11 @@ for (const viewport of [
         await runtime.openPairedChat();
         // Wider windows keep the computer switcher in the sidebar; phones list the computer in the navigation drawer.
         const phone = viewport.width < 640;
-        const computer = page.getByRole("button", { name: `Switch computer, ${machineName}` });
+        const computer = page.getByRole("button", { name: `Switch computer, ${computerName}` });
         const navigation = page.getByRole("button", { name: "Open navigation", exact: true });
         const viewDetails = phone
-            ? page.getByRole("button", { name: `View execution details for ${machineName}`, exact: true })
-            : page.getByRole("menuitem", { name: `View execution details for ${machineName}`, exact: true });
+            ? page.getByRole("button", { name: `View execution details for ${computerName}`, exact: true })
+            : page.getByRole("menuitem", { name: `View execution details for ${computerName}`, exact: true });
         const openDetails = async () => {
             await (phone ? navigation : computer).click();
             await expect(viewDetails).toBeVisible();
@@ -73,7 +73,7 @@ for (const viewport of [
         await openDetails();
         const dialog = page.getByRole("dialog", { name: "Execution details", exact: true });
         await expect(dialog).toBeVisible();
-        await expect(dialog).toContainText(machineName);
+        await expect(dialog).toContainText(computerName);
         await expect(dialog).toContainText("Claude Code");
         await expect(dialog).toContainText("Connected");
         await expect(dialog).toContainText("Online");

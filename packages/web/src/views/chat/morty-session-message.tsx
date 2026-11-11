@@ -268,11 +268,11 @@ export function MortySessionMessage({
     openLocalFile,
     active = false,
     failureHarness = "",
-    failureMachineName = "",
+    failureComputerName = "",
 }: {
     readonly message: SessionMessage;
     readonly failureHarness?: string;
-    readonly failureMachineName?: string;
+    readonly failureComputerName?: string;
     readonly deliveryUnknownUserMessageId: string | null;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -350,7 +350,7 @@ export function MortySessionMessage({
         );
     }
     if (presentation.kind === "failure") {
-        const guidance = authenticationGuidance(presentation.code, failureHarness, failureMachineName);
+        const guidance = authenticationGuidance(presentation.code, failureHarness, failureComputerName);
         if (guidance !== null) {
             return <AuthenticationNotice guidance={guidance} code={presentation.code} message={presentation.message} />;
         }

@@ -6,8 +6,8 @@ import {
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@morty-build/runtime-test-support/fake-daemon";
-import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import type { AgentTermination } from "../../../packages/cli/src/engine/acp/agent/agent-lifecycle.ts";
+import { createControlledAgent } from "../../../packages/cli/tests/support/agents/controlled-agent-definition.ts";
 
 /** Stateful ACP peer that deliberately leaves tool status updates unfinished at turn termination. */
 export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promise<void>) {
@@ -312,12 +312,12 @@ export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promi
             },
         };
     };
-    return new AcpAgentDefinition(
+    return createControlledAgent(
+        (options) =>
+            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         "tool-lifecycle-test",
         "Tool Lifecycle Agent",
         process.execPath,
-        (options) =>
-            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
         "controlled-harness",
         undefined,

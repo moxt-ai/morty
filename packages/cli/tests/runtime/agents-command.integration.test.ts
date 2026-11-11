@@ -40,7 +40,7 @@ async function runCli(
 }
 
 /** A computer whose PATH offers Node but no Agent, with private Morty state. */
-async function machineWithoutAgents(): Promise<{ readonly environment: NodeJS.ProcessEnv; readonly root: string }> {
+async function computerWithoutAgents(): Promise<{ readonly environment: NodeJS.ProcessEnv; readonly root: string }> {
     const root = await mkdtemp(join(tmpdir(), "morty-agents-command-"));
     temporaryDirectories.push(root);
     return {
@@ -60,7 +60,7 @@ async function machineWithoutAgents(): Promise<{ readonly environment: NodeJS.Pr
 
 describe("Morty agents command", () => {
     it("Given an obsolete default-workspace environment override, When the user discovers Agents, Then the CLI uses the stable workspace outside its data container and leaves the override path untouched", async () => {
-        const { environment, root } = await machineWithoutAgents();
+        const { environment, root } = await computerWithoutAgents();
         const obsoleteWorkspace = join(root, "obsolete-workspace");
         const result = await runCli(
             ["agents", "--json"],
@@ -74,7 +74,7 @@ describe("Morty agents command", () => {
     });
 
     it("Given a computer where Pi is not installed, When setup asks for the Agent inventory as a JSON file, Then the file reports Pi's unavailable status and nothing is printed", async () => {
-        const { environment, root } = await machineWithoutAgents();
+        const { environment, root } = await computerWithoutAgents();
         const outputPath = join(root, "agents.json");
         await writeFile(outputPath, "", { mode: 0o600 });
 
@@ -96,7 +96,7 @@ describe("Morty agents command", () => {
     });
 
     it("Given the JSON output file does not exist, When the user asks for the Agent inventory, Then the command fails without creating it", async () => {
-        const { environment, root } = await machineWithoutAgents();
+        const { environment, root } = await computerWithoutAgents();
         const outputPath = join(root, "missing.json");
 
         const result = await runCli(

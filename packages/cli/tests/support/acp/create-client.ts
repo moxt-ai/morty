@@ -8,7 +8,7 @@ import {
     type RequestPermissionRequest,
     type RequestPermissionResponse,
 } from "@agentclientprotocol/sdk/unstable";
-import type { IdentifiedSessionNotification } from "./session-notification.ts";
+import type { IdentifiedSessionNotification } from "../../../src/engine/acp/connection/session-notification.ts";
 
 export interface AcpClientHandler {
     readonly onElicitation: (

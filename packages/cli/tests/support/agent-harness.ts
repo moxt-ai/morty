@@ -1,8 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
+import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { ControlledAcpConnection } from "./agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "./agents/controlled-agent-definition.ts";
 
 const harnessPath = fileURLToPath(new URL("../sessions/fixtures/acp-peer.ts", import.meta.url));
 
@@ -35,10 +36,7 @@ export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDi
     const nativeStorage =
         definition.isolatedNativeStorage === true ? join(stateDirectory, definition.harness) : stateDirectory;
     mkdirSync(nativeStorage, { recursive: true });
-    return new AcpAgentDefinition(
-        definition.harness,
-        definition.label,
-        process.execPath,
+    return createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -49,6 +47,9 @@ export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDi
                 },
                 options,
             ),
+        definition.harness,
+        definition.label,
+        process.execPath,
         { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStorage },
         "1.0.0",
         undefined,

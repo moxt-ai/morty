@@ -100,7 +100,9 @@ export function CwdSelector({
         <>
             <Popover.Root
                 onOpenChange={(open) => {
-                    viewModel.setCwdMenuOpen(open);
+                    if (open) {
+                        viewModel.refreshRecentCwds();
+                    }
                     setMenuOpen(open);
                 }}
                 open={menuOpen}
@@ -229,7 +231,7 @@ export function CwdSelector({
             {browser.kind !== "closed" && (
                 <Dialog
                     variant="workingDirectory"
-                    description="Browse folders on your local machine or enter an absolute folder path."
+                    description="Browse folders on your local computer or enter an absolute folder path."
                     onClose={viewModel.closeCwd}
                     title="Choose working directory"
                 >

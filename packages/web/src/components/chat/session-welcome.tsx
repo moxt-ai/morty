@@ -1,73 +1,31 @@
 import { ArrowUpRight, X } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/ui/cloud-button";
 import { MortyAlert } from "@/components/ui/morty-alert";
-import { chatSessionMessageColumnClassName } from "./chat-session-layout.ts";
-
-function welcomeMockRequested(): boolean {
-    return new URLSearchParams(window.location.search).get("mockSessionWelcome") === "1";
-}
-
-export function SessionWelcomeMock() {
-    const [visible, setVisible] = useState(welcomeMockRequested);
-    if (!visible) {
-        return null;
-    }
-    return (
-        <div className={chatSessionMessageColumnClassName}>
-            <SessionWelcome
-                canSuggestProgress
-                onDismiss={() => setVisible(false)}
-                onSuggestProgress={() => setVisible(false)}
-            />
-        </div>
-    );
-}
 
 export function SessionWelcomeInChat({
     canSuggestProgress,
     onDismiss,
-    onMockSuggestProgress,
     onSuggestProgress,
     visible,
 }: {
     readonly canSuggestProgress: boolean;
     readonly onDismiss: () => void;
-    readonly onMockSuggestProgress: () => void;
     readonly onSuggestProgress: () => void;
     readonly visible: boolean;
 }) {
-    const [showMock, setShowMock] = useState(welcomeMockRequested);
-    if (!visible && !showMock) {
+    if (!visible) {
         return null;
     }
     return (
         <SessionWelcome
-            canSuggestProgress={showMock || canSuggestProgress}
-            onDismiss={() => {
-                setShowMock(false);
-                if (visible) {
-                    onDismiss();
-                }
-            }}
-            onSuggestProgress={() => {
-                if (showMock) {
-                    setShowMock(false);
-                    if (canSuggestProgress) {
-                        onMockSuggestProgress();
-                    }
-                    if (visible) {
-                        onDismiss();
-                    }
-                    return;
-                }
-                onSuggestProgress();
-            }}
+            canSuggestProgress={canSuggestProgress}
+            onDismiss={onDismiss}
+            onSuggestProgress={onSuggestProgress}
         />
     );
 }
 
-export function SessionWelcome({
+function SessionWelcome({
     canSuggestProgress,
     onDismiss,
     onSuggestProgress,

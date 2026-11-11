@@ -2,7 +2,7 @@ import { PROJECT_LOCATION_HINTS } from "@morty-build/client/protocol";
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
-export const machineAccount = sqliteTable(
+export const computerAccount = sqliteTable(
     "computer_accounts",
     {
         computerId: text("computer_id").primaryKey(),

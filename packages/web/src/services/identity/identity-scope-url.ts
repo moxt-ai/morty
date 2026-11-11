@@ -8,7 +8,7 @@ import * as v from "valibot";
  * not decode is treated as absent.
  */
 
-const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
+const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 
 export const identityScopeSchema = v.pipe(

@@ -96,7 +96,7 @@ type CredentialRotation = { readonly kind: "none" } | { readonly kind: "requeste
 
 interface ReadyIdentity extends IssuedIdentity {
     readonly kind: "ready";
-    /** Setup owns the unfinished pairing intent; the Worker owns the final Machine binding. */
+    /** Setup owns the unfinished pairing intent; the Worker owns the final Computer binding. */
     readonly pairing: PairingIntent;
     readonly replacement: ReplacementState;
     readonly rotation: CredentialRotation;
@@ -260,7 +260,7 @@ interface ManagedConnection {
 
 interface VerifiedIdentity {
     readonly context: Context;
-    /** Where the Machine's Computer pairing stands, as the Relay records it. */
+    /** Where the Computer's Runtime pairing stands, as the Relay records it. */
     readonly computerPairing: "unpaired" | "paired" | "revoked";
 }
 
@@ -448,17 +448,17 @@ class RemoteError extends Error {
 function bindingNextStep(code: string, harness: string): string {
     switch (code) {
         case "authentication_required":
-            return `Ask the user to sign in to ${harness} on this computer; you cannot sign in for them. When they confirm, rerun setup; it reuses this computer's Machine.`;
+            return `Ask the user to sign in to ${harness} on this computer; you cannot sign in for them. When they confirm, rerun setup; it reuses this Computer.`;
         case "TIMEOUT":
         case "RELAY_TIMEOUT":
         case "RELAY_UNAVAILABLE":
-            return `Rerun setup without changing anything; it reuses this computer's Machine. The Morty service or ${harness} may have been briefly unavailable. If it fails the same way again, confirm ${harness} answers a prompt in the working directory.`;
+            return `Rerun setup without changing anything; it reuses this Computer. The Morty service or ${harness} may have been briefly unavailable. If it fails the same way again, confirm ${harness} answers a prompt in the working directory.`;
         default:
-            return `Confirm ${harness} answers a prompt in the working directory and fix what stops it, then rerun setup; it reuses this computer's Machine. If ${harness} answers and setup fails the same way again, report error.code to the user.`;
+            return `Confirm ${harness} answers a prompt in the working directory and fix what stops it, then rerun setup; it reuses this Computer. If ${harness} answers and setup fails the same way again, report error.code to the user.`;
     }
 }
 
-/** Setup could not bind the Machine to the chosen harness. */
+/** Setup could not bind the Computer to the chosen harness. */
 class AgentBindingError extends Error {
     readonly code: string;
     readonly harness: string;
@@ -485,7 +485,7 @@ interface HarnessDiagnosis {
 
 /** What the agent should do when the Computer does not offer the chosen harness, chosen by the inventory status. */
 function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): string {
-    const rerun = `rerun setup with --harness ${harness}; it reuses this computer's Machine.`;
+    const rerun = `rerun setup with --harness ${harness}; it reuses this Computer.`;
     switch (diagnosis?.status) {
         case "authentication_required":
             return `Ask the user to sign in to ${diagnosis.label} on this computer by running \`${diagnosis.recoveryCommand || harness}\` in a terminal; you cannot sign in for them. When they confirm, ${rerun}`;
@@ -941,7 +941,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Ends the local identity of a Project this machine replaced. Setup keeps it with the successor's identity until
+     * Ends the local identity of a Project this computer replaced. Setup keeps it with the successor's identity until
      * then, so a run that stops on the way ends it next time instead of leaving a credential that opens the replaced
      * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
      */
@@ -1088,7 +1088,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             progress("identity", "Reusing the saved identity.");
             return { kind: "setup", context: { ...location, identity: saved }, project: "reused" };
         }
-        progress("identity", "Creating the standalone identity and Machine.");
+        progress("identity", "Creating the standalone identity and Computer.");
         // Save the creation key before creating, so a setup retried after a lost reply resumes the same identity
         // instead of creating another.
         let creating: CreatingIdentity;
@@ -1118,13 +1118,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { kind: "setup", context: { ...location, identity }, project: "created" };
     }
 
-    async function verifyIdentityAndMachine(context: Context): Promise<VerifiedIdentity> {
+    async function verifyIdentityAndComputer(context: Context): Promise<VerifiedIdentity> {
         const session = await request(context, "/session");
         if (identifier(session["userId"]) !== context.identity.userId) {
             fail("IDENTITY_CONFLICT");
         }
-        // The Worker reads the Machine's Computer pairing from the Relay, the same one every browser handoff opens.
-        const computerPairing = text((await request(context, "/management/machine"))["computerPairing"]);
+        // The Worker reads the Computer's pairing from the Relay, the same one every browser handoff opens.
+        const computerPairing = text((await request(context, "/management/computer/pairing-state"))["computerPairing"]);
         if (computerPairing !== "unpaired" && computerPairing !== "paired" && computerPairing !== "revoked") {
             fail("INVALID_RESPONSE");
         }
@@ -1338,7 +1338,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return await replaceWithApproval("managed_computer_missing", managedConnectionCount);
             }
             case "revoked":
-                // Morty disconnected this computer because a copy of its connection key was used. The Machine and the
+                // Morty disconnected this computer because a copy of its connection key was used. The Computer and the
                 // browsers that open it stay; only the computer's connection is paired again.
                 emit({ status: "computer_revoked", computerId: context.identity.computerId });
                 progress(
@@ -1349,7 +1349,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return await pairComputer(context);
             case "unpaired": {
                 // A Computer an earlier run started for this computer may still be waiting for its pairing, so continue
-                // on it while this machine still manages its connection.
+                // on it while this computer still manages its connection.
                 const { existing } = await reusable(context.identity.computerId);
                 if (existing !== undefined) {
                     return { context, computer: { kind: "existing", ...existing, paired: false } };
@@ -1478,7 +1478,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         computer: ComputerSelection,
     ): Promise<readonly string[] | null> {
         const botPath = `/chat/computers/${context.identity.computerId}`;
-        // A paired Computer is read through the Machine; one still waiting for its pairing is among the setup candidates.
+        // A paired Computer is read through management; one still waiting for its pairing is among the setup candidates.
         const alreadyPaired = computer.kind === "existing" && computer.paired;
         const state = await request(context, `${botPath}/${alreadyPaired ? "workspace" : "setup/computers"}`, {});
         const candidates = alreadyPaired
@@ -1617,7 +1617,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function bindAgent(context: Context, computer: ComputerSelection, harness: string) {
-        progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
+        progress("binding", `Connecting the Computer to ${harness} in the default working directory.`);
         const computerId = computer.computerId;
         try {
             await request(context, `/chat/computers/${context.identity.computerId}/setup`, {
@@ -1644,7 +1644,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return saved;
     }
 
-    /** Waits until the Machine's Computer is online and offers the harness this run set up. */
+    /** Waits until the Computer is online and offers the harness this run set up. */
     async function waitForReadiness(context: Context, computer: ComputerSelection, requestedHarness: string) {
         const harness = identifier(requestedHarness);
         let attempts = 0;
@@ -1659,7 +1659,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return;
             }
             if (attempts++ % 10 === 0) {
-                progress("activation", "Waiting for the Machine binding to become active.");
+                progress("activation", "Waiting for the Computer binding to become active.");
             }
             await clock.wait(1000, signal);
         }
@@ -1824,17 +1824,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const saved = await loadIdentity(directory, options.base);
         restoreReplacementAccess(saved);
         const identity = await prepareIdentity(location, saved);
-        const verified = await verifyIdentityAndMachine(
+        const verified = await verifyIdentityAndComputer(
             await retireReplacedIdentity(await settleCredentialRotation(identity.context)),
         );
-        let machine = verified.context;
-        emit({ status: "identity_ready", userId: machine.identity.userId, computerId: machine.identity.computerId });
-        const prepared = await prepareComputer(machine, cwd, verified.computerPairing, options.replaceProject);
-        machine = prepared.context;
-        await startRuntime(machine, prepared.computer, cwd, options.harness);
-        await waitForComputer(machine, prepared.computer, options.harness, cwd);
-        machine = await bindAgent(machine, prepared.computer, options.harness);
-        await finishSetup(machine, prepared.computer, options, cwd, identity.project);
+        let computer = verified.context;
+        emit({ status: "identity_ready", userId: computer.identity.userId, computerId: computer.identity.computerId });
+        const prepared = await prepareComputer(computer, cwd, verified.computerPairing, options.replaceProject);
+        computer = prepared.context;
+        await startRuntime(computer, prepared.computer, cwd, options.harness);
+        await waitForComputer(computer, prepared.computer, options.harness, cwd);
+        computer = await bindAgent(computer, prepared.computer, options.harness);
+        await finishSetup(computer, prepared.computer, options, cwd, identity.project);
     }
 
     try {

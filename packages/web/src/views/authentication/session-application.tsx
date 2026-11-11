@@ -1,15 +1,7 @@
 import type { AnyRouter } from "@tanstack/react-router";
-import { lazy, Suspense } from "react";
-import { isComponentLibraryPath } from "../../navigation/component-library-path.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
-
-const PlaygroundApplication = lazy(() =>
-    import("../playground/playground-application.tsx").then((module) => ({
-        default: module.PlaygroundApplication,
-    })),
-);
 
 export function SessionApplication({
     application,
@@ -21,19 +13,6 @@ export function SessionApplication({
     readonly continuationRouter: AnyRouter;
 }) {
     const { state } = useExternalStore(application.anonymousSession);
-    if (isComponentLibraryPath(window.location.pathname)) {
-        return (
-            <Suspense
-                fallback={
-                    <main className="grid min-h-dvh place-items-center bg-background text-14 text-muted-foreground">
-                        Loading component library
-                    </main>
-                }
-            >
-                <PlaygroundApplication application={application} />
-            </Suspense>
-        );
-    }
     const continuationPath = window.location.pathname.startsWith("/continue");
     if (continuationPath) {
         return (
@@ -73,8 +52,6 @@ export function SessionApplication({
                     notice: state.notice,
                     returnHref: state.returnHref,
                     setupHandoff: application.setupHandoff,
-                    onPromptCopied: () => application.analytics?.trackEvent("setup_prompt_copied"),
-                    onLinkSent: () => application.analytics?.trackEvent("setup_link_shared"),
                 }}
             />
         );

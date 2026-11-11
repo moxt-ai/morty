@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { ensureDaemon, stopDaemon } from "../../../daemon/lifecycle/daemon-client.ts";
-import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-computer.ts";
 import type { CliContext } from "../../context.ts";
 
 export function registerUpgradeCommand(program: Command, context: CliContext): void {

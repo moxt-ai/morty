@@ -93,7 +93,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                     new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
                         body: JSON.stringify({
                             agents: fakeAgentHarnessCatalog(harnesses),
-                            machineName: "Controlled Agent harness",
+                            computerName: "Controlled Agent harness",
                             pairingCode: pairing.pairingCode,
                             workspaceName: "Controlled workspace",
                         }),

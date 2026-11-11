@@ -31,19 +31,19 @@ it.each(["empty", "existing"] as const)(
     },
 );
 
-it("Given an existing setup root, When machine is mistakenly selected as the state root, Then the CLI reports the owning root without creating nested state", async () => {
+it("Given an existing setup root, When computer is mistakenly selected as the state root, Then the CLI reports the owning root without creating nested state", async () => {
     const root = await mkdtemp(join(tmpdir(), "morty-nested-state-"));
-    const machine = join(root, "machine");
+    const computer = join(root, "computer");
     try {
-        await mkdir(machine);
+        await mkdir(computer);
         await writeFile(join(root, "config.json"), "{}");
         await expect(
             execute(process.execPath, [entry, "pair", "list"], {
-                env: { ...process.env, MORTY_STATE_DIRECTORY: machine },
+                env: { ...process.env, MORTY_STATE_DIRECTORY: computer },
                 timeout: 10_000,
             }),
         ).rejects.toMatchObject({ code: 78 });
-        expect(await readdir(machine)).toEqual([]);
+        expect(await readdir(computer)).toEqual([]);
     } finally {
         await rm(root, { recursive: true, force: true });
     }

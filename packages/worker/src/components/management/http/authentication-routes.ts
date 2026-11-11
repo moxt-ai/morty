@@ -191,7 +191,7 @@ export function createAuthenticationRoutes() {
                     case "forbidden":
                         throw new ManagementError(
                             "LOCAL_IDENTITY_REQUIRED",
-                            "Use the original identity saved on the machine to revoke all access.",
+                            "Use the original identity saved on the computer to revoke all access.",
                             403,
                         );
                 }

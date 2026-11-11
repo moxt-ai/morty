@@ -1,5 +1,4 @@
 import { fileURLToPath } from "node:url";
-
 import type {
     AcpSessionUpdate,
     SessionElicitationRequestedEvent,
@@ -9,9 +8,10 @@ import type {
     SessionLiveEvent,
     SessionPermissionRequestedEvent,
 } from "@morty-build/client/protocol";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
+import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { SessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 
 export const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
@@ -108,10 +108,7 @@ export function fakeAgent(
     environment: Readonly<Record<string, string>> = {},
     harness = "codex",
 ): AcpAgentDefinition {
-    return new AcpAgentDefinition(
-        harness,
-        "Codex",
-        process.execPath,
+    return createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -122,6 +119,9 @@ export function fakeAgent(
                 },
                 options,
             ),
+        harness,
+        "Codex",
+        process.execPath,
         environment,
     );
 }

@@ -297,7 +297,7 @@ export function NativeSessionDialog({
                                         <NativeSessionDirectoryPlaceholder
                                             icon={PackageOpen}
                                             title={`${model.directory.agentLabel} is not installed`}
-                                            description="Install it on this machine to browse saved sessions."
+                                            description="Install it on this computer to browse saved sessions."
                                         />
                                     )}
                                     {model.directory.kind === "failed" && (
@@ -319,7 +319,7 @@ export function NativeSessionDialog({
                                         <NativeSessionDirectoryPlaceholder
                                             icon={Inbox}
                                             title="No saved sessions"
-                                            description="This agent didn't report any on this machine."
+                                            description="This agent didn't report any on this computer."
                                         />
                                     )}
                                     {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
@@ -554,7 +554,6 @@ export function NativeSessionDialog({
                                         <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
                                             <Button
                                                 className={sheetControlHeightClassName}
-                                                data-testid={dataTestId.importLocalSession}
                                                 variant="outline"
                                                 disabled={
                                                     model.preview.kind !== "ready" ||
@@ -573,7 +572,6 @@ export function NativeSessionDialog({
                                             </Button>
                                             <Button
                                                 className={sheetControlHeightClassName}
-                                                data-testid={dataTestId.forkLocalSession}
                                                 disabled={model.preview.kind !== "ready" || model.operation !== "idle"}
                                                 onClick={() =>
                                                     withSignal(

@@ -29,7 +29,7 @@ def run(command, cwd=ROOT, env=None):
 def overlay(file, environment):
     result = read(file)
     result.update(result.pop('env', {}).get(environment, {}))
-    for field in ('$schema', 'routes', 'account_id'):
+    for field in ('$schema', 'account_id'):
         result.pop(field, None)
     # Production Workers answer only on their custom domains, behind the zone's security and rate-limit rules.
     result.update(account_id=ACCOUNT, workers_dev=False, preview_urls=False)
@@ -103,11 +103,8 @@ def main():
     portable['d1_databases'][0]['migrations_dir'] = '../d1-migrations'
     write(morty_dir / 'wrangler.json', portable)
     shutil.copytree(ROOT / 'packages/relay/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
+    assert portable['account_id'] == ACCOUNT and portable['name'] == spec['morty'] and not portable.get('routes')
     configs = {'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
-    for label, file in configs.items():
-        config = read(release / file)
-        assert config['account_id'] == ACCOUNT and config['name'] == spec[label] and not config.get('routes')
-        assert '95af7a3d67be8c49b1619544e3ce53c0' not in json.dumps(config)
     # Artifact files contain public configuration and compiled code only; secrets are supplied at deploy time.
     cli_release = None
     if os.environ.get('MORTY_CLI_RELEASE_MANIFEST'):

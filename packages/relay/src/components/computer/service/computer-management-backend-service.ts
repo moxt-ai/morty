@@ -34,8 +34,6 @@ export class ComputerManagementBackendService {
         await this.context.services.computerPairings.listProjectComputers(this.computerId, signal);
     readonly agents = async (signal: AbortSignal) =>
         await this.context.services.computerPairings.getComputerAgents(this.computerId, signal);
-    readonly probe = async (signal: AbortSignal) =>
-        await this.context.services.computerPairings.probeProject(this.computerId, signal);
     readonly issueSessionAccess = async (
         target: NativeSessionTarget,
         lifetime: number,

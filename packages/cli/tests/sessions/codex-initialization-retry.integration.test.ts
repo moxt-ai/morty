@@ -49,7 +49,7 @@ createInterface({ input: process.stdin }).on("line", line => {
 `,
             { mode: 0o700 },
         );
-        const agent = new AcpAgentDefinition("codex", "Codex", command, null, {});
+        const agent = new AcpAgentDefinition("codex", "Codex", command, {});
         await expect(
             sessions.createNativeSession({ agent, cwd: directory, signal: AbortSignal.timeout(30_000) }),
         ).resolves.toEqual({ harness: "codex", sessionId: "recovered-thread" });

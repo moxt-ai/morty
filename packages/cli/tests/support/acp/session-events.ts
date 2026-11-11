@@ -5,14 +5,6 @@ import {
     type SessionConfigOption,
 } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
-import { initializeAgentConnection } from "../../../src/engine/acp/adapter/agent-initialization.ts";
-import {
-    applyConfigurationChanges,
-    applyConfigurationMode,
-    type ConfigurationChanges,
-    recordConfigurationMode,
-    recordConfigurationOptions,
-} from "../../../src/engine/acp/adapter/configuration-changes.ts";
 import {
     type NativeSessionEvent,
     type NativeSessionInfoChange,
@@ -21,8 +13,6 @@ import {
 } from "../../../src/engine/acp/adapter/native-session-event.ts";
 import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import type { BackgroundActivity, PromptDelegationStage } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
-import type { AgentConnection } from "../../../src/engine/acp/connection/agent-connection.ts";
-import type { AcpClientHandler } from "../../../src/engine/acp/connection/create-client.ts";
 import type { IdentifiedSessionNotification as SessionNotification } from "../../../src/engine/acp/connection/session-notification.ts";
 import type {
     AcpContentExternalizer,
@@ -34,7 +24,18 @@ import {
     normalizeSessionConfigurationUpdate,
 } from "../../../src/engine/acp/protocol/session-configuration.ts";
 import { truncate } from "../../../src/engine/util/value-utils.ts";
+import type { AgentConnection } from "../agents/agent-connection.ts";
+import { connectControlledAgent } from "../agents/controlled-agent-definition.ts";
+import {
+    applyConfigurationChanges,
+    applyConfigurationMode,
+    type ConfigurationChanges,
+    recordConfigurationMode,
+    recordConfigurationOptions,
+} from "./configuration-changes.ts";
 import { ControlledSessionUpdates } from "./controlled-session-updates.ts";
+import type { AcpClientHandler } from "./create-client.ts";
+import { initializeAgentConnection } from "./initialize-controlled-agent.ts";
 
 interface SessionConnectionScope {
     readonly agent: AcpAgentDefinition;
@@ -189,7 +190,7 @@ export class AdapterSessionConnection {
             onElicitation: options.interactions.onElicitation,
             onElicitationComplete: options.interactions.onElicitationComplete,
         };
-        this.#connection = options.agent.createConnection({
+        this.#connection = connectControlledAgent(options.agent, {
             cwd: options.cwd,
             client,
             onBackgroundActivity: (activity) => {
@@ -310,7 +311,6 @@ export class AdapterSessionConnection {
         }
         return this.#initialization.result;
     };
-    readonly agentSettingsModelEffort = () => this.#connection.agentSettingsModelEffort();
     readonly race = <T>(operation: Promise<T>, exitMessage: string, signal: AbortSignal): Promise<T> =>
         this.#connection.race(operation, exitMessage, signal);
 

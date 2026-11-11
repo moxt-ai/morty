@@ -127,7 +127,6 @@ export function createChatWorkspace(options: {
     readonly bugReportDialog: BugReportDialogStore;
     readonly computerId: string;
     readonly requests: BotChatApi;
-    readonly url?: string;
     readonly createTransfer?: ((terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
     readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
@@ -176,7 +175,7 @@ export function createChatWorkspace(options: {
                 }
             }
             if (options.rememberedIdentity !== undefined) {
-                rememberComputerName(options.rememberedIdentity, configuration.computer.machineName);
+                rememberComputerName(options.rememberedIdentity, configuration.computer.computerName);
             }
             computerRecovery.observe(configuration.computer.online, observation);
         },
@@ -186,7 +185,7 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         onComputerReplaced: () => {
-            // A Session belongs to the Computer that held it, so the page starts over on the Machine's new conversation.
+            // A Session belongs to the Computer that held it, so the page starts over on the Computer's new conversation.
             const url = new URL(window.location.href);
             url.searchParams.delete("harness");
             url.searchParams.delete("sessionId");
@@ -215,7 +214,7 @@ export function createChatWorkspace(options: {
                 paneEntry = null;
             }
         },
-        url: options.url ?? window.location.href,
+        url: window.location.href,
     });
     const directory = createConversationDirectoryStore(
         requests,

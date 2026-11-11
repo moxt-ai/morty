@@ -32,8 +32,6 @@ export type AppState =
           readonly notice: "access-ended" | "none";
           readonly returnHref: string | null;
           readonly setupHandoff: SetupHandoffModel;
-          readonly onPromptCopied: () => void;
-          readonly onLinkSent: () => void;
       }
     | { readonly kind: "authentication"; readonly router: AnyRouter }
     | {
@@ -134,8 +132,6 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             return (
                 <SetupApplication
                     notice={state.notice}
-                    onLinkSent={state.onLinkSent}
-                    onPromptCopied={state.onPromptCopied}
                     returnHref={state.returnHref}
                     setupHandoff={state.setupHandoff}
                 />
@@ -156,14 +152,10 @@ const mortyResources = [
 
 function SetupApplication({
     notice,
-    onLinkSent,
-    onPromptCopied,
     returnHref,
     setupHandoff,
 }: {
     readonly notice: "access-ended" | "none";
-    readonly onLinkSent: () => void;
-    readonly onPromptCopied: () => void;
     readonly returnHref: string | null;
     readonly setupHandoff: SetupHandoffModel;
 }) {
@@ -239,7 +231,7 @@ function SetupApplication({
                     : "Run one setup prompt on the computer you want to add."}
             </SetupCardDescription>
             <div className="mt-4 w-full">
-                <PairingInstruction handoff={setupHandoff} onCopied={onPromptCopied} onLinkSent={onLinkSent} />
+                <PairingInstruction handoff={setupHandoff} />
             </div>
         </SetupCardShell>
     );

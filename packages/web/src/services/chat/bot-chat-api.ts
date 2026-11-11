@@ -27,7 +27,7 @@ import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-catalog.ts";
-import { CloudApiError, ManagementApi, machineUrl } from "../management/management-api.ts";
+import { CloudApiError, computerPairingUrl, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const sessionCredentialSchema = v.pipe(
@@ -86,7 +86,7 @@ const managedSessionSchema = v.pipe(
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 const chatComputerSchema = v.object({
     computerId: identifier,
-    machineName: v.string(),
+    computerName: v.string(),
     online: v.boolean(),
     agents: v.array(
         v.object({
@@ -103,7 +103,7 @@ const networkDiagnosticSchema = v.strictObject({
 export type BotComputerConfiguration = v.InferOutput<typeof computerConfigurationSchema>;
 export type ChatAgentSelection = {
     readonly computerId: Identifier;
-    readonly machineName: string;
+    readonly computerName: string;
     readonly harness: Identifier;
     readonly label: string;
 };
@@ -121,7 +121,7 @@ export function connectedChatComputerAgents(computer: ChatComputer): readonly Ch
     return computer.online
         ? computer.agents.map((agent) => ({
               computerId: computer.computerId,
-              machineName: computer.machineName,
+              computerName: computer.computerName,
               ...agent,
           }))
         : [];
@@ -376,7 +376,7 @@ export class BotChatApi {
             },
         };
     };
-    /** Imports the native session a setup handoff names into the caller's Machine. */
+    /** Imports the native session a setup handoff names into the caller's Computer. */
     readonly continueNativeSession = async (harness: string, sessionId: string, signal: AbortSignal) =>
         continuedSession(await this.#request("continue-native-session", { harness, sessionId }, signal));
     /** The settings a new Session of the Agent starts with in the directory. */
@@ -436,7 +436,7 @@ export class BotChatApi {
     };
     /** Resolves once the Computer's pairing differs from the pairing this client last read. */
     readonly waitForComputerPairingChange = async (parent: AbortSignal): Promise<void> =>
-        await this.#waitForResourceChange(machineUrl(this.#origin, this.#computerId), "GET", parent);
+        await this.#waitForResourceChange(computerPairingUrl(this.#origin, this.#computerId), "GET", parent);
     readonly waitForComputerConfigurationChange = async (
         parent: AbortSignal,
         onReady?: (configuration: BotComputerConfiguration) => void,

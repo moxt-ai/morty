@@ -14,7 +14,6 @@
             "!!**/.wrangler",
             "!!worker-configuration.d.ts",
             "!!**/test-results",
-            "!!**/playwright-report",
             "!!**/worker-configuration.d.ts"
         ]
     },
@@ -70,8 +69,7 @@
                 "!!packages/web/tests/**",
                 "!!**/*.test.ts",
                 "!!**/*.test.tsx",
-                "!!**/tests/**",
-                "!!packages/admin/**"
+                "!!**/tests/**"
             ],
             "linter": {
                 "rules": {

@@ -16,7 +16,7 @@ interface PairingRelay {
 }
 
 /**
- * Accepts the pairing redemption and records the Agent directory the machine advertised. Only the
+ * Accepts the pairing redemption and records the Agent directory the computer advertised. Only the
  * Agent inventory is under test; the redemption response is the Relay's own contract.
  */
 async function createPairingRelay(): Promise<PairingRelay> {
@@ -69,7 +69,7 @@ async function createPairingRelay(): Promise<PairingRelay> {
     };
 }
 
-// Empty overrides short-circuit discovery for every supported Agent, so no machine installation
+// Empty overrides short-circuit discovery for every supported Agent, so no computer installation
 // can satisfy the pairing. This keeps the scenario independent of what the developer has on PATH.
 function agentlessEnvironment(stateDirectory: string): Readonly<NodeJS.ProcessEnv> {
     return Object.freeze({
@@ -105,8 +105,8 @@ async function runCli(
     return { code, stderr };
 }
 
-describe("pairing a machine without a local Agent", () => {
-    it("Given a pairing code piped to the CLI, When the user pairs with --code-stdin, Then the machine redeems that code without it appearing in the command line", async () => {
+describe("pairing a computer without a local Agent", () => {
+    it("Given a pairing code piped to the CLI, When the user pairs with --code-stdin, Then the computer redeems that code without it appearing in the command line", async () => {
         const home = await mkdtemp(join(tmpdir(), "morty-unattended-computer-"));
         const relay = await createPairingRelay();
         const environment = { ...agentlessEnvironment(join(home, "state")), HOME: home, TMPDIR: home };
@@ -139,7 +139,7 @@ describe("pairing a machine without a local Agent", () => {
         }
     });
 
-    it("Given no supported Agent is discoverable, When the machine redeems its pairing, Then it pairs and advertises an empty Agent directory", async () => {
+    it("Given no supported Agent is discoverable, When the computer redeems its pairing, Then it pairs and advertises an empty Agent directory", async () => {
         const stateDirectory = await mkdtemp(join(tmpdir(), "morty-unattended-computer-"));
         const relay = await createPairingRelay();
 
@@ -179,7 +179,7 @@ describe("pairing a machine without a local Agent", () => {
         }
     });
 
-    it("Given an unattended machine is already paired, When another Engine reads its saved connection, Then pairing is retained without redeeming again", async () => {
+    it("Given an unattended computer is already paired, When another Engine reads its saved connection, Then pairing is retained without redeeming again", async () => {
         const stateDirectory = await mkdtemp(join(tmpdir(), "morty-unattended-resume-"));
         const relay = await createPairingRelay();
         const environment = agentlessEnvironment(stateDirectory);

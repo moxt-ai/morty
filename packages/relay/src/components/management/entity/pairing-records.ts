@@ -15,7 +15,7 @@ export type ComputerCredentialRotation =
 interface ComputerRegistrationRow {
     readonly claimed_at: number;
     readonly agents_json: string;
-    readonly machine_name: string;
+    readonly computer_name: string;
     readonly workspace_name: string;
 }
 

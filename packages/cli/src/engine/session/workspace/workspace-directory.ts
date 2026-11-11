@@ -27,7 +27,7 @@ function expandCurrentUserHome(path: string): string {
     return path.replace(/^~(?=$|\/|\\)/, homedir());
 }
 
-/** Pairing authorizes the machine. Explicit paths select a working
+/** Pairing authorizes the computer. Explicit paths select a working
  * directory; they do not grant additional filesystem capabilities. */
 export class WorkspaceDirectoryService {
     readonly #defaultWorkspace: string;

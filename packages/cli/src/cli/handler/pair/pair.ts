@@ -1,7 +1,7 @@
 import { type Command, Option } from "commander";
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
 import { ensureDaemon } from "../../../daemon/lifecycle/daemon-client.ts";
-import { openMortyInstallation, pairLocalMachine } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation, pairLocalComputer } from "../../../daemon/pairing/pair-local-computer.ts";
 import type { CliContext } from "../../context.ts";
 import { valueOption } from "../../util/options.ts";
 import { type ParsedPairOptions, pairArguments, requirePairOptions } from "./logic/options.ts";
@@ -20,10 +20,10 @@ export function registerPairAction(command: Command, context: CliContext): void 
             const control = await openMortyInstallation(context.shutdownSignal, process.env);
             await ensureDaemon(control.stateDirectory, context.entry, context.shutdownSignal);
             process.stdout.write(`morty version: ${context.version}\n`);
-            const paired = await pairLocalMachine(pairArguments(requested), context.shutdownSignal);
+            const paired = await pairLocalComputer(pairArguments(requested), context.shutdownSignal);
             await control.setConnectionActivation(paired.pairingGeneration, "active", context.shutdownSignal);
             await reloadDaemon(control.stateDirectory, context.shutdownSignal);
-            process.stdout.write("\nLocal machine paired.\n");
+            process.stdout.write("\nLocal computer paired.\n");
             process.stdout.write("Morty daemon is running; connection will reconnect automatically.\n");
         });
 }

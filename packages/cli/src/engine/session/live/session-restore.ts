@@ -2,14 +2,14 @@ import type { NativeSessionTarget, SessionCapabilities } from "@morty-build/clie
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import { type NativeSessionOrigin, sessionIdSchema } from "../../acp/protocol/native-session.ts";
 import type { SessionRecovery } from "../api/session-api.ts";
-import { FoundStoredSession, StoredSession, type StoredSessionLookup } from "../record/session-store.ts";
+import { StoredSession } from "../record/session-store.ts";
 
 /**
  * The established native conversation a reopened Session continues: the one the Runtime recorded, or the one an
  * import names. Reopening never creates or assigns a destination.
  */
 export function restoredConversation(
-    recorded: StoredSessionLookup,
+    recorded: StoredSession | undefined,
     target: NativeSessionTarget,
     cwd: string,
     origin: NativeSessionOrigin | undefined,
@@ -24,23 +24,21 @@ export function restoredConversation(
     }
     const stored =
         origin?.kind === "import"
-            ? new FoundStoredSession(
-                  new StoredSession(
-                      { harness: target.harness, sessionId: sessionIdSchema.parse(origin.sessionId) },
-                      cwd,
-                      true,
-                      origin.title,
-                      importedAt,
-                  ),
+            ? new StoredSession(
+                  { harness: target.harness, sessionId: sessionIdSchema.parse(origin.sessionId) },
+                  cwd,
+                  true,
+                  origin.title,
+                  importedAt,
               )
             : recorded;
-    if (!(stored instanceof FoundStoredSession)) {
+    if (stored === undefined) {
         throw new AcpExecutionError("The native Session was not found", {}, "session_not_found");
     }
-    if (stored.session.cwd !== cwd) {
+    if (stored.cwd !== cwd) {
         throw new AcpExecutionError("The native Session workspace cannot change", {}, "session_identity_mismatch");
     }
-    return stored.session;
+    return stored;
 }
 
 /** How the harness reopens a conversation: resuming it, or replaying its history to this process. */

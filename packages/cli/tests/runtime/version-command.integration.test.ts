@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import cliPackage from "../../package.json" with { type: "json" };
 import { sendLocalRequest } from "../../src/daemon/control/local-client.ts";
-import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-computer.ts";
 
 const temporaryDirectories: string[] = [];
 

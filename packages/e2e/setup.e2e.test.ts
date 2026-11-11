@@ -51,7 +51,7 @@ test("Given the agent's shell exposes its Claude Code session, When it follows t
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "session_id_mismatch" }));
 });
 
-test("Given a saved Machine whose Computer the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Computer and keeps the user", async ({
+test("Given a saved Computer the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Computer and keeps the user", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -74,7 +74,7 @@ test("Given a saved Machine whose Computer the manager no longer manages, When t
     expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "replaced" }));
 });
 
-test("Given a browser opened the saved Machine's link, When the user approves replacing its Project, Then earlier access ends and the new link works in the same tab", async ({
+test("Given a browser opened the saved Computer's link, When the user approves replacing its Project, Then earlier access ends and the new link works in the same tab", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -108,7 +108,7 @@ test("Given a browser opened the saved Machine's link, When the user approves re
     await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
 });
 
-test("Given a saved Machine and another same-App connection, When its Computer reconnects, Then setup reuses the Machine's bound Computer", async ({
+test("Given a saved Computer and another same-App connection, When its Runtime reconnects, Then setup reuses the saved Computer", async ({
     runtime,
 }) => {
     await runtime.openChat();

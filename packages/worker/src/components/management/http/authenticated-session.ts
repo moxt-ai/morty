@@ -31,7 +31,7 @@ export const authenticatedSession = createMiddleware<SessionEnvironment>(async (
     }
 });
 
-/** Admits only the machine's local credential, for an operation no shared or recovery access may perform. */
+/** Admits only the computer's local credential, for an operation no shared or recovery access may perform. */
 export const localSession = (operation: LocalOperation) =>
     createMiddleware<SessionEnvironment>(async (context, next) => {
         const result = await context.env.services.authentication.authorize(
@@ -60,7 +60,7 @@ export const localSession = (operation: LocalOperation) =>
 export function localIdentityRequired(): ManagementError {
     return new ManagementError(
         "LOCAL_IDENTITY_REQUIRED",
-        "Use the identity saved on the machine for this operation.",
+        "Use the identity saved on the computer for this operation.",
         403,
     );
 }

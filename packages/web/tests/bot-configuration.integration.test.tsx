@@ -237,7 +237,7 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
     expect(pairing).toHaveProperty("readOnly", true);
     expect(pairing).toHaveProperty(
         "value",
-        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`,
+        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this computer.`,
     );
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
@@ -630,7 +630,7 @@ test("Given a paired Bot on mobile, When the user opens Agent configuration, The
     }
 });
 
-test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger shows its harness mark without repeating the harness or machine name", {
+test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger shows its harness mark without repeating the harness or computer name", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });

@@ -27,11 +27,11 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { IdentifiedSessionNotification } from "../../src/engine/acp/connection/session-notification.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -300,12 +300,12 @@ async function startRuntime() {
             credentials: memoryComputerCredentials("r".repeat(43)),
         },
         [
-            new AcpAgentDefinition(
+            createControlledAgent(
+                (options) =>
+                    new ControlledEndpointConnection(producer.createEndpoint(options.client.onUpdate), options.client),
                 "controlled",
                 "Controlled Agent",
                 process.execPath,
-                (options) =>
-                    new ControlledEndpointConnection(producer.createEndpoint(options.client.onUpdate), options.client),
             ),
         ],
         new RuntimeLocalContext(directory, {}),

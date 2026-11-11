@@ -9,7 +9,6 @@ import {
 import type { NativeSessionTarget, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
-import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -22,7 +21,7 @@ import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMortySession } from "./open-session.ts";
 import { uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
-import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
+import type { SessionActivityState } from "./session-activity-machine.ts";
 import type { SessionComposerStore } from "./session-composer-store.ts";
 import {
     connectionFailure,
@@ -33,7 +32,6 @@ import {
     sessionUpdatesEndedError,
 } from "./session-connection.ts";
 import { acceptedTurn, ownerRunsTurn, workingIndicator } from "./session-current-turn.ts";
-import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { sessionDeliveryPresentation } from "./session-delivery-presentation.ts";
 import {
     awaitingMessage,
@@ -260,11 +258,6 @@ export function sessionPanePresentation(
     const stopping = facts.stopping;
     const composerInputDisabled =
         model.connection.kind === "closed" || facts.configuring || facts.waitingForInput || stopping;
-    const activeCommandId = workingCommandId(activity);
-    const activeMessageId =
-        activeCommandId !== null
-            ? (timeline.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
-            : null;
     const unknownDelivery = delivery.state.kind === "delivery-unknown" ? journalMessage(delivery.state.journal) : null;
     const deliveryUnknownCommandId = unknownDelivery?.commandId ?? null;
     const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
@@ -289,8 +282,6 @@ export function sessionPanePresentation(
     return {
         activity,
         authenticationFailure,
-        activeMessageId,
-        activeCommandId,
         composerInputDisabled,
         settingsDisabled: !canChangeSettings(facts),
         settingsNotice: controlRunning ? "New settings may not affect this response." : null,
@@ -326,7 +317,6 @@ export function sessionPanePresentation(
                   stopFailure(tasks, running) ??
                   queueFailure(queue, execution.queued) ??
                   ""),
-        controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: timeline.hasOlderHistory,
         historyLoading: olderHistory.kind === "loading",
@@ -447,7 +437,7 @@ export function createSessionPaneModel(options: {
      */
     readonly onReleased?: ((activity: SessionActivityState | null) => void) | undefined;
     readonly titles: SessionTitlesStore;
-    /** Whether the connection header reports this Session's connection available, network and Machine included. */
+    /** Whether the connection header reports this Session's connection available, network and Computer included. */
     readonly connectionAvailable: (connection: SessionConnection) => boolean;
     /** The connection reached the Session through the Computer. */
     readonly onConnected: () => void;
@@ -1432,11 +1422,6 @@ export function createSessionPaneModel(options: {
             connection: () => store.getState().connection,
             failedThrough,
         });
-        const unregisterDebug = registerMortyDebugSession({
-            target: sessionTarget,
-            blocks: () => sessionDebugBlocks({ messages: timelineMessages() }),
-        });
-        lifetime.signal.addEventListener("abort", unregisterDebug, { once: true });
         void store
             .getState()
             .connect(lifetime.signal)

@@ -1,7 +1,10 @@
 import type { ClientConnection } from "@agentclientprotocol/sdk/unstable";
-import type { AgentModelEffort } from "@morty-build/client/protocol";
-import type { AgentTermination, BackgroundActivity, PromptDelegationStage } from "../agent/agent-lifecycle.ts";
-import type { AcpClientHandler } from "./create-client.ts";
+import type {
+    AgentTermination,
+    BackgroundActivity,
+    PromptDelegationStage,
+} from "../../../src/engine/acp/agent/agent-lifecycle.ts";
+import type { AcpClientHandler } from "../acp/create-client.ts";
 
 /** Adapter-owned runtime and transport for one ACP client. */
 export interface AgentConnection {
@@ -9,7 +12,6 @@ export interface AgentConnection {
     readonly termination: Promise<AgentTermination>;
     readonly initialize: (signal: AbortSignal) => Promise<void>;
     readonly closeProcess: () => Promise<void>;
-    readonly agentSettingsModelEffort: () => AgentModelEffort | null;
     readonly race: <T>(operation: Promise<T>, exitMessage: string, signal: AbortSignal) => Promise<T>;
 }
 

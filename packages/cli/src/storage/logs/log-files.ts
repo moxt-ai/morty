@@ -8,16 +8,16 @@ function isAbsent(cause: unknown): boolean {
     return typeof cause === "object" && cause !== null && Reflect.get(cause, "code") === "ENOENT";
 }
 
-/** Collect logs only inside Morty's private machine directory. */
+/** Collect logs only inside Morty's private computer directory. */
 export async function findLogDirectories(
     root: string,
     unreadable: string[],
     signal: AbortSignal,
 ): Promise<readonly string[]> {
-    const machine = join(root, "machine");
+    const computer = join(root, "computer");
     signal.throwIfAborted();
-    const logs = join(machine, "logs");
-    for (const path of [machine, logs]) {
+    const logs = join(computer, "logs");
+    for (const path of [computer, logs]) {
         const status = await directoryStatus(path);
         if (status !== "listed") {
             if (status === "unreadable") {

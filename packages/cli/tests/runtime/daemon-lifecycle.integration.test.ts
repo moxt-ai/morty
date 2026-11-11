@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 
 import cliPackage from "../../package.json" with { type: "json" };
 import { controlSocketPath } from "../../src/daemon/control/local-client.ts";
-import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../src/daemon/pairing/pair-local-computer.ts";
 import type { InstallationDirectory } from "../../src/engine/storage/installation/installation-files.ts";
 
 const temporaryDirectories: string[] = [];
@@ -139,10 +139,10 @@ describe("Morty pairing lifecycle", () => {
             const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
             const result = await runCli(["pair", operation], environment, AbortSignal.timeout(30_000));
             expect(result.code).toBe(1);
-            expect(result.stderr).toContain("No machine is paired. Run Morty setup first.");
+            expect(result.stderr).toContain("No computer is paired. Run Morty setup first.");
         },
     );
-    it("Given a paired machine, When the user stops, restarts and removes its current pairing without an identifier, Then the CLI shows each state without exposing an internal generation", async () => {
+    it("Given a paired computer, When the user stops, restarts and removes its current pairing without an identifier, Then the CLI shows each state without exposing an internal generation", async () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-pairing-lifecycle-"));
         temporaryDirectories.push(stateRoot);
         const executableDirectory = join(stateRoot, "empty-path");

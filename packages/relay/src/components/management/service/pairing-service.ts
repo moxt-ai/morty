@@ -1,7 +1,6 @@
 import type { CloudflareComputerRelay } from "../../../../../worker/src/gateway/cloudflare-computer-relay.ts";
 import { ComputerSummary } from "../../runtime/service/computer.ts";
 import { PairingDirectoryError } from "../entity/pairing.ts";
-import { ProjectPermission } from "../entity/project-authentication.ts";
 import type { PairingDirectoryService } from "./pairing-directory-service.ts";
 
 export class PairingService {
@@ -25,10 +24,6 @@ export class PairingService {
         signal: AbortSignal,
     ) => this.#pairings.createProjectComputerPairing(computerId, pairingKey, idempotencyKey, signal);
 
-    readonly probeProject = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        await this.#pairings.authorizeProject(computerId, ProjectPermission.ComputerRead, signal);
-    };
-
     readonly listProjectComputers = async (computerId: string, signal: AbortSignal) => {
         const channels = await this.#pairings.listProjectComputers(computerId, signal);
         return await Promise.all(
@@ -46,7 +41,7 @@ export class PairingService {
         const channels = await this.#pairings.listProjectComputers(computerId, signal);
         const channel = channels.find((candidate) => candidate.computerId === computerId);
         if (channel === undefined) {
-            // A revoked Computer is not listed; saying so lets its Machine be paired again instead of waiting for it.
+            // A revoked Computer is not listed; saying so lets it be paired again instead of waiting for it.
             if (await this.#pairings.isProjectComputerRevoked(computerId, signal)) {
                 throw new PairingDirectoryError("computer_revoked", "The Computer has been revoked");
             }
@@ -67,12 +62,19 @@ export class PairingService {
     readonly redeemComputerPairing: PairingDirectoryService["redeemComputerPairing"] = async (
         computerId,
         pairingCode,
-        machineName,
+        computerName,
         workspaceName,
         agents,
         signal,
     ) =>
-        await this.#pairings.redeemComputerPairing(computerId, pairingCode, machineName, workspaceName, agents, signal);
+        await this.#pairings.redeemComputerPairing(
+            computerId,
+            pairingCode,
+            computerName,
+            workspaceName,
+            agents,
+            signal,
+        );
 
     readonly authorizePairedHost = async (computerId: string, signal: AbortSignal) =>
         await this.#pairings.authorizePairedHost(computerId, signal);

@@ -23,7 +23,7 @@ const tokenSchema = v.pipe(
         /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
-const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
+const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 const identityFields = { token: tokenSchema, userId: userIdSchema, computerId: computerIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
@@ -116,19 +116,6 @@ export type LostAccess = { readonly kind: "revoked" } | { readonly kind: "gone" 
 /** The reason the Worker gives, beside UNAUTHENTICATED, for a credential whose access was ended. */
 const ACCESS_REVOKED = "ACCESS_REVOKED";
 
-export type DataRegion =
-    | "wnam"
-    | "enam"
-    | "sam"
-    | "weur"
-    | "eeur"
-    | "apac"
-    | "apac-ne"
-    | "apac-se"
-    | "oc"
-    | "afr"
-    | "me";
-
 interface Options {
     readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly origin: string;
@@ -214,7 +201,7 @@ export class AnonymousIdentityApi {
             },
         });
         try {
-            const computer = await management.readProject(signal);
+            const computer = await management.readComputer(signal);
             signal.throwIfAborted();
             if (computer === null) {
                 return { kind: "gone" };

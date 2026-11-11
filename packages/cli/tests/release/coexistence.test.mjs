@@ -23,7 +23,7 @@ const mortyEntry = process.env.MORTY_RELEASE_ENTRY ?? (await findEntry("@morty-b
 const moxtEntry = process.env.MOXT_RELEASE_ENTRY ?? (await findEntry("@moxt-ai", "mobius"));
 const releaseVersion = JSON.parse(await readFile(join(dirname(mortyEntry), "../package.json"), "utf8")).version;
 
-test("Given released Moxt and packed Morty on one machine, each product's lifecycle preserves the other's running service and user data", async () => {
+test("Given released Moxt and packed Morty on one computer, each product's lifecycle preserves the other's running service and user data", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-moxt-coexistence-"));
     const mortyRoot = join(directory, "morty");
     const moxtRoot = join(directory, "moxt");

@@ -69,7 +69,7 @@ test("Given unavailable abuse protection, When a visitor asks for a new identity
     });
 });
 
-test("Given an invalid user credential, When a visitor tries to pair a Machine, Then pairing is refused without exposing credential details", async () => {
+test("Given an invalid user credential, When a visitor tries to pair a Computer, Then pairing is refused without exposing credential details", async () => {
     const identity = await fixture.createAnonymousUser();
     const token = `${identity.token.slice(0, -1)}${identity.token.endsWith("A") ? "B" : "A"}`;
     const response = await worker.fetch(

@@ -33,17 +33,12 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
                 <dt className={executionDetailsTermClassName}>Agent</dt>
                 <dd className="min-w-0 font-medium text-foreground">
                     <span className="inline-flex min-w-0 items-center gap-1.5">
-                        <HarnessMark
-                            harness={context.harness}
-                            appearance="line"
-                            label={context.agent}
-                            testId={dataTestId.executionDetailsHarnessMark}
-                        />
+                        <HarnessMark harness={context.harness} appearance="line" label={context.agent} />
                         <span className="min-w-0 [overflow-wrap:anywhere]">{context.agent}</span>
                     </span>
                 </dd>
                 <dt className={executionDetailsTermClassName}>Computer</dt>
-                <dd className="text-foreground [overflow-wrap:anywhere]">{context.machine}</dd>
+                <dd className="text-foreground [overflow-wrap:anywhere]">{context.computer}</dd>
                 <dt className={executionDetailsTermClassName}>Session connection</dt>
                 <dd className="text-foreground">{context.connection}</dd>
                 <dt className={executionDetailsTermClassName}>Computer status</dt>
