@@ -53,7 +53,7 @@
         "@cloudflare/vite-plugin": "catalog:",
         "@morty-build/client": "workspace:*",
         "@morty-build/runtime-test-support": "workspace:*",
-        "@sentry/cli": "2.58.6",
+        "@sentry/cli": "3.8.2",
         "@sentry/vite-plugin": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@types/node": "catalog:",
