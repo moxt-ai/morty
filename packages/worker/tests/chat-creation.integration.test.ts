@@ -984,6 +984,33 @@ test("Given a browser connecting from a city, When it opens a link, Then the dev
     expect(listed.devices).toEqual([{ label: "iPhone · Safari", location: { city: "Shanghai", country: "CN" } }]);
 });
 
+test("Given a sharing link, When a browser redeems it through a Computer-scoped path with a claimed location, Then Morty refuses and lists no such device", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
+    const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    const redeemed = await cloud.dispatchFetch(
+        `${APP_ORIGIN}/morty/api/computers/${fixture.computerId}/identity/transfers/redeem`,
+        {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                "Morty-Client-Location": encodeURIComponent(JSON.stringify({ city: "Elsewhere", country: "AQ" })),
+            },
+            body: JSON.stringify({ code, device: "iPhone · Safari" }),
+            cf: { city: "Shanghai", country: "CN" },
+        },
+    );
+    expect(redeemed.status).toBe(404);
+
+    const listed = v.parse(
+        v.object({ devices: v.array(v.unknown()) }),
+        await (await fixture.request("identity/devices")).json(),
+    );
+    expect(listed.devices).toEqual([]);
+});
+
 test("Given an existing conversation, When a repeated start is refused, Then the conversation remains listed", async ({
     cloud,
 }) => {
