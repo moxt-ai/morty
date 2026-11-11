@@ -46,7 +46,7 @@ Morty is designed for one person reaching their own computer. Knowing what it
 trusts by design helps separate a vulnerability from intended behavior.
 
 - **A device with access controls the Agent.** Whoever holds an unused sharing
-  link, or a device that joined through one, can view and control the project's
+  link, or a device that joined through one, can view and control the computer's
   sessions, and so can ask the Agent to do anything the Agent may do on that
   computer. Codex sessions start in **Full access** (no approval prompts and no
   sandbox) unless another mode is chosen. Claude Code follows the computer's own
@@ -55,7 +55,7 @@ trusts by design helps separate a vulnerability from intended behavior.
 - **The computer's own credential stays on the computer.** Setup saves it in a
   state file readable only by the operating-system account that ran setup. It does
   not expire. Revoking all access replaces it and ends every other credential,
-  sharing link and browser device of the project.
+  sharing link and browser device of the computer.
 - **The relay is trusted.** Session traffic is not end-to-end encrypted; see
   [What Morty does with your data](README.md#what-morty-does-with-your-data).
 
@@ -93,7 +93,7 @@ Generally out of scope:
 
 ## Testing against your own setup
 
-Test against machines and projects you control. Do not attempt to reach other
+Test against computers you control. Do not attempt to reach other
 users' sessions, and do not run tests that degrade the service for other people.
 If a test accidentally gives you access to something that is not yours, stop, and
 tell us what happened in the report.

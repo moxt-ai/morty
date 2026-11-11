@@ -100,7 +100,7 @@ Moxt services. Agent-owned conversation history remains on the machine.
   its own.
 - **Sharing is explicit, time-limited and revocable.** A sharing link opens Morty on
   one device, once, within 10 minutes. That device can view and control sessions in
-  the project for the term chosen when sharing (1 hour to 30 days; a day by default),
+  the computer for the term chosen when sharing (1 hour to 30 days; a day by default),
   including asking the Agent to run commands and change files. Codex sessions start
   with full access to the computer, so treat the link like a password. **Devices**
   lists every device with access and disconnects any of them; to withdraw everything
