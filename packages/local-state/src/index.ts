@@ -30,5 +30,3 @@ export function mortyStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = p
         }
     }
 }
-
-export { claimMortyState } from "./ownership.ts";

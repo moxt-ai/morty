@@ -10,7 +10,6 @@ import { beforeAll, expect, test } from "vitest";
 import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
-import { claimMortyState } from "../../local-state/src/ownership.ts";
 import worker from "../src/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -155,7 +154,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                                   )
                               ).json(),
                           );
-                await claimMortyState(state, AbortSignal.timeout(10000));
+                await mkdir(state, { recursive: true, mode: 0o700 });
                 await writeFile(
                     join(state, "config.json"),
                     savedSetupState(
@@ -517,7 +516,7 @@ for (const [failure, scenario] of starterFailures) {
             const directory = await mkdtemp(join(tmpdir(), "morty-setup-start-"));
             const state = join(directory, "state");
             const bin = join(directory, "bin");
-            await Promise.all([claimMortyState(state, AbortSignal.timeout(10000)), mkdir(bin)]);
+            await Promise.all([mkdir(state, { recursive: true, mode: 0o700 }), mkdir(bin)]);
             const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
@@ -1177,7 +1176,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
 test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials, the local credential included, fail while the replacement setup saved and another machine remain usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-"));
     const configurationDirectory = join(directory, "state");
-    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
+    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
     const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {
@@ -1296,7 +1295,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
 test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and only the replacement of the current identity setup saved opens the current one", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
     const configurationDirectory = join(directory, "state");
-    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
+    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
     const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {
@@ -1367,7 +1366,7 @@ test("Given setup replaced the Project but stopped before ending the previous id
 test("Given the reply to revoking all access was lost after the Worker replaced the local credential, When the user revokes all access again, Then setup keeps the successor it saved and the earlier credential stays revoked", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-retry-"));
     const configurationDirectory = join(directory, "state");
-    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
+    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
     const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {

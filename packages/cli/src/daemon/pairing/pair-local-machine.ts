@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { claimMortyState } from "@morty-build/local-state";
 import type { VerifiedComputerConnection } from "../../engine/runtime/connection/computer-connection.ts";
 import {
     RuntimeInstallationStore,
@@ -58,7 +57,6 @@ export async function openMortyInstallation(
 ): Promise<RuntimeInstallationStore> {
     const root = readStateDirectory(environment);
     try {
-        await claimMortyState(root, signal);
         await ensurePrivateDirectory(root);
         await validateLocalPath(root, true, true, signal);
     } catch (cause) {
