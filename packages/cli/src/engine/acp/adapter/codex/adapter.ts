@@ -249,7 +249,6 @@ export class CodexAdapter implements Adapter {
         if (!truncate(params.title, 500)) {
             throw new AcpExecutionError("The Session title cannot be empty", {}, "invalid_session_title");
         }
-        return { nativeRenameApplied: false };
     };
     readonly configureSession: Adapter["configureSession"] = async (params) => {
         params.signal.throwIfAborted();

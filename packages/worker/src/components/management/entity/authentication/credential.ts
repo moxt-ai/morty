@@ -8,7 +8,7 @@ export const anonymousToken = v.pipe(
     ),
 );
 
-/** The machine's own credential, the only kind its holder may choose: a successor it saved before requesting it. */
+/** The computer's own credential, the only kind its holder may choose: a successor it saved before requesting it. */
 export const localCredentialToken = v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u));
 
 export type Credential = {
@@ -94,10 +94,10 @@ export function sharedLinkTerms(sharer: Credential, now: number, duration: Devic
 
 /**
  * The credential kinds that may perform each identity or management operation; any other operation accepts every
- * active credential. Browser and recovery access may use and share the Machine and disconnect the other browsers, so
- * whoever notices a device they did not add can remove it without losing their own access. Only the machine's local
+ * active credential. Browser and recovery access may use and share the Computer and disconnect the other browsers, so
+ * whoever notices a device they did not add can remove it without losing their own access. Only the computer's local
  * credential may issue a recovery credential (which ending browser access does not reach), pair a Computer, verify the
- * Machine's Agent or revoke all access.
+ * Computer's Agent or revoke all access.
  */
 const permittedKinds = {
     shareAccess: ["local", "browser", "recovery"],
@@ -118,7 +118,7 @@ export type CredentialOperation = keyof typeof permittedKinds;
 export type PermittedCredential<Operation extends CredentialOperation> = Credential & {
     readonly kind: (typeof permittedKinds)[Operation][number];
 };
-/** Operations only the machine's local credential may perform. */
+/** Operations only the computer's local credential may perform. */
 export type LocalOperation = {
     [Operation in CredentialOperation]: (typeof permittedKinds)[Operation] extends readonly ["local"]
         ? Operation

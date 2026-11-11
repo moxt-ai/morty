@@ -334,7 +334,7 @@ export class AuthenticationService {
         }
     };
 
-    /** Revokes all access, and replaces the machine's own credential with `successor` so a copy of it ends too. */
+    /** Revokes all access, and replaces the computer's own credential with `successor` so a copy of it ends too. */
     readonly revokeAllAccess = async (
         token: string | undefined,
         successor: string,
@@ -355,7 +355,7 @@ export class AuthenticationService {
     };
 
     /**
-     * Revokes all access except the machine's own credential. Project replacement keeps it until setup has saved the
+     * Revokes all access except the computer's own credential. Project replacement keeps it until setup has saved the
      * successor Project's identity, and then ends it.
      */
     readonly revokeOtherAccess = async (

@@ -23,7 +23,7 @@ afterAll(async () => {
     await fixture.close();
 });
 
-test("Given a saved Machine on a Project, When its Project is replaced, Then the same user receives a fresh Project, Machine, and credential", async () => {
+test("Given a saved Computer on a Project, When its Project is replaced, Then the same user receives a fresh Project, Computer, and credential", async () => {
     const environment = fixture.environment();
     const original = await fixture.createAnonymousUser();
     const replace = async () =>
@@ -64,17 +64,17 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     );
     expect(previousCredential.status).toBe(401);
 
-    const machineResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/management/machine`, {
+    const computerResponse = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${replacement.computerId}/management/computer/pairing-state`, {
             headers: { authorization: `Bearer ${replacement.token}` },
         }),
         environment,
     );
-    expect(machineResponse.status).toBe(200);
-    expect(await machineResponse.json()).toEqual({ computerPairing: "unpaired" });
+    expect(computerResponse.status).toBe(200);
+    expect(await computerResponse.json()).toEqual({ computerPairing: "unpaired" });
 });
 
-test("Given a revoked successor local credential, When the previous Machine retries replacement, Then it cannot reactivate that credential", async () => {
+test("Given a revoked successor local credential, When the previous Computer retries replacement, Then it cannot reactivate that credential", async () => {
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
@@ -113,7 +113,7 @@ function projectRequest(computerId: string, path: string, token: string, method 
     });
 }
 
-test("Given a completed replacement, When the saved Machine retries after a Worker restart, Then setup receives the same credential and a usable Machine", async () => {
+test("Given a completed replacement, When the saved Computer retries after a Worker restart, Then setup receives the same credential and a usable Computer", async () => {
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
@@ -138,7 +138,7 @@ test("Given a completed replacement, When the saved Machine retries after a Work
     expect(
         (
             await worker.fetch(
-                projectRequest(completed.computerId, "/management/machine", completed.token),
+                projectRequest(completed.computerId, "/management/computer/pairing-state", completed.token),
                 fixture.environment(),
             )
         ).status,
@@ -165,7 +165,7 @@ async function redeem(code: string): Promise<Response> {
     );
 }
 
-test("Given access shared from a saved Machine, When its Project is replaced, Then nothing shared before opens the previous Project and the local identity can still repeat the replacement", async () => {
+test("Given access shared from a saved Computer, When its Project is replaced, Then nothing shared before opens the previous Project and the local identity can still repeat the replacement", async () => {
     const original = await fixture.createAnonymousUser();
     const redeemed = await redeem(await share(original.computerId, original.token));
     expect(redeemed.status).toBe(200);
@@ -199,7 +199,7 @@ test("Given access shared from a saved Machine, When its Project is replaced, Th
     expect(v.parse(replacementSchema, await retry.json()).computerId).toBe(replacement.computerId);
 });
 
-test("Given a browser that opened a shared link, When it asks to replace the Project, Then only the machine's own identity may", async () => {
+test("Given a browser that opened a shared link, When it asks to replace the Project, Then only the computer's own identity may", async () => {
     const original = await fixture.createAnonymousUser();
     const redeemed = await redeem(await share(original.computerId, original.token));
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;

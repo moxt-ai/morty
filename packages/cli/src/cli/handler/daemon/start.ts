@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
 import { ensureDaemon } from "../../../daemon/lifecycle/daemon-client.ts";
-import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-computer.ts";
 import type { CliContext } from "../../context.ts";
 
 export function registerStartCommand(program: Command, context: CliContext): void {

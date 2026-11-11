@@ -160,7 +160,7 @@ export async function connectControlledAgentRuntime(options: {
     await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
     const relayUrl = new URL("/morty/api/v1/computers/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-    // The Agents can change across restarts, as when the user installs another Agent on the machine.
+    // The Agents can change across restarts, as when the user installs another Agent on the computer.
     const configure = (behavior: ControlledAgentBehavior) => {
         const harness = createMortyFakeDaemon(behavior, workspace);
         const runtime = controlledRuntime(
@@ -297,7 +297,7 @@ export async function createControlledAgentRuntime(options: {
                 new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
                     body: JSON.stringify({
                         agents: harness.catalog,
-                        machineName: "Controlled Agent Runtime",
+                        computerName: "Controlled Agent Runtime",
                         pairingCode: pairing.pairingCode,
                         workspaceName: "Controlled workspace",
                     }),

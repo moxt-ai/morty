@@ -286,7 +286,7 @@ export class AcpExecutionConnections {
             throw new AcpExecutionError("The Session title cannot be empty", {}, "invalid_session_title");
         }
         if (!connection.snapshot().capabilities.renameSession) {
-            return { nativeRenameApplied: false };
+            return;
         }
         try {
             await connection.race(
@@ -309,7 +309,6 @@ export class AcpExecutionConnections {
                 "session_rename_failed",
             );
         }
-        return { nativeRenameApplied: true };
     };
 
     /** Asks the harness that owns the native history for its latest conversation entry. */

@@ -67,10 +67,10 @@ export async function openMortyInstallation(
             { cause },
         );
     }
-    return await RuntimeInstallationStore.open(join(root, "machine"), signal);
+    return await RuntimeInstallationStore.open(join(root, "computer"), signal);
 }
 
-export async function pairLocalMachine(
+export async function pairLocalComputer(
     arguments_: readonly string[],
     signal: AbortSignal = new AbortController().signal,
 ): Promise<VerifiedComputerConnection> {

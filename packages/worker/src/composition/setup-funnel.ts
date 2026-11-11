@@ -18,7 +18,7 @@ const funnelSteps = [
     {
         event: "sharing_link_redeemed",
         method: "POST",
-        path: /^\/morty\/api(?:\/computers\/[^/]+)?\/identity\/transfers\/redeem$/u,
+        path: /^\/morty\/api\/identity\/transfers\/redeem$/u,
     },
 ] as const;
 

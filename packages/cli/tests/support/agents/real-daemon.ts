@@ -25,7 +25,7 @@ import { collectLocalDaemonLogs } from "../../../src/cli/handler/logs/logic/coll
 import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";
 import { sendLocalRequest } from "../../../src/daemon/control/local-client.ts";
 import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
-import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-computer.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
 import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery/discover-local-agents.ts";

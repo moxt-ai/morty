@@ -21,7 +21,7 @@ import { activeGeneration, currentGeneration } from "./computer-generation.ts";
 
 const registrationFields = {
     claimed_at: computerRegistration.claimedAt,
-    machine_name: computerRegistration.machineName,
+    computer_name: computerRegistration.computerName,
     workspace_name: computerRegistration.workspaceName,
     agents_json: computerRegistration.agentsJson,
 };
@@ -201,7 +201,7 @@ export class ComputerDirectoryStorage {
             readonly codeHash: string;
             readonly daemonHash: string;
             readonly now: number;
-            readonly machineName: string;
+            readonly computerName: string;
             readonly workspaceName: string;
             readonly agents: string;
             readonly auditId: string;
@@ -243,7 +243,7 @@ export class ComputerDirectoryStorage {
                 .select({
                     generation: daemonCredential.generation,
                     claimedAt: bound(value.now, "claimed_at"),
-                    machineName: bound(value.machineName, "machine_name"),
+                    computerName: bound(value.computerName, "computer_name"),
                     workspaceName: bound(value.workspaceName, "workspace_name"),
                     agentsJson: bound(value.agents, "agents_json"),
                 })

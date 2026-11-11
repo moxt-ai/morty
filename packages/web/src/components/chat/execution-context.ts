@@ -4,10 +4,9 @@
  */
 export interface ExecutionContext {
     readonly harness: string;
-    readonly machine: string;
+    readonly computer: string;
     readonly agent: string;
     readonly directory: string | null;
-    readonly directoryName: string;
     readonly directoryPlaceholder: string;
     readonly computerStatus:
         | "Online"

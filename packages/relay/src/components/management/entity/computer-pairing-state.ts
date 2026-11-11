@@ -22,7 +22,7 @@ export function projectComputerPairingStatus(row: PairingComputerRow, now: numbe
         return {
             status: "paired",
             agents: parseAgents(row.registration.agents_json),
-            machineName: row.registration.machine_name,
+            computerName: row.registration.computer_name,
             workspaceName: row.registration.workspace_name,
             computerId: row.computer_id,
         };

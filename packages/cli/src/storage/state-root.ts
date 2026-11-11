@@ -19,7 +19,7 @@ export class StateRootError extends Error {
 }
 
 async function owningRoot(directory: string): Promise<string | null> {
-    if (basename(directory) === "machine") {
+    if (basename(directory) === "computer") {
         // Recognize actual setup or daemon state instead of maintaining a separate ownership marker.
         for (const path of [
             join(dirname(directory), "config.json"),
@@ -39,7 +39,7 @@ async function owningRoot(directory: string): Promise<string | null> {
     return null;
 }
 
-/** Refuse to create a nested root inside an existing machine installation. */
+/** Refuse to create a nested root inside an existing computer installation. */
 export async function validateStateRoot(environment: Readonly<NodeJS.ProcessEnv>): Promise<void> {
     const directory = readStateDirectory(environment);
     const root = await owningRoot(directory);

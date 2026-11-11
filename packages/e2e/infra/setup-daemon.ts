@@ -18,7 +18,7 @@ type Connection = Readonly<{
     origin: string;
 }>;
 
-/** An installed Agent the machine's Morty cannot offer, as `morty agents` reports it. */
+/** An installed Agent the computer's Morty cannot offer, as `morty agents` reports it. */
 interface UnavailableAgentReport {
     readonly harness: string;
     readonly label: string;
@@ -28,11 +28,11 @@ interface UnavailableAgentReport {
     readonly recoveryCommand: string;
 }
 
-/** How `morty upgrade` behaves on the controlled machine. */
+/** How `morty upgrade` behaves on the controlled computer. */
 type ControlledUpgrade = "available" | "unavailable" | "unresponsive" | "interrupted-switch";
 
 /**
- * The Morty release the machine's daemon runs: an outdated one that `morty upgrade` switches to the
+ * The Morty release the computer's daemon runs: an outdated one that `morty upgrade` switches to the
  * latest, or the latest already. Only the release switch is modeled; the Agent always runs on this
  * checkout's daemon engine.
  */
@@ -52,22 +52,22 @@ export class ControlledSetupRuntime implements SetupRuntime {
     #unavailableAgents: readonly UnavailableAgentReport[] | null = null;
     /** Agents `morty agents` reports ready although the running Computer did not publish them. */
     #unpublishedReadyAgents: readonly { readonly harness: string; readonly label: string }[] = [];
-    readonly #machineName: string;
+    readonly #computerName: string;
     #upgrade: ControlledUpgrade;
     #release: DaemonRelease;
     readonly #upgradeRequested = Promise.withResolvers<void>();
     /** Settles when setup first asks for an upgrade. */
     readonly upgradeRequested = this.#upgradeRequested.promise;
     /**
-     * `upgrade` says how `morty upgrade` behaves; `release` is the release the machine's daemon runs before setup.
+     * `upgrade` says how `morty upgrade` behaves; `release` is the release the computer's daemon runs before setup.
      */
     constructor(
         options: ControlledAgentBehavior,
-        machineName: string,
+        computerName: string,
         upgrade: ControlledUpgrade = "available",
         release: DaemonRelease = "latest",
     ) {
-        this.#machineName = machineName;
+        this.#computerName = computerName;
         this.#options = options;
         this.#upgrade = upgrade;
         this.#release = release;
@@ -143,7 +143,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const claim = await jsonRequest(origin, `/morty/api/v1/pairings/${option("--computer")}/redeem`, {
             body: {
                 agents: daemon.catalog,
-                machineName: this.#machineName,
+                computerName: this.#computerName,
                 pairingCode: input.trim(),
                 workspaceName: "Test project",
             },
@@ -162,7 +162,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     };
 
     /**
-     * Installs other Agents on the machine. Like the manager after an install, running connections restart and
+     * Installs other Agents on the computer. Like the manager after an install, running connections restart and
      * publish the new catalog once they reconnect; later connections offer the same Agents.
      */
     readonly installAgents = async (
@@ -175,7 +175,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     };
 
     /**
-     * Sets what this machine's Morty reports: Agents it cannot offer, such as one the user has not signed in to, and
+     * Sets what this computer's Morty reports: Agents it cannot offer, such as one the user has not signed in to, and
      * Agents that are ready now but missing from the catalog a running Computer published at startup.
      */
     readonly reportAgentInventory = (
@@ -191,7 +191,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         this.#upgrade = upgrade;
     };
 
-    /** The release the machine's daemon runs, as `morty --version` reports it. */
+    /** The release the computer's daemon runs, as `morty --version` reports it. */
     readonly daemonRelease = (): DaemonRelease => this.#release;
 
     // Like `morty upgrade`: the running daemon switches to the newest release, and

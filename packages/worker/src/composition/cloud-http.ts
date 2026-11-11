@@ -51,6 +51,9 @@ export const cloudRoutes = new Hono<{
         await next();
     })
     .route("/", anonymousUserRoutes)
+    .post("/computers/:computerId/identity/transfers/redeem", () => {
+        throw new ManagementError("NOT_FOUND", "Not found.", 404);
+    })
     .all("/computers/:computerId/*", async (context) => {
         const id = v.parse(relayIdentifier, context.req.param("computerId"));
         return await forwardComputerObject(context.req.raw, context.env, id);

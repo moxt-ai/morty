@@ -12,7 +12,7 @@ import { acquireDaemonLock } from "../../storage/daemon/daemon-lock.ts";
 import { resolveMaxAcpProcesses } from "../config.ts";
 import { sendLocalRequest } from "../control/local-client.ts";
 import { serveLocalControl } from "../control/local-server.ts";
-import { openMortyInstallation } from "../pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../pairing/pair-local-computer.ts";
 import { surviveUnhandledRejections, type UnhandledRejectionGuard } from "./unhandled-rejection.ts";
 
 class DaemonRuntimeError extends Error {

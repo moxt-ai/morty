@@ -280,7 +280,7 @@ describe.sequential("Relay Session-only boundary", () => {
                 new Request(redemptionUrl, {
                     body: JSON.stringify({
                         agents: readyAgents,
-                        machineName: "Private reconnect Computer",
+                        computerName: "Private reconnect Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "private-reconnect-workspace",
                     }),
@@ -984,7 +984,7 @@ describe.sequential("Relay Session-only boundary", () => {
         }
     }, 180_000);
 
-    it("Given a machine with no discovered local Agent, When it redeems a Computer pairing and publishes its catalog, Then pairing succeeds and the Computer advertises an empty Agent directory", async () => {
+    it("Given a computer with no discovered local Agent, When it redeems a Computer pairing and publishes its catalog, Then pairing succeeds and the Computer advertises an empty Agent directory", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
@@ -1007,7 +1007,7 @@ describe.sequential("Relay Session-only boundary", () => {
                     body: JSON.stringify({
                         agents: [],
                         futureClientField: "unknown keys are tolerated",
-                        machineName: "Unattended Computer",
+                        computerName: "Unattended Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "unattended-workspace",
                     }),
@@ -1065,7 +1065,7 @@ async function connectComputerDaemon(slug: string, options: { readonly anchorClo
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: readyAgents,
-                        machineName: `${slug} Computer`,
+                        computerName: `${slug} Computer`,
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: `${slug}-workspace`,
                     }),
@@ -2232,7 +2232,7 @@ describe.sequential("Relay Turn submission", () => {
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: readyAgents,
-                        machineName: "Long prompt Computer",
+                        computerName: "Long prompt Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "long-prompt-workspace",
                     }),
@@ -2472,7 +2472,7 @@ describe.sequential("Relay Turn submission", () => {
                                 },
                             },
                         ],
-                        machineName: "Capability-gated commands Computer",
+                        computerName: "Capability-gated commands Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "capability-gated-commands-workspace",
                     }),
@@ -2604,7 +2604,7 @@ describe.sequential("Relay Turn submission", () => {
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: [malformed],
-                        machineName: "Malformed capabilities Computer",
+                        computerName: "Malformed capabilities Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "malformed-capabilities-workspace",
                     }),

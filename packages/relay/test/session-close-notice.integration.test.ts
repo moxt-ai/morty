@@ -121,12 +121,12 @@ it("Given hosts watching every Session and a single Session, When the Computer r
     });
 });
 
-it("Given a host filtered to a native pair, When the Computer disconnects, Then the host still learns that its Machine is offline", async () => {
+it("Given a host filtered to a native pair, When the Computer disconnects, Then the host still learns that its Computer is offline", async () => {
     await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host?harness=claude&sessionId=session-7");
         expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
-        daemon.socket.close(1000, "Machine stopped");
+        daemon.socket.close(1000, "Computer stopped");
         expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: false });
     });
 });

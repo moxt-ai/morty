@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
-test("Given a machine owner, When the owner opens management, Then they can pair a Computer for their account", async () => {
+test("Given a computer owner, When the owner opens management, Then they can pair a Computer for their account", async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
@@ -31,7 +31,7 @@ test("Given a machine owner, When the owner opens management, Then they can pair
     }
 });
 
-test("Given an existing Project and Machine, When Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
+test("Given an existing Project and Computer, When Morty moves to another origin, Then the user keeps their Project and can pair and replace it", {
     timeout: 30_000,
 }, async () => {
     const fixture = await createIdentityFixture();
@@ -46,7 +46,7 @@ test("Given an existing Project and Machine, When Morty moves to another origin,
         expect(originalProject.status).toBe(200);
         const project = await originalProject.json();
         const originalBot = await worker.fetch(
-            new Request(`${projectUrl}/machine`, { headers }),
+            new Request(`${projectUrl}/computer/pairing-state`, { headers }),
             fixture.environment(),
         );
         expect(originalBot.status).toBe(200);
@@ -60,7 +60,10 @@ test("Given an existing Project and Machine, When Morty moves to another origin,
             const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);
             expect(await session.json()).toMatchObject({ userId: identity.userId });
-            const currentBot = await worker.fetch(new Request(`${projectUrl}/machine`, { headers }), environment);
+            const currentBot = await worker.fetch(
+                new Request(`${projectUrl}/computer/pairing-state`, { headers }),
+                environment,
+            );
             expect(currentBot.status).toBe(200);
             expect(await currentBot.json()).toEqual(bot);
             const currentProject = await worker.fetch(new Request(`${projectUrl}/computer`, { headers }), environment);

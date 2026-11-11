@@ -126,9 +126,7 @@ export interface Adapter {
         // An Agent that reports it names the user message the steering recorded in the turn it joined.
         { readonly outcome: "injected"; readonly messageId?: string } | { readonly outcome: "startedNewTurn" }
     >;
-    readonly renameSession: (
-        params: AdapterSessionOperation & { readonly title: string },
-    ) => Promise<{ readonly nativeRenameApplied: boolean }>;
+    readonly renameSession: (params: AdapterSessionOperation & { readonly title: string }) => Promise<void>;
     readonly configureSession: (
         params: AdapterSessionOperation & { readonly selection: SessionConfigurationSelection },
     ) => Promise<readonly SessionConfigOption[]>;

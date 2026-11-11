@@ -38,7 +38,7 @@ export function createComputerManagementRoutes() {
                 case "forbidden":
                     throw new ManagementError(
                         "LOCAL_IDENTITY_REQUIRED",
-                        "Use the identity saved on the machine to replace its Project.",
+                        "Use the identity saved on the computer to replace its Project.",
                         403,
                     );
                 case "authorized":

@@ -5,7 +5,7 @@ class MortyPathError extends Error {
     readonly code = "morty_state_directory_invalid";
 }
 
-/** Each installation has one machine account and one local daemon. */
+/** Each installation has one computer account and one local daemon. */
 export function mortyStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = process.env): string {
     const configured = environment["MORTY_STATE_DIRECTORY"]?.trim();
     if (configured) {

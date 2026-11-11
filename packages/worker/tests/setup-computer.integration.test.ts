@@ -12,7 +12,7 @@ import worker from "../src/application.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
 test.each(["current", "another service origin", "retired configuration"] as const)(
-    "Given %s, When setup runs again, Then it continues the saved identity's Machine or refuses without rewriting the saved state",
+    "Given %s, When setup runs again, Then it continues the saved identity's Computer or refuses without rewriting the saved state",
     {
         timeout: 60_000,
     },
@@ -23,7 +23,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
             workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
         });
         cleanup.defer(() => fixture.close());
-        const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-machine-")));
+        const directory = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-computer-")));
         cleanup.defer(() => rm(directory, { recursive: true, force: true }));
         const state = join(directory, "state");
         const workspace = join(directory, "workspace");
@@ -46,7 +46,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
                     "--harness",
                     "codex",
                     "--session-id",
-                    "native-machine",
+                    "native-computer",
                 ],
                 {
                     state,
@@ -128,7 +128,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
     },
 );
 
-test("Given the answer to setup's Computer pairing is lost, When setup runs again, Then the Machine is bound to the Computer of that same pairing", {
+test("Given the answer to setup's Computer pairing is lost, When setup runs again, Then the Computer uses that same pairing", {
     timeout: 60_000,
 }, async () => {
     await using cleanup = new AsyncDisposableStack();
@@ -190,13 +190,13 @@ test("Given the answer to setup's Computer pairing is lost, When setup runs agai
         v.object({ identity: v.object({ user_token: v.string(), computer_id: v.string() }) }),
         JSON.parse(await readFile(join(state, "config.json"), "utf8")),
     );
-    const machine = await fetch(
-        `${fixture.origin}/morty/api/computers/${saved.identity.computer_id}/management/machine`,
+    const computer = await fetch(
+        `${fixture.origin}/morty/api/computers/${saved.identity.computer_id}/management/computer/pairing-state`,
         {
             headers: { authorization: `Bearer ${saved.identity.user_token}` },
         },
     );
-    const actual: unknown = await machine.json();
+    const actual: unknown = await computer.json();
     const original = await fetch(
         `${fixture.origin}/morty/api/computers/${saved.identity.computer_id}/management/pairing`,
         { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
@@ -208,7 +208,7 @@ test("Given the answer to setup's Computer pairing is lost, When setup runs agai
     expect(saved.identity.computer_id).toBe(pairedComputer);
 });
 
-test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
+test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Computer with a new Runtime and keeps the computer's identity", {
     timeout: 60_000,
 }, async () => {
     await using cleanup = new AsyncDisposableStack();
@@ -263,12 +263,15 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const savedIdentity = v.object({
         identity: v.object({ user_token: v.string(), computer_id: v.string() }),
     });
-    const machineComputer = async () => {
+    const computerState = async () => {
         const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
         const response = await worker.fetch(
-            new Request(`${fixture.origin}/morty/api/computers/${identity.computer_id}/management/machine`, {
-                headers: { authorization: `Bearer ${identity.user_token}` },
-            }),
+            new Request(
+                `${fixture.origin}/morty/api/computers/${identity.computer_id}/management/computer/pairing-state`,
+                {
+                    headers: { authorization: `Bearer ${identity.user_token}` },
+                },
+            ),
             fixture.environment(fixture.origin),
         );
         expect(response.status).toBe(200);
@@ -278,7 +281,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         };
     };
     const first = await run();
-    const before = await machineComputer();
+    const before = await computerState();
     await fixture.revokeComputer(before.identity.computer_id);
     const revokedWorkspace = await fixture.relayRequest(
         new Request(`${fixture.origin}/morty/api/chat/computers/${before.identity.computer_id}/workspace`, {
@@ -289,10 +292,10 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     expect(revokedWorkspace.status).toBe(401);
     expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "computer_revoked" } });
 
-    expect((await machineComputer()).computerPairing).toBe("revoked");
+    expect((await computerState()).computerPairing).toBe("revoked");
 
     const again = await run();
-    const after = await machineComputer();
+    const after = await computerState();
 
     expect(again.events).toContainEqual(
         expect.objectContaining({ status: "computer_revoked", computerId: before.identity.computer_id }),

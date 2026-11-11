@@ -169,12 +169,12 @@ test("Given a computer addressed by its identity, When its owner requests access
 
     // Another computer identity opens nothing with this credential, even for a Session the caller owns.
     const anotherComputer = await cloud.createAnonymousUser();
-    const otherMachine = await fixture.request(`chat/computers/${anotherComputer.computerId}/session-access`, {
+    const otherComputer = await fixture.request(`chat/computers/${anotherComputer.computerId}/session-access`, {
         harness: "codex",
         sessionId: sessionId,
     });
-    expect(otherMachine.status).toBe(401);
-    expect(await otherMachine.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
+    expect(otherComputer.status).toBe(401);
+    expect(await otherComputer.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
 
     const otherHarness = await fixture.request(`chat/session-access`, {
         harness: "pi",
@@ -208,7 +208,7 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
             computers: v.array(
                 v.strictObject({
                     computerId: v.string(),
-                    machineName: v.string(),
+                    computerName: v.string(),
                     online: v.boolean(),
                     agents: v.array(v.strictObject({ harness: v.string(), label: v.string() })),
                 }),
@@ -779,7 +779,7 @@ test("Given the Computer is offline, When its owner archives a Session, Then arc
     expect(await (await fixture.request(`chat/managed-sessions`, {})).json()).toEqual({ sessions: [] });
 });
 
-test("Given a chat opened with a Session credential, When the machine's owner revokes all access, Then the Relay refuses that credential at once", async ({
+test("Given a chat opened with a Session credential, When the computer's owner revokes all access, Then the Relay refuses that credential at once", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -820,7 +820,7 @@ test("Given a chat opened with a Session credential, When the machine's owner re
     await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
 });
 
-test("Given two browsers joined through links, When one disconnects the other browsers, Then only it and the machine keep access and the other's open chat window is refused", async ({
+test("Given two browsers joined through links, When one disconnects the other browsers, Then only it and the computer keep access and the other's open chat window is refused", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -912,6 +912,33 @@ test("Given a browser connecting from a city, When it opens a link, Then the dev
         await (await fixture.request("identity/devices")).json(),
     );
     expect(listed.devices).toEqual([{ label: "iPhone · Safari", location: { city: "Shanghai", country: "CN" } }]);
+});
+
+test("Given a sharing link, When a browser redeems it through a Computer-scoped path with a claimed location, Then Morty refuses and lists no such device", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
+    const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    const redeemed = await cloud.dispatchFetch(
+        `${APP_ORIGIN}/morty/api/computers/${fixture.computerId}/identity/transfers/redeem`,
+        {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                "Morty-Client-Location": encodeURIComponent(JSON.stringify({ city: "Elsewhere", country: "AQ" })),
+            },
+            body: JSON.stringify({ code, device: "iPhone · Safari" }),
+            cf: { city: "Shanghai", country: "CN" },
+        },
+    );
+    expect(redeemed.status).toBe(404);
+
+    const listed = v.parse(
+        v.object({ devices: v.array(v.unknown()) }),
+        await (await fixture.request("identity/devices")).json(),
+    );
+    expect(listed.devices).toEqual([]);
 });
 
 test("Given an existing conversation, When a repeated start is refused, Then the conversation remains listed", async ({

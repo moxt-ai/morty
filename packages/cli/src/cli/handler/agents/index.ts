@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import type { Command } from "commander";
-import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyInstallation } from "../../../daemon/pairing/pair-local-computer.ts";
 import { discoverLocalAgentInventory } from "../../../engine/agent/discovery/discover-local-agents.ts";
 import { RuntimeLocalContext } from "../../../engine/runtime/config.ts";
 import { ensurePrivateDirectory } from "../../../engine/storage/files/local-files.ts";

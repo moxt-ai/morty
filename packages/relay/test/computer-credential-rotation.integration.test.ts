@@ -59,7 +59,7 @@ async function pairedComputer(name: string) {
             new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                 body: JSON.stringify({
                     agents: [],
-                    machineName: "Owner laptop",
+                    computerName: "Owner laptop",
                     pairingCode: text(pairing, "pairingCode"),
                     workspaceName: "workspace",
                 }),

@@ -63,7 +63,7 @@ const claim = v.parse(
     v.object({ computerCredential: v.string() }),
     await request(`/morty/api/v1/pairings/${owner.computerId}/redeem`, 200, undefined, {
         pairingCode: pairing.pairingCode,
-        machineName: "Deployment verification",
+        computerName: "Deployment verification",
         workspaceName: "Isolated verification",
         agents: harness.catalog,
     }),

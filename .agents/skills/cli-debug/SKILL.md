@@ -43,7 +43,7 @@ installation directories or substitute another daemon's logs.
 The Computer diagnostic log is:
 
 ```text
-<state-root>/machine/logs/daemon.log
+<state-root>/computer/logs/daemon.log
 ```
 
 Created lazily on the first recorded diagnostic, reused across daemon restarts,
@@ -52,7 +52,7 @@ new record would exceed the limit, the oldest complete lines are removed first,
 so the newest history is always retained.
 
 The CLI also collects manager-written lifecycle and unhandled-rejection logs
-from that same private machine directory, including when the daemon is stopped.
+from that same private computer directory, including when the daemon is stopped.
 
 Confirm the CLI version the user runs (`morty --version` or the installed
 package version). Compare the invoking CLI and running Runtime versions using

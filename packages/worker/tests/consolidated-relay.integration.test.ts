@@ -43,7 +43,7 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
     const harness = createMortyFakeDaemon(behavior);
     const redeemed = await request(`/v1/pairings/${owner.computerId}/redeem`, undefined, {
         pairingCode: pairing.pairingCode,
-        machineName: "Single Worker",
+        computerName: "Single Worker",
         workspaceName: "Controlled workspace",
         agents: harness.catalog,
     });
@@ -64,16 +64,20 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
     const workspace = await request(`${chat}/workspace`, owner.token, {});
     expect(workspace.status).toBe(200);
     expect(await workspace.json()).toEqual({
-        computer: expect.objectContaining({ computerId: owner.computerId, online: true }),
+        computer: expect.objectContaining({
+            computerId: owner.computerId,
+            computerName: "Single Worker",
+            online: true,
+        }),
     });
     const computers = await request(`${chat}/setup/computers`, owner.token, {});
     expect(computers.status).toBe(200);
     expect(await computers.json()).toEqual({
         computers: [expect.objectContaining({ computerId: owner.computerId, online: true })],
     });
-    const machine = await request(`/computers/${owner.computerId}/management/machine`, owner.token);
-    expect(machine.status).toBe(200);
-    expect(await machine.json()).toEqual({ computerPairing: "paired" });
+    const computer = await request(`/computers/${owner.computerId}/management/computer/pairing-state`, owner.token);
+    expect(computer.status).toBe(200);
+    expect(await computer.json()).toEqual({ computerPairing: "paired" });
     const opened = await request(`${chat}/access`, owner.token, {
         harness: "codex",
         conversationKey: "single-worker-session",

@@ -149,7 +149,7 @@ export class ChatService {
     };
 
     /**
-     * Requires the computer to have a paired Computer, as the Relay records it. Until it has one the Machine needs an
+     * Requires the Computer to have a paired Runtime, as the Relay records it. Until it has one the Computer needs an
      * Agent connected; once its Computer was revoked it needs setup run again.
      */
     readonly #requirePairedComputer = async (scope: ChatScope): Promise<void> => {
@@ -158,7 +158,7 @@ export class ChatService {
             case "paired":
                 return;
             case "unpaired":
-                throw new ComputerManagementError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
+                throw new ComputerManagementError("AGENT_REQUIRED", "Connect an Agent to this Computer first.", 409);
             case "revoked":
                 throw computerRevoked();
             default:
@@ -208,7 +208,7 @@ export class ChatService {
         if (!computer.agents.some((agent) => agent.harness === harness)) {
             throw new ComputerManagementError(
                 "AGENT_UNAVAILABLE",
-                "Choose an agent provided by this Machine's Runtime.",
+                "Choose an agent provided by this Computer's Runtime.",
                 409,
             );
         }
@@ -436,7 +436,7 @@ export class ChatService {
         input: NativePreviewInput,
     ) => {
         await this.#requireNativeSessionComputer(scope, requestedComputerId);
-        // Operation identity belongs to this user and Machine, even when they share a Relay Project.
+        // Operation identity belongs to this user and Computer, even when they share a Relay Project.
         const scopedOperationId = await scopedNativeForkOperationId(
             scope.computerId,
             `${scope.userId}\u0000fork\u0000${operationId}`,
@@ -446,7 +446,7 @@ export class ChatService {
 
     /**
      * Setup's check that the computer's paired Computer offers `harness` and can open its settings in the default
-     * working directory. It records nothing: whether the Machine has a Runtime is the Relay's pairing.
+     * working directory. It records nothing: whether the Computer has a Runtime is the Relay's pairing.
      */
     readonly verifyAgent = async (scope: ChatScope, input: AgentSetupInput) => {
         if (input.computerId !== scope.computerId) {
