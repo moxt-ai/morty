@@ -1,7 +1,6 @@
 import type { CloudflareComputerRelay } from "../../../../../worker/src/gateway/cloudflare-computer-relay.ts";
 import { ComputerSummary } from "../../runtime/service/computer.ts";
 import { PairingDirectoryError } from "../entity/pairing.ts";
-import { ProjectPermission } from "../entity/project-authentication.ts";
 import type { PairingDirectoryService } from "./pairing-directory-service.ts";
 
 export class PairingService {
@@ -24,10 +23,6 @@ export class PairingService {
         idempotencyKey: string,
         signal: AbortSignal,
     ) => this.#pairings.createProjectComputerPairing(computerId, pairingKey, idempotencyKey, signal);
-
-    readonly probeProject = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        await this.#pairings.authorizeProject(computerId, ProjectPermission.ComputerRead, signal);
-    };
 
     readonly listProjectComputers = async (computerId: string, signal: AbortSignal) => {
         const channels = await this.#pairings.listProjectComputers(computerId, signal);

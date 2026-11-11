@@ -100,7 +100,9 @@ export function CwdSelector({
         <>
             <Popover.Root
                 onOpenChange={(open) => {
-                    viewModel.setCwdMenuOpen(open);
+                    if (open) {
+                        viewModel.refreshRecentCwds();
+                    }
                     setMenuOpen(open);
                 }}
                 open={menuOpen}

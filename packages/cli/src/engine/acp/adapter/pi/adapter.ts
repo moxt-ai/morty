@@ -267,7 +267,6 @@ export class PiAdapter implements Adapter {
         if (truncate(params.title, 500).length === 0) {
             throw new AcpExecutionError("The Session title cannot be empty", {}, "invalid_session_title");
         }
-        return { nativeRenameApplied: false };
     };
 
     /** A cancelled caller stops waiting; the session and its native configuration stay intact. */
