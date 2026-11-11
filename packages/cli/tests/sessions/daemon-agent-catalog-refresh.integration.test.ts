@@ -43,7 +43,6 @@ class RefreshableAgentSpecification extends ControlledAcpSpecification {
     readonly agentExecutable = "controlled-acp";
     readonly harness: string;
     readonly label = "Controlled ACP";
-    override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
 
     constructor(id: string) {

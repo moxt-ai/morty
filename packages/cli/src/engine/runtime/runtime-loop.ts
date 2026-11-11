@@ -1,26 +1,7 @@
-import { resolve } from "node:path";
 import type { RuntimeUpgradeResult } from "@morty-build/client/protocol";
-import { supportedLocalAgentSpecifications } from "../agent/discovery/discover-local-agents.ts";
-import { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
 import type { RuntimeAgentProcesses } from "../session/process/runtime-agent-processes.ts";
-import { ensureCanonicalDirectory } from "../storage/files/local-files.ts";
-import { discoverRuntimeAgentInventory } from "./catalog/discover-agent-catalog.ts";
-import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
-import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
-import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
-import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
-import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
+import type { RuntimeConfig } from "./config.ts";
 import { runRuntime } from "./run.ts";
-
-const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-
-export interface MortyRuntimeConnection {
-    readonly computerId: string;
-    readonly defaultWorkspace: string;
-    readonly relayUrl: string;
-    /** The embedding host keeps the credential, which rotates on every connection, where it outlives this process. */
-    readonly credentials: RuntimeCredentials;
-}
 
 class MortyRuntimeConfigurationError extends Error {
     readonly code = "runtime_configuration_invalid";
@@ -34,7 +15,7 @@ class MortyRuntimeConfigurationError extends Error {
 type RuntimeLoopState =
     | { readonly kind: "created" }
     | { readonly kind: "preparing" }
-    | { readonly kind: "running"; readonly config: RuntimeConfig }
+    | { readonly kind: "running" }
     | { readonly kind: "finished" };
 
 function validateRuntimeRelay(relayUrl: URL): void {
@@ -44,95 +25,6 @@ function validateRuntimeRelay(relayUrl: URL): void {
     if (relayUrl.username.length > 0 || relayUrl.password.length > 0 || relayUrl.search.length > 0) {
         throw new MortyRuntimeConfigurationError("The Runtime relay URL cannot carry credentials");
     }
-}
-
-function validateRuntimeConfiguration(config: RuntimeConfig): void {
-    validateRuntimeRelay(config.relayUrl);
-}
-
-function relayUrlFromConnection(connection: MortyRuntimeConnection): URL {
-    let relayUrl: URL;
-    try {
-        relayUrl = new URL(connection.relayUrl);
-    } catch (error) {
-        throw new MortyRuntimeConfigurationError("The Runtime relay URL is invalid", { cause: error });
-    }
-    validateRuntimeRelay(relayUrl);
-    return relayUrl;
-}
-
-async function validateRuntimeCredentials(credentials: RuntimeCredentials, signal: AbortSignal): Promise<void> {
-    if (!RUNTIME_CREDENTIAL_PATTERN.test((await credentials.held(signal)).current)) {
-        throw new MortyRuntimeConfigurationError("The Runtime relay credential is invalid");
-    }
-}
-
-async function resolveWorkspace(path: string): Promise<string> {
-    const requested = resolve(path);
-    let resolved: string | null;
-    try {
-        resolved = await ensureCanonicalDirectory(requested);
-    } catch (error) {
-        throw new MortyRuntimeConfigurationError("The Runtime workspace cannot be resolved", { cause: error });
-    }
-    if (resolved === null) {
-        throw new MortyRuntimeConfigurationError("The Runtime workspace is not a directory");
-    }
-    return resolved;
-}
-
-interface PrepareProvidedRuntimeParams {
-    readonly installation: RuntimeInstallationStore;
-    readonly connection: MortyRuntimeConnection;
-    readonly signal: AbortSignal;
-    readonly agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
-    readonly maxAcpProcesses: number;
-}
-
-export async function prepareProvidedRuntime({
-    installation,
-    connection,
-    signal,
-    agentLaunchEnvironment,
-    maxAcpProcesses,
-}: PrepareProvidedRuntimeParams): Promise<RuntimeConfig> {
-    signal.throwIfAborted();
-    const relayUrl = relayUrlFromConnection(connection);
-    await validateRuntimeCredentials(connection.credentials, signal);
-    const localContext = new RuntimeLocalContext(installation.stateDirectory, agentLaunchEnvironment, maxAcpProcesses);
-    const defaultWorkspace = await resolveWorkspace(connection.defaultWorkspace);
-    const specifications = supportedLocalAgentSpecifications();
-    const discoveryEnvironment = localContext.agentLaunchEnvironment;
-    const discover = async (refreshSignal: AbortSignal) =>
-        await discoverRuntimeAgentInventory(
-            {
-                defaultWorkspace,
-                dataDirectory: localContext.stateDirectory,
-                environment: discoveryEnvironment,
-                signal: refreshSignal,
-                specifications,
-            },
-            connection.computerId,
-        );
-    const inventory = await discover(signal);
-    const config: RuntimeConfig = createRuntimeConfig(
-        {
-            computerId: connection.computerId,
-            defaultWorkspace,
-            relayUrl,
-            credentials: connection.credentials,
-        },
-        new RuntimeAgentDependencies(inventory.readyAgents()),
-        localContext,
-        null,
-        createCatalogAgentResolver(
-            (refreshSignal) => discover(refreshSignal),
-            () => config,
-            publishAgentCatalog,
-        ),
-        (refreshSignal: AbortSignal) => discover(refreshSignal).then((inventory) => inventory.readyAgents()),
-    );
-    return config;
 }
 
 /** Internal, single-execution owner. Never exported from the package's public API. */
@@ -160,8 +52,8 @@ export class RuntimeLoop {
                 this.#options.sessionEnvironment === undefined
                     ? prepared
                     : { ...prepared, sessionEnvironment: this.#options.sessionEnvironment };
-            validateRuntimeConfiguration(config);
-            this.#state = { kind: "running", config };
+            validateRuntimeRelay(config.relayUrl);
+            this.#state = { kind: "running" };
             await runRuntime(config, signal, undefined, {
                 ...(this.#options.agentProcesses === undefined ? {} : { agentProcesses: this.#options.agentProcesses }),
                 onExecutionCountChange: (count) => {

@@ -117,7 +117,6 @@ export class RuntimeService {
     }>();
     #acceptTail: Promise<void> = Promise.resolve();
     readonly #accepting = new Set<{
-        readonly computerId: string;
         readonly scope: ComputerScope;
         readonly controller: AbortController;
     }>();
@@ -147,7 +146,7 @@ export class RuntimeService {
         signal: AbortSignal,
         accept: (admission: AbortSignal, generation: number) => Promise<T>,
     ): Promise<T | { readonly kind: "revoked" }> => {
-        const pending = { computerId: scope.computerId, scope, controller: new AbortController() };
+        const pending = { scope, controller: new AbortController() };
         this.#accepting.add(pending);
         try {
             const admission = AbortSignal.any([signal, pending.controller.signal]);
@@ -276,7 +275,7 @@ export class RuntimeService {
             this.#cx.services.connections.disconnected(latest, Date.now());
         }
         for (const accepting of this.#accepting) {
-            if (accepting.computerId === scope.computerId && accepting.scope.computerId === scope.computerId) {
+            if (accepting.scope.computerId === scope.computerId) {
                 accepting.controller.abort(new DOMException("Runtime revoked", "AbortError"));
             }
         }
@@ -291,10 +290,7 @@ export class RuntimeService {
             }
             if (identity.role === "daemon") {
                 socket.close(1008, "Runtime revoked");
-            } else if (
-                identity.role === "viewer" ||
-                (identity.role === "host" && identity.computerId === scope.computerId)
-            ) {
+            } else if (identity.role === "viewer" || identity.role === "host") {
                 socket.close(1008, "Runtime revoked");
             }
         }

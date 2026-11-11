@@ -20,7 +20,6 @@ class ControlledAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
     readonly harness = NATIVE_HARNESS;
     readonly label = "Controlled Claude";
-    override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
     readonly sessions = new ControlledSessionAgent();
     readonly createConnection: AgentConnectionFactory = this.sessions.createConnection;
