@@ -5,14 +5,13 @@ import { ManagementError } from "../entity/management-error.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
-import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import { provisionAccount } from "./account-provisioning-service.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
 import type { LocalComputerService } from "./local-computer-service.ts";
 
 export class ManagementService {
     readonly #authentication: AuthenticationService;
-    readonly #managedBots: ManagedBotStorage;
+    readonly #ownerUserId: string | undefined;
     readonly #computerId: string | undefined;
     readonly #relay: LocalComputerService;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
@@ -21,12 +20,9 @@ export class ManagementService {
     constructor(cx: {
         readonly config: { readonly bindings: CloudBindings };
         readonly services: { readonly authentication: AuthenticationService; readonly computers: LocalComputerService };
-        readonly storages: {
-            readonly managedBots: ManagedBotStorage;
-        };
     }) {
         this.#authentication = cx.services.authentication;
-        this.#managedBots = cx.storages.managedBots;
+        this.#ownerUserId = cx.config.bindings.CHAT_OWNER_USER_ID ?? undefined;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID;
         this.#relay = cx.services.computers;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
@@ -45,16 +41,8 @@ export class ManagementService {
     ) => {
         const token = await bootstrapToken(this.#credentialKey, userId, project.computerId, origin, signal);
         const identity = await this.#authentication.createAnonymous(userId, project.computerId, signal, token);
-        await this.#provisionUserBot(identity.userId, signal);
         return identity;
     };
-
-    /**
-     * Gives the user its Machine unless it already has one. Only identity bootstrap and transfer redemption call this;
-     * both are retried writes, so repeating them returns the same Machine.
-     */
-    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) =>
-        await this.#managedBots.claimMachine(userId, Date.now(), signal);
 
     /** The owner's Machine: where its Runtime pairing stands, read from the Relay that owns it. */
     readonly readMachine = async (userId: string, signal: AbortSignal) => {
@@ -65,10 +53,10 @@ export class ManagementService {
         return { runtimePairing: await this.#relay.readRuntimePairing(project.computerId, signal) };
     };
 
-    readonly readProject = async (userId: string, signal: AbortSignal) =>
-        this.#computerId === undefined || !(await this.#managedBots.hasMachine(userId, signal))
-            ? null
-            : { computerId: this.#computerId };
+    readonly readProject = async (userId: string, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        return this.#computerId === undefined || this.#ownerUserId !== userId ? null : { computerId: this.#computerId };
+    };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {
@@ -122,7 +110,6 @@ export class ManagementService {
         if (identity === null) {
             return null;
         }
-        await this.#provisionUserBot(identity.userId, signal);
         return identity;
     };
 

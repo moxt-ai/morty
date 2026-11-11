@@ -6,7 +6,6 @@ import { AuthenticationService } from "../components/management/service/authenti
 import { LocalComputerService } from "../components/management/service/local-computer-service.ts";
 import { ManagementService } from "../components/management/service/management-service.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
-import { ManagedBotStorage } from "../components/management/storage/managed-bot-storage.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
 // One logger, whose error serializer keeps credentials and request input out of the logs.
@@ -17,7 +16,6 @@ export interface ApplicationContext {
     readonly logger: Logger;
     readonly storages: {
         readonly identities: IdentityStorage;
-        readonly managedBots: ManagedBotStorage;
     };
     readonly services: {
         readonly computers: LocalComputerService;
@@ -37,8 +35,11 @@ export function createApplicationDependencies(
         logger,
     };
     const storages = Object.freeze({
-        identities: new IdentityStorage(bindings.DATABASE, bindings.CHAT_COMPUTER_ID ?? null),
-        managedBots: new ManagedBotStorage(bindings.DATABASE),
+        identities: new IdentityStorage(
+            bindings.DATABASE,
+            bindings.CHAT_COMPUTER_ID ?? null,
+            bindings.CHAT_OWNER_USER_ID ?? null,
+        ),
     });
     const cx = { ...infrastructure, storages };
     const authentication = new AuthenticationService(cx);

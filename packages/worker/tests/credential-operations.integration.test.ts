@@ -1,7 +1,11 @@
 import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
+import { machineAccount } from "../../relay/src/schema/d1/index.ts";
+import { computerDirectoryDrizzle } from "../../relay/src/storage/relay-drizzle-database.ts";
 import worker, { fetchPublicApplication } from "../src/application.ts";
+import { d1DatabaseBindingSchema } from "../src/infra/cloud-bindings.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
@@ -230,4 +234,26 @@ test("Given a well-formed Project identifier that was never created, When an una
         .get(namespace.idFromName(computerId))
         .fetch(new Request("https://computer.internal/stored-state"));
     expect(await stored.json()).toEqual({ keys: [], tables: [] });
+});
+
+test("Given a saved owner credential, When the directory no longer assigns that computer to its user, Then the credential cannot open the computer", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const environment = fixture.environment();
+    const request = () =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/session`, {
+                headers: { authorization: `Bearer ${owner.token}` },
+            }),
+            environment,
+        );
+    expect((await request()).status).toBe(200);
+    const directory = computerDirectoryDrizzle(
+        v.parse(v.object({ RELAY_DIRECTORY_DATABASE: d1DatabaseBindingSchema }), environment).RELAY_DIRECTORY_DATABASE,
+    );
+    await directory
+        .update(machineAccount)
+        .set({ userId: `usr_${crypto.randomUUID()}` })
+        .where(eq(machineAccount.computerId, owner.computerId))
+        .run();
+    expect((await request()).status).toBe(401);
 });

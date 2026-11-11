@@ -2,13 +2,7 @@ import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
-import {
-    browserCredential,
-    browserDevice,
-    continueLink,
-    managedBot,
-    ownerCredential,
-} from "../../../schema/project-do/index.ts";
+import { browserCredential, browserDevice, continueLink, ownerCredential } from "../../../schema/project-do/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
@@ -155,10 +149,12 @@ export type StoredCredential = { readonly credentialId: string; readonly userId:
 export class IdentityStorage {
     readonly #database: unknown;
     readonly #computerId: string | null;
+    readonly #ownerUserId: string | null;
 
-    constructor(database: unknown, computerId: string | null = null) {
+    constructor(database: unknown, computerId: string | null = null, ownerUserId: string | null = null) {
         this.#database = database;
         this.#computerId = computerId;
+        this.#ownerUserId = ownerUserId;
     }
 
     readonly createAnonymous = async (
@@ -169,6 +165,9 @@ export class IdentityStorage {
         token: string,
     ): Promise<AnonymousIdentity | null> => {
         signal.throwIfAborted();
+        if (userId !== this.#ownerUserId || computerId !== this.#computerId) {
+            return null;
+        }
         const credentialId = `cred_${crypto.randomUUID()}`;
         const tokenHash = await digest(token);
         signal.throwIfAborted();
@@ -205,7 +204,7 @@ export class IdentityStorage {
         now: number,
         signal: AbortSignal,
     ): Promise<StoredCredential | null> => {
-        if (this.#computerId === null) {
+        if (this.#computerId === null || this.#ownerUserId === null) {
             return null;
         }
         signal.throwIfAborted();
@@ -219,8 +218,7 @@ export class IdentityStorage {
                 held: sql<number>`CASE WHEN ${ownerAccessHeld()} THEN 1 ELSE 0 END`.as("held"),
             })
             .from(ownerCredential)
-            .innerJoin(managedBot, eq(managedBot.userId, ownerCredential.userId))
-            .where(eq(ownerCredential.tokenHash, tokenHash))
+            .where(and(eq(ownerCredential.tokenHash, tokenHash), eq(ownerCredential.userId, this.#ownerUserId)))
             .get();
         signal.throwIfAborted();
         if (owner !== undefined) {
@@ -237,7 +235,6 @@ export class IdentityStorage {
                 accessHeldUntil: deviceAccessHeldUntil(database, browserDevice, now).as("access_held_until"),
             })
             .from(browserCredential)
-            .innerJoin(managedBot, eq(managedBot.userId, browserCredential.userId))
             .innerJoin(
                 browserDevice,
                 and(
@@ -245,7 +242,7 @@ export class IdentityStorage {
                     eq(browserDevice.userId, browserCredential.userId),
                 ),
             )
-            .where(eq(browserCredential.tokenHash, tokenHash))
+            .where(and(eq(browserCredential.tokenHash, tokenHash), eq(browserCredential.userId, this.#ownerUserId)))
             .get();
         signal.throwIfAborted();
         if (browser === undefined) {
@@ -267,7 +264,7 @@ export class IdentityStorage {
      * recovery credential's. Only the computer owner's access holds.
      */
     readonly holdsAccess = async (holder: SessionAccessHolder, now: number, signal: AbortSignal): Promise<boolean> => {
-        if (this.#computerId === null) {
+        if (this.#computerId === null || this.#ownerUserId === null) {
             return false;
         }
         signal.throwIfAborted();
@@ -277,10 +274,10 @@ export class IdentityStorage {
                 ? await database
                       .select({ id: browserDevice.id })
                       .from(browserDevice)
-                      .innerJoin(managedBot, eq(managedBot.userId, browserDevice.userId))
                       .where(
                           and(
                               eq(browserDevice.id, holder.deviceId),
+                              eq(browserDevice.userId, this.#ownerUserId),
                               sql`${deviceAccessHeldUntil(database, browserDevice, now)} IS NOT NULL`,
                           ),
                       )
@@ -288,8 +285,13 @@ export class IdentityStorage {
                 : await database
                       .select({ id: ownerCredential.id })
                       .from(ownerCredential)
-                      .innerJoin(managedBot, eq(managedBot.userId, ownerCredential.userId))
-                      .where(and(eq(ownerCredential.id, holder.credentialId), ownerAccessHeld()))
+                      .where(
+                          and(
+                              eq(ownerCredential.id, holder.credentialId),
+                              eq(ownerCredential.userId, this.#ownerUserId),
+                              ownerAccessHeld(),
+                          ),
+                      )
                       .get();
         signal.throwIfAborted();
         return found !== undefined;
@@ -835,12 +837,6 @@ export class IdentityStorage {
         if (this.#computerId !== computerId) {
             return false;
         }
-        const row = await requireIdentityDatabase(this.#database)
-            .select({ userId: managedBot.userId })
-            .from(managedBot)
-            .where(eq(managedBot.userId, userId))
-            .get();
-        signal.throwIfAborted();
-        return row !== undefined;
+        return userId === this.#ownerUserId;
     };
 }

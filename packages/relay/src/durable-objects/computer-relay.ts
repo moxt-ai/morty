@@ -108,7 +108,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             this.#store = new SqliteComputerManagementStore(
                 computerId,
                 new DurableObjectDatabaseAdapter(this.ctx.storage),
-                (holder, signal) => this.#chat.holdsAccess(computerId, holder, signal),
+                (holder, signal) => this.#chat.holdsAccess(computerId, holder, this.env, signal),
             );
         }
         return this.#store;
