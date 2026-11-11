@@ -2,13 +2,13 @@ import { mkdtemp, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { harnessAdapters } from "../../src/engine/acp/adapter/registry.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { discoverLocalAgentInventory } from "../../src/engine/agent/discovery/discover-local-agents.ts";
 import { CodexAgentSpecification } from "../../src/engine/agent/specification/vendors/codex-agent.ts";
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { RecordingObserver } from "../sessions/acp-feature-fixture.ts";
-import { acpAdapters } from "../support/acp-adapters.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
@@ -65,7 +65,7 @@ test.skipIf(process.platform === "win32")(
         const manager = new SessionManager({
             observer,
             store: new MemorySessionStore(),
-            adapters: acpAdapters,
+            adapters: harnessAdapters,
             onSessionStatusChanged: () => undefined,
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({

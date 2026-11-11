@@ -1,15 +1,13 @@
 import * as acp from "@agentclientprotocol/sdk/unstable";
 import {
+    type ControlledAcpPeer,
     ControlledEndpointConnection,
     type ControlledSessionUpdate,
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@morty-build/runtime-test-support/fake-daemon";
 import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
-import type {
-    AcpEndpointTermination,
-    InProcessAcpEndpoint,
-} from "../../../packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
+import type { AgentTermination } from "../../../packages/cli/src/engine/acp/agent/agent-lifecycle.ts";
 
 /** Stateful ACP peer that deliberately leaves tool status updates unfinished at turn termination. */
 export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promise<void>) {
@@ -17,8 +15,8 @@ export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promi
     const steeringToolCounts = new Map<string, number>();
     const heldSteering = new Set<string>();
     const delayedUserMessages = new Map<string, acp.SessionUpdate[]>();
-    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
-        const termination = Promise.withResolvers<AcpEndpointTermination>();
+    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): ControlledAcpPeer => {
+        const termination = Promise.withResolvers<AgentTermination>();
         const lifetime = new AbortController();
         const turns = new Map<string, AbortController>();
         const app = acp

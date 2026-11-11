@@ -1,7 +1,7 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
 import { AcpAgentDefinition } from "../../../cli/src/engine/acp/agent/agent-definition.ts";
 import type { AgentConnectionOptions } from "../../../cli/src/engine/acp/connection/agent-connection.ts";
-import { EndpointAgentConnection } from "../../../cli/src/engine/acp/connection/endpoint-agent-connection.ts";
+import { ControlledEndpointConnection } from "./controlled-connection.ts";
 import { createFakeHarness, fakeHarnessCapabilities } from "./fake-harness/index.ts";
 import type { FakeAgentHarnessOptions } from "./fake-harness/model.ts";
 
@@ -26,8 +26,7 @@ export const controlledSessionUpdates =
         }
     };
 
-/** Connects controlled ACP endpoints through the shared vendor transport mechanics. */
-export class ControlledEndpointConnection extends EndpointAgentConnection {}
+export { type ControlledAcpPeer, ControlledEndpointConnection } from "./controlled-connection.ts";
 
 /** Composes the production daemon's injected Agent type with a controlled ACP harness. */
 export function createFakeDaemon(options: FakeAgentHarnessOptions) {

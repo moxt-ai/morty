@@ -14,13 +14,13 @@ import {
     type SessionLiveEvent,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
+import { ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import type { AcpEndpointTermination } from "../../src/engine/acp/agent/in-process-endpoint.ts";
+import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycle.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
-import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
 import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
@@ -70,7 +70,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         throw new Error("The Agent has not completed a foreground prompt");
     };
     const agent = new AcpAgentDefinition("claude", "Controlled background Agent", process.execPath, (options) => {
-        const terminated = Promise.withResolvers<AcpEndpointTermination>();
+        const terminated = Promise.withResolvers<AgentTermination>();
         let connection: acp.AgentConnection | null = null;
         const app = acp
             .agent({ name: "background-interaction" })
