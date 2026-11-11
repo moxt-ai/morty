@@ -1,13 +1,22 @@
-import { ClaudeAgentConnection } from "../../../acp/adapter/claude/agent-connection.ts";
-import type { AgentConnectionFactory } from "../../../acp/connection/agent-connection.ts";
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
+import { createClaudeClient, initializeClaudeClient } from "../../../acp/adapter/claude/create-client.ts";
+import { waitForAgentOperation } from "../../../acp/connection/agent-operation.ts";
+import { normalizeAcpCapabilities } from "../../../acp/protocol/session-capabilities.ts";
 import { platformSupportFor } from "../../../util/platform/index.ts";
 import { type ResolvedExecutable, resolveExecutablePath } from "../../../util/process/executable.ts";
+import {
+    type AgentReadinessProbeParams,
+    filterEnvironment,
+    VerifiedAcpReadiness,
+} from "../../discovery/acp-readiness-probe.ts";
 import type { LocalAgentDiscoveryContext } from "../../discovery/agent-discovery-context.ts";
+import { AgentProbeError } from "../../discovery/agent-probe-error.ts";
+import { normalizeVersionOutput } from "../../discovery/version-output.ts";
 import { InProcessAcpAgentSpecification } from "../agent-specification.ts";
 
 export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "claude";
-    readonly createConnection: AgentConnectionFactory = (options) => new ClaudeAgentConnection(options);
+    readonly createConnection = null;
     readonly harness = "claude";
     readonly label = "Claude Code";
     override readonly minimumSupportedAgentVersion = "2.1.273";
@@ -16,6 +25,50 @@ export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification
     constructor() {
         super("MORTY_CLAUDE_PATH");
     }
+
+    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<VerifiedAcpReadiness> => {
+        const timeout = AbortSignal.timeout(this.acpProbeTimeoutMilliseconds);
+        const signal = AbortSignal.any([params.signal, timeout]);
+        const reject = async (): Promise<never> => {
+            throw new AgentProbeError("acp_incompatible", "The Claude readiness probe does not accept interactions");
+        };
+        try {
+            const client = await createClaudeClient(
+                params.agent.withEnvironment({ ...filterEnvironment(params.environment), ...params.agent.environment }),
+                {
+                    sessionUpdate: reject,
+                    requestPermission: reject,
+                    createElicitation: reject,
+                    completeElicitation: reject,
+                    readTextFile: reject,
+                    writeTextFile: reject,
+                    extNotification: reject,
+                },
+                signal,
+            );
+            try {
+                const initialized = await waitForAgentOperation(initializeClaudeClient(client), signal);
+                if (initialized.protocolVersion !== PROTOCOL_VERSION) {
+                    throw new AgentProbeError("acp_incompatible", "Claude selected an unsupported protocol version");
+                }
+                return new VerifiedAcpReadiness(
+                    normalizeVersionOutput(initialized.agentInfo?.version ?? ""),
+                    normalizeAcpCapabilities(initialized),
+                );
+            } finally {
+                await client.dispose("graceful");
+            }
+        } catch (cause) {
+            params.signal.throwIfAborted();
+            if (timeout.aborted) {
+                throw new AgentProbeError("adapter_probe_timeout", "Claude readiness probe timed out", { cause });
+            }
+            if (cause instanceof AgentProbeError) {
+                throw cause;
+            }
+            throw new AgentProbeError("acp_incompatible", "Claude initialization failed", { cause });
+        }
+    };
 
     override readonly resolveInstalledAgentExecutables = async (
         context: LocalAgentDiscoveryContext,
