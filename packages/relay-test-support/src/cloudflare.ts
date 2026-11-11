@@ -1,18 +1,14 @@
 import { fileURLToPath, URL as NodeURL } from "node:url";
 import { readD1Migrations } from "@cloudflare/vitest-plugin";
-import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database } from "@cloudflare/workers-types";
 import { build } from "esbuild";
-import { convertV4MiniflareOptions, Miniflare, WebSocketPair, Response as WorkerResponse } from "miniflare";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
 type TestRelayBindings = {
     readonly RELAY_DIRECTORY_DATABASE: D1Database;
-    readonly R2_BUCKET_APAC: R2Bucket;
-    readonly R2_BUCKET_WNAM: R2Bucket;
 };
 
 import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
-
-export { convertV4MiniflareOptions, Miniflare, miniflareDurableObjects, WebSocketPair, WorkerResponse };
 
 /** Prepare once per suite run; only immutable code is shared, never a runtime or its storage. */
 export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
@@ -35,14 +31,14 @@ export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
 
 /** Owns the real Cloudflare adapters for Runtime/Worker integration scenarios. */
 function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<string>) {
-    const packageDirectory = new NodeURL("../../relay/", import.meta.url);
     const options = {
+        name: "morty-test-relay",
         modules: true,
         script,
         compatibilityDate: "2026-09-07",
         compatibilityFlags: ["nodejs_compat"],
         d1Databases: ["RELAY_DIRECTORY_DATABASE"],
-        r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM", "CHAT_ATTACHMENTS_APAC"],
+        r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
         ratelimits: {
             ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
         },
@@ -50,7 +46,7 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
             MORTY_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
             MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
         },
-        durableObjects: miniflareDurableObjects(new NodeURL("wrangler.jsonc", packageDirectory)),
+        durableObjects: miniflareDurableObjects(new NodeURL("../wrangler.test.jsonc", import.meta.url)),
     } satisfies Parameters<typeof convertV4MiniflareOptions>[0];
     const runtime = new Miniflare(convertV4MiniflareOptions(options));
     return {

@@ -4,7 +4,6 @@ import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
 import { encodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
 import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
-import type { ComputerSessionAccess } from "../infra/computer-session-access.ts";
 
 export interface ComputerWorkerRoutingBindings {
     readonly COMPUTER_RELAY: DurableObjectNamespace<ComputerRelay>;
@@ -14,7 +13,6 @@ export interface ComputerWorkerRoutingBindings {
 export interface ComputerDurableObjectExecutionBindings extends ComputerWorkerRoutingBindings {
     readonly MORTY_LOCAL_CHANNEL?: (computerId: string, request: Request) => Promise<Response>;
     readonly MORTY_COMPUTER_STORE: ComputerManagementStore;
-    readonly MORTY_COMPUTER_SESSION_ACCESS: ComputerSessionAccess;
     readonly MORTY_COMPUTER_ID: string;
 }
 
@@ -108,16 +106,15 @@ export async function routeComputerDurableObject(
     const body = request.body === null ? undefined : await request.arrayBuffer();
     request.signal.throwIfAborted();
     try {
-        return await bindings.COMPUTER_RELAY.getByName(computerId, { locationHint: placement.locationHint }).fetch(
-            durableObjectUrl,
-            {
-                method: request.method,
-                headers: request.headers,
-                ...(body === undefined ? {} : { body }),
-                signal: request.signal,
-                redirect: request.redirect,
-            },
-        );
+        const computer = bindings.COMPUTER_RELAY.getByName(computerId, { locationHint: placement.locationHint });
+        const routedRequest = new Request(durableObjectUrl, {
+            method: request.method,
+            headers: request.headers,
+            ...(body === undefined ? {} : { body }),
+            signal: request.signal,
+            redirect: request.redirect,
+        });
+        return await computer.fetch(routedRequest);
     } catch (error) {
         logger.error(
             {

@@ -86,7 +86,6 @@ jobs:
       - name: Verify production authority and secrets before any production write
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
           MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
           EXPECTED_REVISION: ${{ github.sha }}
         run: |
@@ -113,6 +112,8 @@ jobs:
         with:
           name: morty-release
           path: .release
+      - name: Compile source Runtime adapters used by deployment verification
+        run: pnpm --dir packages/cli run prebuild
       - name: Upload accepted browser source maps before activating the release
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -123,7 +124,6 @@ jobs:
       - name: Deploy and verify the Workers, restoring the previous ones on failure
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
           MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
           EXPECTED_REVISION: ${{ github.sha }}
         run: |

@@ -1,10 +1,5 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import {
-    AuditActorKind,
-    type HttpError,
-    type ProjectAccessContext,
-    type ProjectPermission,
-} from "@morty-build/relay-core/contracts";
+import { AuditActorKind, type HttpError } from "@morty-build/relay-core/contracts";
 
 export class RelayAuditActorKind extends AuditActorKind {
     static readonly Application = new RelayAuditActorKind("application");
@@ -37,36 +32,8 @@ export class RelayAuthenticationConfiguration {
     }
 }
 
-export class RelayAppCredentialAccess {
-    readonly appId: string;
-    readonly publicCredentialId: string;
-    readonly project: ProjectAccessContext;
-
-    constructor(appId: string, publicCredentialId: string, project: ProjectAccessContext) {
-        this.appId = appId;
-        this.publicCredentialId = publicCredentialId;
-        this.project = project;
-    }
-}
-
-export interface RelayApplicationIdentity {
-    readonly kind: "application";
-    readonly publicCredentialId: string;
-    readonly appId: string;
-    readonly credentialId: string;
-    readonly permissions: ReadonlySet<ProjectPermission>;
-    readonly scope: "all-projects" | "selected-projects";
-}
-
-export type RelayPrincipal = RelayApplicationIdentity;
-
 export interface ComputerManagementPlacement {
     readonly locationHint: ProjectLocationHint;
-}
-
-export interface ComputerManagementPlacementRegistry {
-    readonly resolveLocationHint: (locationHint: string) => ComputerManagementPlacement | null;
-    readonly supports: (placement: ComputerManagementPlacement) => boolean;
 }
 
 export function hasControlCharacters(value: string): boolean {

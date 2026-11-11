@@ -2,21 +2,15 @@
     "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
     "environments": {
         "production": {
-            "d1_id": "41b0bb37-d19f-4376-a694-b32e08de9fc8",
-            "d1_name": "morty-platform-production-control-plane-wnam",
-            "relay": "morty-platform-production",
+            "d1_id": "1a6331f2-8f42-47a8-8f26-f13d80cfb6bc",
+            "d1_name": "morty-production-directory",
             "morty": "morty-production",
-            "relay_origin": "https://relay.mobius.host",
             "morty_origin": "https://morty.build",
             "buckets": {
-                "relay_apac": "morty-platform-production-apac-objects",
-                "relay_wnam": "morty-platform-production-wnam-objects",
                 "attachments": "morty-production-apac-attachments",
                 "web_assets": "morty-production-web-assets"
             },
-            "asset_origin": "https://assets.morty.build",
-            "app_id": "app_NtHgrttun_lpHHvLxCfZKPan",
-            "allowed_origins": ["https://morty.build", "https://relay.mobius.host"]
+            "asset_origin": "https://assets.morty.build"
         }
     }
 }

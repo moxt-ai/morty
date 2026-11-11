@@ -1,1 +1,1 @@
-export { ComputerRelay, default } from "../../relay/src/worker.ts";
+export { ComputerRelay, default } from "../../worker/src/index.ts";

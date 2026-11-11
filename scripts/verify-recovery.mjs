@@ -32,36 +32,10 @@ const run = api(`actions/runs/${runId}`);
 if (!authorized(run)) {
     throw new Error("Archive run is not an authorized successful main run");
 }
-let cliRun = run;
-let legacy = false;
-if (run.path === ".github/workflows/morty-cli.yml") {
-    if (!completed(run, ["publish", "deploy", "github-release"])) {
-        throw new Error("Recovery requires the completed release chain");
-    }
-} else if (run.path === ".github/workflows/morty-cloud.yml") {
-    // Legacy releases archived cloud and CLI bytes in independent runs.
-    // Accept them only with successful publication of the same source revision.
-    const result = api(`actions/workflows/morty-cli.yml/runs?head_sha=${run.head_sha}&status=success&per_page=100`);
-    if (result.total_count > result.workflow_runs.length) {
-        throw new Error("Incomplete legacy release inventory");
-    }
-    cliRun = result.workflow_runs.find(
-        (candidate) =>
-            authorized(candidate) && candidate.head_sha === run.head_sha && completed(candidate, ["publish"]),
-    );
-    if (!cliRun) {
-        throw new Error("No successful CLI publication for this archived source");
-    }
-    legacy = true;
-} else {
-    throw new Error("Unrecognized release workflow");
+if (run.path !== ".github/workflows/morty-cli.yml" || !completed(run, ["publish", "deploy", "github-release"])) {
+    throw new Error("Recovery requires a completed consolidated release chain");
 }
-for (const [source, name] of legacy
-    ? [
-          [run, "release-production"],
-          [cliRun, "morty-cli"],
-      ]
-    : [[run, "morty-release"]]) {
+for (const [source, name] of [[run, "morty-release"]]) {
     const inventory = api(`actions/runs/${source.id}/artifacts?per_page=100`);
     if (inventory.total_count > inventory.artifacts.length) {
         throw new Error("Incomplete archive inventory");
@@ -71,4 +45,4 @@ for (const [source, name] of legacy
         throw new Error("The original accepted archive is missing, expired or ambiguous");
     }
 }
-await appendFile(process.env.GITHUB_OUTPUT, `revision=${run.head_sha}\nlegacy=${legacy}\ncli_run=${cliRun.id}\n`);
+await appendFile(process.env.GITHUB_OUTPUT, `revision=${run.head_sha}\n`);

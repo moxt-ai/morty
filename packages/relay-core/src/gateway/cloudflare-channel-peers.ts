@@ -40,7 +40,6 @@ const attachmentSchema = v.union([
         role: v.literal("viewer"),
         expiresAt: v.number(),
         credential: v.object({
-            credentialId: v.string(),
             signingKeyId: v.string(),
             grant: v.pipe(v.unknown(), v.transform(decodeSessionAccessGrant)),
         }),
@@ -49,13 +48,12 @@ const attachmentSchema = v.union([
     }),
     v.object({
         role: v.literal("host"),
-        credentialId: v.string(),
         nativeRequestId: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
         sessionFilter: v.optional(targetSchema),
 
         computerId: v.string(),
         historyRequest: v.optional(historyRequestSchema),
-        pendingAgentSettingsDiscoveries: v.optional(v.array(pendingAgentSettingsDiscoverySchema), []),
+        pendingAgentSettingsDiscoveries: v.array(pendingAgentSettingsDiscoverySchema),
     }),
     v.object({
         role: v.literal("relay"),
@@ -85,7 +83,6 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         if (attachment.role === "host") {
             return {
-                credential: { credentialId: attachment.credentialId },
                 ...(attachment.nativeRequestId === undefined ? {} : { nativeRequestId: attachment.nativeRequestId }),
                 ...(attachment.sessionFilter === undefined ? {} : { sessionFilter: attachment.sessionFilter }),
                 computerId: attachment.computerId,
@@ -293,11 +290,6 @@ export class CloudflareChannelPeers implements RuntimePeers {
     };
 }
 
-/** Host attachments keep the flat credential field that earlier Relay versions read. */
 function attachment(identity: RuntimeSocketIdentity): v.InferInput<typeof attachmentSchema> {
-    if (identity.role !== "host") {
-        return identity;
-    }
-    const { credential, ...connection } = identity;
-    return { ...connection, credentialId: credential.credentialId };
+    return identity.role === "host" ? { ...identity, pendingAgentSettingsDiscoveries: [] } : identity;
 }

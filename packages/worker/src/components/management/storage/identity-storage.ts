@@ -2,13 +2,7 @@ import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
-import {
-    browserCredential,
-    browserDevice,
-    continueLink,
-    managedBot,
-    ownerCredential,
-} from "../../../schema/project-do/index.ts";
+import { browserCredential, browserDevice, continueLink, ownerCredential } from "../../../schema/project-do/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
@@ -17,17 +11,51 @@ import { type AnonymousIdentity, digest, requireIdentityDatabase } from "./ident
 type IdentityDatabase = ReturnType<typeof requireIdentityDatabase>;
 
 /** A link no device has used yet: it issued no credential. */
-function unusedLink(database: IdentityDatabase) {
+function unusedLink(database: IdentityDatabase, linkId: SQLiteColumn = continueLink.id) {
     return notExists(
         database
             .select({ id: browserCredential.id })
             .from(browserCredential)
-            .where(eq(browserCredential.transferId, continueLink.id)),
+            .where(eq(browserCredential.transferId, linkId)),
     );
 }
 const openedCredential = alias(browserCredential, "opened_credential");
 const openedLink = alias(continueLink, "opened_link");
-const issuedLink = alias(continueLink, "issued_link");
+const successorLink = alias(continueLink, "successor_link");
+const predecessorLink = alias(continueLink, "predecessor_link");
+
+/**
+ * The one rule for a link the owner still stands by: they did not cancel it, no newer link replaced it, and it is
+ * not past the time it can add a device. What follows from the access that shared it is read from that access.
+ */
+function linkInForce(
+    database: IdentityDatabase,
+    now: number,
+    link: {
+        readonly id: SQLiteColumn;
+        readonly cancelledAt: SQLiteColumn;
+        readonly expiresAt: SQLiteColumn;
+    } = continueLink,
+) {
+    return and(
+        isNull(link.cancelledAt),
+        gt(link.expiresAt, now),
+        notExists(
+            database
+                .select({ id: successorLink.id })
+                .from(successorLink)
+                .where(eq(successorLink.replacesTransferId, link.id)),
+        ),
+    );
+}
+
+/** Cancels the invitations of the user's links no device has used yet; a cancelled link stays cancelled. */
+function cancelUnusedLinks(database: IdentityDatabase, userId: string, now: number) {
+    return database
+        .update(continueLink)
+        .set({ cancelledAt: now })
+        .where(and(eq(continueLink.userId, userId), isNull(continueLink.cancelledAt), unusedLink(database)));
+}
 const successorCredential = alias(ownerCredential, "successor_credential");
 const heldDevice = alias(browserDevice, "held_device");
 
@@ -121,10 +149,12 @@ export type StoredCredential = { readonly credentialId: string; readonly userId:
 export class IdentityStorage {
     readonly #database: unknown;
     readonly #computerId: string | null;
+    readonly #ownerUserId: string | null;
 
-    constructor(database: unknown, computerId: string | null = null) {
+    constructor(database: unknown, computerId: string | null, ownerUserId: string | null) {
         this.#database = database;
         this.#computerId = computerId;
+        this.#ownerUserId = ownerUserId;
     }
 
     readonly createAnonymous = async (
@@ -135,6 +165,9 @@ export class IdentityStorage {
         token: string,
     ): Promise<AnonymousIdentity | null> => {
         signal.throwIfAborted();
+        if (userId !== this.#ownerUserId || computerId !== this.#computerId) {
+            return null;
+        }
         const credentialId = `cred_${crypto.randomUUID()}`;
         const tokenHash = await digest(token);
         signal.throwIfAborted();
@@ -171,7 +204,7 @@ export class IdentityStorage {
         now: number,
         signal: AbortSignal,
     ): Promise<StoredCredential | null> => {
-        if (this.#computerId === null) {
+        if (this.#computerId === null || this.#ownerUserId === null) {
             return null;
         }
         signal.throwIfAborted();
@@ -185,8 +218,7 @@ export class IdentityStorage {
                 held: sql<number>`CASE WHEN ${ownerAccessHeld()} THEN 1 ELSE 0 END`.as("held"),
             })
             .from(ownerCredential)
-            .innerJoin(managedBot, eq(managedBot.userId, ownerCredential.userId))
-            .where(eq(ownerCredential.tokenHash, tokenHash))
+            .where(and(eq(ownerCredential.tokenHash, tokenHash), eq(ownerCredential.userId, this.#ownerUserId)))
             .get();
         signal.throwIfAborted();
         if (owner !== undefined) {
@@ -203,7 +235,6 @@ export class IdentityStorage {
                 accessHeldUntil: deviceAccessHeldUntil(database, browserDevice, now).as("access_held_until"),
             })
             .from(browserCredential)
-            .innerJoin(managedBot, eq(managedBot.userId, browserCredential.userId))
             .innerJoin(
                 browserDevice,
                 and(
@@ -211,7 +242,7 @@ export class IdentityStorage {
                     eq(browserDevice.userId, browserCredential.userId),
                 ),
             )
-            .where(eq(browserCredential.tokenHash, tokenHash))
+            .where(and(eq(browserCredential.tokenHash, tokenHash), eq(browserCredential.userId, this.#ownerUserId)))
             .get();
         signal.throwIfAborted();
         if (browser === undefined) {
@@ -233,7 +264,7 @@ export class IdentityStorage {
      * recovery credential's. Only the computer owner's access holds.
      */
     readonly holdsAccess = async (holder: SessionAccessHolder, now: number, signal: AbortSignal): Promise<boolean> => {
-        if (this.#computerId === null) {
+        if (this.#computerId === null || this.#ownerUserId === null) {
             return false;
         }
         signal.throwIfAborted();
@@ -243,10 +274,10 @@ export class IdentityStorage {
                 ? await database
                       .select({ id: browserDevice.id })
                       .from(browserDevice)
-                      .innerJoin(managedBot, eq(managedBot.userId, browserDevice.userId))
                       .where(
                           and(
                               eq(browserDevice.id, holder.deviceId),
+                              eq(browserDevice.userId, this.#ownerUserId),
                               sql`${deviceAccessHeldUntil(database, browserDevice, now)} IS NOT NULL`,
                           ),
                       )
@@ -254,8 +285,13 @@ export class IdentityStorage {
                 : await database
                       .select({ id: ownerCredential.id })
                       .from(ownerCredential)
-                      .innerJoin(managedBot, eq(managedBot.userId, ownerCredential.userId))
-                      .where(and(eq(ownerCredential.id, holder.credentialId), ownerAccessHeld()))
+                      .where(
+                          and(
+                              eq(ownerCredential.id, holder.credentialId),
+                              eq(ownerCredential.userId, this.#ownerUserId),
+                              ownerAccessHeld(),
+                          ),
+                      )
                       .get();
         signal.throwIfAborted();
         return found !== undefined;
@@ -302,7 +338,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Revokes every local and recovery credential except the caller's, ends every browser device's access, and voids
+     * Revokes every local and recovery credential except the caller's, ends every browser device's access, and cancels
      * the links no device has used yet. Only the machine's own credential, which belongs to no device, may do this.
      */
     readonly revokeOtherAccess = async (
@@ -315,10 +351,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         const tokenHash = await digest(token);
         await database.batch([
-            database
-                .update(continueLink)
-                .set({ revokedAt: now })
-                .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt), unusedLink(database))),
+            cancelUnusedLinks(database, userId, now),
             database
                 .update(ownerCredential)
                 .set({ revokedAt: now })
@@ -335,8 +368,9 @@ export class IdentityStorage {
     };
 
     /**
-     * Revokes every local and recovery credential, the caller's included, ends every browser device's access, and voids
-     * the links no device has used yet, in one transaction that issues `successor` as the only local credential. Only
+     * Revokes every local and recovery credential, the caller's included, and ends every browser device's access, in one
+     * transaction that issues `successor` as the only local credential. Every link was shared by access this ends, so
+     * none adds a device afterwards. Only
      * the machine's own credential may do this, so a copy of it stops working too. Repeating it with the successor as
      * the caller, after a lost reply, repeats the revocation and keeps the successor. False when the caller no longer
      * holds access, and then nothing changed.
@@ -391,17 +425,6 @@ export class IdentityStorage {
                 .onConflictDoNothing({ target: ownerCredential.tokenHash }),
             // Nothing else changes unless the successor holds access: a caller revoked meanwhile revokes nothing.
             database
-                .update(continueLink)
-                .set({ revokedAt: now })
-                .where(
-                    and(
-                        eq(continueLink.userId, userId),
-                        isNull(continueLink.revokedAt),
-                        unusedLink(database),
-                        successorInForce,
-                    ),
-                ),
-            database
                 .update(ownerCredential)
                 .set({ revokedAt: now })
                 .where(
@@ -424,7 +447,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Ends the access of every browser device except the one kept, and voids the links no device has used yet. The
+     * Ends the access of every browser device except the one kept, and cancels the links no device has used yet. The
      * machine's own and recovery credentials belong to no device, so they stay.
      */
     readonly endOtherBrowserAccess = async (
@@ -436,10 +459,7 @@ export class IdentityStorage {
         signal.throwIfAborted();
         const database = requireIdentityDatabase(this.#database);
         await database.batch([
-            database
-                .update(continueLink)
-                .set({ revokedAt: now })
-                .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt), unusedLink(database))),
+            cancelUnusedLinks(database, userId, now),
             endDevices(
                 database,
                 and(
@@ -486,28 +506,27 @@ export class IdentityStorage {
             eq(browserCredential.tokenHash, parentTokenHash),
             browserCredentialInForce(database, now),
         );
-        const createdByIssuer = or(
-            inArray(
-                continueLink.createdByCredentialId,
-                database.select({ id: ownerCredential.id }).from(ownerCredential).where(ownerIssuer),
-            ),
-            inArray(
-                continueLink.createdByCredentialId,
-                database.select({ id: browserCredential.id }).from(browserCredential).where(browserIssuer),
-            ),
-        );
+        const createdByIssuer = (createdBy: SQLiteColumn) =>
+            or(
+                inArray(
+                    createdBy,
+                    database.select({ id: ownerCredential.id }).from(ownerCredential).where(ownerIssuer),
+                ),
+                inArray(
+                    createdBy,
+                    database.select({ id: browserCredential.id }).from(browserCredential).where(browserIssuer),
+                ),
+            );
+        // The unused link the issuer shared before and this one replaces; replacing it is recorded on this link alone.
         const predecessor = and(
-            eq(continueLink.codeHash, replacesHash ?? ""),
-            eq(continueLink.userId, userId),
-            isNull(continueLink.revokedAt),
-            gt(continueLink.expiresAt, now),
-            unusedLink(database),
-            createdByIssuer,
+            eq(predecessorLink.codeHash, replacesHash ?? ""),
+            eq(predecessorLink.userId, userId),
+            linkInForce(database, now, predecessorLink),
+            unusedLink(database, predecessorLink.id),
+            createdByIssuer(predecessorLink.createdByCredentialId),
         );
-        const predecessorOpen =
-            replacesHash === null
-                ? undefined
-                : exists(database.select({ id: continueLink.id }).from(continueLink).where(predecessor));
+        const predecessorId = database.select({ id: predecessorLink.id }).from(predecessorLink).where(predecessor);
+        const predecessorOpen = replacesHash === null ? undefined : exists(predecessorId);
         // The link's columns in table order, issued by `issuer`.
         const issuedBy = (issuer: { readonly id: SQLiteColumn; readonly userId: SQLiteColumn }) => ({
             id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
@@ -517,8 +536,11 @@ export class IdentityStorage {
             expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
             accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
             createdAt: sql<number>`${now}`.as("created_at"),
-            revokedAt: sql<null>`null`.as("revoked_at"),
             createdByCredentialId: issuer.id,
+            replacesTransferId: (replacesHash === null ? sql<null>`null` : sql<string>`(${predecessorId})`).as(
+                "replaces_transfer_id",
+            ),
+            cancelledAt: sql<null>`null`.as("cancelled_at"),
         });
         // The token names one credential, of one kind, so at most one of these issues the link.
         const issueByOwner = database
@@ -540,33 +562,7 @@ export class IdentityStorage {
             )
             .onConflictDoNothing({ target: continueLink.codeHash });
         signal.throwIfAborted();
-        if (replacesHash === null) {
-            await database.batch([issueByOwner, issueByBrowser]);
-        } else {
-            await database.batch([
-                issueByOwner,
-                issueByBrowser,
-                database
-                    .update(continueLink)
-                    .set({ revokedAt: now })
-                    .where(
-                        and(
-                            predecessor,
-                            exists(
-                                database
-                                    .select({ id: issuedLink.id })
-                                    .from(issuedLink)
-                                    .where(
-                                        and(
-                                            eq(issuedLink.codeHash, codeHash),
-                                            eq(issuedLink.requestHash, operation.requestHash),
-                                        ),
-                                    ),
-                            ),
-                        ),
-                    ),
-            ]);
-        }
+        await database.batch([issueByOwner, issueByBrowser]);
         const issued = await database
             .select({
                 createdAt: continueLink.createdAt,
@@ -579,9 +575,8 @@ export class IdentityStorage {
                     eq(continueLink.codeHash, codeHash),
                     eq(continueLink.requestHash, operation.requestHash),
                     eq(continueLink.userId, userId),
-                    isNull(continueLink.revokedAt),
-                    gt(continueLink.expiresAt, now),
-                    createdByIssuer,
+                    linkInForce(database, now),
+                    createdByIssuer(continueLink.createdByCredentialId),
                 ),
             )
             .get();
@@ -656,8 +651,7 @@ export class IdentityStorage {
         // A link adds one device: only while no credential was issued through it.
         const open = and(
             eq(continueLink.codeHash, codeHash),
-            isNull(continueLink.revokedAt),
-            gt(continueLink.expiresAt, now),
+            linkInForce(database, now),
             gt(continueLink.accessExpiresAt, now),
             unusedLink(database),
             // A link adds no device once the access that shared it ended; checking it in the issuing write means ending
@@ -843,12 +837,6 @@ export class IdentityStorage {
         if (this.#computerId !== computerId) {
             return false;
         }
-        const row = await requireIdentityDatabase(this.#database)
-            .select({ userId: managedBot.userId })
-            .from(managedBot)
-            .where(eq(managedBot.userId, userId))
-            .get();
-        signal.throwIfAborted();
-        return row !== undefined;
+        return userId === this.#ownerUserId;
     };
 }

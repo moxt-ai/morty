@@ -2,11 +2,12 @@ import { sameNativeSession } from "@morty-build/client/native-session";
 import { type NativeSessionTarget, readNativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
-import type {
-    BotChatApi,
-    BotRuntimeConfiguration,
-    ChatAccess,
-    ChatDraftConfiguration,
+import {
+    type BotChatApi,
+    type BotRuntimeConfiguration,
+    type ChatAccess,
+    type ChatDraftConfiguration,
+    runtimeAgentAvailability,
 } from "../../services/chat/bot-chat-api.ts";
 import { CloudApiError, isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
 import {
@@ -186,10 +187,14 @@ function homeSetupReason(home: BotChatHomeStore): SetupReason | null {
     if (home.selection.kind !== "draft" || home.runtimeConfiguration === null) {
         return null;
     }
-    if (home.runtimeConfiguration.runtime.agents.length === 0) {
-        return "agent-missing";
+    switch (runtimeAgentAvailability(home.runtimeConfiguration.runtime)) {
+        case "no-agent":
+            return "agent-missing";
+        case "offline":
+            return "runtime-offline";
+        case "available":
+            return null;
     }
-    return home.runtimeConfiguration.runtime.online ? null : "runtime-offline";
 }
 
 export function homeCanStartConversation(home: BotChatHomeStore): boolean {
@@ -740,7 +745,7 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    if (cause instanceof CloudApiError && cause.code === "RUNTIME_REVOKED") {
+                    if (cause instanceof CloudApiError && cause.code === "runtime_revoked") {
                         // An operation reported the revocation, so the page's last pairing read may predate it. Waiting
                         // starts from a read after it; one that already differs means setup is pairing again.
                         const pairing = await requests.readRuntimePairing(signal);

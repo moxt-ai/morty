@@ -8,6 +8,8 @@ import {
     acceptWebSocketHttpTransport,
     type ClaimPairing,
     createLocalSessionOperations,
+    createWorkerContext,
+    DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
     RelaySockets,
     type RequestRuntimePairing,
@@ -30,9 +32,11 @@ import {
     type ComputerRelayRelayBindings,
     type ConfiguredRelayRelayBindings,
     createRelayAccessServices,
+    createRelayGateways,
     createRelayWorker,
 } from "../relay-worker.ts";
-import { composeComputer } from "./compose-computer.ts";
+import { ComputerBackendService } from "../service/computer-backend-service.ts";
+import { SqliteComputerManagementStore } from "../storage/sqlite-computer-management-store.ts";
 import { migrateComputerStorage } from "./migrate-computer-storage.ts";
 import { createRelayDurableObjectContext } from "./relay-durable-object-context.ts";
 
@@ -50,12 +54,13 @@ const uncancelled = new AbortController().signal;
  */
 export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
     readonly #application = createRelayWorker();
-    #computer: ReturnType<typeof composeComputer> | null = null;
+    #store: Store | null = null;
 
     readonly #chat = new ComputerChat(
         this.ctx.storage,
         (id) => this.#owns(id),
         (change) => this.#endAccess(change),
+        (computerId) => this.#backendServices(computerId),
     );
 
     readonly #uploads = new WebSocketUploadBudget();
@@ -73,7 +78,6 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         const context = createRelayDurableObjectContext(this.ctx, this.env, {
             database: new DurableObjectSqlDatabase(this.ctx.storage),
             storeFor: (computerId) => this.#operate(computerId),
-            sessionAccessFor: (computerId) => this.#computerFor(computerId).sessionAccess,
         });
         return {
             context,
@@ -94,43 +98,32 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return this.#connections;
     }
 
-    /** The store and Session access of the computer this object holds; null when `computerId` names another. */
-    #ownComputer(computerId: string): ReturnType<typeof composeComputer> | null {
+    /** The store of the computer this object holds; null when `computerId` names another computer. */
+    #computerStore(computerId: string): Store | null {
         if (!this.#owns(computerId)) {
             return null;
         }
-        if (this.#computer === null) {
+        if (this.#store === null) {
             migrateComputerStorage(this.ctx.storage);
-            this.#computer = composeComputer(computerId, this.ctx.storage, this.#chat);
+            this.#store = new SqliteComputerManagementStore(
+                computerId,
+                new DurableObjectDatabaseAdapter(this.ctx.storage),
+                (holder, signal) => this.#chat.holdsAccess(computerId, holder, this.env, signal),
+            );
         }
-        return this.#computer;
+        return this.#store;
     }
 
     #owns(computerId: string): boolean {
         return this.env.COMPUTER_RELAY.idFromName(computerId).toString() === this.ctx.id.toString();
     }
 
-    #computerFor(computerId: string): ReturnType<typeof composeComputer> {
-        const computer = decodeComputerPlacement(computerId) === null ? null : this.#ownComputer(computerId);
-        if (computer === null) {
+    #operate(computerId: string): Store {
+        const store = decodeComputerPlacement(computerId) === null ? null : this.#computerStore(computerId);
+        if (store === null) {
             throw new Error("The computer is unavailable");
         }
-        return computer;
-    }
-
-    #operate(computerId: string): Store {
-        return this.#computerFor(computerId).store;
-    }
-
-    /** The bindings with which a request runs against the computer this object holds. */
-    #computerBindings(computerId: string) {
-        const computer = this.#computerFor(computerId);
-        return {
-            MORTY_COMPUTER_ID: computerId,
-            MORTY_LOCAL_CHANNEL: this.#localChannel,
-            MORTY_COMPUTER_STORE: computer.store,
-            MORTY_COMPUTER_SESSION_ACCESS: computer.sessionAccess,
-        };
+        return store;
     }
 
     readonly #localChannel = (computerId: string, request: Request): Promise<Response> => {
@@ -152,7 +145,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                 );
             }
             const computerId = computerPath.computerId;
-            if (this.#ownComputer(computerId) === null) {
+            const store = this.#computerStore(computerId);
+            if (store === null) {
                 return Response.json(
                     { error: { code: "computer_id_mismatch", message: "The computer is unavailable" } },
                     { status: 421 },
@@ -162,7 +156,9 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             const routedRequest = new Request(requestUrl, request);
             const environment: ConfiguredRelayRelayBindings & ComputerRelayRelayBindings = {
                 ...this.env,
-                ...this.#computerBindings(computerId),
+                MORTY_LOCAL_CHANNEL: this.#localChannel,
+                MORTY_COMPUTER_STORE: store,
+                MORTY_COMPUTER_ID: computerId,
             };
             return await this.#application.fetch(routedRequest, environment);
         } catch (error) {
@@ -235,8 +231,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
     }
 
-    async currentSessionGeneration(computerId: string, holder: SessionAccessHolder): Promise<number | null> {
-        return await this.#computerFor(computerId).sessionAccess.currentGeneration(holder, uncancelled);
+    async holdsAccess(computerId: string, holder: SessionAccessHolder): Promise<boolean> {
+        return await this.#operate(computerId).holdsAccess(holder, uncancelled);
     }
 
     /**
@@ -294,7 +290,9 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             }
             const environment = {
                 ...this.env,
-                ...this.#computerBindings(current.computerId),
+                MORTY_COMPUTER_ID: current.computerId,
+                MORTY_LOCAL_CHANNEL: this.#localChannel,
+                MORTY_COMPUTER_STORE: this.#operate(current.computerId),
                 MORTY_RUNTIME_EXECUTION: {
                     computerId: current.computerId,
                     operations: createLocalSessionOperations(this.#connectionsForComputer.context, current.computerId),
@@ -311,6 +309,35 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             await this.scheduleConnectionChecks();
         }
         return response;
+    }
+
+    #backendServices(computerId: string): ComputerBackendService {
+        const environment = {
+            ...this.env,
+            MORTY_COMPUTER_ID: computerId,
+            MORTY_LOCAL_CHANNEL: this.#localChannel,
+            MORTY_COMPUTER_STORE: this.#operate(computerId),
+            MORTY_RUNTIME_EXECUTION: {
+                computerId,
+                operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
+            },
+        };
+        const access = createRelayAccessServices(environment);
+        const context = createWorkerContext({
+            applications: access.control,
+            authorization: access.control,
+            stores: access.stores,
+            identityStores: access.identityStores,
+            projects: access.projects,
+            apiPrefix: "/morty/api",
+            gateways: createRelayGateways(environment),
+        });
+        return new ComputerBackendService(
+            computerId,
+            context,
+            access.sessionAccess,
+            this.env.MORTY_SESSION_SIGNING_SECRET,
+        );
     }
 
     /**

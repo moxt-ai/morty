@@ -1,7 +1,6 @@
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeNativeSessionTarget,
-    decodeSessionAccessCredential,
     type NativeSessionTarget,
     ProtocolMessageError,
     type SessionAccessGrant,
@@ -9,8 +8,6 @@ import {
 } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
-import type { ComputerSessionAccessDirectory } from "../infra/computer-session-access.ts";
-import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
 import type { ComputerManagementService } from "./computer-management-service.ts";
 
 export type SessionAccessTarget =
@@ -20,10 +17,8 @@ export type SessionAccessTarget =
 /** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
 export interface SessionAccess {
     readonly signingKeyId: string;
-    /** The AppCredential that issued the Session credential. */
-    readonly credentialId: string;
     readonly issuedAtEpochMilliseconds: number;
-    /** The access the credential carries. */
+    /** The holder and pairing generation the credential carries. */
     readonly grant: SessionAccessGrant;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
@@ -40,37 +35,25 @@ function sessionScopedPermission(permission: ProjectPermission): ProjectPermissi
 }
 
 export class SessionAccessService {
-    readonly #applications: AppCredentialAuthenticationService;
     readonly #control: ComputerManagementService;
-    readonly #sessionAccess: ComputerSessionAccessDirectory;
     readonly #signer: SessionAccessSigner;
 
-    constructor(
-        applications: AppCredentialAuthenticationService,
-        control: ComputerManagementService,
-        sessionAccess: ComputerSessionAccessDirectory,
-        signer: SessionAccessSigner,
-    ) {
-        this.#applications = applications;
+    constructor(control: ComputerManagementService, signer: SessionAccessSigner) {
         this.#control = control;
-        this.#sessionAccess = sessionAccess;
         this.#signer = signer;
     }
 
     /**
-     * Issues a Session credential carrying `holder`'s access under the computer's active Runtime pairing generation. It
-     * is refused when that access has already ended or no Runtime is paired, as the credential would be refused from
-     * its first use.
+     * Issues a Session credential bound to the active Runtime pairing and holder. Ending either
+     * authority ends the credential; a later pairing cannot restore it.
      */
     readonly issue = async (
         target: SessionAccessTarget,
-        appCredential: string,
         expiresInSeconds: number,
         holder: SessionAccessHolder,
         signal: AbortSignal,
     ): Promise<{
         readonly credential: string;
-        readonly credentialId: string;
         readonly expiresAt: string;
         readonly computerId: string;
         readonly target: NativeSessionTarget;
@@ -82,20 +65,14 @@ export class SessionAccessService {
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
-        const access = await this.#control.authorizeRelayCredential(
-            target.computerId,
-            appCredential,
-            ProjectPermission.SessionWrite,
-            "",
-            signal,
-        );
-        const generation = await this.#sessionAccess.forComputer(target.computerId).currentGeneration(holder, signal);
+        await this.#control.authorizeProject(target.computerId, ProjectPermission.SessionWrite, signal);
+        const generation = await this.#control.currentSessionGeneration(target.computerId, holder, signal);
         if (generation === null) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
         }
         const issuedAtEpochMilliseconds = Date.now();
         const expiresAtEpochMilliseconds = issuedAtEpochMilliseconds + expiresInSeconds * 1_000;
-        const credential = await this.#signer.issue(access.publicCredentialId, {
+        const credential = await this.#signer.issue({
             expiresAtEpochMilliseconds,
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
@@ -105,7 +82,6 @@ export class SessionAccessService {
         });
         return {
             credential,
-            credentialId: `sac_${crypto.randomUUID()}`,
             expiresAt: new Date(expiresAtEpochMilliseconds).toISOString(),
             computerId: target.computerId,
             target: nativeTarget,
@@ -125,6 +101,7 @@ export class SessionAccessService {
         permission: ProjectPermission,
         signal: AbortSignal,
     ): Promise<SessionAccess> => {
+        signal.throwIfAborted();
         const access = await this.authenticate(target, credentialValue, signal);
         await access.authorize(permission, signal);
         return access;
@@ -145,15 +122,6 @@ export class SessionAccessService {
                 "The credential authorizes only a selected Session",
             );
         }
-        let decoded: ReturnType<typeof decodeSessionAccessCredential>;
-        try {
-            decoded = decodeSessionAccessCredential(credentialValue);
-        } catch (cause) {
-            throw new ProjectAuthenticationError("project_credential_invalid", "The Session credential is invalid", {
-                cause,
-            });
-        }
-        const application = await this.#applications.readActiveCredentialByPublicId(decoded.publicCredentialId, signal);
         let claims: Awaited<ReturnType<SessionAccessSigner["verify"]>>;
         try {
             claims = await this.#signer.verify(credentialValue, Date.now());
@@ -180,10 +148,10 @@ export class SessionAccessService {
                 "The credential authorizes only the selected Session",
             );
         }
+        signal.throwIfAborted();
         const computerId = target.computerId;
         return {
             signingKeyId: await this.#signer.keyId(),
-            credentialId: application.credential_id,
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             grant: claims.grant,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
@@ -191,7 +159,6 @@ export class SessionAccessService {
             authorize: async (permission, authorizationSignal) => {
                 await this.#control.authorizeSessionCredentialRecord(
                     computerId,
-                    application,
                     sessionScopedPermission(permission),
                     claims.grant,
                     authorizationSignal,

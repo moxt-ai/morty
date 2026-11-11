@@ -3,6 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import { json } from "../../../infra/http.ts";
+import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -20,15 +21,14 @@ export function createComputerManagementRoutes() {
         )
         .get("/computer", authenticatedSession, async (context) => {
             const session = context.get("session");
+            using deadline = new RequestDeadline(context.req.raw.signal, 15000);
             return json({
-                computer: await context.env.services.management.readProject(
-                    session.userId,
-                    AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]),
-                ),
+                computer: await context.env.services.management.readProject(session.userId, deadline.signal),
             });
         })
         .post("/computer/replacement", async (context) => {
-            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
+            using deadline = new RequestDeadline(context.req.raw.signal, 45000);
+            const signal = deadline.signal;
             const { authentication, management } = context.env.services;
             const local = await authentication.authorize(context.get("bearerToken"), "replaceProject", signal);
             switch (local.kind) {

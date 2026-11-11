@@ -1,11 +1,9 @@
 import type { RuntimeAccessContext } from "../entity/authentication/project-authentication.ts";
-import type { ProjectCredentialHostAccess, VerifiedChannelAccess } from "../entity/pairing/pairing.ts";
+import type { VerifiedChannelAccess } from "../entity/pairing/pairing.ts";
 import { requestLogContext } from "../infra/log-diagnostics.ts";
 import { logger } from "../infra/logger.ts";
 import { RuntimeStatus } from "../service/channel/channel.ts";
 import type { ChannelGateway } from "./channel-gateway.ts";
-
-const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-morty-host-credential-id";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
@@ -42,12 +40,11 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     readonly acceptHost = async (
-        access: ProjectCredentialHostAccess,
+        access: VerifiedChannelAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
         const headers = new Headers(request.headers);
-        setHostCredential(headers, access);
         const endpoint = new URL(request.url);
         // Public viewers cannot opt into the private request-reply routing mode.
         endpoint.searchParams.delete("nativeRequestId");
@@ -138,9 +135,4 @@ export class CloudflareChannelRuntime implements ChannelGateway {
             throw error;
         }
     };
-}
-
-/** Replaces whatever a caller sent: only this Worker states which credential authorizes a host connection. */
-function setHostCredential(headers: Headers, access: ProjectCredentialHostAccess): void {
-    headers.set(INTERNAL_HOST_CREDENTIAL_ID_HEADER, access.credentialId);
 }

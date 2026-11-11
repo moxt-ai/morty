@@ -56,7 +56,7 @@ interface RuntimeConnection {
 
 async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<RuntimeConnection>) => Promise<void>) {
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    const { hostCredentialId } = await registerRuntimeFixture(computerId);
+    await registerRuntimeFixture(computerId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
     const connect = async (path: string): Promise<RuntimeConnection> => {
@@ -64,8 +64,6 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
         const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
-
-                "x-morty-host-credential-id": hostCredentialId,
             },
         });
         expect(response.status).toBe(101);

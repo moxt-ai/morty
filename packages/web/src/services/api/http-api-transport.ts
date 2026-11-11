@@ -1,4 +1,3 @@
-import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { systemClock } from "../time/clock.ts";
 import type { ApiResponseSnapshot } from "./api-transport.ts";
@@ -7,7 +6,6 @@ export class ApiConnectionError extends Error {}
 export function isApiConnectionError(error: unknown): error is ApiConnectionError {
     return error instanceof ApiConnectionError;
 }
-const mortyHealthSchema = v.strictObject({ service: v.literal("morty-relay"), status: v.literal("ok") });
 function isWatchable(method: string, pathname: string): boolean {
     return (
         (method === "POST" && pathname.endsWith("/workspace")) ||
@@ -65,35 +63,6 @@ export class HttpApiTransport {
             throw new ApiConnectionError("Unable to reach Morty.", { cause });
         }
     };
-    readonly measureRelayLatency = async (origin: string, parent: AbortSignal): Promise<number> => {
-        parent.throwIfAborted();
-        const endpoint = new URL(origin);
-        if (
-            endpoint.origin !== origin ||
-            (endpoint.protocol !== "https:" &&
-                !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname))) ||
-            endpoint.username !== "" ||
-            endpoint.password !== "" ||
-            endpoint.pathname !== "/" ||
-            endpoint.search !== "" ||
-            endpoint.hash !== ""
-        ) {
-            throw new Error("The Morty relay diagnostic endpoint is invalid.");
-        }
-        endpoint.pathname = "/morty/api/dashboard/health";
-        endpoint.searchParams.set("diagnostic", crypto.randomUUID());
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(10_000)]);
-        const startedAt = performance.now();
-        const response = await fetch(endpoint, { cache: "no-store", signal });
-        signal.throwIfAborted();
-        if (!response.ok) {
-            await response.body?.cancel();
-            throw new Error("The Morty relay did not respond to the network diagnostic.");
-        }
-        v.parse(mortyHealthSchema, await response.json());
-        return Math.max(0, Math.round(performance.now() - startedAt));
-    };
-
     readonly measureMortyLatency = async (parent: AbortSignal) => {
         const start = performance.now();
         const response = await fetch(new URL("/morty/api/health", this.#origin), {

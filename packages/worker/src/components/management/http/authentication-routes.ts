@@ -1,9 +1,8 @@
 import { Hono } from "hono";
 import * as v from "valibot";
-import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
-import { computerObject } from "../../../gateway/computer-object-routing.ts";
 import { json } from "../../../infra/http.ts";
-import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
+import { RequestDeadline } from "../../../infra/request-deadline.ts";
+import { bodyParser } from "../../../middleware/body-parser.ts";
 import {
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
@@ -11,9 +10,7 @@ import {
     localCredentialToken,
 } from "../entity/authentication/credential.ts";
 import { clientLocationHeader, decodeClientLocation } from "../entity/client-location.ts";
-import { anonymousCreationKey } from "../entity/computer-bootstrap.ts";
 import { ManagementError } from "../entity/management-error.ts";
-import { projectLocationHint } from "../util/project-location.ts";
 import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
@@ -47,25 +44,6 @@ const revokeAllAccessInput = v.pipe(
     }),
     v.readonly(),
 );
-const anonymousUserInput = v.strictObject({
-    creationKey: anonymousCreationKey,
-    locationHint: v.optional(
-        v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
-    ),
-});
-
-/** The user a creation key names. A one-way digest, so the public user ID never reveals the key. */
-async function anonymousUserId(creationKey: string): Promise<string> {
-    const digest = new Uint8Array(
-        await crypto.subtle.digest(
-            "SHA-256",
-            new TextEncoder().encode(JSON.stringify(["morty-anonymous-user-v1", creationKey])),
-        ),
-    );
-    const hex = Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return `usr_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 export function createAuthenticationRoutes() {
     return new Hono<ManagementHttpEnvironment>()
         .all("/session", async (context) => {
@@ -97,37 +75,6 @@ export function createAuthenticationRoutes() {
                 case "revoked":
                     throw credentialRejected(result.kind);
             }
-        })
-        .post("/identity/anonymous-users", async (context) => {
-            const request = context.req.raw;
-            const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
-            const input = v.parse(anonymousUserInput, await readJsonBody(request));
-            signal.throwIfAborted();
-            await admitAnonymousCreation(request, context.env.config.bindings);
-            signal.throwIfAborted();
-            // Retrying the same creation key names the same user, whose Relay Project creation is idempotent and
-            // whose bootstrap returns the identity an earlier attempt issued.
-            const userId = await anonymousUserId(input.creationKey);
-            const project = await context.env.gateways.computerManagements.create(
-                userId,
-                "Morty",
-                signal,
-                input.locationHint ?? projectLocationHint(request),
-            );
-            const response = await computerObject(context.env.config.bindings, project.computerId).fetch(
-                new Request("https://computer.internal/__computer/bootstrap", {
-                    body: JSON.stringify({
-                        computer: project,
-                        userId,
-                        origin: { kind: "created", creationKey: input.creationKey },
-                    }),
-                    headers: { "content-type": "application/json" },
-                    method: "POST",
-                    signal,
-                }),
-            );
-            signal.throwIfAborted();
-            return response;
         })
         .post(
             "/identity/transfers",
@@ -164,7 +111,8 @@ export function createAuthenticationRoutes() {
             },
         )
         .post("/identity/recovery-token", async (context) => {
-            const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
+            using deadline = new RequestDeadline(context.req.raw.signal, 15000);
+            const signal = deadline.signal;
             const result = await context.env.services.authentication.createRecoveryToken(
                 context.get("bearerToken"),
                 signal,

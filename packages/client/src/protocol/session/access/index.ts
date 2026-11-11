@@ -3,7 +3,7 @@ import { identifierStringSchema } from "../../shared/identifier.ts";
 import { decodeZodValue, ProtocolMessageError } from "../../shared/message-codec.ts";
 import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
-const SESSION_ACCESS_PATTERN = /^msession_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]+)_([A-Za-z0-9_-]{43})$/u;
+const SESSION_ACCESS_PATTERN = /^msession_([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/u;
 
 /** Whose access a Session credential carries: a browser device's, or the machine's local or recovery credential's. */
 const sessionAccessHolderSchema = z.discriminatedUnion("kind", [
@@ -52,7 +52,6 @@ export type SessionAccessClaims = z.infer<typeof claimsSchema>;
 
 export interface SessionAccessCredential {
     readonly claims: SessionAccessClaims;
-    readonly publicCredentialId: string;
     readonly signature: ArrayBuffer;
     readonly signedValue: string;
 }
@@ -75,10 +74,9 @@ function exactBuffer(value: Uint8Array): ArrayBuffer {
 
 export function decodeSessionAccessCredential(credential: string): SessionAccessCredential {
     const match = SESSION_ACCESS_PATTERN.exec(credential);
-    const publicCredentialId = match?.[1];
-    const payload = match?.[2];
-    const encodedSignature = match?.[3];
-    if (publicCredentialId === undefined || payload === undefined || encodedSignature === undefined) {
+    const payload = match?.[1];
+    const encodedSignature = match?.[2];
+    if (payload === undefined || encodedSignature === undefined) {
         throw new ProtocolMessageError("The Session credential is invalid");
     }
     let decoded: unknown;
@@ -93,8 +91,7 @@ export function decodeSessionAccessCredential(credential: string): SessionAccess
     }
     return {
         claims: parsed.data,
-        publicCredentialId,
         signature: exactBuffer(decodeBase64Url(encodedSignature)),
-        signedValue: `msession_${publicCredentialId}_${payload}`,
+        signedValue: `msession_${payload}`,
     };
 }

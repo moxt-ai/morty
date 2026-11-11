@@ -42,11 +42,10 @@ export function pendingExecutionContext(
             };
         }
         case "loading":
-        case "waiting-agent":
         case "switching":
             return { ...base, agent: "Loading…", directoryName: "Loading…", directoryPlaceholder: "Loading…" };
         case "failed":
-        case "waiting-runtime":
+        case "unreachable":
             return base;
     }
 }

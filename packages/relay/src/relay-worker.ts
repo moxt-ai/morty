@@ -5,10 +5,8 @@ import {
     type Identifier,
     isDirectoryPath,
     isIdentifier,
-    isSessionAccessHolder,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
-    type SessionAccessHolder,
     type TurnState,
 } from "@morty-build/client/protocol";
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
@@ -47,13 +45,9 @@ import {
     type ComputerWorkerRoutingBindings,
     routeComputerDurableObject,
 } from "./gateway/computer-durable-object-routing.ts";
-import {
-    ComputerDurableObjectSessionAccessDirectory,
-    ComputerDurableObjectStores,
-} from "./gateway/computer-durable-object-store.ts";
+import { ComputerDurableObjectStores } from "./gateway/computer-durable-object-store.ts";
 import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
 import { createProjectApplication } from "./http/project-routes.ts";
-import { createRelayControlApplication } from "./http/relay-routes.ts";
 import { authorizeSessionContentUpload } from "./http/session-content-upload.ts";
 import { ComputerManagementStorageDirectory } from "./infra/computer-management-storage-directory.ts";
 import { createBrowserCors } from "./middleware/browser-cors.ts";
@@ -61,7 +55,6 @@ import {
     initializeSessionAccessTargetMiddleware,
     sessionAccessTargetMiddleware,
 } from "./middleware/session-access-target.ts";
-import { AppCredentialAuthenticationService } from "./service/app-credential-authentication-service.ts";
 import { ComputerManagementService } from "./service/computer-management-service.ts";
 import {
     type SessionAccess,
@@ -69,11 +62,9 @@ import {
     type SessionAccessTarget,
 } from "./service/session-access-service.ts";
 import { ComputerManagementStorage } from "./storage/computer-management-storage.ts";
-import { type RelayStorageBindings, RelayStorageRegistry } from "./storage/relay-storage-registry.ts";
 
-export interface RelayRelayBindings extends RelayStorageBindings, ComputerWorkerRoutingBindings {
+export interface RelayRelayBindings extends ComputerWorkerRoutingBindings {
     readonly RELAY_DIRECTORY_DATABASE: D1Database;
-    readonly R2_BUCKET_APAC: R2Bucket;
     /** Worker secret from which the Relay derives the keys that sign Session credentials. */
     readonly MORTY_SESSION_SIGNING_SECRET: string;
 }
@@ -90,8 +81,6 @@ type RelayApplicationBindings = RelayRelayBindings | ComputerRelayRelayBindings 
 
 export interface ConfiguredRelayRelayBindings extends RelayRelayBindings, RelayAuthenticationEnvironment {
     readonly APP_ORIGIN?: string;
-    readonly MORTY_RELAY_URL?: string;
-    readonly MORTY_SERVICE_SECRET?: string;
 }
 
 // A request a Session credential authorizes is routed to its ComputerRelay before any Session route runs.
@@ -109,7 +98,6 @@ function nativeTarget(request: { readonly param: (name: string) => string | unde
     };
 }
 
-/** Session operations on the Runtime a Session credential authorized. */
 /** Session operations through a Session credential, each authorized for its own permission on that Session. */
 function authorizedSessionControl(
     context: {
@@ -153,7 +141,6 @@ function submittedTurnState(state: TurnAdmission["state"], answeredAt: string): 
 
 const projectApplication = createMortyApplication();
 const scopedProjectApplication = createProjectApplication();
-const controlApplication = createRelayControlApplication();
 const RELAY_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 const sessionIdentifier = v.custom<Identifier>(isIdentifier);
 
@@ -161,7 +148,6 @@ type DispatchEnvironment = {
     readonly Bindings: RelayApplicationBindings;
     readonly Variables: {
         readonly control: ComputerManagementService;
-        readonly appAuthentication: AppCredentialAuthenticationService;
         readonly stores: ComputerDurableObjectStores;
         readonly projects: ComputerManagementStorageDirectory;
         readonly identityStores: readonly ProjectStore[];
@@ -183,39 +169,21 @@ function optionalExecutionContext(context: Pick<Context, "executionCtx">): Conte
 export function createRelayAccessServices(environment: RelayApplicationBindings) {
     const execution =
         "MORTY_COMPUTER_STORE" in environment
-            ? {
-                  computerId: environment.MORTY_COMPUTER_ID,
-                  store: environment.MORTY_COMPUTER_STORE,
-                  access: environment.MORTY_COMPUTER_SESSION_ACCESS,
-              }
+            ? { computerId: environment.MORTY_COMPUTER_ID, store: environment.MORTY_COMPUTER_STORE }
             : null;
     const stores = new ComputerDurableObjectStores(environment.COMPUTER_RELAY, execution);
-    const computerSessionAccess = new ComputerDurableObjectSessionAccessDirectory(
-        environment.COMPUTER_RELAY,
-        execution,
-    );
     const identityStores = execution === null ? [] : [execution.store];
     const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
-    const storageRegistry = new RelayStorageRegistry(environment);
-    const appAuthentication = new AppCredentialAuthenticationService(controlStorage);
-    const control = new ComputerManagementService(
-        controlStorage,
-        storageRegistry,
-        appAuthentication,
-        computerSessionAccess,
-    );
+    const control = new ComputerManagementService(controlStorage);
     return {
         stores,
         identityStores,
         control,
-        appAuthentication,
         sessionAccess: new SessionAccessService(
-            appAuthentication,
             control,
-            computerSessionAccess,
             new SessionAccessSigner(environment.MORTY_SESSION_SIGNING_SECRET),
         ),
-        projects: new ComputerManagementStorageDirectory(storageRegistry, controlStorage),
+        projects: new ComputerManagementStorageDirectory(controlStorage),
     };
 }
 
@@ -223,78 +191,21 @@ export function createRelayApplication(
     authentication: RelayAuthenticationConfiguration,
     gateways: (environment: RelayApplicationBindings) => WorkerRuntimeGateways,
 ): Hono<{ Bindings: RelayApplicationBindings }> {
-    const controlHandler: Handler<DispatchEnvironment> = (context) =>
-        controlApplication.fetch(context.req.raw, {
-            control: context.var.control,
-            appAuthentication: context.var.appAuthentication,
-            allowedOrigins: authentication.allowedOrigins,
-        });
     const projectHandler: Handler<DispatchEnvironment> = (context) =>
         scopedProjectApplication.fetch(context.req.raw, {
             relay: context.var.relay,
             allowedOrigins: authentication.allowedOrigins,
         });
 
-    const controlRoutes = new Hono<DispatchEnvironment>()
-        .all("/health", controlHandler)
-        .all("/capabilities", controlHandler)
-        .route(
-            "/v1",
-            new Hono<DispatchEnvironment>()
-                .post("/machine-accounts", controlHandler)
-                .all("/relay/*", controlHandler)
-                .route(
-                    "/computers/:computerId",
-                    new Hono<DispatchEnvironment>()
-                        .all("/storage-placement", controlHandler)
-                        .all("/storage-placement/", controlHandler)
-                        .all("/audit-events", controlHandler)
-                        .all("/audit-events/", controlHandler)
-                        .all("/harnesses/*", controlHandler),
-                ),
-        );
     const sessionRoutes = new Hono<DispatchEnvironment>()
         .use(
             "*",
             createBrowserCors(
                 ["GET", "POST", "PUT"],
-                [
-                    "authorization",
-                    "content-type",
-                    "x-morty-byte-length",
-                    "x-morty-content-kind",
-                    "x-morty-file-name",
-                    "x-morty-oidc-provider",
-                ],
+                ["authorization", "content-type", "x-morty-byte-length", "x-morty-content-kind", "x-morty-file-name"],
                 authentication.allowedOrigins,
             ),
         )
-        .post("/:sessionId/access-credentials", sessionAccessTargetMiddleware, async (context) => {
-            const authorization = context.req.header("authorization") ?? "";
-            const credential = authorization.match(/^Bearer ([^\s]+)$/u)?.[1];
-            if (credential === undefined) {
-                return context.json(
-                    { error: { code: "project_credential_required", message: "An App credential is required" } },
-                    401,
-                );
-            }
-            const input = decodeSessionRequest(
-                v.strictObject({
-                    expiresInSeconds: v.pipe(v.number(), v.safeInteger(), v.minValue(60), v.maxValue(900)),
-                    holder: v.custom<SessionAccessHolder>(isSessionAccessHolder),
-                }),
-                await context.req.json(),
-            );
-            const access = await context.var.sessionAccess.issue(
-                context.var.sessionAccessTarget,
-                credential,
-                input.expiresInSeconds,
-                input.holder,
-                context.req.raw.signal,
-            );
-            context.header("Cache-Control", "no-store");
-            return context.json(access, 201);
-        })
         .get("/:sessionId/live-event-subscription-target", sessionAccessTargetMiddleware, async (context) => {
             const authorization = context.req.header("authorization") ?? "";
             const credential = authorization.match(/^Bearer ([^\s]+)$/u)?.[1];
@@ -315,7 +226,6 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
-            // The public shape of this answer, not the internal access record: it names no AppCredential.
             return context.json({
                 expiresAtEpochMilliseconds: target.expiresAtEpochMilliseconds,
                 issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
@@ -337,14 +247,17 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const eventLimit = v.parse(
+            const eventLimit = decodeSessionRequest(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
                 Number(context.req.query("eventLimit") ?? "50"),
             );
             const control = authorizedSessionControl(context, access, sessionTarget);
-            const directory = v.parse(v.custom<string>(isDirectoryPath), context.req.query("directory"));
+            const directory = decodeSessionRequest(v.custom<string>(isDirectoryPath), context.req.query("directory"));
             const events = await control.previewEvents(directory, {
-                cursor: context.req.query("cursor") ?? null,
+                cursor: decodeSessionRequest(
+                    v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
+                    context.req.query("cursor") ?? null,
+                ),
                 eventLimit,
             });
             context.header("Cache-Control", "no-store");
@@ -386,7 +299,7 @@ export function createRelayApplication(
             const commandId = context.req.query("commandId");
             const control = authorizedSessionControl(context, access, sessionTarget);
             const result = await control.activeTurn(
-                commandId === undefined ? undefined : v.parse(sessionIdentifier, commandId),
+                commandId === undefined ? undefined : decodeSessionRequest(sessionIdentifier, commandId),
             );
             context.header("Cache-Control", "no-store");
             return context.json(result);
@@ -437,7 +350,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
+            const turnId = decodeSessionRequest(sessionIdentifier, context.req.param("turnId"));
             decodeSessionRequest(turnSteerRequest, await context.req.json());
             const control = authorizedSessionControl(context, access, sessionTarget);
             await control.steerTurn(turnId);
@@ -458,8 +371,11 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const path = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(4096)), context.req.query("path"));
-            const maxBytes = v.parse(
+            const path = decodeSessionRequest(
+                v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
+                context.req.query("path"),
+            );
+            const maxBytes = decodeSessionRequest(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(128 * 1024 * 1024)),
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
@@ -483,20 +399,26 @@ export function createRelayApplication(
                 return authorized;
             }
             const { access, target, contentKey } = authorized;
-            const byteLength = v.parse(
+            const byteLength = decodeSessionRequest(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(CONTENT_WRITE_MAX_BYTES)),
                 Number(context.req.header("x-morty-byte-length") ?? ""),
             );
-            const contentKind = v.parse(v.picklist(["image", "resource"]), context.req.header("x-morty-content-kind"));
-            const mediaType = v.parse(
+            const contentKind = decodeSessionRequest(
+                v.picklist(["image", "resource"]),
+                context.req.header("x-morty-content-kind"),
+            );
+            const mediaType = decodeSessionRequest(
                 v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
                 context.req.header("content-type"),
             );
-            const encodedName = v.parse(
+            const encodedName = decodeSessionRequest(
                 v.pipe(v.string(), v.minLength(1), v.maxLength(1_500)),
                 context.req.header("x-morty-file-name"),
             );
-            const uri = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)), context.req.query("uri"));
+            const uri = decodeSessionRequest(
+                v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)),
+                context.req.query("uri"),
+            );
             const body = context.req.raw.body;
             if (body === null) {
                 throw new PairingDirectoryError("invalid_request", "The content body is required");
@@ -507,7 +429,7 @@ export function createRelayApplication(
             } catch (cause) {
                 throw new PairingDirectoryError("invalid_request", "The content name is invalid", { cause });
             }
-            name = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
+            name = decodeSessionRequest(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
             const available = await sessionOperations(context).writeProjectSessionContent(
                 new ComputerScope(access.computerId),
                 decodeContentWriteCommand(
@@ -589,7 +511,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
+            const turnId = decodeSessionRequest(sessionIdentifier, context.req.param("turnId"));
             const control = authorizedSessionControl(context, access, sessionTarget);
             await control.withdrawTurn(turnId);
             context.header("Cache-Control", "no-store");
@@ -609,7 +531,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const turnId = v.parse(sessionIdentifier, context.req.param("turnId"));
+            const turnId = decodeSessionRequest(sessionIdentifier, context.req.param("turnId"));
             const control = authorizedSessionControl(context, access, sessionTarget);
             const { stopReason } = await control.cancelTurn(turnId);
             context.header("Cache-Control", "no-store");
@@ -629,7 +551,7 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
             const sessionTarget = nativeTarget(context.req);
-            const interactionId = v.parse(sessionIdentifier, context.req.param("interactionId"));
+            const interactionId = decodeSessionRequest(sessionIdentifier, context.req.param("interactionId"));
             const body = decodeSessionRequest(interactionResponseRequest, await context.req.json());
             const control = authorizedSessionControl(context, access, sessionTarget);
             await control.respond(interactionId, body);
@@ -651,8 +573,11 @@ export function createRelayApplication(
             );
             if (context.req.header("upgrade")?.toLowerCase() !== "websocket") {
                 const events = await authorizedSessionControl(context, target, nativeTarget(context.req)).liveEvents({
-                    cursor: context.req.query("cursor") ?? null,
-                    eventLimit: v.parse(
+                    cursor: decodeSessionRequest(
+                        v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
+                        context.req.query("cursor") ?? null,
+                    ),
+                    eventLimit: decodeSessionRequest(
                         v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
                         Number(context.req.query("limit") ?? "50"),
                     ),
@@ -665,7 +590,6 @@ export function createRelayApplication(
 
                 nativeTarget(context.req),
                 {
-                    credentialId: target.credentialId,
                     signingKeyId: target.signingKeyId,
                     grant: target.grant,
                     expiresAt: target.expiresAtEpochMilliseconds,
@@ -705,17 +629,14 @@ export function createRelayApplication(
         })
         .use("*", async (context, next) => {
             const environment = context.env;
-            const { stores, identityStores, control, appAuthentication, sessionAccess, projects } =
-                createRelayAccessServices(environment);
+            const { stores, identityStores, control, sessionAccess, projects } = createRelayAccessServices(environment);
             context.set("control", control);
-            context.set("appAuthentication", appAuthentication);
             context.set("sessionAccess", sessionAccess);
             context.set("stores", stores);
             context.set("projects", projects);
             context.set("identityStores", identityStores);
             await next();
         })
-        .route(`${MORTY_API_PREFIX}/dashboard`, controlRoutes)
         .use("*", initializeSessionAccessTargetMiddleware)
         .use("*", async (context, next) => {
             const environment = context.env;
@@ -795,8 +716,4 @@ export function createRelayWorker() {
     };
 }
 
-const worker = createRelayWorker();
-
-export { relayAuthenticationFromEnvironment } from "./composition/relay-authentication-environment.ts";
 export { RelayAuthenticationConfiguration } from "./entity/computer-management.ts";
-export default worker;

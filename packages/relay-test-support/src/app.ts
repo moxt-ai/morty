@@ -2,7 +2,6 @@ import { createRelayApplication, RelayAuthenticationConfiguration, type RelayRel
 import type { WorkerRuntimeGateways } from "@morty-build/relay-core";
 import { type Env, Hono } from "hono";
 
-export { createRelayGateways } from "@morty-build/relay";
 export type { RelayRelayBindings };
 
 /** Bind request defaults in the test adapter, leaving the production app untouched. */

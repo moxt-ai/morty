@@ -5,7 +5,7 @@ import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
-import { draftHarnessSelection } from "../../view-models/chat/draft-controls-store.ts";
+import { draftHarnessSelection, draftShownOptions } from "../../view-models/chat/draft-controls-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import { runtimeDisconnectedMessage } from "../../view-models/format-error.ts";
 
@@ -36,11 +36,11 @@ export function DraftChatControls({
     const retry = () => {
         workspace.retryDraftControls();
     };
-    if (settings.kind === "loading" || settings.kind === "waiting-agent") {
+    if (settings.kind === "loading") {
         return <DraftChatControlsSkeleton />;
     }
-    if (settings.kind === "failed" || settings.kind === "waiting-runtime") {
-        const message = settings.kind === "waiting-runtime" ? runtimeDisconnectedMessage : settings.message;
+    if (settings.kind === "failed" || settings.kind === "unreachable") {
+        const message = settings.kind === "unreachable" ? runtimeDisconnectedMessage : settings.message;
         return (
             <div className="flex min-w-0 items-center gap-1">
                 <span className="sr-only" role="alert">
@@ -80,7 +80,8 @@ export function DraftChatControls({
     const switching = settings.kind === "switching";
     const settingsLoading = switching || settings.kind === "refreshing";
     const harness = draftHarnessSelection(settings, runtimeConfiguration);
-    const options = settings.kind === "ready" ? settings.options : [];
+    // Settings kept on screen while new ones load cannot be changed.
+    const options = draftShownOptions(settings);
     const model = options.find((option) => option.category === "model" && option.type !== "boolean");
     return (
         <div className="flex min-w-0 items-center gap-1">
@@ -101,7 +102,7 @@ export function DraftChatControls({
                         option.type === "boolean"
                             ? {
                                   checked: option.booleanValue,
-                                  disabled,
+                                  disabled: disabled || settingsLoading,
                                   id: option.id,
                                   kind: "boolean" as const,
                                   label: option.name,
@@ -109,7 +110,7 @@ export function DraftChatControls({
                                   testId: dataTestId.agentSetting(option.id),
                               }
                             : {
-                                  disabled,
+                                  disabled: disabled || settingsLoading,
                                   id: option.id,
                                   kind: "select" as const,
                                   label: option.name,

@@ -1,26 +1,50 @@
 import { ComputerRelay as ProductionComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
-import relay, { type ConfiguredRelayRelayBindings } from "../../../relay/src/worker.ts";
-import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
+import type { ConfiguredRelayRelayBindings } from "../../../relay/src/relay-worker.ts";
+import { requestTestRuntimeControl } from "../../../relay-test-support/src/backend-fixture.ts";
 import chat from "../../src/index.ts";
-import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
-import { managedBot } from "../../src/schema/project-do/index.ts";
 
-// Both public Workers reach the same production ComputerRelay namespace, as deployed.
+// The public Worker reaches the production ComputerRelay namespace.
 export default {
-    fetch: (request: Request, env: ConfiguredRelayRelayBindings) =>
-        /^\/morty\/api\/(?:v1|dashboard|channels)\//u.test(new URL(request.url).pathname)
-            ? relay.fetch(request, env)
-            : chat.fetch(request, env),
+    fetch: async (request: Request, env: ConfiguredRelayRelayBindings) => {
+        const url = new URL(request.url);
+        const target = url.pathname.match(
+            /^\/__test\/computers\/([^/]+)\/harnesses\/([^/]+)\/sessions\/([^/]+)\/close$/u,
+        );
+        if (target !== null && target[1] !== undefined && target[2] !== undefined && target[3] !== undefined) {
+            const result = await requestTestRuntimeControl(
+                env,
+                target[1],
+                {
+                    kind: "session.close",
+                    requestId: crypto.randomUUID(),
+                    target: { harness: target[2], sessionId: target[3] },
+                },
+                request.signal,
+            );
+            return Response.json(result);
+        }
+        return chat.fetch(request, env);
+    },
 };
 
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
-        if (request.url === "https://computer.internal/incomplete-bootstrap" && request.method === "DELETE") {
-            // Reconstruct an interrupted bootstrap: the credential committed, but the mapping and Machine did not.
-            const database = requireIdentityDatabase(new DurableObjectDatabase(this.ctx.storage));
-            await database.delete(managedBot).run();
-            return new Response(null, { status: 204 });
+        if (request.url === "https://computer.internal/revoked-runtime" && request.method === "POST") {
+            const computerId = await request.text();
+            await this.revokeRuntime(computerId, {
+                computerId,
+                now: Date.now(),
+                actorKind: "system",
+                actorId: computerId,
+                auditId: `test-revocation-${crypto.randomUUID()}`,
+            });
+            return await super.fetch(
+                new Request(`https://runtime.internal/computers/${computerId}/runtime/revoke`, {
+                    method: "DELETE",
+                    signal: request.signal,
+                }),
+            );
         }
         if (request.url === "https://computer.internal/aged-links" && request.method === "POST") {
             // Reconstruct links whose device term has passed: the Durable Object's clock cannot be moved forward.

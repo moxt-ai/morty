@@ -9,7 +9,7 @@ import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
 const identifier = v.custom<Identifier>(isIdentifier);
 
 /** A Turn submission apart from its attachments, which an API may state in more than one representation. */
-export const turnSubmissionEntries = {
+const turnSubmissionEntries = {
     content: v.pipe(v.string(), v.maxLength(100_000)),
     disposition: v.optional(v.picklist(["append", "steer"]), "append"),
     idempotencyKey: identifier,
@@ -18,7 +18,7 @@ export const turnSubmissionEntries = {
     targetCommandId: v.optional(identifier),
 };
 
-export const turnAttachmentsSchema = v.pipe(v.array(v.unknown()), v.maxLength(16));
+const turnAttachmentsSchema = v.pipe(v.array(v.unknown()), v.maxLength(16));
 
 export const turnSubmissionRequest = v.strictObject({ ...turnSubmissionEntries, attachments: turnAttachmentsSchema });
 

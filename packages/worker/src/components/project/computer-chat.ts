@@ -1,6 +1,7 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import { computerApplication as application } from "../../computer-application.ts";
+import type { ComputerBackendService } from "../../../../relay/src/service/computer-backend-service.ts";
+import { createComputerApplication } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
@@ -8,6 +9,7 @@ import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
 import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
 import { relayIdentifier } from "../management/entity/computer-management.ts";
+import { readComputerOwner } from "../management/service/account-provisioning-service.ts";
 import { holdsAccess } from "../management/service/authentication-service.ts";
 import { IdentityStorage } from "../management/storage/identity-storage.ts";
 
@@ -19,28 +21,36 @@ export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
     readonly #endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>;
-    /** `endAccess` commits an identity change that may end access, together with closing what it ended. */
+    readonly #runtime: (computerId: string) => ComputerBackendService;
+    /** Commits access changes with their connection checks inside the owning object. */
     constructor(
         storage: DurableObjectStorage,
         owns: (id: string) => boolean,
         endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>,
+        runtime: (computerId: string) => ComputerBackendService,
     ) {
         this.#storage = storage;
         this.#owns = owns;
         this.#endAccess = endAccess;
+        this.#runtime = runtime;
     }
 
     /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
     readonly holdsAccess = async (
         computerId: string,
         holder: SessionAccessHolder,
+        env: CloudBindings,
         signal: AbortSignal,
     ): Promise<boolean> => {
         if (!this.#owns(computerId)) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
         this.#database ??= new DurableObjectDatabase(this.#storage);
-        return await holdsAccess(new IdentityStorage(this.#database, computerId), holder, signal);
+        return await holdsAccess(
+            new IdentityStorage(this.#database, computerId, await readComputerOwner(env, computerId, signal)),
+            holder,
+            signal,
+        );
     };
 
     #database: DurableObjectDatabase | undefined;
@@ -63,21 +73,24 @@ export class ComputerChat {
         if (!this.#owns(validatedComputerId) || bound !== validatedComputerId) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await application.fetch(request, this.#bindings(validatedComputerId, env));
+        return await createComputerApplication(this.#runtime(validatedComputerId)).fetch(
+            request,
+            await this.#bindings(validatedComputerId, env, request.signal),
+        );
     }
 
     readonly #bootstrap = async (request: Request, env: CloudBindings): Promise<Response> => {
         const input: unknown = await request.json();
         const parsed = v.parse(computerBootstrap, input);
         await this.#bindComputer(parsed.computer.computerId);
-        return await application.fetch(
+        return await createComputerApplication(this.#runtime(parsed.computer.computerId)).fetch(
             new Request(request.url, {
                 body: JSON.stringify(parsed),
                 headers: { "content-type": "application/json" },
                 method: "POST",
                 signal: request.signal,
             }),
-            this.#bindings(parsed.computer.computerId, env),
+            await this.#bindings(parsed.computer.computerId, env, request.signal),
         );
     };
 
@@ -121,11 +134,16 @@ export class ComputerChat {
         }
     };
 
-    readonly #bindings = (computerId: string, env: CloudBindings): CloudBindings => {
+    readonly #bindings = async (
+        computerId: string,
+        env: CloudBindings,
+        signal: AbortSignal,
+    ): Promise<CloudBindings> => {
         this.#database ??= new DurableObjectDatabase(this.#storage);
         return {
             ...env,
             CHAT_COMPUTER_ID: computerId,
+            CHAT_OWNER_USER_ID: await readComputerOwner(env, computerId, signal),
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
             CHAT_END_ACCESS: this.#endAccess,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,

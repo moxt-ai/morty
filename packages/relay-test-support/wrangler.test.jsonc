@@ -1,0 +1,50 @@
+{
+    "$schema": "../../node_modules/wrangler/config-schema.json",
+    "name": "morty-test",
+    "main": "../worker/src/index.ts",
+    "compatibility_date": "2026-09-07",
+    "compatibility_flags": ["enable_request_signal", "nodejs_compat_do_not_populate_process_env"],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "COMPUTER_RELAY",
+                "class_name": "ComputerRelay"
+            }
+        ]
+    },
+    "migrations": [
+        {
+            "tag": "test-initial",
+            "new_sqlite_classes": ["ComputerRelay"]
+        }
+    ],
+    "d1_databases": [
+        {
+            "binding": "RELAY_DIRECTORY_DATABASE",
+            "database_name": "morty-test-directory",
+            "database_id": "00000000-0000-0000-0000-000000000102",
+            "migrations_dir": "../relay/migrations/d1"
+        }
+    ],
+    "r2_buckets": [
+        {
+            "binding": "CHAT_ATTACHMENTS_APAC",
+            "bucket_name": "morty-test-attachments"
+        }
+    ],
+    "vars": {
+        "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
+        "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret",
+        "APP_ORIGIN": "https://relay.test"
+    },
+    "ratelimits": [
+        {
+            "name": "ANONYMOUS_CREATION_LIMITER",
+            "namespace_id": "103001",
+            "simple": {
+                "limit": 1000,
+                "period": 60
+            }
+        }
+    ]
+}

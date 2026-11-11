@@ -6,16 +6,6 @@ describe("Runtime upgrade wire contract", () => {
         const request = { kind: "runtime.upgrade.request", requestId: "upgrade_1", version: "0.0.228" };
         expect(() => decodeServiceToDaemonMessage(JSON.stringify(request))).toThrow();
     });
-    it.each(["latest", "../evil", "https://example.com/a.tgz", "1.2.3 --script=evil", "^1.2.3"])(
-        "Given an unsafe target %s, When requested, Then it is rejected",
-        (version) => {
-            expect(() =>
-                decodeServiceToDaemonMessage(
-                    JSON.stringify({ kind: "runtime.upgrade.request", requestId: "upgrade_1", version }),
-                ),
-            ).toThrow();
-        },
-    );
     it("Given a rolled back daemon, When it reports failure, Then the service receives a correlated error and cooldown", () => {
         const result = {
             kind: "runtime.upgrade.result",

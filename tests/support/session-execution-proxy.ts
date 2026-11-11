@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, request } from "node:http";
-import { decodeNativeSessionResult } from "@morty-build/client/protocol";
+import { decodeNativeSessionResult, RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 
 /** Forwards real traffic unchanged, with controllable ordering at the Relay transport boundary. */
@@ -66,7 +66,17 @@ export async function createSessionExecutionProxy(upstream: string) {
             ...(incoming.headers.origin === undefined ? {} : { origin: incoming.headers.origin }),
             ...(incoming.headers.authorization === undefined
                 ? {}
-                : { headers: { authorization: incoming.headers.authorization } }),
+                : {
+                      headers: {
+                          authorization: incoming.headers.authorization,
+                          ...(typeof incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === "string"
+                              ? {
+                                    [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]:
+                                        incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER],
+                                }
+                              : {}),
+                      },
+                  }),
         });
         sockets.add(client);
         sockets.add(remote);
@@ -82,7 +92,7 @@ export async function createSessionExecutionProxy(upstream: string) {
                     pending.push(() => remote.send(data, { binary }));
                 }
             };
-            const frame: unknown = binary ? null : JSON.parse(data.toString());
+            const frame: unknown = binary ? null : jsonFrame(data.toString());
             const heldReply =
                 typeof frame === "object" &&
                 frame !== null &&
@@ -156,7 +166,7 @@ export async function createSessionExecutionProxy(upstream: string) {
             }
         });
         remote.on("message", (data, binary) => {
-            const frame: unknown = binary ? null : JSON.parse(data.toString());
+            const frame: unknown = binary ? null : jsonFrame(data.toString());
             if (
                 typeof frame === "object" &&
                 frame !== null &&
@@ -346,4 +356,12 @@ export async function createSessionExecutionProxy(upstream: string) {
             await new Promise<void>((resolve) => server.close(() => resolve()));
         },
     };
+}
+
+function jsonFrame(value: string): unknown {
+    try {
+        return JSON.parse(value);
+    } catch {
+        return null;
+    }
 }

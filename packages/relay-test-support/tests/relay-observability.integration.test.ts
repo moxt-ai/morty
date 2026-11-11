@@ -12,7 +12,6 @@ import {
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { seedMortyService } from "../src/service-fixture.ts";
 
 const logs: Record<string, unknown>[] = [];
 let runtime: Miniflare;
@@ -22,6 +21,7 @@ beforeAll(async () => {
         entryPoints: [fileURLToPath(new URL("./fixtures/relay-observability-worker.ts", import.meta.url))],
         bundle: true,
         external: ["cloudflare:workers"],
+        loader: { ".txt": "text", ".sql": "text" },
         format: "esm",
         platform: "browser",
         write: false,
@@ -47,8 +47,10 @@ beforeAll(async () => {
                 UNAVAILABLE_PROJECT: { className: "UnavailableProject", useSQLite: true },
             },
             d1Databases: ["RELAY_DIRECTORY_DATABASE"],
-            r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
+            compatibilityFlags: ["nodejs_compat"],
+            ratelimits: { ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1000, period: 60 } } },
             bindings: {
+                APP_ORIGIN: "https://relay.test",
                 MORTY_ALLOWED_ORIGINS: '["*"]',
                 MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
             },
@@ -111,33 +113,24 @@ async function api(
     return record(value);
 }
 
-async function provisionApp() {
-    const app = await seedMortyService(await runtime.getD1Database("RELAY_DIRECTORY_DATABASE"));
-    return { appId: app.appId, appCredential: app.credential };
-}
-
 async function provisionProject() {
-    const app = await provisionApp();
-    const project = await api(
-        `/dashboard/v1/machine-accounts`,
+    const owner = await api(
+        "/identity/anonymous-users",
         {
             method: "POST",
-            headers: { authorization: `Bearer ${app.appCredential}` },
             body: JSON.stringify({
-                displayName: "Logging E2E",
-                idempotencyKey: "logging-project",
-                locationHint: "apac",
+                creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),
             }),
         },
         201,
     );
-    return { ...app, computerId: text(project, "computerId") };
+    return { computerId: text(owner, "computerId"), appCredential: text(owner, "token") };
 }
 
 async function pairRuntime() {
     const { computerId, appCredential } = await provisionProject();
     const pairing = await api(
-        `/v1/computers/${computerId}/pairing`,
+        `/computers/${computerId}/management/pairing`,
         {
             method: "POST",
             headers: { authorization: `Bearer ${appCredential}` },
@@ -264,9 +257,9 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
     const start = logs.length;
     const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
     await api(
-        `/v1/computers/${computerId}/runtimes`,
+        `/computers/${computerId}/management/computer`,
         { headers: { "x-test-project-failure": "1", "cf-ray": "project-failure-ray" } },
-        500,
+        503,
     );
     await expect
         .poll(() => logs.slice(start).find((log) => log["event"] === "project_relay_request_failed"))
@@ -284,38 +277,6 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
             }),
         }),
     );
-});
-
-// @no-uc: Technical regression; database RPC overloads must identify their target without logging SQL or bound values.
-it("identifies a Project database overload through the public project creation API", async () => {
-    const app = await provisionApp();
-    const start = logs.length;
-    await api(
-        `/dashboard/v1/machine-accounts`,
-        {
-            method: "POST",
-            headers: { authorization: `Bearer ${app.appCredential}`, "x-test-project-failure": "1" },
-            body: JSON.stringify({
-                displayName: "PROJECT_BODY_CANARY",
-                idempotencyKey: "failed-project",
-                locationHint: "apac",
-            }),
-        },
-        500,
-    );
-    await expect
-        .poll(() => logs.slice(start).find((log) => log["event"] === "project_database_request_failed"))
-        .toBeDefined();
-    const log = logs.slice(start).find((log) => log["event"] === "project_database_request_failed");
-    expect(log).toMatchObject({
-        event: "project_database_request_failed",
-        durableObjectClass: "ComputerRelay",
-        durableObjectId: expect.any(String),
-        computerId: expect.any(String),
-        operation: expect.any(String),
-        err: expect.objectContaining({ overloaded: true, message: expect.stringContaining("Project DO overloaded") }),
-    });
-    expect(JSON.stringify(log)).not.toMatch(/PROJECT_BODY_CANARY|INSERT INTO|SELECT|values|authorization/);
 });
 
 // @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.

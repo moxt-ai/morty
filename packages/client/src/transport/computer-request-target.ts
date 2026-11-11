@@ -20,9 +20,6 @@ export function computerRequestTarget(
     if (parts.length === 2 && parts[1] === "transport") {
         return { computerId, kind: "transport" };
     }
-    if (parts[1] === "daemon" && parts.length > 2) {
-        return { computerId, kind: "operation" };
-    }
     if (parts[1] !== "harnesses" || parts[3] !== "sessions" || parts.length < 6 || parts[5] === "access-credentials") {
         return null;
     }
