@@ -68,7 +68,7 @@ async function request(path: string, status: number, token?: string, body?: obje
 
 const owner = v.parse(
     v.object({ token: v.string(), computerId: v.string() }),
-    await request("/morty/api/identity/anonymous-users", 201, undefined, {
+    await request("/morty/api/computers", 201, undefined, {
         creationKey: randomBytes(32).toString("base64url"),
     }),
 );

@@ -73,7 +73,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         );
         await completed.promise;
 
-        const identity = await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+        const identity = await jsonRequest(stack.chatOrigin, "/morty/api/computers", {
             body: { creationKey: anonymousCreationKey() },
             signal,
         });

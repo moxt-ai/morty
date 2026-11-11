@@ -288,10 +288,6 @@ function sanitizeCommandOutput(output, environment, args) {
     return sanitized.replace(/Bearer\s+[^\s"']+/giu, "Bearer [REDACTED]");
 }
 
-function wrangler(args) {
-    return run(WRANGLER, args);
-}
-
 async function startProcess(name, args, logPath, command = WRANGLER, env = {}, cwd = REPO_ROOT) {
     const launch = await localLaunch(command, args);
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
@@ -447,19 +443,6 @@ async function prepare(options) {
 
     try {
         await ensureMortyDependencies();
-        log("applying Relay migrations");
-        await wrangler([
-            "d1",
-            "migrations",
-            "apply",
-            "RELAY_DIRECTORY_DATABASE",
-            "--local",
-            "--persist-to",
-            chatPersist,
-            "--config",
-            "wrangler.jsonc",
-        ]);
-
         if (options.build !== false) {
             log("building Chat Worker");
             await run("pnpm", ["build"]);

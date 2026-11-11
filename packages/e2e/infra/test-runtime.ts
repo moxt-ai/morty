@@ -47,7 +47,7 @@ export async function createTestRuntime(
 
         const openChat = async () => {
             const identity = object(
-                await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+                await jsonRequest(stack.chatOrigin, "/morty/api/computers", {
                     body: { creationKey: anonymousCreationKey() },
                     signal: journey.signal,
                 }),
@@ -143,7 +143,7 @@ export async function createTestRuntime(
             connectUnrelatedRuntime: async () => {
                 const unrelated = new ChatApi(stack.chatOrigin, journey.signal);
                 await unrelated.useBrowserIdentity(
-                    await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+                    await jsonRequest(stack.chatOrigin, "/morty/api/computers", {
                         body: { creationKey: anonymousCreationKey() },
                         signal: journey.signal,
                     }),

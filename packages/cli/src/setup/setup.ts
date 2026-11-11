@@ -80,7 +80,7 @@ interface IssuedIdentity {
     readonly computerId: string;
 }
 
-/** The key naming an identity being created, saved before the request so a retried run resumes the same identity. */
+/** The user creation secret, saved before requesting a new computer. */
 interface CreatingIdentity {
     readonly kind: "creating";
     readonly creationKey: string;
@@ -1089,8 +1089,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { kind: "setup", context: { ...location, identity: saved }, project: "reused" };
         }
         progress("identity", "Creating the standalone identity and Computer.");
-        // Save the creation key before creating, so a setup retried after a lost reply resumes the same identity
-        // instead of creating another.
+        // Keep the user creation secret across failures. Until a reply supplies the computerId, each attempt
+        // creates a new computer; once the pair is saved, subsequent runs link that exact pair instead.
         let creating: CreatingIdentity;
         if (saved.kind === "creating") {
             creating = saved;
@@ -1103,7 +1103,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         const created = await send(
             location.base,
-            "/identity/anonymous-users",
+            "/computers",
             {},
             {
                 creationKey: creating.creationKey,
@@ -1119,8 +1119,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function verifyIdentityAndComputer(context: Context): Promise<VerifiedIdentity> {
-        const session = await request(context, "/session");
-        if (identifier(session["userId"]) !== context.identity.userId) {
+        const session = await request(context, "/identity/link", { userId: context.identity.userId });
+        if (
+            identifier(session["userId"]) !== context.identity.userId ||
+            identifier(session["computerId"]) !== context.identity.computerId
+        ) {
             fail("IDENTITY_CONFLICT");
         }
         // The Worker reads the Computer's pairing from the Relay, the same one every browser handoff opens.

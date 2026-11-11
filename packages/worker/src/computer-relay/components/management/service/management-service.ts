@@ -70,9 +70,7 @@ export class ManagementService {
         if (previous === null) {
             throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }
-        // A successor needs its own Relay reference: clientReference is unique per (app, reference)
-        // and the primary reference is already bound to the previous Project. Keying the reference on
-        // the previous Project keeps replacement retries idempotent, as does reusing its placement.
+        // The predecessor fixes the successor's creation identity, so retries reach the same computer.
         const reference = `${userId}.${previous.computerId}`;
         const placement = decodeComputerPlacement(previous.computerId);
         if (placement === null) {

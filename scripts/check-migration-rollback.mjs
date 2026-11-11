@@ -91,6 +91,13 @@ if (production === null) {
     process.exit(0);
 }
 const target = (revision) => JSON.parse(git("show", `${revision}:deployment/targets.json`)).environments.production;
+if (target("HEAD").d1_id === undefined) {
+    if (git("diff", "--name-only", production, "HEAD", "--", migrations).trim() !== "") {
+        throw new Error("Retired D1 migration history must remain unchanged.");
+    }
+    console.log("D1 is no longer bound or migrated; the retained database remains unchanged for recovery.");
+    process.exit(0);
+}
 if (target(production).d1_id !== target("HEAD").d1_id) {
     console.log(
         "The release provisions an independent directory; historical migrations do not change the previous database.",

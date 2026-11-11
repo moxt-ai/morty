@@ -8,7 +8,12 @@ import {
     computerGenerationResponseSchema,
     computerInternalPath,
 } from "../../contracts/computer-relay-http.ts";
-import type { RelayAuditRecord } from "../../contracts/relay/relay-records.ts";
+import {
+    type ProjectRow,
+    ProjectRowSchema,
+    type RelayAuditRecord,
+    RelayComputerScopeRowSchema,
+} from "../../contracts/relay/relay-records.ts";
 import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
 import { RequestDeadline } from "../../http/request-deadline.ts";
 import { DatabaseError } from "../../infra/sql-database.ts";
@@ -71,6 +76,36 @@ export class ComputerRelayGateway {
             const body: unknown = await response.json();
             return v.parse(computerAccessResponseSchema, body).holdsAccess;
         });
+
+    readonly readActiveComputerScope = (computerId: string, signal: AbortSignal) => {
+        if (computerId !== this.#computerId) {
+            throw new DatabaseError("database_unavailable", "Computer storage is unavailable");
+        }
+        return this.#call(signal, async (stub, signal) => {
+            const response = await stub.fetch(this.#request("account", signal));
+            if (response.status !== 200) {
+                await response.body?.cancel();
+                throw new DatabaseError("database_unavailable", "Computer account is unavailable");
+            }
+            const body: unknown = await response.json();
+            return v.parse(v.nullable(RelayComputerScopeRowSchema), body);
+        });
+    };
+
+    readonly createComputerAccount = (project: ProjectRow, signal: AbortSignal) => {
+        if (project.computer_id !== this.#computerId) {
+            throw new DatabaseError("database_unavailable", "Computer storage is unavailable");
+        }
+        return this.#call(signal, async (stub, signal) => {
+            const response = await stub.fetch(this.#request("account", signal, project));
+            if (response.status !== 200) {
+                await response.body?.cancel();
+                throw new DatabaseError("database_unavailable", "Computer account is unavailable");
+            }
+            const body: unknown = await response.json();
+            return v.parse(ProjectRowSchema, body);
+        });
+    };
 
     readonly recordAudit = (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
         this.#call(signal, async (stub, signal) => {

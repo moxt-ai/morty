@@ -8,8 +8,6 @@ function hasMethods(value: unknown, methods: readonly string[]): boolean {
     );
 }
 
-export const d1DatabaseBindingSchema = v.custom<D1Database>((value) => hasMethods(value, ["batch", "prepare"]));
-
 export const durableObjectNamespaceBindingSchema = <T extends Rpc.DurableObjectBranded | undefined = undefined>() =>
     v.custom<DurableObjectNamespace<T>>((value) => hasMethods(value, ["get", "idFromName"]));
 
@@ -18,7 +16,6 @@ export interface CloudBindings {
     readonly ANONYMOUS_CREATION_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
-    readonly RELAY_DIRECTORY_DATABASE?: unknown;
     readonly MORTY_SESSION_SIGNING_SECRET?: unknown;
     readonly MORTY_ALLOWED_ORIGINS?: unknown;
 }

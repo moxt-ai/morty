@@ -67,6 +67,10 @@ type Authorization<Operation extends CredentialOperation> =
 
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
 
+type ComputerLinkResult =
+    | { readonly kind: "linked"; readonly userId: string; readonly computerId: string }
+    | { readonly kind: "unauthenticated" | "revoked" | "mismatch" };
+
 /** Who shared the link a device joined through, as the owner recognizes it. */
 export type DeviceSharer =
     | { readonly kind: "computer" }
@@ -139,6 +143,24 @@ export class AuthenticationService {
     private readonly identities: IdentityStorage;
     readonly #commitAccessEnd: IdentityOperations["commitAccessEnd"];
     readonly #computerId: string;
+
+    readonly linkComputer = async (
+        userId: string,
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<ComputerLinkResult> => {
+        const access = await this.session(token, signal);
+        if (access.kind !== "authenticated") {
+            return access;
+        }
+        if (this.#computerId === null) {
+            return { kind: "unauthenticated" };
+        }
+        if (access.session.userId !== userId) {
+            return { kind: "mismatch" };
+        }
+        return { kind: "linked", userId, computerId: this.#computerId };
+    };
 
     constructor(cx: {
         readonly identity: ComputerIdentity;

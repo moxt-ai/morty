@@ -24,23 +24,35 @@ afterAll(async () => {
 /** Declares its length as HTTP clients do, so the request keeps Cloudflare's location metadata. */
 function creationRequest(headers: Readonly<Record<string, string>> = {}): Request {
     const body = JSON.stringify({ creationKey: anonymousCreationKey() });
-    return new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+    return new Request(`${APP_ORIGIN}/morty/api/computers`, {
         method: "POST",
         headers: { ...headers, "content-type": "application/json", "content-length": String(body.length) },
         body,
     });
 }
 
-test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Project and Computer", async () => {
-    const environment = fixture.environment();
+test("Given no D1 binding, When a user creates computers and later links a known pair after a Worker restart, Then each creation is new and the known pair retains its identity", async () => {
+    let environment = fixture.environment();
     const creationKey = anonymousCreationKey();
-    const create = async () => {
+    class RegionalRequest extends Request {
+        override readonly cf: { readonly continent: string; readonly country: string };
+        constructor(request: Request, continent: string, country: string) {
+            super(request);
+            this.cf = { continent, country };
+        }
+    }
+    const create = async (continent: string, country: string) => {
+        const body = JSON.stringify({ creationKey });
         const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ creationKey }),
-            }),
+            new RegionalRequest(
+                new Request(`${APP_ORIGIN}/morty/api/computers`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json", "content-length": String(body.length) },
+                    body,
+                }),
+                continent,
+                country,
+            ),
             environment,
         );
         expect(response.status).toBe(201);
@@ -54,13 +66,97 @@ test("Given an identity creation whose reply was lost, When the client retries i
         );
     };
 
-    const lost = await create();
-    const retried = await create();
+    const [first, second, third] = await Promise.all([create("AS", "CN"), create("NA", "US"), create("AS", "SG")]);
+    expect(new Set([first.computerId, second.computerId, third.computerId]).size).toBe(3);
+    expect(second.userId).toBe(first.userId);
+    expect(third.userId).toBe(first.userId);
+    expect(first.computerId).toMatch(/^prj_an_01_/u);
+    expect(second.computerId).toMatch(/^prj_wn_01_/u);
+    expect(third.computerId).toMatch(/^prj_as_01_/u);
+    await fixture.reload();
+    environment = fixture.environment();
+    for (const identity of [first, second, third]) {
+        const link = () =>
+            worker.fetch(
+                new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/link`, {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+                    body: JSON.stringify({ userId: identity.userId }),
+                }),
+                environment,
+            );
+        for (const response of [await link(), await link()]) {
+            expect(response.status).toBe(200);
+            expect(await response.json()).toEqual({ userId: identity.userId, computerId: identity.computerId });
+        }
+        expect((await worker.fetch(accountRequest(identity.token, identity.computerId), environment)).status).toBe(200);
+    }
+    const wrongComputerCredential = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${first.computerId}/identity/link`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${second.token}`, "content-type": "application/json" },
+            body: JSON.stringify({ userId: first.userId }),
+        }),
+        environment,
+    );
+    expect(wrongComputerCredential.status).toBe(401);
+    const namespace = environment.COMPUTER_RELAY;
+    const stored = await namespace
+        .get(namespace.idFromName(first.computerId))
+        .fetch(new Request("https://computer.internal/stored-state"));
+    expect(await stored.json()).toMatchObject({ keys: expect.arrayContaining(["computer-account", "computer-id"]) });
+});
 
-    expect(retried).toEqual(lost);
-    const session = await worker.fetch(accountRequest(retried.token, retried.computerId), environment);
-    expect(session.status).toBe(200);
-    expect(await session.json()).toMatchObject({ userId: lost.userId });
+test("Given an existing user-computer pair, When linking omits proof or supplies another user, Then access is denied without changing the valid pair", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const other = await fixture.createAnonymousUser();
+    const link = (userId: string, token?: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/link`, {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+                },
+                body: JSON.stringify({ userId }),
+            }),
+            fixture.environment(),
+        );
+    expect((await link(owner.userId)).status).toBe(401);
+    expect((await link(owner.userId, other.token)).status).toBe(401);
+    expect((await link(other.userId, owner.token)).status).toBe(403);
+    expect((await link(owner.userId, owner.token)).status).toBe(200);
+    const revoke = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/v1/local-credential`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        fixture.environment(),
+    );
+    expect(revoke.status).toBe(204);
+    const revoked = await link(owner.userId, owner.token);
+    expect(revoked.status).toBe(401);
+    expect(await revoked.json()).toMatchObject({ error: { code: "UNAUTHENTICATED", reason: "ACCESS_REVOKED" } });
+});
+
+test("Given the computer creation API, When a client calls the retired anonymous-user endpoint, Then it is not found", async () => {
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ creationKey: anonymousCreationKey() }),
+        }),
+        fixture.environment(),
+    );
+    expect(response.status).toBe(404);
+});
+
+test("Given a computer account, When a caller changes only its placement prefix, Then the alias is not found and the original identity remains usable", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const alias = `${owner.computerId.startsWith("prj_wn_") ? "prj_ap_01_" : "prj_wn_01_"}${owner.computerId.slice(10)}`;
+    const response = await worker.fetch(accountRequest(owner.token, alias), fixture.environment());
+    expect(response.status).toBe(404);
+    expect((await worker.fetch(accountRequest(owner.token, owner.computerId), fixture.environment())).status).toBe(200);
 });
 
 test("Given a device that opened a link and opens the next one, When the reply is lost and the browser repeats the redemption with the same key, Then it gets the same access back and stays one device", async () => {
