@@ -96,12 +96,3 @@ produce a clear, retryable failure rather than an incomplete setup script.
 
 Keep setup intent (identity and Bot configuration) separate from daemon-owned pairing
 and connection state.
-
-The CD token needs R2 object write permission on the existing attachments bucket. CD
-uploads the generated bundle before deploying the Worker. To seed or refresh local
-development R2:
-
-```sh
-pnpm build:setup
-pnpm exec wrangler r2 object put morty-local-apac-attachments/artifacts/setup.mjs --file packages/setup/dist/setup.mjs --local
-```
