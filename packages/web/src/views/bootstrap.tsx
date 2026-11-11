@@ -14,8 +14,9 @@ import { createImageDownloadStore } from "../view-models/chat/image-download-sto
 import { createMortyApplication, type MortyApplication } from "../view-models/morty-application.ts";
 import { MortyApplicationProvider } from "./application/application-context.tsx";
 import { MortyCrashFallback } from "./application/crash-fallback.tsx";
+import { createSignedInRouter } from "./application/router.tsx";
 import { createContinuationRouter } from "./authentication/router.tsx";
-import { createSignedInRouter, SessionApplication } from "./authentication/session-application.tsx";
+import { SessionApplication } from "./authentication/session-application.tsx";
 
 /**
  * The one application assembly shared by production and tests: creates the

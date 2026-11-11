@@ -35,65 +35,6 @@ const sessionConfigurationSelectionSchema = z
 
 export type SessionConfigurationSelection = z.infer<typeof sessionConfigurationSelectionSchema>;
 
-export const AGENT_DEFAULT_EXECUTION_SETTING = "agent_default";
-export const AGENT_PERMISSION_MODE_CONFIG_ID = "permission_mode";
-export const AGENT_PERMISSION_MODES: readonly string[] = Object.freeze([
-    AGENT_DEFAULT_EXECUTION_SETTING,
-    "read-only",
-    "workspace-write",
-    "danger-full-access",
-]);
-
-const agentExecutionConfigurationSchema = z
-    .object({
-        model: sessionConfigurationSelectionSchema,
-        permissionMode: z.string().refine((value) => AGENT_PERMISSION_MODES.includes(value)),
-        reasoningEffort: sessionConfigurationSelectionSchema,
-    })
-    .superRefine((configuration, context) => {
-        if (
-            configuration.model.valueType !== "select" ||
-            configuration.model.booleanValue ||
-            configuration.model.value.length === 0 ||
-            configuration.reasoningEffort.valueType !== "select" ||
-            configuration.reasoningEffort.booleanValue ||
-            configuration.reasoningEffort.value.length === 0
-        ) {
-            context.addIssue({
-                code: "custom",
-                message: "Model and reasoning effort must be explicit select configurations",
-            });
-        }
-        if (
-            configuration.model.configId === configuration.reasoningEffort.configId ||
-            configuration.model.configId === AGENT_PERMISSION_MODE_CONFIG_ID ||
-            configuration.reasoningEffort.configId === AGENT_PERMISSION_MODE_CONFIG_ID
-        ) {
-            context.addIssue({
-                code: "custom",
-                message: "Required execution setting identifiers must differ",
-            });
-        }
-    })
-    .readonly();
-
-export type AgentExecutionConfiguration = z.infer<typeof agentExecutionConfigurationSchema>;
-
-function agentDefaultSelection(configId: string): SessionConfigurationSelection {
-    return Object.freeze({
-        booleanValue: false,
-        configId,
-        value: AGENT_DEFAULT_EXECUTION_SETTING,
-        valueType: "select",
-    });
-}
-
-export const DEFAULT_AGENT_EXECUTION_CONFIGURATION: AgentExecutionConfiguration = Object.freeze({
-    model: agentDefaultSelection("model"),
-    permissionMode: AGENT_DEFAULT_EXECUTION_SETTING,
-    reasoningEffort: agentDefaultSelection("reasoning_effort"),
-});
-
 export const sessionConfigurationSelectionsSchema = z
     .array(sessionConfigurationSelectionSchema)
     .max(100)
@@ -142,12 +83,6 @@ export type SessionConfigUpdatedEvent = z.infer<typeof sessionConfigUpdatedEvent
 
 export const decodeSessionConfigurationSelections = (value: unknown): readonly SessionConfigurationSelection[] =>
     decodeZodValue(value, sessionConfigurationSelectionsSchema);
-
-export const decodeAgentExecutionConfiguration = (value: unknown): AgentExecutionConfiguration =>
-    decodeZodValue(value, agentExecutionConfigurationSchema);
-
-export const decodeSessionConfigOptions = (value: unknown): readonly SessionConfigOption[] =>
-    decodeZodValue(value, sessionConfigOptionsSchema);
 
 export const decodeSessionConfigureCommand = (encoded: string): SessionConfigureCommand =>
     decodeZodMessage(encoded, sessionConfigureCommandSchema);
