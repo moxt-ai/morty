@@ -41,5 +41,5 @@ for logs. Development uses one local Worker with isolated storage and a local si
 It does not require cloud credentials or a separate Relay process.
 
 Run `pnpm lint`, `pnpm typecheck`, and related integration tests. Test installation
-through the packed archive. Follow issue #6's complete acceptance gates before
-publishing the independent package or replacing the production installer.
+through the packed archive. Follow the complete archive acceptance gates in
+[TESTING.md](../../../docs/TESTING.md) before publishing a release.
