@@ -48,9 +48,7 @@ verify a deployment before revoking the replaced token; never use a personal
 User API Token or a Global API key as a fallback.
 Never log credentials.
 
-Clerk, developer sign-in, organization management, and the generic platform
-console are retired. Morty's anonymous identity, sharing, pairing and authorization
-remain enforced. Removing unused authentication surfaces must not remove retained
+Morty's anonymous identity, sharing, pairing and authorization remain enforced. Removing unused authentication surfaces must not remove retained
 computer or Agent data. Historical database migrations are immutable.
 
 Deployment checks account authority, artifact identity, required secrets and the
@@ -59,10 +57,8 @@ Morty npm version exists with the accepted archive integrity. Upload immutable a
 A restore uses the archived bytes and source revision, validates current Durable
 Object migration history, and never rolls persistent data backwards.
 
-Wrangler updates supplied secrets additively. Remove retired Clerk/OIDC/webhook
-secrets explicitly only after replacing their consumers and verifying the target
-service. Cloudflare cannot return stored secret plaintext; obtain it from its
-owner or replace it with a new signing secret. Rotating the signing secret ends
+Cloudflare cannot return stored secret plaintext; obtain it from its owner or
+replace it with a new signing secret. Rotating the signing secret ends
 existing Session access; Runtime and owner credentials have separate lifetimes.
 
 ## Automatic release sequence
