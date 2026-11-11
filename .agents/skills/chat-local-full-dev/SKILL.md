@@ -11,7 +11,7 @@ storage. Nothing in this workflow deploys or changes Cloudflare accounts.
 1. Confirm the Git root and read its instructions. Use the pinned Node and pnpm.
    Install locked dependencies, run `pnpm db:codegen`, and build the CLI with
    `pnpm build:cli`. No submodule or Moxt package is required.
-2. Run `scripts/local-dev web-server --background`. Use `web-server-morty-cli`
+2. Run `node scripts/local-dev.cjs prepare web-server --background`. Use `web-server-morty-cli`
    to additionally verify the checkout's Runtime. The helper builds browser and CLI
    artifacts and migrates isolated local storage. The stack uses a local signing
    key; setup creates an owner and pairs through the public product boundary.
