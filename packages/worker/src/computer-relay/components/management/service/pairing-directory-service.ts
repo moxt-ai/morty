@@ -22,7 +22,6 @@ import type { ComputerPairingRow } from "../../../../contracts/relay/pairing-rec
 import type { ProjectAccessContext } from "../../../../contracts/relay/project-authentication.ts";
 import type { ComputerScope } from "../../../../contracts/relay/session.ts";
 import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
-import type { ComputerManagementStorageDirectory } from "../../../../directory/service/computer-management-storage-directory.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
 import { deriveComputerDaemonToken, deriveComputerPairingSecrets } from "./computer-pairing-secrets.ts";
 import type { ComputerIdentityService } from "./pairing-identity-service.ts";
@@ -33,8 +32,7 @@ export interface PairingDirectoryInfrastructure {
     readonly services: {
         readonly identities: ComputerIdentityService;
         readonly projectAuthentication: Pick<ComputerManagementService, "authorizeProject">;
-        readonly computerAccounts: Pick<ComputerManagementService, "requireActiveAccount">;
-        readonly projects: Pick<ComputerManagementStorageDirectory, "resolve">;
+        readonly computerAccounts: Pick<ComputerManagementService, "requireActiveAccount" | "isActive">;
     };
 }
 
@@ -46,12 +44,12 @@ export class PairingDirectoryService {
     }
 
     private readonly projectStorage = async (scope: ComputerScope, signal: AbortSignal) => {
-        const project = await this.#cx.services.projects.resolve(scope.computerId, signal);
+        const active = await this.#cx.services.computerAccounts.isActive(scope.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (!active) {
             throw new PairingDirectoryError("unauthorized", "The Project is no longer active");
         }
-        if (project.computerId !== scope.computerId || project.computerId !== this.#cx.computerId) {
+        if (scope.computerId !== this.#cx.computerId) {
             throw new PairingDirectoryError("invalid_directory_record", "The Project storage locator is invalid");
         }
         return this.#cx.store;

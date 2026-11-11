@@ -744,11 +744,9 @@ for (const operation of ["access", "managed-session"]) {
         expect([200, 404]).toContain(reopened.status);
         expect(archived.status).toBe(200);
         expect(await archived.json()).toEqual({ target });
-        await expect(fixture.runtime.api.access(AbortSignal.timeout(10_000), target)).rejects.toMatchObject({
-            code: "NOT_FOUND",
-        });
         const rejected = await fixture.request(`chat/access`, target);
         expect(rejected.status).toBe(404);
+        expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
         const managed = await fixture.request(`chat/managed-sessions`, {});
         expect(await managed.json()).toEqual({ sessions: [] });
     });

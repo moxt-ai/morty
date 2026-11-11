@@ -15,9 +15,6 @@ export class NativeSessionMap<Value> {
             this.set(target, value);
         }
     }
-    get size(): number {
-        return this.#entries.size;
-    }
     readonly get = (target: NativeSessionTarget): Value | undefined =>
         this.#entries.get(nativeSessionKey(target))?.value;
     readonly has = (target: NativeSessionTarget): boolean => this.#entries.has(nativeSessionKey(target));

@@ -222,8 +222,6 @@ export class BotChatApi {
         }
         this.#sessionClients.clear();
     };
-    readonly access = async (parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
-        v.parse(accessSchema, await this.#request("access", v.parse(nativeSessionTargetSchema, target), parent));
     readonly daemonDiagnostics = async (signal: AbortSignal) =>
         decodeComputerDiagnosticsResult(JSON.stringify(await this.#request("daemon-diagnostics", undefined, signal)));
     readonly networkDiagnostic = async (signal: AbortSignal) =>

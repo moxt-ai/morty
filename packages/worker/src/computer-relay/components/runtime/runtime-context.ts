@@ -1,6 +1,6 @@
 import type { ComputerScope } from "../../../contracts/relay/session.ts";
 import type { BackendProjectAccess } from "../../../directory/service/backend-project-access.ts";
-import type { ComputerManagementStorageDirectory } from "../../../directory/service/computer-management-storage-directory.ts";
+import type { ComputerManagementService } from "../../../directory/service/computer-management-service.ts";
 import type { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import type { ComputerRelayStore } from "../management/storage/computer-relay-store.ts";
 import { createComputerRoutes } from "./http/computer-routes.ts";
@@ -20,7 +20,7 @@ export function createRuntimeContext(cx: {
         readonly projectStore: Pick<ComputerRelayStore, "readActiveGeneration">;
     };
     readonly services: {
-        readonly projects: Pick<ComputerManagementStorageDirectory, "resolve">;
+        readonly computerAccounts: Pick<ComputerManagementService, "isActive">;
         readonly projectAccess: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
     };
     readonly gateways: {
@@ -45,7 +45,7 @@ export function createRuntimeContext(cx: {
     };
     const credentials = new ComputerCredentialService(
         cx.storages.projectStore,
-        cx.services.projects,
+        cx.services.computerAccounts,
         cx.services.projectAccess,
     );
     const connections = new DaemonConnectionService(new ComputerConnectionStorage(cx.doDatabase));

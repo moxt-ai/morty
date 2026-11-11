@@ -1,20 +1,20 @@
 import type { BackendProjectAccess } from "../../../../directory/service/backend-project-access.ts";
-import type { ComputerManagementStorageDirectory } from "../../../../directory/service/computer-management-storage-directory.ts";
+import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import type { ComputerRelayStore } from "../../management/storage/computer-relay-store.ts";
 import type { ComputerSocketIdentity } from "./computer-service.ts";
 
 export class ComputerCredentialService {
     readonly #store: Pick<ComputerRelayStore, "readActiveGeneration">;
-    readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
+    readonly #accounts: Pick<ComputerManagementService, "isActive">;
     readonly #access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
 
     constructor(
         store: Pick<ComputerRelayStore, "readActiveGeneration">,
-        projects: Pick<ComputerManagementStorageDirectory, "resolve">,
+        accounts: Pick<ComputerManagementService, "isActive">,
         access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">,
     ) {
         this.#store = store;
-        this.#projects = projects;
+        this.#accounts = accounts;
         this.#access = access;
     }
 
@@ -23,13 +23,10 @@ export class ComputerCredentialService {
         identity: { readonly computerId: string },
         signal: AbortSignal,
     ): Promise<number | null> => {
-        const project = await this.#projects.resolve(identity.computerId, signal);
+        const active = await this.#accounts.isActive(identity.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (!active) {
             return null;
-        }
-        if (project.computerId !== identity.computerId) {
-            throw new Error("The Project placement is invalid");
         }
         const generation = await this.#store.readActiveGeneration(identity.computerId, signal);
         signal.throwIfAborted();
