@@ -1,8 +1,8 @@
-import type { VerifiedChannelAccess } from "../../../relay-core/src/entity/pairing/pairing.ts";
-import type { ChannelGateway } from "../../../relay-core/src/gateway/channel-gateway.ts";
-import { requestLogContext } from "../../../relay-core/src/infra/log-diagnostics.ts";
-import { logger } from "../../../relay-core/src/infra/logger.ts";
-import { RuntimeStatus } from "../../../relay-core/src/service/channel/channel.ts";
+import type { VerifiedChannelAccess } from "../../../relay/src/components/management/entity/pairing.ts";
+import type { ChannelGateway } from "../../../relay/src/components/runtime/gateway/channel-gateway.ts";
+import { RuntimeStatus } from "../../../relay/src/components/runtime/service/channel.ts";
+import { requestLogContext } from "../../../relay/src/infra/log-diagnostics.ts";
+import { logger } from "../../../relay/src/infra/logger.ts";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;

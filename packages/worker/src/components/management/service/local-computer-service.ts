@@ -22,9 +22,9 @@ import {
     type SessionAccessHolder,
     type SessionReadyEvent,
 } from "@morty-build/client/protocol";
-import { isHttpError } from "@morty-build/relay-core";
+import { isHttpError } from "@morty-build/relay";
 import * as v from "valibot";
-import type { ComputerBackendService } from "../../../../../relay/src/service/computer-backend-service.ts";
+import type { ComputerBackendService } from "../../../../../relay/src/components/computer/service/computer-backend-service.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ComputerManagementError, relayIdentifier } from "../entity/computer-management.ts";
 import type { RuntimePairing } from "../entity/runtime-pairing.ts";

@@ -1,6 +1,6 @@
-import { logger } from "@morty-build/relay-core/logging";
+import { logger } from "@morty-build/relay/logging";
 import type { Logger } from "pino";
-import type { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
+import type { ComputerBackendService } from "../../../relay/src/components/computer/service/computer-backend-service.ts";
 import { ChatService } from "../components/chat/service/chat-service.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
 import { LocalComputerService } from "../components/management/service/local-computer-service.ts";

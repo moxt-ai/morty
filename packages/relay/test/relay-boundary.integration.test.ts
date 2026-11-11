@@ -36,15 +36,15 @@ import {
     runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
-import { DurableObjectSqlDatabase, RelaySockets, SessionControl } from "@morty-build/relay-core";
+import { DurableObjectSqlDatabase, RelaySockets, SessionControl } from "@morty-build/relay";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
 import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
 import { createRelayDurableObjectContext } from "../../worker/src/composition/relay-durable-object-context.ts";
 import { ComputerRelay as RelayRuntimeRelay } from "../../worker/src/do/computer-relay.ts";
-import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
+import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
+import { createRuntimeContext } from "../src/components/runtime/runtime-context.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { computerManagementStore } from "./registered-runtime.ts";
 
@@ -1378,9 +1378,10 @@ it.each(["text", "binary"])(
                     storeFor: (computerId) => computerManagementStore(computerId, state.storage),
                 });
                 const relay = new RelaySockets(
-                    createDurableObjectDependencies({
+                    createRuntimeContext({
                         doDatabase: database,
                         storages: context.storages,
+                        services: context.services,
                         gateways: context.gateways,
                         utilities: {
                             waitUntil: (operation) => {

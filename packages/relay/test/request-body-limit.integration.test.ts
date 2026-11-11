@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { bodyParser } from "../../relay-core/src/http/middleware/body-parser.ts";
+import { bodyParser } from "../src/middleware/body-parser.ts";
 
 describe("Relay JSON request boundary", () => {
     it("Given a valid JSON body larger than 16 KiB, When a route uses the default parser, Then the request is accepted", async () => {

@@ -4,7 +4,14 @@
     "license": "Apache-2.0",
     "type": "module",
     "exports": {
-        "./http": "./src/http/relay-routes.ts",
+        ".": "./src/index.ts",
+        "./contracts": "./src/contracts.ts",
+        "./database": "./src/infra/sql-database.ts",
+        "./durable-object-migrations": "./src/infra/durable-object-migrations.ts",
+        "./logging": "./src/infra/logger.ts",
+        "./project-store": "./src/components/management/storage/sqlite-project-store.ts",
+        "./schema/project-do": "./src/schema/project-do/index.ts",
+        "./http": "./src/components/runtime/http/session-routes.ts",
         "./services": "./src/composition/relay-access-services.ts"
     },
     "scripts": {
@@ -14,15 +21,15 @@
         "typecheck": "tsc --project tsconfig.json && tsc --project tsconfig.vitest.json && tsc --project test/tsconfig.json"
     },
     "dependencies": {
-        "@morty-build/relay-core": "workspace:*",
+        "@morty-build/client": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
+        "pino": "catalog:",
         "valibot": "catalog:"
     },
     "devDependencies": {
         "@cloudflare/vitest-plugin": "^1.4.9",
         "@cloudflare/workers-types": "^5.20261028.1",
-        "@morty-build/client": "workspace:*",
         "vitest": "catalog:"
     },
     "private": true

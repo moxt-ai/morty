@@ -1,6 +1,6 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import type { ComputerBackendService } from "../../../../relay/src/service/computer-backend-service.ts";
+import type { ComputerBackendService } from "../../../../relay/src/components/computer/service/computer-backend-service.ts";
 import { readComputerOwner } from "../../composition/account-provisioning.ts";
 import { createComputerApplication } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";

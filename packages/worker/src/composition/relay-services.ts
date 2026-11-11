@@ -1,10 +1,6 @@
+import { createRelayDependencies, type LocalSessionOperations } from "@morty-build/relay";
 import { createRelayAccessServices, type RelayAccessServices } from "@morty-build/relay/services";
-import {
-    createRelayDependencies,
-    type LocalSessionOperations,
-    type RelayInfrastructure,
-} from "@morty-build/relay-core";
-import type { ComputerManagementStore } from "../../../relay/src/infra/computer-management-store.ts";
+import type { ComputerManagementStore } from "../../../relay/src/components/management/storage/computer-management-store.ts";
 import { CloudflareChannelRuntime } from "../gateway/cloudflare-channel-runtime.ts";
 import { ComputerDurableObjectStores } from "../gateway/computer-durable-object-store.ts";
 import type { RelayBindings } from "./relay-bindings.ts";
@@ -28,19 +24,16 @@ export function createHostedRelayAccess(bindings: RelayBindings, execution: Comp
 export function createRelayPorts(bindings: RelayBindings, execution: ComputerExecution | null = null) {
     return {
         channelGateway: new CloudflareChannelRuntime(bindings.COMPUTER_RELAY, execution?.channel),
-        ...(execution === null ? {} : { runtimeOperations: execution.operations }),
         nowEpochMilliseconds: () => Date.now(),
-    } satisfies RelayInfrastructure["gateways"];
+    };
 }
 
-export function composeRelayContext(access: RelayAccessServices, ports: RelayInfrastructure["gateways"]) {
+export function composeRelayContext(access: RelayAccessServices, ports: ReturnType<typeof createRelayPorts>) {
     return createRelayDependencies({
-        authentication: { projects: access.control },
-        machineAccounts: access.control,
+        control: access.control,
         stores: access.stores,
         identityStores: access.identityStores,
         projects: access.projects,
-        logger: console,
         gateways: ports,
     });
 }
