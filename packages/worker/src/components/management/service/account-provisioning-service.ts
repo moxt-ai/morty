@@ -1,32 +1,24 @@
 import * as v from "valibot";
-import { createRelayAccessServices } from "../../../../../relay/src/relay-worker.ts";
-import { relayEnvironment } from "../../../gateway/local-relay.ts";
-import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import type { ComputerManagementService } from "../../../../../relay/src/service/computer-management-service.ts";
 import { computerManagementSchema } from "../entity/computer-management.ts";
 import type { ProjectLocationHint } from "../util/project-location.ts";
 
+export type AccountProvisioner = (
+    userId: string,
+    reference: string,
+    location: ProjectLocationHint,
+    signal: AbortSignal,
+) => Promise<v.InferOutput<typeof computerManagementSchema>>;
+
 export async function provisionAccount(
-    bindings: CloudBindings,
+    accounts: ComputerManagementService,
     userId: string,
     reference: string,
     location: ProjectLocationHint,
     signal: AbortSignal,
 ) {
-    const services = createRelayAccessServices(relayEnvironment(bindings));
     return v.parse(
         computerManagementSchema,
-        await services.control.provisionMachineAccount(
-            userId,
-            "Morty",
-            `cloud-${reference}`,
-            reference,
-            location,
-            signal,
-        ),
+        await accounts.provisionMachineAccount(userId, "Morty", `cloud-${reference}`, reference, location, signal),
     );
-}
-
-/** Resolves ownership from the directory without persisting a second copy in the computer. */
-export async function readComputerOwner(bindings: CloudBindings, computerId: string, signal: AbortSignal) {
-    return await createRelayAccessServices(relayEnvironment(bindings)).control.readComputerOwner(computerId, signal);
 }

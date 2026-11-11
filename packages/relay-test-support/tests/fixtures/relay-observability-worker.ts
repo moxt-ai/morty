@@ -1,10 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
-
-import { ComputerRelay as RelayComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
-import type { ConfiguredRelayRelayBindings } from "../../../relay/src/relay-worker.ts";
 import { errorMiddleware, rethrowHonoError } from "../../../relay-core/src/http/middleware/error-middleware.ts";
-import relay from "../../src/relay-worker-entry.ts";
+import type { ConfiguredRelayBindings } from "../../../worker/src/composition/relay-bindings.ts";
+import { ComputerRelay as RelayComputerRelay } from "../../../worker/src/do/computer-relay.ts";
+import relay from "../../src/worker-entry.ts";
 
 function failure(kind: string): unknown {
     if (kind === "primitive") {
@@ -85,7 +84,7 @@ export class UnavailableProject extends DurableObject {
     }
 }
 
-interface TestBindings extends ConfiguredRelayRelayBindings {
+interface TestBindings extends ConfiguredRelayBindings {
     // Stands in for COMPUTER_RELAY: every request and operation sent to it fails.
     readonly UNAVAILABLE_PROJECT: DurableObjectNamespace<ComputerRelay>;
 }

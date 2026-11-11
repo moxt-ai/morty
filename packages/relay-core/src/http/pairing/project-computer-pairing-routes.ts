@@ -23,7 +23,7 @@ export function createProjectComputerPairingRoutes() {
             async (context) => {
                 const body = context.req.valid("json");
                 const agents = validateAgents(body["agents"]);
-                const redeemed = await context.env.services.computerPairings.redeemComputerPairing(
+                const redeemed = await context.var.relay.services.computerPairings.redeemComputerPairing(
                     validateIdentifier(context.req.param("computerId"), "computer_id"),
                     validatePairingCode(body["pairingCode"]),
                     validateDisplayName(body["machineName"], "machine_name"),
@@ -39,20 +39,20 @@ export function createProjectComputerPairingRoutes() {
         )
         .get("/computers/connect", async (context) => {
             const request = context.req.raw;
-            const connection = await context.env.services.channels.connectComputer(
+            const connection = await context.var.relay.services.channels.connectComputer(
                 bearerToken(request),
                 request.headers.get(COMPUTER_SUCCESSOR_CREDENTIAL_HEADER) ?? "",
                 request.signal,
             );
             switch (connection.kind) {
                 case "accepted":
-                    return await context.env.gateways.channelGateway.acceptDaemon(
+                    return await context.var.relay.gateways.channelGateway.acceptDaemon(
                         connection.access,
                         request,
                         request.signal,
                     );
                 case "revoked":
-                    return context.env.gateways.channelGateway.refuseRevokedDaemon();
+                    return context.var.relay.gateways.channelGateway.refuseRevokedDaemon();
             }
         });
 }

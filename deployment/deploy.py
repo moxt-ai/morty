@@ -94,7 +94,6 @@ def main():
     assert morty['d1_databases'][0]['database_id'] == expected['d1_id']
     assert not morty.get('services')
     assert morty['durable_objects']['bindings'] == [{'name': 'COMPUTER_RELAY', 'class_name': 'ComputerRelay'}]
-    assert morty['r2_buckets'] == [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': expected['buckets']['attachments']}]
     assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
     assert json.loads(morty['vars']['MORTY_ALLOWED_ORIGINS']) == [expected['morty_origin']]
     if args.verify_release_only:

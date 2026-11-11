@@ -24,11 +24,11 @@ An Agent may be working on your computer while you are somewhere else. You need 
 convenient place to check its progress, answer a question, give the next instruction
 and see the result without returning to the terminal where the work started.
 
-Morty makes that a browser chat experience. A Bot connects you to the machine and
-Agent intended for the task. In its conversations, you can send instructions, queue
-follow-ups, stop work, respond to permission requests and view available history,
-files and generated images. Access to Bots and conversations belongs to the users
-authorized to use them.
+Morty makes that a browser chat experience. Connect a computer and select an
+installed Agent for the task. In its conversations, you can send instructions,
+queue follow-ups, stop work, respond to permission requests and view available
+history, files and generated images. Only browsers with access to that computer
+can use its conversations.
 
 You should be able to open the same conversation in another browser, catch up on
 instructions sent elsewhere and continue participating. New output should appear

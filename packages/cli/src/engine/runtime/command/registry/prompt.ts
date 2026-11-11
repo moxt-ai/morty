@@ -14,17 +14,7 @@ export const sessionPromptCommand: RuntimeCommand = {
         if (message.kind !== SESSION_PROMPT_KIND) {
             throw new Error("Command kind mismatch");
         }
-        if (!context.sessionTurns.acceptsPrompts()) {
-            send(context.socket, {
-                code: "runtime_upgrading",
-                requestId: message.commandId,
-                kind: "session.operation.failed",
-                message: "The Computer is upgrading. Retry after it reconnects.",
-                target: message.target,
-            });
-            return;
-        }
-        // A prompt names only its Session; it runs with the Agent and directory of the Session this Computer holds.
+        // A prompt names only its Session; it runs with the Agent and directory of the Session this Runtime holds.
         const session = context.sessions.findSessions([message.target])[0];
         if (session === undefined) {
             send(context.socket, {

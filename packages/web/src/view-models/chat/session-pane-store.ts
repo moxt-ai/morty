@@ -440,10 +440,7 @@ export function createSessionPaneModel(options: {
     readonly sessionPage: SessionPageState;
     readonly attachmentSignal: AbortSignal;
     readonly computerId: string;
-    readonly requests: Pick<
-        BotChatApi,
-        "connectSession" | "managedSession" | "computerConfiguration" | "resetSessionConnections"
-    >;
+    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "computerConfiguration">;
     /**
      * Hands the owner this pane's last account of the Session's work when the pane stops, or null when it had none.
      * While it runs, the owner derives the Session's status from the pane's account instead.

@@ -1,5 +1,4 @@
-import { ComputerAccessContext } from "../../entity/authentication/project-authentication.ts";
-import { ComputerScope } from "../../entity/do/session.ts";
+import type { VerifiedChannelAccess } from "../../entity/pairing/pairing.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { PairingScopeRow } from "../../entity/pairing/pairing-records.ts";
@@ -33,7 +32,7 @@ export class ComputerIdentityService {
     }
 
     private readonly matchesPlacement = (source: ProjectStore, project: ProjectStorageContext): boolean =>
-        source === this.#stores.resolve(project.storagePlacement);
+        source === this.#stores.resolve(project.computerId);
 
     readonly authenticateProject = async (
         credential: ComputerIdentityCredential,
@@ -61,7 +60,7 @@ export class ComputerIdentityService {
         successorHash: string,
         signal: AbortSignal,
     ): Promise<
-        { readonly kind: "rotated" | "reused"; readonly access: ComputerAccessContext } | { readonly kind: "revoked" }
+        { readonly kind: "rotated" | "reused"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
     > => {
         signal.throwIfAborted();
         try {
@@ -103,7 +102,7 @@ export class ComputerIdentityService {
             }
             return {
                 kind: match.kind,
-                access: new ComputerAccessContext(new ComputerScope(computerId)),
+                access: { computerId },
             };
         } catch (cause) {
             signal.throwIfAborted();

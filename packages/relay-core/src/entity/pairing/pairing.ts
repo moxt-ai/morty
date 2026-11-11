@@ -37,14 +37,8 @@ export interface ClaimedPairing {
     readonly daemonToken: string;
 }
 
-export class VerifiedChannelAccess {
-    readonly agents: readonly AgentDescriptor[];
+export interface VerifiedChannelAccess {
     readonly computerId: string;
-
-    constructor(computerId: string, agents: readonly AgentDescriptor[]) {
-        this.agents = agents;
-        this.computerId = computerId;
-    }
 }
 
 /**
@@ -59,51 +53,6 @@ export class ChannelDescriptor {
     readonly workspaceName: string;
 
     constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
-        this.agents = agents.map((agent) => ({
-            ...agent,
-            agentSettingsDiscovery: true,
-            sessionTurnConfiguration: true,
-        }));
-        this.computerId = computerId;
-        this.machineName = machineName;
-        this.workspaceName = workspaceName;
-    }
-}
-
-const PairingLifecycle = Object.freeze({
-    Expired: "expired",
-    Paired: "paired",
-    Pending: "pending",
-    Revoked: "revoked",
-});
-
-export abstract class PairingStatus {
-    abstract readonly status: string;
-}
-
-export class PendingPairingStatus extends PairingStatus {
-    readonly expiresAt: string;
-    readonly status = PairingLifecycle.Pending;
-
-    constructor(expiresAt: string) {
-        super();
-        this.expiresAt = expiresAt;
-    }
-}
-
-export class ExpiredPairingStatus extends PairingStatus {
-    readonly status = PairingLifecycle.Expired;
-}
-
-export class PairedPairingStatus extends PairingStatus {
-    readonly agents: readonly AgentDescriptor[];
-    readonly machineName: string;
-    readonly computerId: string;
-    readonly status = PairingLifecycle.Paired;
-    readonly workspaceName: string;
-
-    constructor(agents: readonly AgentDescriptor[], machineName: string, workspaceName: string, computerId: string) {
-        super();
         this.agents = agents;
         this.computerId = computerId;
         this.machineName = machineName;
@@ -111,15 +60,17 @@ export class PairedPairingStatus extends PairingStatus {
     }
 }
 
-export class RevokedPairingStatus extends PairingStatus {
-    readonly revokedAt: string;
-    readonly status = PairingLifecycle.Revoked;
-
-    constructor(revokedAt: string) {
-        super();
-        this.revokedAt = revokedAt;
-    }
-}
+export type PairingStatus =
+    | { readonly status: "pending"; readonly expiresAt: string }
+    | { readonly status: "expired" }
+    | {
+          readonly status: "paired";
+          readonly agents: readonly AgentDescriptor[];
+          readonly machineName: string;
+          readonly computerId: string;
+          readonly workspaceName: string;
+      }
+    | { readonly status: "revoked"; readonly revokedAt: string };
 
 export class PairingDirectoryError extends Error implements HttpError {
     readonly code: string;

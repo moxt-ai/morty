@@ -1,6 +1,5 @@
 import {
     CONTENT_WRITE_MAX_BYTES,
-    decodeKnownNativeSessionEvents,
     decodeKnownSessionEventLogPage,
     decodeKnownSessionLiveEventBatch,
     decodeNativeSessionResult,
@@ -8,13 +7,12 @@ import {
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
     decodeSessionRenamedEvent,
+    decodeTurn,
     type ExternalAudioContentBlock,
     type ExternalImageContentBlock,
     type ExternalResourceContentBlock,
     isIdentifier,
     MORTY_API_PREFIX,
-    type NativeEventPageRequest,
-    type NativeSessionEvents,
     type NativeSessionResult,
     type NativeSessionTarget,
     type PromptAttachment,
@@ -22,6 +20,7 @@ import {
     type SessionEventLogPage,
     type SessionLiveEventBatch,
     SessionPromptDisposition,
+    type Turn,
 } from "@morty-build/client/protocol";
 import {
     MortyApiError,
@@ -34,13 +33,11 @@ import {
 } from "./errors.ts";
 import { sameNativeSession } from "./native-session.ts";
 import { nativeSessionTargetSchema } from "./protocol/session/shared/native-session-target.ts";
-import {
-    decodeMortyTurn,
-    type MortyInteractionResponseRequest,
-    type MortyPageRequest,
-    type MortyTurn,
-    type MortyTurnCancellation,
-    type SubmitMortyTurnRequest,
+import type {
+    MortyInteractionResponseRequest,
+    MortyPageRequest,
+    MortyTurnCancellation,
+    SubmitMortyTurnRequest,
 } from "./resources.ts";
 
 import {
@@ -52,7 +49,6 @@ import {
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
 const DEFAULT_STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
-const DEFAULT_STREAM_LIVENESS_TIMEOUT_MILLISECONDS = 45_000;
 const DEFAULT_STREAM_RECONNECT_ATTEMPTS = 7;
 
 function sanitizedConnectionCauseMessage(value: string): string {
@@ -82,15 +78,6 @@ function connectionCauseMessages(cause: unknown): readonly string[] {
 
 export interface MortyCredentialProvider {
     readonly credential: (signal: AbortSignal) => Promise<string>;
-}
-
-export interface DiscoverMortyAgentSettingsRequest {
-    /**
-     * The directory a new Session would start in; omitted, the Computer's default directory. The result's `directory`
-     * names the directory actually inspected.
-     */
-    readonly directory?: string;
-    readonly model?: string;
 }
 
 /** A Session setting change. */
@@ -135,19 +122,6 @@ export function externalContentPath(content: MortyExternalContentBlock): string 
     return `morty-content:${kind}:${key}`;
 }
 
-export class StaticMortyCredentialProvider implements MortyCredentialProvider {
-    readonly #token: string;
-
-    constructor(token: string) {
-        this.#token = validateCredential(token);
-    }
-
-    readonly credential = async (signal: AbortSignal): Promise<string> => {
-        signal.throwIfAborted();
-        return this.#token;
-    };
-}
-
 function validateCredential(value: unknown): string {
     if (
         typeof value !== "string" ||
@@ -174,7 +148,6 @@ export interface MortyEndpointOptions {
     readonly observeResponse?: (metadata: MortyResponseMetadata) => void;
     readonly operationTimeoutMilliseconds?: number;
     readonly streamConnectionTimeoutMilliseconds?: number;
-    readonly streamLivenessTimeoutMilliseconds?: number;
     readonly transport?: MortyHttpTransport;
 }
 
@@ -365,7 +338,6 @@ export class MortyRequestExecutor {
     readonly #operationTimeoutMilliseconds: number;
     readonly #observeResponse: ((metadata: MortyResponseMetadata) => void) | undefined;
     readonly #streamConnectionTimeoutMilliseconds: number;
-    readonly #streamLivenessTimeoutMilliseconds: number;
     readonly #transport: MortyHttpTransport;
 
     constructor(options: MortyEndpointOptions) {
@@ -379,10 +351,6 @@ export class MortyRequestExecutor {
         this.#streamConnectionTimeoutMilliseconds = validatePositiveInteger(
             options.streamConnectionTimeoutMilliseconds ?? DEFAULT_STREAM_CONNECTION_TIMEOUT_MILLISECONDS,
             "stream connection timeout",
-        );
-        this.#streamLivenessTimeoutMilliseconds = validatePositiveInteger(
-            options.streamLivenessTimeoutMilliseconds ?? DEFAULT_STREAM_LIVENESS_TIMEOUT_MILLISECONDS,
-            "stream liveness timeout",
         );
         this.#transport = options.transport ?? new HttpTransport();
     }
@@ -505,13 +473,6 @@ export class MortyRequestExecutor {
         }
     };
 
-    readonly delete = async (path: string, signal: AbortSignal): Promise<unknown> =>
-        await this.request(path, "DELETE", "", false, signal);
-
-    readonly deleteEmpty = async (path: string, signal: AbortSignal): Promise<void> => {
-        await this.requestEmpty(path, "DELETE", signal);
-    };
-
     readonly openLiveEventStream = async (path: string, signal: AbortSignal): Promise<LiveEventConnection> => {
         if (!isMortyLiveEventTransport(this.#transport)) {
             throw new MortyValidationError("The configured transport does not support live Session events");
@@ -586,40 +547,12 @@ export class MortyRequestExecutor {
         }
     };
 
-    private readonly requestEmpty = async (path: string, method: string, signal: AbortSignal): Promise<void> => {
-        const deadline = new RequestDeadline(signal, this.#operationTimeoutMilliseconds);
-        try {
-            const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
-            const response = await this.#transport.fetch(
-                new Request(requestUrl(this.#endpoint, path), {
-                    headers: this.authenticationHeaders(credential, "application/json"),
-                    method,
-                    signal: deadline.signal,
-                }),
-            );
-            this.#observeResponse?.({
-                serverTiming: response.headers.get("server-timing"),
-                status: response.status,
-            });
-            if (!response.ok) {
-                await throwApiError(response);
-            }
-            if (response.status !== 204) {
-                throw new MortyProtocolError("The service returned an invalid empty response");
-            }
-        } catch (cause) {
-            return deadline.translate(cause);
-        } finally {
-            deadline.finish();
-        }
-    };
-
     private readonly authenticationHeaders = (credential: string, accept: string): Headers => {
         return new Headers({ accept, authorization: `Bearer ${credential}` });
     };
 }
 
-export async function readExactResponseBytes(
+async function readExactResponseBytes(
     response: Response,
     expectedByteLength: number,
     signal: AbortSignal,
@@ -762,35 +695,6 @@ export class MortySessionResources {
         );
     };
 
-    readonly readExternalContent = async (
-        sessionTarget: NativeSessionTarget,
-        content: MortyExternalContentBlock,
-        signal: AbortSignal,
-        maximumBytes = content.byteLength,
-    ): ReturnType<MortySessionResources["readFile"]> =>
-        await this.readFile(sessionTarget, externalContentPath(content), signal, maximumBytes);
-
-    /** Reads a page of the Agent's own history of a native session in `directory`, which the caller browses. */
-    readonly previewSessionNativeEvents = async (
-        sessionTarget: NativeSessionTarget,
-        directory: string,
-        page: NativeEventPageRequest,
-        signal: AbortSignal,
-    ): Promise<NativeSessionEvents> => {
-        const path = requestUrl(
-            new URL("https://morty.invalid/"),
-            sessionPath(this.#computerId, sessionTarget, "native-events-preview"),
-        );
-        path.searchParams.set("directory", directory);
-        path.searchParams.set("eventLimit", page.eventLimit.toString());
-        if (page.cursor !== null) {
-            path.searchParams.set("cursor", page.cursor);
-        }
-        return decodeKnownNativeSessionEvents(
-            await this.#executor.get(`${path.pathname.slice(1)}${path.search}`, signal),
-        );
-    };
-
     /**
      * Reads the Session's execution. Naming a command also asks for that command's delivery;
      * `command` is present when the request names a command. `lastTurn` reports how the last
@@ -844,8 +748,8 @@ export class MortyTurnResources {
         sessionTarget: NativeSessionTarget,
         request: SubmitMortyTurnRequest,
         signal: AbortSignal,
-    ): Promise<MortyTurn> => {
-        const turn = decodeMortyTurn(
+    ): Promise<Turn> => {
+        const turn = decodeTurn(
             await this.#executor.post(sessionPath(this.#computerId, sessionTarget, "turns"), request, signal),
         );
         if (turn === null) {
@@ -934,7 +838,7 @@ export class MortyInteractionResources {
     };
 }
 
-export type MortySessionLiveEventConnection = { readonly kind: "initial" } | { readonly kind: "reconnected" };
+type MortySessionLiveEventConnection = { readonly kind: "initial" } | { readonly kind: "reconnected" };
 
 export interface MortySessionEventObserver {
     readonly receive: (events: SessionLiveEventBatch) => Promise<boolean>;

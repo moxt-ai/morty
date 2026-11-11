@@ -1,10 +1,11 @@
 import { fireEvent, getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
+import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 test("Given Chat is ready, When the user views recent sessions and opens a local session, Then every action uses session terminology", {
     timeout: 30_000,
@@ -252,4 +253,38 @@ test("Given Open Session was opened while the Computer was offline, When the Com
     await app.waitForView(() => getByRole(dialog, "button", { name: "Native session-after-reconnect" }));
     await app.waitForView(() => getByRole(dialog, "button", { name: "Native session-after-reconnect /" }));
     expect(dialog.textContent).not.toContain("No local agent");
+});
+
+test("Given an old native preview response, When the selected Agent changes, Then the old preview cannot appear under the new Agent", {
+    timeout: 60_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({
+        environment,
+        connectAgent: true,
+        sessionIds: new Set(["previous-agent-session"]),
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    if (app.executionNetwork === null) {
+        throw new Error("Expected controllable real transport");
+    }
+    const held = app.executionNetwork.holdNextResponse("/native-session/previous-agent-session");
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const release = await held;
+    onTestFinished(release);
+    const dialog = getByRole(document.body, "dialog", { name: "Open Session" });
+    await app.user.click(getByRole(dialog, "tab", { name: "Pi not installed" }));
+    expect(dialog.textContent).toContain("Pi is not installed");
+    await act(async () => {
+        release();
+        // Complete a real HTTP round trip after forwarding the held response.
+        const response = await fetch(app.origin, { signal: AbortSignal.timeout(10_000) });
+        await response.text();
+    });
+    expect(queryByRole(dialog, "heading", { name: "Native previous-agent-session" })).toBeNull();
+    expect(queryByRole(dialog, "button", { name: "Fork" })).toBeNull();
 });

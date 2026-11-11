@@ -1,46 +1,16 @@
-import { PROJECT_PERMISSION_NAMES, type ProjectPermissionName } from "@morty-build/client/protocol";
+import type { ProjectPermissionName } from "@morty-build/client/protocol";
 import type { ComputerScope } from "../do/session.ts";
 import type { HttpError } from "../http-error.ts";
-import { VerifiedChannelAccess } from "../pairing/pairing.ts";
 
-export class ProjectPermission {
-    // The vocabulary is defined once by the protocol; each name has exactly one instance.
-    static readonly #byName: ReadonlyMap<string, ProjectPermission> = new Map(
-        PROJECT_PERMISSION_NAMES.map((name) => [name, new ProjectPermission(name)]),
-    );
+export type ProjectPermission = ProjectPermissionName;
 
-    /** The permission this release knows by that name, if any. */
-    static readonly known = (name: string): ProjectPermission | undefined => ProjectPermission.#byName.get(name);
-
-    static readonly named = (name: ProjectPermissionName): ProjectPermission => {
-        const permission = ProjectPermission.#byName.get(name);
-        if (permission === undefined) {
-            throw new Error(`Project permission ${name} is missing from the vocabulary`);
-        }
-        return permission;
-    };
-
-    static readonly ArtifactRead = ProjectPermission.named("artifact:read");
-    static readonly ArtifactWrite = ProjectPermission.named("artifact:write");
-    static readonly IdentityBindingsManage = ProjectPermission.named("identity-binding:manage");
-    static readonly InteractionRespond = ProjectPermission.named("interaction:respond");
-    static readonly ProjectEventsRead = ProjectPermission.named("project:event:read");
-    static readonly ProjectRead = ProjectPermission.named("project:read");
-    static readonly ComputerPair = ProjectPermission.named("computer:pair");
-    static readonly ComputerRead = ProjectPermission.named("computer:read");
-    static readonly ComputerRevoke = ProjectPermission.named("computer:revoke");
-    static readonly SessionDelete = ProjectPermission.named("session:delete");
-    static readonly SessionRead = ProjectPermission.named("session:read");
-    static readonly SessionWrite = ProjectPermission.named("session:write");
-
-    readonly value: ProjectPermissionName;
-
-    private constructor(value: ProjectPermissionName) {
-        this.value = value;
-    }
-
-    readonly toJSON = (): string => this.value;
-}
+export const ProjectPermission = {
+    ComputerPair: "computer:pair",
+    ComputerRead: "computer:read",
+    ComputerRevoke: "computer:revoke",
+    SessionRead: "session:read",
+    SessionWrite: "session:write",
+} as const satisfies Readonly<Record<string, ProjectPermission>>;
 
 /**
  * What a project credential must grant to open a Computer host connection and to keep using it. The connection
@@ -52,42 +22,13 @@ export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.fre
     ProjectPermission.SessionRead,
 ]);
 
-export class AuditActorKind {
-    static readonly BrowserAccess = new AuditActorKind("browser_access");
-
-    readonly value: string;
-
-    protected constructor(value: string) {
-        this.value = value;
-    }
-
-    readonly toJSON = (): string => this.value;
-}
-
-export class AuditActor {
+export interface AuditActor {
     readonly actorId: string;
-    readonly kind: AuditActorKind;
-
-    constructor(kind: AuditActorKind, actorId: string) {
-        this.kind = kind;
-        this.actorId = actorId;
-    }
-}
-
-export abstract class ProjectAccessLifetime {
-    abstract readonly expiresAtEpochMilliseconds: number;
-    abstract readonly isExpiring: boolean;
-}
-
-export class PerpetualProjectAccessLifetime extends ProjectAccessLifetime {
-    readonly expiresAtEpochMilliseconds = Number.MAX_SAFE_INTEGER;
-    readonly isExpiring = false;
+    readonly kind: "application";
 }
 
 export class ProjectAccessContext {
     readonly actor: AuditActor;
-    readonly authenticatedAtEpochMilliseconds: number;
-    readonly lifetime: ProjectAccessLifetime;
     readonly permissions: ReadonlySet<ProjectPermission>;
     readonly scope: ComputerScope;
 
@@ -95,18 +36,10 @@ export class ProjectAccessContext {
         return this.scope.computerId;
     }
 
-    constructor(
-        scope: ComputerScope,
-        permissions: ReadonlySet<ProjectPermission>,
-        actor: AuditActor,
-        authenticatedAtEpochMilliseconds: number,
-        lifetime: ProjectAccessLifetime,
-    ) {
+    constructor(scope: ComputerScope, permissions: ReadonlySet<ProjectPermission>, actor: AuditActor) {
         this.scope = scope;
         this.permissions = new Set(permissions);
         this.actor = actor;
-        this.authenticatedAtEpochMilliseconds = authenticatedAtEpochMilliseconds;
-        this.lifetime = lifetime;
     }
 
     readonly permits = (permission: ProjectPermission): boolean => this.permissions.has(permission);
@@ -133,29 +66,10 @@ function projectAuthenticationErrorStatus(code: string): number {
         case "credential_revoked":
         case "project_credential_invalid":
             return 401;
-        case "owner_access_required":
         case "project_access_denied":
         case "project_permission_denied":
             return 403;
-        case "owner_credential_not_found":
-            return 404;
-        case "owner_credential_rotation_conflict":
-            return 409;
-        case "access_credential_lifetime_invalid":
-        case "audit_page_invalid":
-        case "credential_overlap_invalid":
-        case "project_permission_invalid":
-            return 400;
         default:
             return 503;
-    }
-}
-
-export class ComputerAccessContext extends VerifiedChannelAccess {
-    readonly scope: ComputerScope;
-
-    constructor(scope: ComputerScope) {
-        super(scope.computerId, []);
-        this.scope = scope;
     }
 }

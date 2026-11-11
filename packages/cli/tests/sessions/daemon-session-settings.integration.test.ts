@@ -133,14 +133,6 @@ async function createSession(socket: Duplex, frames: ClientFrames, harness: stri
     }
 }
 
-function _readStringField(value: unknown, field: string): string {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        return "";
-    }
-    const fieldValue = Reflect.get(value, field);
-    return typeof fieldValue === "string" ? fieldValue : "";
-}
-
 async function readTerminalSessionResult(
     frames: ClientFrames,
     sessionTarget: NativeSessionTarget,

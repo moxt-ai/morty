@@ -3,6 +3,7 @@ import {
     decodeNativeSessionTarget,
     type NativeSessionTarget,
     ProtocolMessageError,
+    type SessionAccessGrant,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
@@ -17,8 +18,8 @@ export type SessionAccessTarget =
 export interface SessionAccess {
     readonly signingKeyId: string;
     readonly issuedAtEpochMilliseconds: number;
-    /** Whose access the credential carries. */
-    readonly holder: SessionAccessHolder;
+    /** The holder and pairing generation the credential carries. */
+    readonly grant: SessionAccessGrant;
     readonly expiresAtEpochMilliseconds: number;
     readonly computerId: string;
     readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
@@ -43,8 +44,8 @@ export class SessionAccessService {
     }
 
     /**
-     * Issues a Session credential carrying `holder`'s access. It is refused when that access has already ended, as the
-     * credential would be refused from its first use.
+     * Issues a Session credential bound to the active Computer pairing and holder. Ending either
+     * authority ends the credential; a later pairing cannot restore it.
      */
     readonly issue = async (
         target: SessionAccessTarget,
@@ -65,7 +66,8 @@ export class SessionAccessService {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
         await this.#control.authorizeProject(target.computerId, ProjectPermission.SessionWrite, signal);
-        if (!(await this.#control.holdsAccess(target.computerId, holder, signal))) {
+        const generation = await this.#control.currentSessionGeneration(target.computerId, holder, signal);
+        if (generation === null) {
             throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
         }
         const issuedAtEpochMilliseconds = Date.now();
@@ -75,7 +77,7 @@ export class SessionAccessService {
             issuedAtEpochMilliseconds,
             computerId: target.computerId,
             purpose: "session-access",
-            holder,
+            grant: { holder, generation },
             target: nativeTarget,
         });
         return {
@@ -151,14 +153,14 @@ export class SessionAccessService {
         return {
             signingKeyId: await this.#signer.keyId(),
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
-            holder: claims.holder,
+            grant: claims.grant,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
             authorize: async (permission, authorizationSignal) => {
                 await this.#control.authorizeSessionCredentialRecord(
                     computerId,
                     sessionScopedPermission(permission),
-                    claims.holder,
+                    claims.grant,
                     authorizationSignal,
                 );
             },

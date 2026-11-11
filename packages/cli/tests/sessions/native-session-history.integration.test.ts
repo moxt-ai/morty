@@ -3,14 +3,14 @@ import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import { describe, expect, it, vi } from "vitest";
-import { ClaudeAdapter } from "../../src/engine/acp/adapter/claude/adapter.ts";
 import type { AdapterResolver } from "../../src/engine/acp/native-history/preview-contract.ts";
 import { MemorySessionEventStore } from "../../src/engine/session/history/session-event-store.ts";
+import { ControlledAcpAdapter } from "../support/controlled-acp-adapter.ts";
 import { fixture } from "./native-session-fixture.ts";
 
 /** A direct-read adapter with canned history, standing in for the Codex app-server. */
 const cannedHistoryAdapter: AdapterResolver = (agent, dependencies) => {
-    const acp = new ClaudeAdapter(agent, dependencies);
+    const acp = new ControlledAcpAdapter(agent, dependencies);
     const events = new MemorySessionEventStore();
     return {
         refreshAgent: acp.refreshAgent,

@@ -26,7 +26,6 @@ export type ProjectStorageBindings = v.InferOutput<typeof projectStorageBindings
 
 export interface CloudBindings {
     readonly COMPUTER_RELAY?: unknown;
-    readonly CHAT_ATTACHMENTS_APAC?: unknown;
     readonly ANONYMOUS_CREATION_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;

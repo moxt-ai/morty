@@ -8,8 +8,8 @@ import {
 } from "./components/management/entity/client-location.ts";
 import { logger } from "./composition/application-context.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
-import { fetchPublicRelay } from "./gateway/local-relay.ts";
-import { notFoundPage, webPages } from "./gateway/web-pages.ts";
+import { createPublicRelayRoutes } from "./composition/relay-http.ts";
+import { notFoundPage, webPages } from "./http/web-pages.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { errorHandler } from "./middleware/error-middleware.ts";
@@ -32,18 +32,7 @@ const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
         context.req.raw = new Request(context.req.raw, { headers });
         await next();
     })
-    .route(
-        "/morty/api/v1",
-        new Hono<{ readonly Bindings: CloudBindings }>().all("*", (context) =>
-            fetchPublicRelay(context.req.raw, context.env),
-        ),
-    )
-    .route(
-        "/morty/api/channels",
-        new Hono<{ readonly Bindings: CloudBindings }>().all("*", (context) =>
-            fetchPublicRelay(context.req.raw, context.env),
-        ),
-    )
+    .route("/", createPublicRelayRoutes())
     .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
     .get("/morty/api/health", (context) => context.body(null, 204))
     .route("/", webPages)

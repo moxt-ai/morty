@@ -24,7 +24,6 @@ export abstract class LocalAgentSpecification {
     abstract readonly agentOverrideVariable: string;
     abstract readonly harness: string;
     abstract readonly label: string;
-    abstract readonly launchArguments: readonly string[];
     readonly minimumSupportedAgentVersion: string = "0.0.0";
     readonly maximumTestedAgentVersion: string = "0.0.0";
     readonly acpProbeTimeoutMilliseconds: number = ACP_PROBE_TIMEOUT_MILLISECONDS;
@@ -64,7 +63,6 @@ export abstract class LocalAgentSpecification {
  * readiness with direct harness operations, independently of their session adapter implementation.
  */
 export abstract class InProcessAcpAgentSpecification extends LocalAgentSpecification {
-    readonly launchArguments: readonly string[] = Object.freeze([]);
     readonly adapterOverrideVariable: string;
     readonly adapterVersion = "in-process";
     readonly agentOverrideVariable: string;

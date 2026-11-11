@@ -1,11 +1,4 @@
-import {
-    ExpiredPairingStatus,
-    PairedPairingStatus,
-    PairingDirectoryError,
-    PendingPairingStatus,
-    parseAgents,
-    RevokedPairingStatus,
-} from "./pairing.ts";
+import { PairingDirectoryError, type PairingStatus, parseAgents } from "./pairing.ts";
 import type { PairingChannelRow } from "./pairing-records.ts";
 
 export function computerRevokedAt(value: unknown): number | null {
@@ -20,23 +13,24 @@ export function computerRevokedAt(value: unknown): number | null {
 
 // The v1 representation is a projection of facts. Passing the clock explicitly
 // makes expiry independent of polling, maintenance writes, and component order.
-export function projectComputerPairingStatus(row: PairingChannelRow, now: number) {
+export function projectComputerPairingStatus(row: PairingChannelRow, now: number): PairingStatus {
     const revokedAt = computerRevokedAt(row.revoked_at);
     if (revokedAt !== null) {
-        return new RevokedPairingStatus(new Date(revokedAt).toISOString());
+        return { status: "revoked", revokedAt: new Date(revokedAt).toISOString() };
     }
     if (row.registration !== null) {
-        return new PairedPairingStatus(
-            parseAgents(row.registration.agents_json),
-            row.registration.machine_name,
-            row.registration.workspace_name,
-            row.computer_id,
-        );
+        return {
+            status: "paired",
+            agents: parseAgents(row.registration.agents_json),
+            machineName: row.registration.machine_name,
+            workspaceName: row.registration.workspace_name,
+            computerId: row.computer_id,
+        };
     }
     if (!Number.isSafeInteger(row.expires_at) || row.expires_at < 0) {
         throw new PairingDirectoryError("invalid_directory_record", "The pairing deadline is invalid");
     }
     return row.expires_at <= now
-        ? new ExpiredPairingStatus()
-        : new PendingPairingStatus(new Date(row.expires_at).toISOString());
+        ? { status: "expired" }
+        : { status: "pending", expiresAt: new Date(row.expires_at).toISOString() };
 }

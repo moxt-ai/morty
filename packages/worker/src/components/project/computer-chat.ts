@@ -1,6 +1,7 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ComputerBackendService } from "../../../../relay/src/service/computer-backend-service.ts";
+import { readComputerOwner } from "../../composition/account-provisioning.ts";
 import { createComputerApplication } from "../../computer-application.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
@@ -9,7 +10,6 @@ import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
 import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
 import { relayIdentifier } from "../management/entity/computer-management.ts";
-import { readComputerOwner } from "../management/service/account-provisioning-service.ts";
 import { holdsAccess } from "../management/service/authentication-service.ts";
 import { IdentityStorage } from "../management/storage/identity-storage.ts";
 

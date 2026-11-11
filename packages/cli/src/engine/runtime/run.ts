@@ -5,7 +5,6 @@ import { buildSessionLayer } from "../session/api/session-layer.ts";
 import { LocalExternalContentStore } from "../session/content/external-content-store.ts";
 import { AgentProcessPool } from "../session/process/agent-process-pool.ts";
 import type { RuntimeAgentProcesses } from "../session/process/runtime-agent-processes.ts";
-import type { RuntimeTurnActivity } from "../session/turn/runtime-turn-activity.ts";
 import { runCleanup } from "../util/run-cleanup.ts";
 import { systemTimer, type Timer } from "../util/timer.ts";
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
@@ -68,7 +67,6 @@ async function publishAgentCatalogUntilAvailable(
 }
 
 export interface RunRuntimeOptions {
-    readonly turnActivity?: RuntimeTurnActivity;
     /** The daemon worker's registry of Runtime process pools, for releasing idle Agent processes on request. */
     readonly agentProcesses?: RuntimeAgentProcesses;
     readonly onExecutionCountChange?: (count: number) => void;
@@ -130,7 +128,6 @@ export async function runRuntime(
     };
     const layer = buildSessionLayer({
         processes,
-        ...(options.turnActivity === undefined ? {} : { turnActivity: options.turnActivity }),
         computerId: config.computerId,
         defaultWorkspace: config.defaultWorkspace,
         resolveAgent,

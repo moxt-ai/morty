@@ -5,9 +5,9 @@ import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable
 import { computerPairing, computerRegistration } from "../../relay-core/src/schema/project-do/index.ts";
 import { holdsAccess } from "../../worker/src/components/management/service/authentication-service.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
+import { createHostedRelayAccess } from "../../worker/src/composition/relay-services.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { migrateComputerStorage } from "../src/durable-objects/migrate-computer-storage.ts";
-import { createRelayAccessServices } from "../src/relay-worker.ts";
 import { machineAccount } from "../src/schema/d1/index.ts";
 import { computerDirectoryDrizzle } from "../src/storage/relay-drizzle-database.ts";
 import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
@@ -22,7 +22,7 @@ export function computerManagementStore(computerId: string, storage: DurableObje
                 new IdentityStorage(
                     new DurableObjectDatabase(storage),
                     computerId,
-                    await createRelayAccessServices(env).control.readComputerOwner(computerId, signal),
+                    await createHostedRelayAccess(env).control.readComputerOwner(computerId, signal),
                 ),
                 holder,
                 signal,

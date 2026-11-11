@@ -37,11 +37,6 @@ export class NativeSessionMap<Value> {
             yield entry.value;
         }
     }
-    *keys(): IterableIterator<NativeSessionTarget> {
-        for (const entry of this.#entries.values()) {
-            yield entry.target;
-        }
-    }
     [Symbol.iterator](): IterableIterator<readonly [NativeSessionTarget, Value]> {
         return this.entries();
     }
@@ -49,9 +44,6 @@ export class NativeSessionMap<Value> {
 
 export class NativeSessionSet {
     readonly #entries = new NativeSessionMap<true>();
-    get size(): number {
-        return this.#entries.size;
-    }
     readonly has = (target: NativeSessionTarget): boolean => this.#entries.has(target);
     readonly add = (target: NativeSessionTarget): this => {
         this.#entries.set(target, true);

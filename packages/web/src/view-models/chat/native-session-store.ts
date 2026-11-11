@@ -1,4 +1,4 @@
-import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/channel";
+import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatComputer, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
@@ -153,6 +153,9 @@ export const createNativeSessionStore = (
             if (listing !== null && before.kind === "loading" && before.listing === listing) {
                 return;
             }
+            // A new listing invalidates the selected preview, including its in-flight response.
+            selection?.abort();
+            selection = null;
             const attempt = new AbortController();
             discovery?.abort(new Error("Native session discovery restarted."));
             discovery = attempt;
@@ -210,8 +213,8 @@ export const createNativeSessionStore = (
                 // the whole right pane empty even though there is a session to show.
                 const next = relistMatch(entries, previewedEntry) ?? entries[0];
                 if (next !== undefined) {
-                    // Only the dialog's lifetime cancels this preview. A discovery restart must not abort it, or a
-                    // Computer configuration refresh right after opening would strand the pane on its skeleton.
+                    // The selection owns its request independently of the completed discovery attempt.
+                    // Invalidating this listing ends that selection before the next listing is published.
                     void get().select(next, lifetime.signal);
                 }
             } catch (cause) {

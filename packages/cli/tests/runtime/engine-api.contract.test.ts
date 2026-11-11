@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +12,8 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { MortyRuntimeEngine } from "../../src/exports/engine.ts";
+import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
+import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
 it("Given an explicit data directory, When a host constructs Engine and reopens its store, Then construction has no side effects and saved connections survive", async () => {
@@ -20,11 +21,10 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
     const signal = AbortSignal.timeout(5_000);
     const params = { engineDataDir: join(directory, "data"), agentLaunchEnvironment: { PATH: "" } };
     try {
-        const engine = new MortyRuntimeEngine(params);
+        new MortyRuntimeEngine(params);
         expect(await readdir(directory)).toEqual([]);
-        const store = engine.getConnectionManager();
-        expect(engine.getConnectionManager()).toBe(store);
-        const connection = await store.save(
+        const store = await RuntimeInstallationStore.open(params.engineDataDir, signal);
+        const connection = await store.saveConnection(
             {
                 computerId: "embedded_channel",
                 defaultWorkspace: join(directory, "workspace"),
@@ -33,72 +33,28 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
             },
             signal,
         );
-        const reopened = new MortyRuntimeEngine(params).getConnectionManager();
-        expect(await reopened.read(connection.pairingGeneration, signal)).toEqual(connection);
-        expect(await reopened.list(signal)).toEqual([connection]);
-        await reopened.setActivation(connection.pairingGeneration, "stopped", signal);
-        expect(await store.read(connection.pairingGeneration, signal)).toMatchObject({ activation: "stopped" });
-        await reopened.remove(connection.pairingGeneration, signal);
-        expect(await store.list(signal)).toEqual([]);
+        const reopened = await RuntimeInstallationStore.open(params.engineDataDir, signal);
+        expect(await reopened.readConnection(connection.pairingGeneration, signal)).toEqual(connection);
+        expect(await reopened.listConnections(signal)).toEqual([connection]);
+        await reopened.setConnectionActivation(connection.pairingGeneration, "stopped", signal);
+        expect(await store.readConnection(connection.pairingGeneration, signal)).toMatchObject({
+            activation: "stopped",
+        });
+        await reopened.removeConnection(connection.pairingGeneration, signal);
+        expect(await store.listConnections(signal)).toEqual([]);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
 });
 
-it("Given a cancelled connection lookup, When another caller lists saved connections, Then cancellation does not poison lazy initialization", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "morty-engine-cancel-"));
-    try {
-        const engine = new MortyRuntimeEngine({ engineDataDir: directory, agentLaunchEnvironment: { PATH: "" } });
-        const cancelled = AbortSignal.abort(new Error("Lookup cancelled"));
-        await expect(engine.getConnectionManager().list(cancelled)).rejects.toBe(cancelled.reason);
-        const signal = AbortSignal.timeout(5_000);
-        expect(
-            await Promise.all([engine.getConnectionManager().list(signal), engine.getConnectionManager().list(signal)]),
-        ).toEqual([[], []]);
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
-
-it("Given first-use initialization is pending, When its owner and one waiter cancel, Then another waiter initializes successfully and later callers reuse that installation", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "morty-engine-first-use-"));
-    try {
-        const engine = new MortyRuntimeEngine({ engineDataDir: directory, agentLaunchEnvironment: { PATH: "" } });
-        const manager = engine.getConnectionManager();
-        const owner = new AbortController();
-        const waiter = new AbortController();
-        const ownerReason = new Error("Initialization owner cancelled");
-        const waiterReason = new Error("Initialization waiter cancelled");
-        const first = manager.list(owner.signal);
-        const cancelledWaiter = manager.list(waiter.signal);
-        const survivingWaiter = manager.list(AbortSignal.timeout(5_000));
-        // All three calls entered synchronously, before the first filesystem await completes.
-        const pending = Promise.allSettled([first, cancelledWaiter, survivingWaiter]);
-        waiter.abort(waiterReason);
-        owner.abort(ownerReason);
-        expect(await pending).toEqual([
-            { status: "rejected", reason: ownerReason },
-            { status: "rejected", reason: waiterReason },
-            { status: "fulfilled", value: [] },
-        ]);
-        expect(await manager.list(AbortSignal.timeout(5_000))).toEqual([]);
-        expect(await readdir(directory)).toEqual([]);
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
-
-it("Given a fresh Engine data directory, When a host concurrently saves connections on first use, Then only one complete pairing becomes active", async () => {
+it("Given a fresh installation, When a host concurrently saves connections, Then only one complete pairing becomes active", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-concurrent-"));
     const signal = AbortSignal.timeout(5_000);
     try {
-        const manager = new MortyRuntimeEngine({
-            engineDataDir: directory,
-            agentLaunchEnvironment: { PATH: "" },
-        }).getConnectionManager();
+        const manager = await RuntimeInstallationStore.open(directory, signal);
         const results = await Promise.allSettled(
             Array.from({ length: 32 }, (_, index) =>
-                manager.save(
+                manager.saveConnection(
                     {
                         computerId: `concurrent_channel_${index}`,
                         defaultWorkspace: join(directory, "workspace"),
@@ -109,7 +65,7 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
                 ),
             ),
         );
-        const saved = await manager.list(signal);
+        const saved = await manager.listConnections(signal);
         expect(saved).toHaveLength(1);
         expect(
             results.some(
@@ -122,24 +78,6 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
                 expect(result.reason).toMatchObject({ code: "pairing_busy" });
             }
         }
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
-
-it("Given installation initialization fails, When the host fixes the data directory and tries again, Then Engine does not cache the failed initialization", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "morty-engine-retry-"));
-    const data = join(directory, "data");
-    const signal = AbortSignal.timeout(5_000);
-    try {
-        await writeFile(data, "not a directory");
-        const manager = new MortyRuntimeEngine({
-            engineDataDir: data,
-            agentLaunchEnvironment: { PATH: "" },
-        }).getConnectionManager();
-        await expect(manager.list(signal)).rejects.toMatchObject({ code: "installation_unavailable" });
-        await rm(data);
-        expect(await manager.list(signal)).toEqual([]);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -196,8 +134,8 @@ it("Given saved and provided connections with opaque credentials, When a host se
                 MORTY_OPENCODE_PATH: "",
             },
         });
-        const manager = engine.getConnectionManager();
-        const saved = await manager.save(
+        const manager = await RuntimeInstallationStore.open(join(directory, "data"), deadline);
+        const saved = await manager.saveConnection(
             {
                 computerId: "loop_channel",
                 defaultWorkspace: join(directory, "workspace"),
@@ -244,7 +182,7 @@ it("Given saved and provided connections with opaque credentials, When a host se
         expect(catalogs).toEqual([expect.objectContaining({ agents: [] }), expect.objectContaining({ agents: [] })]);
         const [savedSuccessor] = successors;
         expect(savedSuccessor).toMatch(/^[A-Za-z0-9_-]{73}$/u);
-        expect(await manager.list(deadline)).toEqual([
+        expect(await manager.listConnections(deadline)).toEqual([
             { ...saved, credentials: { current: savedSuccessor, successor: null } },
         ]);
 

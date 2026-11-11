@@ -818,8 +818,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             await chmod(adapterPath, 0o700);
             vi.useFakeTimers({ toFake: ["clearTimeout", "setTimeout"] });
             vi.setSystemTime(new Date("2026-10-26T00:00:00.000Z"));
+            const observer = new RecordingObserver();
             const manager = new SessionManager({
-                observer: new NullSessionObserver(),
+                observer,
                 store: new MemorySessionStore(),
                 adapters: acpAdapters,
                 onSessionStatusChanged: () => undefined,
@@ -859,8 +860,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 "0.0.33",
                 [agentIdentity, adapterIdentity],
             );
-            const observer = new RecordingObserver();
-            manager.setObserver(observer);
 
             try {
                 const target = await manager.createNativeSession({
@@ -924,8 +923,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
     );
 
     it("Given a harness owns an empty conversation, When another harness is selected, Then the new harness creates its own conversation", async () => {
+        const observer = new RecordingObserver();
         const manager = new SessionManager({
-            observer: new NullSessionObserver(),
+            observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
             onSessionStatusChanged: () => undefined,
@@ -985,8 +985,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 signal: AbortSignal.timeout(10_000),
             });
 
-            const observer = new RecordingObserver();
-            manager.setObserver(observer);
             await manager.runPrompt({
                 agent: claude,
                 commandId: "command-after-rebind",

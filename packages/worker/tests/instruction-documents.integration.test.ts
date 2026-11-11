@@ -20,7 +20,7 @@ if (output === undefined) {
 }
 const workerScript = output.text;
 
-function createRuntime(options: { readonly appOrigin?: string; readonly attachments?: boolean } = {}) {
+function createRuntime(options: { readonly appOrigin?: string } = {}) {
     return new Miniflare(
         convertV4MiniflareOptions({
             modules: true,
@@ -28,27 +28,9 @@ function createRuntime(options: { readonly appOrigin?: string; readonly attachme
             compatibilityDate: "2026-09-07",
             compatibilityFlags: ["nodejs_compat"],
             ...(options.appOrigin === undefined ? {} : { bindings: { APP_ORIGIN: options.appOrigin } }),
-            ...(options.attachments ? { r2Buckets: ["CHAT_ATTACHMENTS_APAC"] } : {}),
         }),
     );
 }
-
-test("Given a retained setup artifact, When a user requests the retired download URL, Then the Worker refuses to serve it and instructions use the CLI", async () => {
-    const runtime = createRuntime({ attachments: true });
-    try {
-        const bucket = await runtime.getR2Bucket("CHAT_ATTACHMENTS_APAC");
-        const artifact = "console.log('published setup');\n";
-        await bucket.put("artifacts/setup.mjs", artifact);
-        const response = await runtime.dispatchFetch("https://chat.example/setup.mjs?token=ignored");
-        expect(response.status).toBe(404);
-        expect(await response.text()).not.toContain(artifact);
-        const instructions = await runtime.dispatchFetch("https://chat.example/setup.md");
-        expect(instructions.status).toBe(200);
-        expect(await instructions.text()).toContain("morty setup --base-url https://chat.example");
-    } finally {
-        await runtime.dispose();
-    }
-});
 
 test("Given the setup document, When users fetch it from configured and standalone origins, Then the rendered command is safe and current", async () => {
     const response = await worker.fetch(new Request("https://preview.example/setup.md?token=ticket"), {

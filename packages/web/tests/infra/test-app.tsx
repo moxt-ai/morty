@@ -10,7 +10,7 @@ import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runt
 import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
 import { encodeIdentityScope, identityScopeSchema } from "../../src/services/identity/identity-scope-url.ts";
-import { saveAccess } from "../../src/services/identity/remembered-computers.ts";
+import { withStoredAccessLock } from "../../src/services/identity/remembered-computers.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 import { assembleMorty } from "../../src/views/bootstrap.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
@@ -348,3 +348,11 @@ afterEach(async () => {
 afterAll(async () => {
     await closeTestEnvironment();
 });
+
+async function saveAccess(
+    scope: Parameters<import("../../src/services/identity/remembered-computers.ts").StoredAccessWriter["save"]>[0],
+    token: string,
+    signal: AbortSignal,
+): Promise<void> {
+    await withStoredAccessLock(signal, async (access) => access.save(scope, token));
+}

@@ -1,9 +1,4 @@
-import {
-    type MortyClient,
-    MortyElicitationResponseRequest,
-    type MortyInteractionResponseRequest,
-    MortyPermissionResponseRequest,
-} from "@morty-build/client";
+import type { MortyClient, MortyInteractionResponseRequest } from "@morty-build/client";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -120,13 +115,18 @@ export function createSessionPageState(options: {
         permission: (response, signal) =>
             respond(
                 response.interactionId,
-                new MortyPermissionResponseRequest("morty-web", response.outcome, response.optionId),
+                {
+                    kind: "permission",
+                    responderId: "morty-web",
+                    outcome: response.outcome,
+                    optionId: response.optionId,
+                },
                 signal,
             ),
         elicitation: (response, signal) =>
             respond(
                 response.interactionId,
-                new MortyElicitationResponseRequest("morty-web", response.action, response.content),
+                { kind: "elicitation", responderId: "morty-web", action: response.action, content: response.content },
                 signal,
             ),
         answerDrafts: new Map(Object.entries(centralSessionStorage.read(answerDraftsEntry) ?? {})),

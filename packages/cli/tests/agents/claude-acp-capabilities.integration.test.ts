@@ -51,7 +51,7 @@ test("Given a client advertises JetBrains Air extensions, When it initializes th
             resume: {},
         });
     } finally {
-        await claude.agent()?.dispose();
+        await claude.agent()?.dispose("graceful");
         connection.close();
     }
 });

@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
-export class MortyPathError extends Error {
+class MortyPathError extends Error {
     readonly code = "morty_state_directory_invalid";
 }
 
@@ -31,4 +31,4 @@ export function mortyStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = p
     }
 }
 
-export { claimMortyState, MortyOwnershipError } from "./ownership.ts";
+export { claimMortyState } from "./ownership.ts";

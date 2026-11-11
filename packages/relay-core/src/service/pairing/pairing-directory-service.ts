@@ -5,6 +5,7 @@ import {
     ProjectAuthenticationError,
     ProjectPermission,
 } from "../../entity/authentication/project-authentication.ts";
+import type { ProjectAccessAuthorizer } from "../../entity/authentication/project-authorization.ts";
 import type { ComputerScope } from "../../entity/do/session.ts";
 import { computerRevokedAt, projectComputerPairingStatus } from "../../entity/pairing/computer-pairing-state.ts";
 import type { AgentDescriptor, ClaimedPairing } from "../../entity/pairing/pairing.ts";
@@ -17,13 +18,11 @@ import {
     PairingDirectoryError,
     parseAgents,
     RevokedProjectComputer,
-    VerifiedChannelAccess,
     validateIdentifier,
     validateToken,
 } from "../../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { ComputerPairingRow } from "../../entity/pairing/pairing-records.ts";
-import type { ProjectAccessAuthorizer } from "../../gateway/project-access-authorizer.ts";
 import type { MachineAccountDirectory } from "../../infra/machine-account-directory.ts";
 import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
 import type { ProjectStore } from "../../infra/project-store.ts";
@@ -87,7 +86,7 @@ export class PairingDirectoryService implements PairingOperations {
         }
         // Only the daemon that saved a successor can present the retired credential with it. Another successor means
         // a copy of the credential connected first, so neither copy may keep the Computer.
-        const storage = await this.projectStorage(rotation.access.scope, signal);
+        const storage = await this.projectStorage(rotation.access, signal);
         await storage.revokeComputer(
             {
                 computerId: rotation.access.computerId,
@@ -114,7 +113,7 @@ export class PairingDirectoryService implements PairingOperations {
         }
         const storage = await this.projectStorage(access.scope, signal);
         const computer = await this.readActivePairing(storage, computerId, signal);
-        return new VerifiedChannelAccess(computer.computerId, []);
+        return { computerId: computer.computerId };
     };
 
     readonly authorizePairing: PairingOperations["authorizePairing"] = async (computerId, permission, signal) => {
@@ -134,7 +133,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (computerRevokedAt(row.revoked_at) !== null || row.registration === null) {
             throw new PairingDirectoryError("computer_unavailable", "The selected Computer is unavailable");
         }
-        return new VerifiedChannelAccess(row.computer_id, parseAgents(row.registration.agents_json));
+        return { computerId: row.computer_id };
     };
 
     private readonly decodeCreatedComputerPairing = async (
@@ -193,7 +192,7 @@ export class PairingDirectoryService implements PairingOperations {
                     expiresAt,
                     idempotencyKey: normalizedKey,
                     ownerId: owner.actor.actorId,
-                    actorKind: owner.actor.kind.value,
+                    actorKind: owner.actor.kind,
                     actorId: owner.actor.actorId,
                     auditId: `rpa_${crypto.randomUUID()}`,
                     rejectionAuditId: `rpa_${crypto.randomUUID()}`,
@@ -244,7 +243,7 @@ export class PairingDirectoryService implements PairingOperations {
             {
                 computerId: validateIdentifier(computerId, "computer_id"),
                 now: Date.now(),
-                actorKind: owner.actor.kind.value,
+                actorKind: owner.actor.kind,
                 actorId: owner.actor.actorId,
                 auditId: `rpa_${crypto.randomUUID()}`,
             },
@@ -257,10 +256,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (revokedAt === null) {
             throw new PairingDirectoryError("invalid_directory_record", "The Computer revocation is invalid");
         }
-        return new RevokedProjectComputer(
-            new VerifiedChannelAccess(row.computer_id, []),
-            new Date(revokedAt).toISOString(),
-        );
+        return new RevokedProjectComputer({ computerId: row.computer_id }, new Date(revokedAt).toISOString());
     };
 
     private readonly redeemPairing = async (

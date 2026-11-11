@@ -1,35 +1,17 @@
-/** Every permission a Project credential can grant. Servers and clients take the vocabulary from here. */
 export const PROJECT_PERMISSION_NAMES = Object.freeze([
-    "artifact:read",
-    "artifact:write",
-    "identity-binding:manage",
-    "interaction:respond",
-    "project:event:read",
-    "project:read",
     "computer:pair",
     "computer:read",
     "computer:revoke",
-    "session:delete",
     "session:read",
     "session:write",
 ] as const);
 
 export type ProjectPermissionName = (typeof PROJECT_PERMISSION_NAMES)[number];
 
-/**
- * The permissions a Relay App credential may hold. The Relay issues an App's server credential with all of
- * them and requires all of them to provision Projects; the Dashboard requests them when it issues a credential.
- */
 export const RELAY_APP_PROJECT_PERMISSIONS: readonly ProjectPermissionName[] = Object.freeze([
-    "artifact:read",
-    "artifact:write",
-    "interaction:respond",
-    "project:event:read",
-    "project:read",
     "computer:pair",
     "computer:read",
     "computer:revoke",
-    "session:delete",
     "session:read",
     "session:write",
 ]);

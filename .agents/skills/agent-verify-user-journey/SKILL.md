@@ -223,8 +223,7 @@ sections apply only to `todolist`.
 
 Through visible Morty controls:
 
-1. Confirm the agent configuration shows the paired harness; the page serves the
-   Bot bound to it, so there is no Bot selector.
+1. Confirm the selected computer and Agent configuration match the paired harness.
 2. Select the exact requested model in the Session configuration.
 3. Start a new conversation with the **New Session** control.
 4. Send an outcome-focused build request that names the already-paired app
@@ -261,7 +260,7 @@ through internal APIs to keep the turn active.
 Wait for the visible turn to complete through live Session events. Confirm in
 the UI that the selected model handled the turn and capture the final response
 and its summary. Do not infer success merely from files appearing in the
-workspace, and do not bypass Morty by querying the daemon or Platform directly.
+workspace, and do not bypass Morty by querying the daemon or Worker directly.
 
 If generation fails, retain the browser-visible failure and inspect the local
 stack logs using `chat-local-full-dev`. Report the failure; do not repair the
@@ -281,7 +280,7 @@ not an agent-integration failure; a failed agent turn or message control is.
 
 Screenshot the behavior the user actually asked to verify, at the product
 boundary where that behavior is visible. Do not automatically use screenshots
-of the generated to-do app as evidence for a Morty, Platform, Runtime, or
+of the generated to-do app as evidence for a Morty, Worker, Runtime, or
 streaming fix.
 
 For example, a streaming fix needs screenshots of the Morty conversation while

@@ -59,7 +59,6 @@
         "@biomejs/biome": "catalog:",
         "@cloudflare/vite-plugin": "catalog:",
         "@electron/asar": "4.3.1",
-        "@morty-build/cli": "workspace:*",
         "@morty-build/client": "workspace:*",
         "@morty-build/runtime-test-support": "workspace:*",
         "@sentry/cli": "2.58.6",

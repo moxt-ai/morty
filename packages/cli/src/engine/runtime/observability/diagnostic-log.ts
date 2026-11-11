@@ -82,14 +82,12 @@ export interface RuntimeDiagnosticLogOptions {
 
 export class RuntimeDiagnosticLog {
     readonly #log: BoundedLineLog;
-    readonly #maximumBytes: number;
     readonly #sources: readonly DiagnosticSource[];
 
     constructor(stateDirectory: string, options: RuntimeDiagnosticLogOptions = {}) {
         const maximumBytes = options.maximumBytes ?? MAXIMUM_RUNTIME_LOG_BYTES;
         const directory = logDirectory(stateDirectory);
         this.#log = new BoundedLineLog(directory, DAEMON_LOG_FILENAME, maximumBytes);
-        this.#maximumBytes = maximumBytes;
         const processLogsDirectory = options.processLogsDirectory;
         this.#sources = [
             { maximumBytes, path: join(directory, DAEMON_LOG_FILENAME) },

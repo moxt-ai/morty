@@ -80,13 +80,6 @@ const dialogMobileSheetDesktopMaxWidthClassNameBySize = {
     wide: "sm:max-w-[1024px]",
 } as const satisfies Record<DialogSize, string>;
 
-export function resolveDialogSize(size: DialogSize | undefined, wide: boolean): DialogSize {
-    if (size !== undefined) {
-        return size;
-    }
-    return wide ? "wide" : "standard";
-}
-
 export const dialogStandardMaxWidthClassName = dialogDesktopMaxWidthClassNameBySize.standard;
 
 export function sharedDialogDesktopMaxWidthClassName(size: DialogSize): string {

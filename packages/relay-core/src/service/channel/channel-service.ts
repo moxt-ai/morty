@@ -1,5 +1,4 @@
-import type { ComputerAccessContext } from "../../entity/authentication/project-authentication.ts";
-import type { AgentDescriptor } from "../../entity/pairing/pairing.ts";
+import type { AgentDescriptor, VerifiedChannelAccess } from "../../entity/pairing/pairing.ts";
 import type { ChannelGateway } from "../../gateway/index.ts";
 import { logger } from "../../infra/logger.ts";
 import type { PairingOperations } from "../pairing/pairing-operations.ts";
@@ -33,7 +32,7 @@ export class ChannelService {
         successor: string,
         signal: AbortSignal,
     ): Promise<
-        { readonly kind: "accepted"; readonly access: ComputerAccessContext } | { readonly kind: "revoked" }
+        { readonly kind: "accepted"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
     > => {
         const rotation = await this.#pairings.rotateComputerCredential(token, successor, signal);
         switch (rotation.kind) {

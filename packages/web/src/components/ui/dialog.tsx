@@ -28,7 +28,7 @@ import {
 } from "./overlay-width.ts";
 import { ScrollArea } from "./scroll-area.tsx";
 
-export { dialogVariantCatalog, dialogVariantLayout } from "./dialog-variant.ts";
+export { dialogVariantCatalog } from "./dialog-variant.ts";
 export type { DialogAppearance, DialogSize, DialogVariant };
 
 /** Sections inside a default dialog body. The dialog header and `footer` stay outside the scroll region. */
@@ -37,17 +37,11 @@ export const dialogBodyStackClassName = "flex flex-col gap-5";
 /** Subsection label inside a default dialog body (below header description). */
 export const dialogSectionTitleClassName = "text-[13px] font-medium leading-5 text-foreground";
 
-/** Primary/cancel row at the bottom of a default dialog body. */
-export const dialogFooterActionsClassName = "mt-5 flex justify-end gap-2";
-
 /** Pinned `footer` slot: 20px above the actions, 24px on the sides and below. */
 export const dialogPinnedFooterActionsClassName = "flex justify-end gap-2 px-6 pt-5 pb-6";
 
 /** Surface-appearance body inset inside the outer `p-2` panel shell (not used on default `p-6` cards). */
 export const dialogSurfaceBodyClassName = "space-y-5 px-3 pb-4 sm:px-5 sm:pb-5";
-
-/** Surface-appearance section label above grouped cards (e.g. Devices with access). */
-export const dialogSurfaceSectionHeadingClassName = "mb-2 px-0.5 text-12 font-medium leading-4 text-morty-text-3";
 
 export function Dialog({
     title,
@@ -56,7 +50,6 @@ export function Dialog({
     busy = false,
     variant,
     size,
-    wide = false,
     mobileSheet,
     appearance,
     testId,
@@ -72,8 +65,6 @@ export function Dialog({
     readonly variant?: DialogVariant;
     /** Overrides variant desktop max-width tier. */
     readonly size?: DialogSize;
-    /** @deprecated Prefer `size="wide"`. */
-    readonly wide?: boolean;
     /** Present as a bottom sheet on mobile, then return to a centered dialog at the sm breakpoint. */
     readonly mobileSheet?: boolean;
     readonly appearance?: DialogAppearance;
@@ -96,7 +87,6 @@ export function Dialog({
         ...(mobileSheet !== undefined ? { mobileSheet } : {}),
         ...(size !== undefined ? { size } : {}),
         ...(variant !== undefined ? { variant } : {}),
-        wide,
     });
     const setup = generated.appearance === "setup";
     const surface = generated.appearance === "surface";

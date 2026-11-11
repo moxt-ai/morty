@@ -7,12 +7,13 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/relay-worker.ts";
+import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
+import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
 import { createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const relayOrigin = "https://relay.test";
 
-function bindings(): RelayRelayBindings {
+function bindings(): RelayBindings {
     return {
         RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
@@ -37,9 +38,9 @@ async function responseJson(response: Response, status: number): Promise<Readonl
     return Object.fromEntries(Object.entries(body));
 }
 
-/** Pairs a Computer through the public pairing API and returns how its daemon connects. */
+/** Pairs a Runtime through the public pairing API and returns how its daemon connects. */
 async function pairedComputer(name: string) {
-    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const environment = bindings();
     const project = await createOwner();
     const headers = new Headers({ authorization: `Bearer ${project.token}`, "content-type": "application/json" });

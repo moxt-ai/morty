@@ -145,7 +145,6 @@ export class SessionRuntimeFixture {
         }
     };
 
-    readonly setObserver = (...args: Parameters<SessionManager["setObserver"]>) => this.sessions.setObserver(...args);
     readonly recordLifecycleEvent = (...args: Parameters<SessionManager["recordLifecycleEvent"]>) =>
         this.sessions.recordLifecycleEvent(...args);
     readonly renameSession = (...args: Parameters<SessionManager["renameSession"]>) =>
@@ -164,6 +163,4 @@ export class SessionRuntimeFixture {
         this.sessions.sessionStatus(...args);
     readonly listSessions = (...args: Parameters<SessionManager["listSessions"]>) =>
         this.sessions.listSessions(...args);
-    readonly hasPreparedSession = (...args: Parameters<SessionManager["hasPreparedSession"]>) =>
-        this.sessions.hasPreparedSession(...args);
 }

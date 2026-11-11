@@ -1,24 +1,8 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { logger } from "@morty-build/relay-core/logging";
-import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
-import { encodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
-import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
-
-export interface ComputerWorkerRoutingBindings {
-    readonly COMPUTER_RELAY: DurableObjectNamespace<ComputerRelay>;
-}
-
-/** A request executing inside the Account Durable Object, beside the Project's own store. */
-export interface ComputerDurableObjectExecutionBindings extends ComputerWorkerRoutingBindings {
-    readonly MORTY_LOCAL_CHANNEL?: (computerId: string, request: Request) => Promise<Response>;
-    readonly MORTY_COMPUTER_STORE: ComputerManagementStore;
-    readonly MORTY_COMPUTER_ID: string;
-}
-
-export type ComputerDurableObjectRoutingBindings =
-    | ComputerWorkerRoutingBindings
-    | ComputerDurableObjectExecutionBindings;
+import { encodeComputerDurableObjectPath } from "../../../relay/src/entity/computer-durable-object-path.ts";
+import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
+import type { RelayBindings } from "../composition/relay-bindings.ts";
 
 function failure(code: string, status: number): Response {
     return Response.json({ error: { code, message: "Account routing is unavailable" } }, { status });
@@ -76,16 +60,10 @@ async function computerIdFromUnscopedRequest(request: Request): Promise<string |
 
 export async function routeComputerDurableObject(
     request: Request,
-    bindings: ComputerDurableObjectRoutingBindings,
+    bindings: RelayBindings,
     allowedOrigins: ReadonlySet<string>,
 ): Promise<Response | null> {
-    if ("MORTY_COMPUTER_STORE" in bindings) {
-        return null;
-    }
     const pathname = new URL(request.url).pathname;
-    if (pathname === `${MORTY_API_PREFIX}/dashboard` || pathname.startsWith(`${MORTY_API_PREFIX}/dashboard/`)) {
-        return null;
-    }
     const computerId = computerIdFromPath(pathname) ?? (await computerIdFromUnscopedRequest(request));
     if (computerId === null) {
         return null;

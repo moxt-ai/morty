@@ -4,10 +4,10 @@ import { createServer, request as httpRequest, type Server } from "node:http";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
+import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
 import { ControlledCodexFixture } from "../support/agents/controlled-codex.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -161,7 +161,7 @@ describe("daemon environment proxy", () => {
         Object.assign(process.env, codex.environment);
 
         try {
-            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const { MortyRuntimeEngine } = await import("../../src/engine/runtime/engine.ts");
             const { connectRelay } = await import("../../src/engine/runtime/relay/connect.ts");
             const { describeEnvironmentProxyRoute, environmentProxyDispatcher } = await import(
                 "../../src/engine/util/network/environment-proxy.ts"
@@ -182,8 +182,11 @@ describe("daemon environment proxy", () => {
                 AbortSignal.timeout(2_000),
             );
             expect(
-                (await engine.getConnectionManager().read(paired.pairingGeneration, AbortSignal.timeout(2_000)))
-                    .computerId,
+                (
+                    await (
+                        await RuntimeInstallationStore.open(stateDirectory, AbortSignal.timeout(5_000))
+                    ).readConnection(paired.pairingGeneration, AbortSignal.timeout(2_000))
+                ).computerId,
             ).toBe("proxy-computer");
 
             const relayPort = port(relayServer);

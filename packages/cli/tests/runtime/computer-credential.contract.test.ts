@@ -2,7 +2,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { MortyRuntimeEngine } from "../../src/exports/engine.ts";
+import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
 it("Given a credential outside the Computer token format, When an embedding host runs a provided connection, Then configuration is rejected before workspace creation", async () => {

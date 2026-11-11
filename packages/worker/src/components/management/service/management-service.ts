@@ -5,7 +5,7 @@ import { ManagementError } from "../entity/management-error.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
 import { randomSecret } from "../storage/identity-storage-common.ts";
-import { provisionAccount } from "./account-provisioning-service.ts";
+import type { AccountProvisioner } from "./account-provisioning-service.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
 import type { LocalComputerService } from "./local-computer-service.ts";
 
@@ -15,18 +15,22 @@ export class ManagementService {
     readonly #computerId: string | undefined;
     readonly #relay: LocalComputerService;
     readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
-    readonly #bindings: CloudBindings;
+    readonly #provisionAccount: AccountProvisioner;
 
     constructor(cx: {
         readonly config: { readonly bindings: CloudBindings };
-        readonly services: { readonly authentication: AuthenticationService; readonly computers: LocalComputerService };
+        readonly services: {
+            readonly authentication: AuthenticationService;
+            readonly computers: LocalComputerService;
+            readonly provisionAccount: AccountProvisioner;
+        };
     }) {
         this.#authentication = cx.services.authentication;
         this.#ownerUserId = cx.config.bindings.CHAT_OWNER_USER_ID ?? undefined;
         this.#computerId = cx.config.bindings.CHAT_COMPUTER_ID;
         this.#relay = cx.services.computers;
         this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
-        this.#bindings = cx.config.bindings;
+        this.#provisionAccount = cx.services.provisionAccount;
     }
 
     /**
@@ -68,13 +72,7 @@ export class ManagementService {
         // and the primary reference is already bound to the previous Project. Keying the reference on
         // the previous Project keeps replacement retries idempotent, as does reusing its placement.
         const reference = `${userId}.${previous.computerId}`;
-        const project = await provisionAccount(
-            this.#bindings,
-            userId,
-            reference,
-            projectRegion(previous.computerId),
-            signal,
-        );
+        const project = await this.#provisionAccount(userId, reference, projectRegion(previous.computerId), signal);
         return project;
     };
 

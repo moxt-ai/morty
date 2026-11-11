@@ -1543,6 +1543,11 @@ async function waitForMcpAuthentication(
 }
 
 export class ClaudeAcpAgent {
+    private readonly lifetime = new AbortController();
+    readonly signal: AbortSignal = this.lifetime.signal;
+    private readonly creating = new Set<Promise<NewSessionResponse>>();
+    private readonly creationControllers = new Set<AbortController>();
+    private closing: Promise<void> | null = null;
     private readonly pendingSubmissions = new Map<string, Set<AbortController>>();
     sessions: {
         [key: string]: Session;
@@ -5202,12 +5207,14 @@ export class ClaudeAcpAgent {
 
     /** Cleanly tear down a session: cancel in-flight work, release stream
      *  resources, and remove it from the session map. */
-    private async teardownSession(sessionId: string): Promise<void> {
+    private async teardownSession(sessionId: string, graceful = true): Promise<void> {
         const session = this.sessions[sessionId];
         if (!session) {
             return;
         }
-        await this.cancel({ sessionId });
+        if (graceful) {
+            await this.cancel({ sessionId });
+        }
         // cancel() arms the force-cancel floor and interrupts gracefully, but a
         // wedged consumer only wakes when `cancelController` aborts — closeQueryStream
         // below doesn't touch it. Since we're tearing the session down anyway, wake
@@ -5226,9 +5233,27 @@ export class ClaudeAcpAgent {
         delete this.sessions[sessionId];
     }
 
-    /** Tear down all active sessions. Called when the ACP connection closes. */
-    async dispose(): Promise<void> {
-        await Promise.all(Object.keys(this.sessions).map((id) => this.teardownSession(id)));
+    /** Release SDK resources; callers may skip graceful interruption after their own cancellation deadline. */
+    async dispose(mode: "graceful" | "force"): Promise<void> {
+        if (this.closing === null) {
+            this.lifetime.abort(new DOMException("The Claude client closed", "AbortError"));
+            for (const controller of this.creationControllers) {
+                controller.abort(this.signal.reason);
+            }
+            this.closing = (async () => {
+                await Promise.allSettled([...this.creating]);
+                await Promise.all(Object.keys(this.sessions).map((id) => this.teardownSession(id, mode !== "force")));
+            })();
+        }
+        return await this.closing;
+    }
+
+    sessionConfiguration(sessionId: string) {
+        const session = this.sessions[sessionId];
+        if (!session || session.queryClosed) {
+            throw RequestError.internalError(undefined, SESSION_ENDED_MESSAGE);
+        }
+        return { configOptions: session.configOptions, modes: session.modes };
     }
 
     async closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
@@ -6301,6 +6326,20 @@ export class ClaudeAcpAgent {
             permissionMode?: PermissionMode;
         } = {},
     ): Promise<NewSessionResponse> {
+        this.signal.throwIfAborted();
+        const creating = this.createSessionQuery(params, creationOpts);
+        this.creating.add(creating);
+        try {
+            return await creating;
+        } finally {
+            this.creating.delete(creating);
+        }
+    }
+
+    private async createSessionQuery(
+        params: NewSessionRequest,
+        creationOpts: { resume?: string; publicSessionId?: string; permissionMode?: PermissionMode },
+    ): Promise<NewSessionResponse> {
         // Validate `cwd` up front. The ACP spec requires an absolute path, and the
         // directory must actually exist on the machine running the agent. Without
         // this check a session is created against a missing directory and the
@@ -6323,7 +6362,26 @@ export class ClaudeAcpAgent {
         const settingsManager = new SettingsManager(params.cwd, {
             logger: this.logger,
         });
+        const sessionMeta = params._meta as NewSessionMeta | undefined;
+        const userProvidedOptions = sessionMeta?.claudeCode?.options;
+        const abortController = userProvidedOptions?.abortController || new AbortController();
+        this.creationControllers.add(abortController);
+        let q: Query | null = null;
+        using _resources = {
+            [Symbol.dispose]: () => {
+                this.creationControllers.delete(abortController);
+                // Once registered, the Session owns these resources instead of the creation scope.
+                if (q !== null && this.sessions[sessionId]?.query === q) {
+                    return;
+                }
+                q?.close();
+                input.end();
+                settingsManager.dispose();
+                abortController.abort();
+            },
+        };
         await settingsManager.initialize();
+        this.signal.throwIfAborted();
 
         const mcpServers: Record<string, McpServerConfig> = {};
         if (Array.isArray(params.mcpServers)) {
@@ -6372,8 +6430,6 @@ export class ClaudeAcpAgent {
         const initialPermissionMode = creationOpts.permissionMode ?? permissionMode;
 
         // Extract options from _meta if provided
-        const sessionMeta = params._meta as NewSessionMeta | undefined;
-        const userProvidedOptions = sessionMeta?.claudeCode?.options;
         const forwardSubagentText =
             supportsSubagentTranscript(this.clientCapabilities) || userProvidedOptions?.forwardSubagentText === true;
 
@@ -6403,8 +6459,6 @@ export class ClaudeAcpAgent {
         const tools: Options["tools"] =
             userProvidedOptions?.tools ??
             (params._meta?.disableBuiltInTools === true ? [] : { type: "preset", preset: "claude_code" });
-
-        const abortController = userProvidedOptions?.abortController || new AbortController();
 
         // Per-session task state. Created here (rather than in the session record
         // below) so the TaskCreated/TaskCompleted hook callbacks can close over
@@ -6609,11 +6663,9 @@ export class ClaudeAcpAgent {
         }
 
         // Handle abort controller from meta options
-        if (abortController?.signal.aborted) {
-            throw new Error("Cancelled");
-        }
-
-        const q = query({
+        this.signal.throwIfAborted();
+        abortController.signal.throwIfAborted();
+        q = query({
             prompt: input,
             options,
         });
