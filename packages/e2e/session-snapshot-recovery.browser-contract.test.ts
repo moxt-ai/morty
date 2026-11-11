@@ -360,6 +360,7 @@ test("Given the user has loaded older messages, when the connection recovers, th
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
+    await expect(page.getByRole("status", { name: "Loading messages", exact: true })).toBeHidden();
     for (let index = 1; index <= 7; index += 1) {
         await composer.fill(`many session events: Saved message ${index}`);
         await page.getByRole("button", { name: "Send message", exact: true }).click();

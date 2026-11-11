@@ -37,15 +37,11 @@ export const dialogBodyStackClassName = "flex flex-col gap-5";
 /** Subsection label inside a default dialog body (below header description). */
 export const dialogSectionTitleClassName = "text-[13px] font-medium leading-5 text-foreground";
 
-/** Primary/cancel row at the bottom of a default dialog body. */
-
 /** Pinned `footer` slot: 20px above the actions, 24px on the sides and below. */
 export const dialogPinnedFooterActionsClassName = "flex justify-end gap-2 px-6 pt-5 pb-6";
 
 /** Surface-appearance body inset inside the outer `p-2` panel shell (not used on default `p-6` cards). */
 export const dialogSurfaceBodyClassName = "space-y-5 px-3 pb-4 sm:px-5 sm:pb-5";
-
-/** Surface-appearance section label above grouped cards (e.g. Devices with access). */
 
 export function Dialog({
     title,
