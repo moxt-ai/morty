@@ -149,6 +149,7 @@ checksums. Do not describe that release record as a public provenance attestatio
 
 Activate matching cloud and CLI artifacts, then verify fresh installation, pairing,
 conversation, attachments and reconnect. Preserve accepted release archives and
-retained data for recovery. Recovery restores an accepted matching cloud/CLI
+retained data for recovery. Never replay old writers against new schemas.
+Recovery restores an accepted matching cloud/CLI
 release and uses fresh pairing when installation generations differ. Moxt services
 and Agent-owned data remain independent.
