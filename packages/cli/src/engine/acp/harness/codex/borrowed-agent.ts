@@ -395,7 +395,6 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
         return false;
     };
 
-    readonly nativeTurnId = (): null => null;
     readonly steer = async (_params: unknown, signal: AbortSignal): Promise<never> => {
         signal.throwIfAborted();
         throw new AcpExecutionError("This Codex session only supports queued input", {}, "steering_unsupported");

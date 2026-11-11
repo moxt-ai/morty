@@ -2,19 +2,22 @@ import { isAbsolute, resolve } from "node:path";
 import { methods, RequestError } from "@agentclientprotocol/sdk/unstable";
 import { decodeAgentPromptResponse, type SessionConfigOption } from "@morty-build/client/protocol";
 import { z } from "zod";
-import { isRecord, truncate } from "../../util/value-utils.ts";
-import { AcpConfigurationValueUnavailableError, AcpExecutionError } from "../acp-error.ts";
-import { buildPromptContent } from "../client/prompt-content.ts";
-import type { AcpContentExternalizer } from "../content/content-externalizer.ts";
+import { AcpConfigurationValueUnavailableError, AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
+import { buildPromptContent } from "../../../src/engine/acp/client/prompt-content.ts";
+import type { AcpContentExternalizer } from "../../../src/engine/acp/content/content-externalizer.ts";
 import type {
     Adapter,
     AdapterPromptResult,
     AdapterSessionCreateParams,
     AdapterSessionScope,
     AdapterSessionTarget,
-} from "../native-history/preview-contract.ts";
-import { sessionIdSchema } from "../protocol/native-session.ts";
-import { SessionConfigProtocolError, sessionConfigProtocolForAgent } from "../protocol/session-config-protocol.ts";
+} from "../../../src/engine/acp/native-history/preview-contract.ts";
+import { sessionIdSchema } from "../../../src/engine/acp/protocol/native-session.ts";
+import {
+    SessionConfigProtocolError,
+    sessionConfigProtocolForAgent,
+} from "../../../src/engine/acp/protocol/session-config-protocol.ts";
+import { isRecord, truncate } from "../../../src/engine/util/value-utils.ts";
 import { AdapterSessionConnection } from "./session-events.ts";
 
 export interface AcpExecutionConnection {
@@ -35,14 +38,9 @@ const targetSchema = z.object({
 export class AcpExecutionConnections {
     readonly #sessions = new Set<AcpExecutionConnection>();
     readonly #externalizer: Pick<AcpContentExternalizer, "update">;
-    readonly #normalizeEvent: (event: unknown) => unknown;
 
-    constructor(
-        externalizer: Pick<AcpContentExternalizer, "update">,
-        normalizeEvent: (event: unknown) => unknown = (event) => event,
-    ) {
+    constructor(externalizer: Pick<AcpContentExternalizer, "update">) {
         this.#externalizer = externalizer;
-        this.#normalizeEvent = normalizeEvent;
     }
 
     readonly acquire = (params: AdapterSessionCreateParams): AcpExecutionConnection => {
@@ -69,7 +67,6 @@ export class AcpExecutionConnections {
                 interactions: params.interactions,
             },
             this.#externalizer,
-            this.#normalizeEvent,
             () => this.#sessions.delete(session),
         );
         const session = { connection, scope: params.scope, subscriber: params };
@@ -145,10 +142,6 @@ export class AcpExecutionConnections {
         }
         return session;
     };
-
-    /** The open writer's connection for this native session, if any. */
-    readonly connection = (target: AdapterSessionTarget): AdapterSessionConnection | undefined =>
-        this.#find(target)?.connection;
 
     readonly cancel: Adapter["cancel"] = async ({ signal, ...target }) => {
         const bounded = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);

@@ -222,7 +222,6 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
     readonly #streamedReasoningSources = new Map<string, "summary" | "content">();
     readonly #agentMessages = new Map<string, "started" | "streaming">();
     #turn: ActiveTurn | null = null;
-    #nativeTurnId: string | null = null;
     readonly #runningCommands = new Map<string, "foreground" | "background">();
     #updateTail: Promise<void> = Promise.resolve();
     // The compaction whose contextCompaction item/started has been reported but whose
@@ -243,7 +242,6 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
         this.#settings = context.settings;
     }
 
-    readonly nativeTurnId = (): string | null => this.#nativeTurnId;
     readonly onTerminated = (termination: AgentTermination): void => {
         if (this.#turn !== null) {
             this.#turn.steeringContent.clear();
@@ -420,7 +418,6 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                 (this.#turn.turn.id === "" || this.#turn.turn.id === decoded.data.turn.id)
             ) {
                 this.#turn.turn.id = decoded.data.turn.id;
-                this.#nativeTurnId = decoded.data.turn.id;
             }
             return;
         }
@@ -833,7 +830,6 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
         this.#agentMessages.clear();
         this.#streamedReasoningSources.clear();
         this.#turn = turn;
-        this.#nativeTurnId = null;
         try {
             // The selection rides on the turn rather than the thread, so a choice made between turns
             // applies to the next one without restarting the conversation. Approval and sandboxing
@@ -852,7 +848,6 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
             );
             if (this.#turn === turn) {
                 turn.turn.id = started.id;
-                this.#nativeTurnId = started.id;
             }
             try {
                 const result = await completion.promise;

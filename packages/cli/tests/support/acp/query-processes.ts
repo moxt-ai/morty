@@ -1,11 +1,11 @@
 import type { SessionCapabilities } from "@morty-build/client/protocol";
-import { waitForSharedOperation } from "../../session/manager/operation-drain.ts";
-import type { AgentProcessPool } from "../../session/process/agent-process-pool.ts";
-import { RetainedAgentProcesses } from "../../session/process/retained-agent-processes.ts";
-import type { AcpAgentDefinition } from "../agent/agent-definition.ts";
-import type { NativeSessionQuery } from "../native-history/preview-contract.ts";
-import type { NativeSessionPage } from "../protocol/native-session.ts";
-import { type NativeSessionQueryKey, nativeSessionQueryKey } from "./query-scope.ts";
+import { type NativeSessionQueryKey, nativeSessionQueryKey } from "../../../src/engine/acp/adapter/query-scope.ts";
+import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
+import type { NativeSessionQuery } from "../../../src/engine/acp/native-history/preview-contract.ts";
+import type { NativeSessionPage } from "../../../src/engine/acp/protocol/native-session.ts";
+import { waitForSharedOperation } from "../../../src/engine/session/manager/operation-drain.ts";
+import type { AgentProcessPool } from "../../../src/engine/session/process/agent-process-pool.ts";
+import { RetainedAgentProcesses } from "../../../src/engine/session/process/retained-agent-processes.ts";
 import { AcpQuerySession } from "./query-session.ts";
 import type { AcpSessionConnector } from "./session-events.ts";
 

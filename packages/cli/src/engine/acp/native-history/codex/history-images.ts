@@ -1,75 +1,20 @@
-import type { AcpSessionUpdate, ContentBlock } from "@morty-build/client/protocol";
 import { readLocalRaster } from "../../content/raster.ts";
-
-type ToolCallContent = NonNullable<
-    Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" }>["content"]
->[number];
 
 const IMAGE_MARKER = /\[@image\]\(([^)\r\n]*)(?:\)|$)/g;
 const DATA_IMAGE_HEADER = /^data:(image\/[a-z+]+);base64,/;
 const BASE_64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const SESSION_HISTORY_IMAGE_CHARACTER_LIMIT = 4_000_000;
 
-/**
- * Internal materialized history model for direct native reads. It exists only to
- * bound saved Agent threads before they are converted into V2 session events;
- * it is not a protocol contract.
- */
 interface NativeHistoryImage {
     readonly data: string;
     readonly mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
-    readonly name: string;
 }
-
-interface NativeHistoryMessage {
-    readonly role: "user";
-    readonly text: string;
-    readonly images?: readonly NativeHistoryImage[];
-}
-
-interface NativeAssistantHistoryMessage {
-    readonly activities: readonly NativeHistoryActivity[];
-    /** Raw message content; recorded verbatim into the session event log. */
-    readonly content: readonly ContentBlock[];
-    readonly role: "assistant";
-    /** Absent when the source Agent does not report a terminal outcome. */
-    readonly outcome?: "succeeded" | "cancelled" | "failed";
-    readonly text: string;
-    readonly images?: readonly NativeHistoryImage[];
-}
-
-interface NativeHistoryActivity {
-    readonly activityId: string;
-    readonly activityType: string;
-    /** Raw tool content; recorded verbatim into the session event log. */
-    readonly content: readonly ToolCallContent[];
-    readonly input: string;
-    readonly locations: readonly string[];
-    readonly name: string;
-    readonly output: string;
-    readonly sequence: number;
-    readonly status: string;
-    readonly title: string;
-    readonly toolKind: string;
-}
-
-export type NativeHistoryEntry =
-    | {
-          readonly status: "available";
-          readonly messages: readonly (NativeHistoryMessage | NativeAssistantHistoryMessage)[];
-          readonly truncated: boolean;
-          /** Commands whose native turns are covered by this read; consumed by turn bookkeeping. */
-          readonly coveredCommandIds?: readonly string[];
-          readonly coveredMessageIds?: readonly string[];
-      }
-    | { readonly status: "unavailable"; readonly cause: { readonly code: string; readonly message: string } };
 
 function isRasterMime(value: string): value is NativeHistoryImage["mimeType"] {
     return value === "image/png" || value === "image/jpeg" || value === "image/gif" || value === "image/webp";
 }
 
-/** Codex ACP serializes saved images as text links. Only embedded raster data
- * can be restored without granting filesystem or network access. */
+/** Decode inline raster images before attempting the authorized local-file path. */
 function parseNativeHistoryImage(uri: string): NativeHistoryImage | null {
     const header = DATA_IMAGE_HEADER.exec(uri);
     if (header === null) {
@@ -83,47 +28,26 @@ function parseNativeHistoryImage(uri: string): NativeHistoryImage | null {
     if (data.length % 4 !== 0 || !BASE_64.test(data)) {
         return null;
     }
-    return { data, mimeType, name: "" };
+    return { data, mimeType };
 }
 
-export async function embedLocalHistoryImages(
-    history: NativeHistoryEntry,
+export async function resolveHistoryTextImages(
+    value: string,
     signal: AbortSignal,
-): Promise<NativeHistoryEntry> {
-    if (history.status !== "available") {
-        return history;
-    }
-    const messages: (NativeHistoryMessage | NativeAssistantHistoryMessage)[] = [];
+): Promise<{ readonly text: string; readonly images: readonly NativeHistoryImage[] }> {
+    signal.throwIfAborted();
+    const images: NativeHistoryImage[] = [];
     let imageCharacters = 0;
-    for (const message of history.messages) {
-        signal.throwIfAborted();
-        const resolved = await resolveMessageImages(message, imageCharacters, signal);
-        imageCharacters += (resolved.images ?? []).reduce((size, image) => size + image.data.length, 0);
-        messages.push(resolved);
-    }
-    return {
-        ...history,
-        messages,
-    };
-}
-
-async function resolveMessageImages(
-    message: NativeHistoryMessage | NativeAssistantHistoryMessage,
-    usedCharacters: number,
-    signal: AbortSignal,
-): Promise<NativeHistoryMessage | NativeAssistantHistoryMessage> {
-    const images: NativeHistoryImage[] = [...(message.images ?? [])];
-    let imageCharacters = images.reduce((size, image) => size + image.data.length, 0);
-    const text = await replaceImageMarkers(message.text, async (uri) => {
-        if (images.length >= 8 || usedCharacters + imageCharacters >= SESSION_HISTORY_IMAGE_CHARACTER_LIMIT) {
+    const text = await replaceImageMarkers(value, async (uri) => {
+        if (images.length >= 8 || imageCharacters >= SESSION_HISTORY_IMAGE_CHARACTER_LIMIT) {
             return "[Image unavailable]";
         }
         const embedded = parseNativeHistoryImage(uri);
         if (embedded !== null) {
-            if (usedCharacters + imageCharacters + embedded.data.length > SESSION_HISTORY_IMAGE_CHARACTER_LIMIT) {
+            if (imageCharacters + embedded.data.length > SESSION_HISTORY_IMAGE_CHARACTER_LIMIT) {
                 return "[Image unavailable]";
             }
-            images.push({ ...embedded, name: `Image ${(images.length + 1).toString()}` });
+            images.push(embedded);
             imageCharacters += embedded.data.length;
             return "";
         }
@@ -132,22 +56,17 @@ async function resolveMessageImages(
             return "[Image unavailable]";
         }
         const data = await local.base64();
-        if (usedCharacters + imageCharacters + data.length > SESSION_HISTORY_IMAGE_CHARACTER_LIMIT) {
+        if (imageCharacters + data.length > SESSION_HISTORY_IMAGE_CHARACTER_LIMIT) {
             return "[Image unavailable]";
         }
         images.push({
             data,
             mimeType: local.mimeType,
-            name: local.name,
         });
         imageCharacters += data.length;
         return "";
     });
-    return {
-        ...message,
-        text,
-        ...(images.length > 0 ? { images } : {}),
-    };
+    return { text, images };
 }
 
 async function replaceImageMarkers(text: string, replace: (uri: string) => Promise<string>): Promise<string> {
