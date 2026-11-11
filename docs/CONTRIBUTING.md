@@ -94,5 +94,5 @@ library dependencies separately. The download must serve a deployment-owned arti
 request parameters must not select arbitrary storage objects. Missing artifacts must
 produce a clear, retryable failure rather than an incomplete setup script.
 
-Keep setup intent (identity and Bot configuration) separate from daemon-owned pairing
+Keep setup intent (identity and workspace selection) separate from daemon-owned pairing
 and connection state.
