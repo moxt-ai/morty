@@ -77,7 +77,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/
 curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/morty/api/health
 ```
 
-Expect `200` for the SPA and `200` from the proxied deployed Worker. The second
+Expect `200` for the SPA and `204` from the proxied Worker health endpoint. The second
 request proves the proxy reaches the deployed origin; if it hangs or errors,
 fix the proxy layer before touching the browser.
 

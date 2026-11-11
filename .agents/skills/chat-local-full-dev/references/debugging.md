@@ -17,7 +17,7 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | --- | --- |
 | Morty Worker output | `chatLog` from `prepare` |
 | Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`); read the daemon log with the checkout CLI as shown below |
-| D1 / Durable Objects / R2 | `chatPersist` |
+| D1 / Durable Objects | `chatPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
 
 Read Worker and setup logs with

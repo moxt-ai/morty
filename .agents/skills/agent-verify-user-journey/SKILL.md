@@ -93,7 +93,7 @@ Use `chat-local-full-dev` to:
 1. Validate the Morty checkout, pinned Node and pnpm versions, and locked
    workspace dependencies.
 2. Start an isolated local stack in `web-server` mode. This must include the
-   single Morty Worker and its local D1, Durable Objects, R2 and assets.
+   single Morty Worker and its local D1, Durable Objects and browser assets.
    Read `chatOrigin` and `stateDir` from
    the ready/status record; do not assume ports.
 3. Check stack health before opening the browser.
@@ -179,7 +179,7 @@ Use `chat-local-full-dev` to:
    Pi uses `PI_SESSION_ID`. Use its own session metadata if its variable is
    unavailable; stop if the exact current identifier cannot be resolved. Do not
    ask the user for it, guess, use an unrelated saved session, or substitute the
-   verification agent's session. The setup bundle prefers the selected harness's
+   verification agent's session. The setup command prefers the selected harness's
    environment variable, so the explicit argument must match it.
 
 6. Have the harness capture the setup result to the protected temporary file
@@ -190,8 +190,7 @@ Use `chat-local-full-dev` to:
    ownership of the setup harness process and release it on completion, failure,
    or cancellation without stopping the paired Runtime before verification.
 
-This local flow uses Morty's anonymous identity handoff. Clerk sign-in and Clerk
-publishable keys are not required; do not restore the obsolete Clerk prerequisites.
+This local flow uses Morty's anonymous identity handoff.
 
 Connecting the harness launches it as a Runtime; it does not authorize calling
 the harness CLI directly for generation.

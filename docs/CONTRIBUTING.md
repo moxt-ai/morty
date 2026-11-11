@@ -87,12 +87,10 @@ objects during ordinary deployment. Provision resources using the independent
 Morty production target. Local development uses isolated local resources without
 production credentials. Hosted staging and benchmark environments are retired.
 
-### Setup download
+### CLI setup
 
-Users must be able to download and run the setup artifact without installing its
-library dependencies separately. The download must serve a deployment-owned artifact;
-request parameters must not select arbitrary storage objects. Missing artifacts must
-produce a clear, retryable failure rather than an incomplete setup script.
+Setup runs through the installed Morty CLI. The website serves instructions that
+invoke that CLI; it does not host a separate executable setup download.
 
-Keep setup intent (identity and workspace selection) separate from daemon-owned pairing
-and connection state.
+Keep setup intent (identity and workspace selection) separate from daemon-owned
+pairing and connection state.
