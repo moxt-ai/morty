@@ -2,7 +2,7 @@ import { AcpExecutionError } from "../../acp-error.ts";
 import type { AcpAgentDefinition } from "../../agent/agent-definition.ts";
 import { CodexAcpAgent } from "../../harness/codex/agent.ts";
 import type { CodexClientOptions } from "../../harness/codex/session-update.ts";
-import { validateAgentRuntime } from "../agent-initialization.ts";
+import { RetryableAcpInitializationError, validateAgentRuntime } from "../agent-initialization.ts";
 
 export async function createCodexClient(
     agent: AcpAgentDefinition,
@@ -20,6 +20,7 @@ export async function createCodexClient(
         return client;
     } catch (cause) {
         await client.dispose("force");
-        throw cause;
+        signal.throwIfAborted();
+        throw new RetryableAcpInitializationError(cause);
     }
 }
