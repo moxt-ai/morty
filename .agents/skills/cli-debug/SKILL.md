@@ -22,22 +22,37 @@ Read the variable from the environment the daemon actually runs in (for example
 the shell or service definition that started it); do not assume your current
 shell matches. When unset, use the platform default from the table.
 
-Locate the running daemon's actual log beneath that state root. Do not reuse an
-older installation generation or assume that a log from another daemon belongs
-to the current process. For a managed local stack, use
-`node scripts/local-dev.cjs logs --state-dir <stack-state> --worker runtime` first.
-If that does not find the log, search the resolved CLI state root for `daemon.log`.
+Collect the selected daemon's diagnostics through the CLI, using its resolved
+state root explicitly:
 
-The diagnostic log is one file per daemon installation:
+```sh
+morty logs --state-directory <state-root>
+```
+
+For a managed local stack, use the built checkout CLI with the stack's isolated
+Morty directory:
+
+```sh
+node packages/cli/dist/cli.js logs --state-directory <stack-state>/morty
+```
+
+The local-stack command `logs --worker runtime` reads setup output; it does not
+collect the daemon's diagnostic files. Do not search retired versioned
+installation directories or substitute another daemon's logs.
+
+The Computer diagnostic log is:
 
 ```text
-<daemon installation directory>/logs/daemon.log
+<state-root>/machine/logs/daemon.log
 ```
 
 Created lazily on the first recorded diagnostic, reused across daemon restarts,
 mode `0600` inside a mode `0700` `logs/` directory, and bounded at 1 MiB: when a
 new record would exceed the limit, the oldest complete lines are removed first,
 so the newest history is always retained.
+
+The CLI also collects manager-written lifecycle and unhandled-rejection logs
+from that same private machine directory, including when the daemon is stopped.
 
 Confirm the CLI version the user runs (`morty --version` or the installed
 package version). Compare the invoking CLI and running Runtime versions using
