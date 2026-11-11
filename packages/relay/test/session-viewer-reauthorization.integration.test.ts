@@ -6,7 +6,7 @@ import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { createHostedRelayAccess } from "../../worker/src/composition/relay-services.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
-import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
+import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 

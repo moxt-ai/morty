@@ -10,4 +10,4 @@ export default {
     fetch,
 } satisfies ExportedHandler<CloudBindings, unknown>;
 
-export { ComputerRelay } from "./do/computer-relay.ts";
+export { ComputerRelay } from "../../relay/src/durable-object/computer-relay.ts";

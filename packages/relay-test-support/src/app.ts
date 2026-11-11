@@ -1,6 +1,6 @@
-import { rethrowHonoError } from "@morty-build/relay-core";
+import { rethrowHonoError } from "@morty-build/relay";
 import { Hono } from "hono";
-import type { RelayAuthenticationConfiguration } from "../../relay/src/entity/computer-management.ts";
+import type { RelayAuthenticationConfiguration } from "../../relay/src/components/management/entity/computer-management.ts";
 import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
 import application from "../../worker/src/index.ts";
 

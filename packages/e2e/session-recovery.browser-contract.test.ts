@@ -445,8 +445,11 @@ test("Given a mobile browser with an unsent draft, when its network is disabled 
     const { page } = runtime;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    await runtime.openPairedChat();
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
+    await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("Keep this draft");
     await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
     await page.context().setOffline(true);

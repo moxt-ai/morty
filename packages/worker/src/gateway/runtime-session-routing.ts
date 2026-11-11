@@ -1,5 +1,5 @@
 import { computerRequestTarget } from "@morty-build/client/relay";
-import { decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
+import { decodeComputerPlacement } from "../../../relay/src/components/computer/entity/computer-id.ts";
 import type { RelayBindings } from "../composition/relay-bindings.ts";
 
 export async function routeRuntimeSessionRequest(

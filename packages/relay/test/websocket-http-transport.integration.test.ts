@@ -5,7 +5,7 @@ import {
     SessionRuntimeError,
     standardWebSocketHost,
     WebSocketUploadBudget,
-} from "@morty-build/relay-core";
+} from "@morty-build/relay";
 import { expect, it, vi } from "vitest";
 
 class FailingDaemonBoundary {

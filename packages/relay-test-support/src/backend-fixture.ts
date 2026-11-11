@@ -1,8 +1,8 @@
-import { ComputerBackendService } from "../../relay/src/service/computer-backend-service.ts";
+import { ComputerManagementBackendService } from "../../relay/src/components/computer/service/computer-management-backend-service.ts";
 import {
     type RuntimeControlCommand,
     requestRuntimeControl,
-} from "../../relay-core/src/service/pairing/runtime-control-request.ts";
+} from "../../relay/src/components/runtime/service/runtime-control-request.ts";
 import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
 import {
     composeRelayContext,
@@ -13,7 +13,7 @@ import {
 /** Exercises real services through the Cloudflare storage and Runtime boundaries. */
 export function createTestComputerBackend(env: RelayBindings, computerId: string) {
     const access = createHostedRelayAccess(env);
-    return new ComputerBackendService(
+    return new ComputerManagementBackendService(
         computerId,
         composeRelayContext(access, createRelayPorts(env)),
         access.sessionAccess,

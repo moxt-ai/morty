@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 // only what those production Workers no longer use: stop using it in one release, then drop or rename it in a later one.
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", timeout: 60000, maxBuffer: 64 * 1024 * 1024 });
 const migrations = "packages/relay/migrations/d1";
-const workerSources = ["packages/relay/src", "packages/relay-core/src", "packages/worker/src"];
+const workerSources = ["packages/relay/src", "packages/worker/src"];
 const schema = "packages/relay/src/schema/d1";
 
 function productionRevision() {

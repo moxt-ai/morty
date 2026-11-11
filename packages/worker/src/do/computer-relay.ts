@@ -17,17 +17,21 @@ import {
     type RuntimePairingRequest,
     standardWebSocketHost,
     WebSocketUploadBudget,
-} from "@morty-build/relay-core";
-import { logger } from "@morty-build/relay-core/logging";
-import { migrateComputerStorage } from "../../../relay/src/durable-objects/migrate-computer-storage.ts";
-import { decodeComputerDurableObjectPath } from "../../../relay/src/entity/computer-durable-object-path.ts";
-import { decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
-import type { ProjectAuditRow, RelayAuditRecord } from "../../../relay/src/entity/relay-records.ts";
-import { SessionAccessSigner } from "../../../relay/src/entity/session-access-credential.ts";
-import { authorizeSessionContentUpload } from "../../../relay/src/http/session-content-upload.ts";
-import type { ComputerManagementStore } from "../../../relay/src/infra/computer-management-store.ts";
-import { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
-import { SqliteComputerManagementStore } from "../../../relay/src/storage/sqlite-computer-management-store.ts";
+} from "@morty-build/relay";
+import { logger } from "@morty-build/relay/logging";
+import { decodeComputerDurableObjectPath } from "../../../relay/src/components/computer/entity/computer-durable-object-path.ts";
+import { decodeComputerPlacement } from "../../../relay/src/components/computer/entity/computer-id.ts";
+import { migrateComputerStorage } from "../../../relay/src/components/computer/migrate-computer-storage.ts";
+import { ComputerBackendService } from "../../../relay/src/components/computer/service/computer-backend-service.ts";
+import type {
+    ProjectAuditRow,
+    RelayAuditRecord,
+} from "../../../relay/src/components/management/entity/relay-records.ts";
+import type { ComputerManagementStore } from "../../../relay/src/components/management/storage/computer-management-store.ts";
+import { SqliteComputerManagementStore } from "../../../relay/src/components/management/storage/sqlite-computer-management-store.ts";
+import { SessionAccessSigner } from "../../../relay/src/components/runtime/entity/session-access-credential.ts";
+import { authorizeSessionContentUpload } from "../../../relay/src/components/runtime/http/session-content-upload.ts";
+import { RuntimeOperationsService } from "../../../relay/src/components/runtime/service/runtime-operations-service.ts";
 import { ComputerChat } from "../components/project/computer-chat.ts";
 import type { ConfiguredRelayBindings } from "../composition/relay-bindings.ts";
 import { createRelayDurableObjectContext } from "../composition/relay-durable-object-context.ts";
@@ -319,6 +323,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             context,
             access.sessionAccess,
             this.env.MORTY_SESSION_SIGNING_SECRET,
+            new RuntimeOperationsService(context.services.pairings, execution.operations),
         );
     }
 

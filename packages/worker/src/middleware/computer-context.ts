@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
-import type { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
+import type { ComputerBackendService } from "../../../relay/src/components/computer/service/computer-backend-service.ts";
 import { relayIdentifier } from "../components/management/entity/computer-management.ts";
 import { ManagementError } from "../components/management/entity/management-error.ts";
 import { readProjectCredential } from "../components/management/entity/project-credential.ts";
