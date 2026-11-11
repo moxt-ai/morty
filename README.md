@@ -110,16 +110,13 @@ running it. Read it yourself before you paste the prompt.
   addresses.
 - **Restart to update Morty.** Run `npx --yes @morty-build/cli@latest restart`
   to launch the current release. Use `status` to see the CLI and daemon versions.
-- **The website counts page views and setup steps, and reports errors.** morty.build
-  sends page views to Google Analytics and errors to Sentry. Both receive page paths
-  without query strings, so session IDs are not included, and Sentry events have user,
-  cookie, header, and request-body data removed. Google Analytics also receives two
-  setup clicks, copying the setup prompt and sending Morty's link to another device,
-  with no parameters. Morty's server counts each setup step (instructions fetched,
-  script downloaded, identity created, link issued, link opened) in its logs, recording
-  only the step and whether a browser or an agent made the request. A bug report you
-  choose to send also includes diagnostics from your browser and your computer's
-  daemon, plus any images you attach.
+- **The website reports errors and performance diagnostics to Sentry.** URL query
+  strings, user information, cookies, request headers, and request bodies are removed
+  from these reports. Morty's server logs setup progress (instructions fetched,
+  identity created, link issued, link opened), recording only the step and whether
+  a browser or an agent made the request. A bug report you choose to send also
+  includes diagnostics from your browser and your computer's daemon, plus any images
+  you attach.
 
 ## Leaving
 

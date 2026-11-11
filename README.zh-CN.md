@@ -97,13 +97,10 @@ You may install missing prerequisites and pair this machine.
 - **Morty 记录设备加入时的大致位置，不记录 IP 地址。** 浏览器打开分享链接时，Morty
   保存 Cloudflare 提供的城市和国家，帮助你辨认自己的设备。
 - **重启更新。** `npx --yes @morty-build/cli@latest restart` 启动最新版。
-- **网站会统计页面访问和 setup 步骤，并上报错误。** morty.build 把页面访问发送给 Google
-  Analytics，把错误发送给 Sentry。两者收到的页面路径都不带查询参数，因此不包含会话 ID；
-  Sentry 事件还会去掉用户、cookie、请求头和请求体数据。Google Analytics 还会收到两种不带
-  任何参数的 setup 点击：复制 setup 提示词，以及把 Morty 链接发送到另一台设备。Morty 的
-  服务器会在日志里统计每个 setup 步骤（获取说明、下载脚本、创建身份、签发链接、打开链接），
-  只记录步骤本身以及请求来自浏览器还是 Agent。你主动提交的 bug 报告还会附带浏览器和你电脑上
-  daemon 的诊断信息，以及你附上的图片。
+- **网站向 Sentry 上报错误和性能诊断。** 报告会去除 URL 查询参数、用户信息、cookie、
+  请求头和请求体。Morty 的服务器会在日志里记录 setup 进度（获取说明、创建身份、签发链接、
+  打开链接），只记录步骤本身以及请求来自浏览器还是 Agent。你主动提交的 bug 报告还会附带
+  浏览器和你电脑上 daemon 的诊断信息，以及你附上的图片。
 
 ## 离开
 
