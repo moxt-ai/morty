@@ -55,8 +55,12 @@ export type NativeSessionEvent =
       };
 
 /** Value conversion only; the harness owns state and the consumer owns publication. */
-export function nativeSessionEvent(update: SessionUpdate, value: unknown = update): NativeSessionEvent {
-    const payload = decodeAcpSessionUpdate(JSON.stringify(value));
+export function nativeSessionEvent(
+    harness: string,
+    update: SessionUpdate,
+    value: unknown = update,
+): NativeSessionEvent {
+    const payload = decodeAcpSessionUpdate(JSON.stringify(withMortyFields(update, value)));
     switch (update.sessionUpdate) {
         case "available_commands_update":
             return {
@@ -75,7 +79,7 @@ export function nativeSessionEvent(update: SessionUpdate, value: unknown = updat
             return {
                 kind: "configuration",
                 payload,
-                configOptions: sessionConfigProtocolForAgent("pi").normalizeUpdate([], update.configOptions),
+                configOptions: sessionConfigProtocolForAgent(harness).normalizeUpdate([], update.configOptions),
             };
         case "current_mode_update":
             return { kind: "mode", payload, modeId: update.currentModeId };
@@ -104,5 +108,25 @@ export function nativeSessionEvent(update: SessionUpdate, value: unknown = updat
             return { kind: "content", payload };
         default:
             return { kind: "other", payload };
+    }
+}
+
+/** Promote harness metadata onto the protocol fields consumed by Morty. */
+export function withMortyFields(update: SessionUpdate, eventUpdate: unknown): unknown {
+    if (typeof eventUpdate !== "object" || eventUpdate === null) {
+        return eventUpdate;
+    }
+    switch (update.sessionUpdate) {
+        case "tool_call":
+        case "tool_call_update": {
+            const backgroundTask = update._meta?.["morty.backgroundTask"];
+            return backgroundTask === undefined ? eventUpdate : { ...eventUpdate, backgroundTask };
+        }
+        case "agent_message_chunk": {
+            const questions = update._meta?.["morty.questions"];
+            return questions === undefined ? eventUpdate : { ...eventUpdate, questions };
+        }
+        default:
+            return eventUpdate;
     }
 }

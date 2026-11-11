@@ -129,7 +129,7 @@ test("Given real Claude saves text and four resources, When its ACP history is r
             }),
         );
     } finally {
-        await claude.agent()?.dispose();
+        await claude.agent()?.dispose("graceful");
         connection.close();
         await rm(cwd, { recursive: true, force: true });
     }

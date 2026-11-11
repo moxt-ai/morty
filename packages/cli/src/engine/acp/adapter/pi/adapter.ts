@@ -15,16 +15,16 @@ import type {
     AdapterSessionOpenParams,
     AdapterSessionTarget,
 } from "../../native-history/preview-contract.ts";
-import { NativeHistoryPreviewSnapshots } from "../../native-history/preview-snapshots.ts";
 import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
 import { normalizeAcpCapabilities } from "../../protocol/session-capabilities.ts";
 import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
+import { HarnessHistoryPreviews } from "../harness-history-previews.ts";
+import type { HarnessSession } from "../harness-session.ts";
 import { sessionCreationResponse } from "../lifecycle-output.ts";
 import { findNativeSession } from "../native-session-lookup.ts";
-import { nativeSessionPreviewKey, nativeSessionQueryKey } from "../query-scope.ts";
-import { piClientCallbacks, piPreviewCallbacks, piSessionCallbacks } from "./client-callbacks.ts";
+import { piClientCallbacks, piSessionCallbacks } from "./client-callbacks.ts";
 import { createPiCatalogClient, createPiClient, type PiClientRuntime, piRuntime } from "./create-client.ts";
-import { PiSession, type PiWorkspace } from "./pi-session.ts";
+import { type PiWorkspace, startPiSession } from "./pi-session.ts";
 
 const START_TIMEOUT_MILLISECONDS = 60_000;
 const configurationProtocol = sessionConfigProtocolForAgent("pi");
@@ -42,9 +42,9 @@ function workspaceOf(target: { readonly cwd: string }): PiWorkspace {
 /** Live Pi operations call the Pi harness directly; each native session owns one Pi client. */
 export class PiAdapter implements Adapter {
     readonly #dependencies: AdapterDependencies;
-    readonly #sessions = new Map<SessionId, PiSession>();
+    readonly #sessions = new Map<SessionId, HarnessSession<PiAcpAgent>>();
     readonly #lifetime = new AbortController();
-    readonly #previews = new NativeHistoryPreviewSnapshots();
+    readonly #previews: HarnessHistoryPreviews;
     #agent: AcpAgentDefinition;
     #runtime: PiClientRuntime;
 
@@ -52,6 +52,7 @@ export class PiAdapter implements Adapter {
         this.#agent = agent;
         this.#runtime = piRuntime(agent);
         this.#dependencies = dependencies;
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes);
     }
 
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
@@ -118,7 +119,7 @@ export class PiAdapter implements Adapter {
         params: AdapterSessionCreateParams,
         start: (agent: PiAcpAgent) => Promise<PiSessionResponse & { readonly sessionId: string }>,
     ): Promise<AdapterSessionOpened> => {
-        const { session, response } = await PiSession.start(
+        const { session, response } = await startPiSession(
             {
                 runtime: this.#runtime,
                 workspace: workspaceOf(params.scope),
@@ -133,7 +134,7 @@ export class PiAdapter implements Adapter {
             start,
         );
         if (this.#lifetime.signal.aborted || this.#sessions.has(session.sessionId)) {
-            await session.dispose();
+            await session.dispose("graceful");
             this.#lifetime.signal.throwIfAborted();
             throw new AcpExecutionError("Another writer is using this native session", {}, "session_busy");
         }
@@ -147,7 +148,7 @@ export class PiAdapter implements Adapter {
     };
 
     readonly #opened = async (
-        session: PiSession,
+        session: HarnessSession<PiAcpAgent>,
         params: AdapterSessionCreateParams,
         response: PiSessionResponse,
     ): Promise<AdapterSessionOpened> => {
@@ -162,7 +163,7 @@ export class PiAdapter implements Adapter {
         };
     };
 
-    readonly #session = (target: AdapterSessionTarget): PiSession => {
+    readonly #session = (target: AdapterSessionTarget): HarnessSession<PiAcpAgent> => {
         this.#lifetime.signal.throwIfAborted();
         const session = this.#sessions.get(sessionIdSchema.parse(target.sessionId));
         if (session === undefined) {
@@ -257,7 +258,7 @@ export class PiAdapter implements Adapter {
         const session = this.#sessions.get(sessionId);
         if (session !== undefined) {
             this.#sessions.delete(sessionId);
-            await session.dispose();
+            await session.dispose("graceful");
         }
     };
 
@@ -355,61 +356,20 @@ export class PiAdapter implements Adapter {
                 AbortSignal.timeout(START_TIMEOUT_MILLISECONDS),
             ]),
         };
-        scoped.signal.throwIfAborted();
-        const sessionId = sessionIdSchema.parse(request.sessionId);
-        const target = { harness: this.#agent.harness, sessionId };
-        const key = nativeSessionPreviewKey(nativeSessionQueryKey(scoped), sessionId);
-        if (request.cursor !== null) {
-            return this.#previews.get(key).page(target, request.eventLimit, request.cursor);
-        }
-        const store = this.#previews.replace(key);
         const runtime = this.#runtime;
-        try {
-            return await this.#dependencies.processes.runTransient(
-                scoped.signal,
-                async () => {
-                    const lifetime = new AbortController();
-                    const callbacks = piPreviewCallbacks(scoped, async (receivedSessionId, event) => {
-                        if (receivedSessionId !== sessionId) {
-                            throw new AcpExecutionError(
-                                "Pi replayed another native session",
-                                {},
-                                "invalid_agent_session",
-                            );
-                        }
-                        store.append(target, { type: "acp", payload: event.payload });
-                    });
-                    const client = await createPiClient(
-                        runtime,
-                        piClientCallbacks(callbacks, this.#dependencies.contentExternalizer, {
-                            signal: lifetime.signal,
-                            fail: (cause) => lifetime.abort(cause),
-                        }),
-                        scoped.signal,
-                    );
-                    return {
-                        client,
-                        lifetime,
-                        closeProcess: async () => {
-                            lifetime.abort();
-                            await client.dispose();
-                        },
-                    };
-                },
-                async ({ client, lifetime }) => {
-                    await waitForAgentOperation(
-                        client.loadSession({ cwd: scoped.cwd, sessionId: sessionId, mcpServers: [] }),
-                        scoped.signal,
-                    );
-                    lifetime.signal.throwIfAborted();
-                    return store.page(target, request.eventLimit, null);
-                },
-                (runtime) => runtime.closeProcess(),
-            );
-        } catch (cause) {
-            this.#previews.discard(key, store);
-            throw agentOperationError(cause);
-        }
+        return await this.#previews.read({
+            query: scoped,
+            request,
+            create: async (params, lifetime, signal) => {
+                const callbacks = piClientCallbacks(params, this.#dependencies.contentExternalizer, lifetime);
+                const client = await createPiClient(runtime, callbacks, signal);
+                return {
+                    client,
+                    load: (id) => client.loadSession({ cwd: scoped.cwd, sessionId: id, mcpServers: [] }),
+                    drained: callbacks.drained,
+                };
+            },
+        });
     };
 
     readonly close = async (): Promise<void> => {
