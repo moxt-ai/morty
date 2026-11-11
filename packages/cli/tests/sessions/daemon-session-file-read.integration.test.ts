@@ -22,7 +22,6 @@ import { withControlledDaemon as withRealDaemon } from "../support/agents/real-d
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
 class PromptMediaAgent extends ControlledAcpSpecification {
-    readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
     readonly harness = "controlled-acp";
     readonly label = "Controlled prompt media";

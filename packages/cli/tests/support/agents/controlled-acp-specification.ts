@@ -1,10 +1,9 @@
 import type { AgentConnectionFactory } from "../../../src/engine/acp/connection/agent-connection.ts";
-import { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
 import { ControlledAcpConnection } from "./controlled-acp-connection.ts";
+import { ControlledReadinessSpecification } from "./controlled-readiness-specification.ts";
 
 /** Discovery fixture for controlled peers that expose ACP on stdio. */
-export abstract class ControlledAcpSpecification extends LocalAgentSpecification {
-    readonly agentOverrideVariable: string;
+export abstract class ControlledAcpSpecification extends ControlledReadinessSpecification {
     readonly launchArguments: readonly string[];
     readonly createConnection: AgentConnectionFactory = (options) =>
         new ControlledAcpConnection(
@@ -18,8 +17,7 @@ export abstract class ControlledAcpSpecification extends LocalAgentSpecification
         );
 
     protected constructor(executableOverrideVariable: string, launchArguments: readonly string[]) {
-        super();
-        this.agentOverrideVariable = executableOverrideVariable;
+        super(executableOverrideVariable);
         this.launchArguments = Object.freeze([...launchArguments]);
     }
 }

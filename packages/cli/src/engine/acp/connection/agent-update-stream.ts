@@ -3,44 +3,25 @@ import { AcpExecutionError } from "../acp-error.ts";
 import { sessionIdSchema } from "../protocol/native-session.ts";
 import type { IdentifiedSessionNotification as SessionNotification } from "./session-notification.ts";
 
-const MAX_PENDING_UPDATES = 100;
-const MAX_PENDING_BYTES = 1024 * 1024;
-const MAX_SELECTED_UPDATES = 2048;
-const MAX_SELECTED_BYTES = 16 * 1024 * 1024;
+const MAX_QUEUED_UPDATES = 2048;
+const MAX_QUEUED_BYTES = 16 * 1024 * 1024;
 const MAX_RUNTIME_QUEUED_BYTES = 64 * 1024 * 1024;
 const UPDATES_PER_YIELD = 32;
 let runtimeQueuedBytes = 0;
 let updatesSinceYield = 0;
 
-type Selection =
-    | { readonly kind: "identified" }
-    | {
-          readonly kind: "awaiting-session";
-          readonly notifications: readonly SessionNotification[];
-          readonly bytes: number;
-      }
-    | { readonly kind: "selected"; readonly sessionId: string };
-
-/** Owns session selection and ordered delivery, including updates received before selection. */
+/** Bounds and serializes native notifications that already identify their session. */
 export class AgentUpdateStream {
-    #selection: Selection = { kind: "awaiting-session", notifications: [], bytes: 0 };
     #tail: Promise<void> = Promise.resolve();
     #pendingUpdates = 0;
     #pendingBytes = 0;
     #state: "open" | "failed" = "open";
     readonly #consume: (notification: SessionNotification) => Promise<void>;
 
-    constructor(
-        consume: (notification: SessionNotification) => Promise<void>,
-        mode: "select" | "identified" = "select",
-    ) {
+    constructor(consume: (notification: SessionNotification) => Promise<void>) {
         this.#consume = consume;
-        if (mode === "identified") {
-            this.#selection = { kind: "identified" };
-        }
     }
 
-    readonly sessionId = (): string => (this.#selection.kind === "selected" ? this.#selection.sessionId : "");
     readonly drained = (): Promise<void> => this.#tail;
 
     readonly #enqueue = (notification: SessionNotification): Promise<void> => {
@@ -49,8 +30,8 @@ export class AgentUpdateStream {
         }
         const bytes = Buffer.byteLength(JSON.stringify(notification), "utf8");
         if (
-            this.#pendingUpdates >= MAX_SELECTED_UPDATES ||
-            this.#pendingBytes + bytes > MAX_SELECTED_BYTES ||
+            this.#pendingUpdates >= MAX_QUEUED_UPDATES ||
+            this.#pendingBytes + bytes > MAX_QUEUED_BYTES ||
             runtimeQueuedBytes + bytes > MAX_RUNTIME_QUEUED_BYTES
         ) {
             this.#state = "failed";
@@ -84,59 +65,7 @@ export class AgentUpdateStream {
     };
 
     readonly receive = (notification: SessionNotification): Promise<void> => {
-        const selection = this.#selection;
-        switch (selection.kind) {
-            case "identified":
-                sessionIdSchema.parse(notification.sessionId);
-                return this.#enqueue(notification);
-            case "selected":
-                return this.#enqueue(notification);
-            case "awaiting-session": {
-                const bytes = selection.bytes + Buffer.byteLength(JSON.stringify(notification));
-                if (selection.notifications.length >= MAX_PENDING_UPDATES || bytes > MAX_PENDING_BYTES) {
-                    return Promise.reject(
-                        new AcpExecutionError(
-                            "ACP agent sent too many updates before creating its session",
-                            {},
-                            "agent_update_limit",
-                        ),
-                    );
-                }
-                this.#selection = {
-                    kind: "awaiting-session",
-                    notifications: [...selection.notifications, notification],
-                    bytes,
-                };
-                return Promise.resolve();
-            }
-        }
-    };
-
-    readonly select = (sessionId: string): void => {
-        const selected = sessionIdSchema.parse(sessionId);
-        const selection = this.#selection;
-        switch (selection.kind) {
-            case "identified":
-                throw new AcpExecutionError(
-                    "Native notifications already identify their session",
-                    {},
-                    "invalid_agent_session",
-                );
-            case "selected":
-                if (selection.sessionId !== selected) {
-                    throw new AcpExecutionError(
-                        "ACP agent attempted to replace the selected session",
-                        {},
-                        "invalid_agent_session",
-                    );
-                }
-                return;
-            case "awaiting-session":
-                this.#selection = { kind: "selected", sessionId: selected };
-                for (const notification of selection.notifications) {
-                    void this.#enqueue(notification);
-                }
-                return;
-        }
+        sessionIdSchema.parse(notification.sessionId);
+        return this.#enqueue(notification);
     };
 }

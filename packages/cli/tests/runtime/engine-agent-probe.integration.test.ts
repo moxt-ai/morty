@@ -18,7 +18,7 @@ interface ProbeOptions {
         | "empty"
         | "nonzero"
         | "nonzero-held"
-        | "adapter-empty"
+        | "native-version-once"
         | "readiness-failure"
         | "limit"
         | "held";
@@ -314,6 +314,29 @@ test.for([{ stream: "stdout" }, { stream: "stderr" }] as const)(
     },
 );
 
+test("Given a native Agent has a valid version and readiness response, When discovery builds its catalog, Then it needs no separate adapter version probe", async ({
+    signal,
+}) => {
+    vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
+    const peer = await createProbeEngine({ scenario: "native-version-once", stream: "stdout" }, signal);
+    try {
+        await peer.online();
+        expect(peer.catalogs).toContainEqual(
+            expect.objectContaining({
+                agents: expect.arrayContaining([
+                    expect.objectContaining({
+                        harness: "codex",
+                        agentVersion: "codex-cli 0.154.0",
+                    }),
+                ]),
+            }),
+        );
+    } finally {
+        await peer.close();
+        vi.useRealTimers();
+    }
+});
+
 test.for([
     {
         scenario: "empty",
@@ -338,13 +361,6 @@ test.for([
         exitCode: "7",
     },
     { scenario: "limit", source: "agent_version", code: "agent_probe_failed", failureCode: "process_output_limit" },
-    {
-        scenario: "adapter-empty",
-        source: "adapter_version",
-        code: "adapter_probe_failed",
-        failureCode: "process_exit_failed",
-        probeReason: "empty_version_output",
-    },
     {
         scenario: "readiness-failure",
         source: "acp_readiness",

@@ -2,15 +2,13 @@ import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
 import { unsupportedSessionCapabilities } from "../../acp/protocol/session-capabilities.ts";
 import { ProcessExecutionError } from "../../util/process/executable.ts";
-import { InProcessAcpAgentSpecification, type LocalAgentSpecification } from "../specification/agent-specification.ts";
+import type { LocalAgentSpecification } from "../specification/agent-specification.ts";
 import {
     type AgentDiscovery,
     AgentProbeFailed,
     AuthenticationRequiredAgent,
     AvailableAgent,
     IncompatibleAdapter,
-    IntegrationProbeFailed,
-    MissingAdapter,
     MissingAgent,
     type UnavailableAgent,
     UnsupportedAgentVersion,
@@ -18,7 +16,7 @@ import {
 import type { AgentProbeDiagnostic, LocalAgentDiscoveryContext } from "./agent-discovery-context.ts";
 import { AgentProbeError } from "./agent-probe-error.ts";
 import { isAgentVersionSupported } from "./agent-version.ts";
-import { probeVersion, resolveAdapterExecutables, resolveAgentExecutables } from "./executable-discovery.ts";
+import { probeVersion, resolveAgentExecutables } from "./executable-discovery.ts";
 
 function agentProbeFailure(specification: LocalAgentSpecification, error: unknown): UnavailableAgent {
     if (error instanceof AgentProbeError) {
@@ -89,13 +87,13 @@ function integrationProbeFailure(specification: LocalAgentSpecification, error: 
         }
         return error.code === "acp_incompatible"
             ? new IncompatibleAdapter(specification, error.message)
-            : new IntegrationProbeFailed(specification, error.code, error.message);
+            : new AgentProbeFailed(specification, error.code, error.message);
     }
     if (error instanceof ProcessExecutionError) {
         const code = error.code === "process_timeout" ? "adapter_probe_timeout" : "adapter_probe_failed";
-        return new IntegrationProbeFailed(specification, code, "Adapter version probe failed");
+        return new AgentProbeFailed(specification, code, "Agent readiness probe failed");
     }
-    return new IntegrationProbeFailed(specification, "adapter_probe_failed", "Adapter probe failed");
+    return new AgentProbeFailed(specification, "adapter_probe_failed", "Agent readiness probe failed");
 }
 
 export async function discoverAgent(
@@ -103,10 +101,7 @@ export async function discoverAgent(
     context: LocalAgentDiscoveryContext,
 ): Promise<AgentDiscovery> {
     context.signal.throwIfAborted();
-    const [adapters, agents] = await Promise.all([
-        resolveAdapterExecutables(specification, context),
-        resolveAgentExecutables(specification, context),
-    ]);
+    const agents = await resolveAgentExecutables(specification, context);
     if (agents.length === 0) {
         return new MissingAgent(specification);
     }
@@ -154,94 +149,42 @@ export async function discoverAgent(
             );
             continue;
         }
-        // An in-process Agent is its own adapter: `resolveAdapterExecutables` already returned the
-        // Agent executable, so an empty adapter list never means "install an adapter" here.
-        if (adapters.length === 0 && !(specification instanceof InProcessAcpAgentSpecification)) {
-            return new MissingAdapter(specification);
-        }
-
-        for (const adapter of adapters) {
-            if (adapter.path !== agent.path) {
-                continue;
-            }
-            let adapterVersion = "";
-            let launchEnvironment: Readonly<Record<string, string>>;
-            try {
-                launchEnvironment = await specification.createLaunchEnvironment(agent, context);
-                if (specification.adapterVersionArguments.length > 0) {
-                    adapterVersion = await probeWithRetry(
-                        context,
-                        specification,
-                        "adapter_version",
-                        async () =>
-                            await probeVersion(
-                                adapter,
-                                specification.adapterVersionArguments,
-                                {
-                                    ...context.environment,
-                                    ...launchEnvironment,
-                                },
-                                context.defaultWorkspace,
-                                context.signal,
-                                specification.versionProbeTimeoutMilliseconds,
-                                specification.normalizeAdapterVersion,
-                            ),
-                    );
-                }
-            } catch (error) {
-                if (context.signal.aborted) {
-                    context.signal.throwIfAborted();
-                }
-                lastFailure = integrationProbeFailure(specification, error);
-                continue;
-            }
-
-            const buildDefinition = (
-                verifiedAdapterVersion: string,
-                capabilities: SessionCapabilities,
-            ): AcpAgentDefinition =>
+        try {
+            const launchEnvironment = await specification.createLaunchEnvironment(agent, context);
+            const buildDefinition = (capabilities: SessionCapabilities): AcpAgentDefinition =>
                 new AcpAgentDefinition(
                     specification.harness,
                     specification.label,
                     agent.path,
                     specification.createConnection,
                     launchEnvironment,
-                    agentVersion.length > 0 ? agentVersion : verifiedAdapterVersion,
+                    agentVersion,
                     agent.identity,
                     capabilities,
-                    specification instanceof InProcessAcpAgentSpecification ? agentVersion : verifiedAdapterVersion,
+                    agentVersion,
                 );
-            try {
-                const readiness = await probeWithRetry(
-                    context,
-                    specification,
-                    "acp_readiness",
-                    async () =>
-                        await specification.probeReadiness({
-                            agent: buildDefinition(adapterVersion, unsupportedSessionCapabilities()),
-                            environment: context.environment,
-                            defaultWorkspace: context.defaultWorkspace,
-                            signal: context.signal,
-                        }),
-                );
-                const verifiedAdapterVersion = adapterVersion.length > 0 ? adapterVersion : readiness.adapterVersion;
-                if (verifiedAdapterVersion.length === 0) {
-                    throw new AgentProbeError("acp_incompatible", "ACP adapter did not report a version");
-                }
-                return new AvailableAgent(
-                    specification,
-                    buildDefinition(verifiedAdapterVersion, readiness.capabilities),
-                );
-            } catch (error) {
-                if (context.signal.aborted) {
-                    context.signal.throwIfAborted();
-                }
-                const failure = integrationProbeFailure(specification, error);
-                if (failure instanceof AuthenticationRequiredAgent) {
-                    return failure;
-                }
-                lastFailure = failure;
+            const capabilities = await probeWithRetry(
+                context,
+                specification,
+                "acp_readiness",
+                async () =>
+                    await specification.probeReadiness({
+                        agent: buildDefinition(unsupportedSessionCapabilities()),
+                        environment: context.environment,
+                        defaultWorkspace: context.defaultWorkspace,
+                        signal: context.signal,
+                    }),
+            );
+            return new AvailableAgent(specification, buildDefinition(capabilities));
+        } catch (error) {
+            if (context.signal.aborted) {
+                context.signal.throwIfAborted();
             }
+            const failure = integrationProbeFailure(specification, error);
+            if (failure instanceof AuthenticationRequiredAgent) {
+                return failure;
+            }
+            lastFailure = failure;
         }
     }
     return lastFailure ?? new MissingAgent(specification);

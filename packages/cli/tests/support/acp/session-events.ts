@@ -22,7 +22,6 @@ import {
 import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import type { BackgroundActivity, PromptDelegationStage } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
 import type { AgentConnection } from "../../../src/engine/acp/connection/agent-connection.ts";
-import { AgentUpdateStream } from "../../../src/engine/acp/connection/agent-update-stream.ts";
 import type { AcpClientHandler } from "../../../src/engine/acp/connection/create-client.ts";
 import type { IdentifiedSessionNotification as SessionNotification } from "../../../src/engine/acp/connection/session-notification.ts";
 import type {
@@ -32,6 +31,7 @@ import type {
 import { restrictAcpSessionCapabilities } from "../../../src/engine/acp/protocol/session-capabilities.ts";
 import { sessionConfigProtocolForAgent } from "../../../src/engine/acp/protocol/session-config-protocol.ts";
 import { truncate } from "../../../src/engine/util/value-utils.ts";
+import { ControlledSessionUpdates } from "./controlled-session-updates.ts";
 
 interface SessionConnectionScope {
     readonly agent: AcpAgentDefinition;
@@ -67,7 +67,7 @@ type ExecutionState =
 export class AdapterSessionConnection {
     readonly #connection: AgentConnection;
     readonly #onBackgroundActivity: (activity: BackgroundActivity) => void;
-    readonly #updates: AgentUpdateStream;
+    readonly #updates: ControlledSessionUpdates;
     readonly #lifetime = new AbortController();
     readonly #onClosed: () => void;
     readonly #agent: AcpAgentDefinition;
@@ -77,7 +77,7 @@ export class AdapterSessionConnection {
         | { readonly kind: "started"; readonly result: ReturnType<typeof initializeAgentConnection> } = {
         kind: "not-started",
     };
-    readonly events: Pick<AgentUpdateStream, "sessionId" | "select" | "drained">;
+    readonly events: Pick<ControlledSessionUpdates, "sessionId" | "select" | "drained">;
 
     constructor(
         options: AdapterSessionConnectionOptions,
@@ -87,7 +87,7 @@ export class AdapterSessionConnection {
         this.#agent = options.agent;
         this.#onClosed = onClosed;
         this.#onBackgroundActivity = options.onBackgroundActivity ?? (() => {});
-        this.#updates = new AgentUpdateStream(async (notification: SessionNotification) => {
+        this.#updates = new ControlledSessionUpdates(async (notification: SessionNotification) => {
             this.#lifetime.signal.throwIfAborted();
             if (notification.sessionId !== this.#updates.sessionId()) {
                 throw new AcpExecutionError("ACP agent referenced an unknown session", {}, "invalid_agent_session");

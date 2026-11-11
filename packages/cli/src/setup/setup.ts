@@ -491,10 +491,6 @@ function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): s
             return `Ask the user to sign in to ${diagnosis.label} on this computer by running \`${diagnosis.recoveryCommand || harness}\` in a terminal; you cannot sign in for them. When they confirm, ${rerun}`;
         case "missing_agent":
             return `Morty cannot find ${diagnosis.label} on this computer. Make sure \`${harness}\` runs in a new terminal, then ${rerun} Do not switch to another harness.`;
-        case "missing_adapter":
-            return diagnosis.recoveryCommand.length > 0
-                ? `Install the ${diagnosis.label} adapter by running \`${diagnosis.recoveryCommand}\`, then ${rerun}`
-                : `Install the ${diagnosis.label} adapter, then ${rerun}`;
         case "unsupported_version":
             return `Update ${diagnosis.label} to ${diagnosis.minimumSupportedVersion || "its latest release"} or newer, then ${rerun}`;
         case "ready":

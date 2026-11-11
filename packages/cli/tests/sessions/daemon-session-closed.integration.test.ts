@@ -24,7 +24,7 @@ import {
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
 import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
-import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
+import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import {
     prepareNewRealSession,
@@ -36,7 +36,7 @@ import {
 const NATIVE_HARNESS = "claude";
 
 /** Each discovery or execution process receives the next endpoint index. */
-class ClosableAgentSpecification extends InProcessAcpAgentSpecification {
+class ClosableAgentSpecification extends ControlledReadinessSpecification {
     readonly agentExecutable = "node";
     readonly harness = NATIVE_HARNESS;
     readonly label = "Controlled Claude";

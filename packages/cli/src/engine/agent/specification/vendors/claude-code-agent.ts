@@ -1,20 +1,16 @@
 import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
+import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { createClaudeClient, initializeClaudeClient } from "../../../acp/adapter/claude/create-client.ts";
 import { waitForAgentOperation } from "../../../acp/connection/agent-operation.ts";
 import { normalizeAcpCapabilities } from "../../../acp/protocol/session-capabilities.ts";
 import { platformSupportFor } from "../../../util/platform/index.ts";
 import { type ResolvedExecutable, resolveExecutablePath } from "../../../util/process/executable.ts";
-import {
-    type AgentReadinessProbeParams,
-    filterEnvironment,
-    VerifiedAcpReadiness,
-} from "../../discovery/acp-readiness-probe.ts";
 import type { LocalAgentDiscoveryContext } from "../../discovery/agent-discovery-context.ts";
 import { AgentProbeError } from "../../discovery/agent-probe-error.ts";
-import { normalizeVersionOutput } from "../../discovery/version-output.ts";
-import { InProcessAcpAgentSpecification } from "../agent-specification.ts";
+import { type AgentReadinessProbeParams, filterEnvironment } from "../../discovery/agent-readiness.ts";
+import { LocalAgentSpecification } from "../agent-specification.ts";
 
-export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification {
+export class ClaudeCodeAgentSpecification extends LocalAgentSpecification {
     readonly agentExecutable = "claude";
     readonly createConnection = null;
     readonly harness = "claude";
@@ -25,7 +21,7 @@ export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification
         super("MORTY_CLAUDE_PATH");
     }
 
-    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<VerifiedAcpReadiness> => {
+    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<SessionCapabilities> => {
         const timeout = AbortSignal.timeout(this.acpProbeTimeoutMilliseconds);
         const signal = AbortSignal.any([params.signal, timeout]);
         const reject = async (): Promise<never> => {
@@ -50,10 +46,7 @@ export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification
                 if (initialized.protocolVersion !== PROTOCOL_VERSION) {
                     throw new AgentProbeError("acp_incompatible", "Claude selected an unsupported protocol version");
                 }
-                return new VerifiedAcpReadiness(
-                    normalizeVersionOutput(initialized.agentInfo?.version ?? ""),
-                    normalizeAcpCapabilities(initialized),
-                );
+                return normalizeAcpCapabilities(initialized);
             } finally {
                 await client.dispose("graceful");
             }

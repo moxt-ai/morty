@@ -24,15 +24,14 @@ import {
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
 import { afterEach, expect, test, vi } from "vitest";
-import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
+import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import { waitForAgentFile } from "../support/agents/observed-process.ts";
 import { type RealDaemonPeer, withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 import { IdleTimeoutTimer } from "../support/idle-timeout-timer.ts";
 
 class IdleAgentSpecification extends ControlledAcpSpecification {
-    readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
     readonly harness = "claude";
     readonly label = "Controlled ACP";
@@ -476,7 +475,7 @@ test("Given a canonical native Session is idle, When its process is reclaimed, T
     });
 });
 
-class RetiringIdleAgentSpecification extends InProcessAcpAgentSpecification {
+class RetiringIdleAgentSpecification extends ControlledReadinessSpecification {
     readonly agentExecutable = "node";
     readonly harness = "claude";
     readonly label = "Controlled retiring Agent";

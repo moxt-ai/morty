@@ -142,7 +142,6 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
 });
 
 class UpdatingSettingsAgent extends ControlledAcpSpecification {
-    readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
     readonly harness = "controlled-acp";
     readonly label = "Controlled session state";
