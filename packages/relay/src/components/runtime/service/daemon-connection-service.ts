@@ -1,10 +1,10 @@
-import type { RuntimeConnectionIdentity } from "../entity/runtime-connection.ts";
-import type { RuntimeConnectionStorage } from "../storage/runtime-connection-storage.ts";
+import type { ComputerConnectionIdentity } from "../entity/computer-connection.ts";
+import type { ComputerConnectionStorage } from "../storage/computer-connection-storage.ts";
 
-export class RuntimeConnectionService {
-    readonly #storage: RuntimeConnectionStorage;
+export class DaemonConnectionService {
+    readonly #storage: ComputerConnectionStorage;
 
-    constructor(storage: RuntimeConnectionStorage) {
+    constructor(storage: ComputerConnectionStorage) {
         this.#storage = storage;
     }
 
@@ -14,18 +14,18 @@ export class RuntimeConnectionService {
     readonly latest = () => this.#storage.latest();
 
     /** The identity of the next connection: every connection takes a later epoch than any before it. */
-    readonly next = (computerId: string): RuntimeConnectionIdentity => ({
+    readonly next = (computerId: string): ComputerConnectionIdentity => ({
         computerId,
         connectionEpoch: (this.#storage.latest()?.connectionEpoch ?? 0) + 1,
     });
 
-    readonly isCurrent = (identity: RuntimeConnectionIdentity): boolean => this.standing(identity) === "current";
+    readonly isCurrent = (identity: ComputerConnectionIdentity): boolean => this.standing(identity) === "current";
 
     /**
      * Where a daemon connection stands: still the current one; `replaced` by a later connection or closed; or `ended`
      * because the generation it was admitted under no longer authorizes it.
      */
-    readonly standing = (identity: RuntimeConnectionIdentity): "current" | "replaced" | "ended" => {
+    readonly standing = (identity: ComputerConnectionIdentity): "current" | "replaced" | "ended" => {
         const latest = this.#storage.latest();
         if (
             latest?.kind !== "connected" ||
@@ -37,11 +37,11 @@ export class RuntimeConnectionService {
         return this.#storage.read() === null ? "ended" : "current";
     };
 
-    readonly connected = (identity: RuntimeConnectionIdentity, generation: number, now: number): void => {
+    readonly connected = (identity: ComputerConnectionIdentity, generation: number, now: number): void => {
         this.#storage.connect(identity, generation, now);
     };
 
-    readonly disconnected = (identity: RuntimeConnectionIdentity, now: number): void => {
+    readonly disconnected = (identity: ComputerConnectionIdentity, now: number): void => {
         this.#storage.disconnect(identity, now);
     };
 }

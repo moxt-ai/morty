@@ -1,22 +1,22 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { DoSqlDatabase } from "../../../infra/do-sql-database.ts";
 import { DatabaseError } from "../../../infra/sql-database.ts";
-import { runtimeConnection } from "../../../schema/project-do/index.ts";
-import { activeGeneration } from "../../management/storage/runtime-generation.ts";
+import { computerConnection } from "../../../schema/computer-relay-do/index.ts";
+import { activeGeneration } from "../../management/storage/computer-generation.ts";
 import type {
-    LatestRuntimeConnection,
-    RuntimeConnection,
-    RuntimeConnectionIdentity,
-} from "../entity/runtime-connection.ts";
+    ComputerConnection,
+    ComputerConnectionIdentity,
+    LatestComputerConnection,
+} from "../entity/computer-connection.ts";
 
 const connectionFields = {
-    computerId: runtimeConnection.computerId,
-    connectionEpoch: runtimeConnection.connectionEpoch,
-    generation: runtimeConnection.generation,
-    connectedAt: runtimeConnection.connectedAt,
+    computerId: computerConnection.computerId,
+    connectionEpoch: computerConnection.connectionEpoch,
+    generation: computerConnection.generation,
+    connectedAt: computerConnection.connectedAt,
 };
 
-export class RuntimeConnectionStorage {
+export class ComputerConnectionStorage {
     readonly #database: DoSqlDatabase;
 
     constructor(database: DoSqlDatabase) {
@@ -24,23 +24,23 @@ export class RuntimeConnectionStorage {
     }
 
     /** The current connection: attached, and admitted under the generation that is still active. */
-    readonly read = (): RuntimeConnection | null =>
+    readonly read = (): ComputerConnection | null =>
         this.#database.orm
             .select(connectionFields)
-            .from(runtimeConnection)
+            .from(computerConnection)
             .where(
                 and(
-                    isNull(runtimeConnection.disconnectedAt),
-                    inArray(runtimeConnection.generation, activeGeneration(runtimeConnection.computerId)),
+                    isNull(computerConnection.disconnectedAt),
+                    inArray(computerConnection.generation, activeGeneration(computerConnection.computerId)),
                 ),
             )
             .limit(1)
             .get() ?? null;
 
-    readonly latest = (): LatestRuntimeConnection | null => {
+    readonly latest = (): LatestComputerConnection | null => {
         const row = this.#database.orm
-            .select({ ...connectionFields, disconnectedAt: runtimeConnection.disconnectedAt })
-            .from(runtimeConnection)
+            .select({ ...connectionFields, disconnectedAt: computerConnection.disconnectedAt })
+            .from(computerConnection)
             .limit(1)
             .get();
         if (row === undefined) {
@@ -53,7 +53,7 @@ export class RuntimeConnectionStorage {
     };
 
     /** Makes `identity` the computer's latest connection, replacing the one before it. */
-    readonly connect = (identity: RuntimeConnectionIdentity, generation: number, now: number): void => {
+    readonly connect = (identity: ComputerConnectionIdentity, generation: number, now: number): void => {
         const connection = {
             ...identity,
             generation,
@@ -61,25 +61,25 @@ export class RuntimeConnectionStorage {
             disconnectedAt: null,
         };
         const result = this.#database.orm
-            .insert(runtimeConnection)
+            .insert(computerConnection)
             .values(connection)
-            .onConflictDoUpdate({ target: runtimeConnection.computerId, set: connection })
-            .returning({ computerId: runtimeConnection.computerId })
+            .onConflictDoUpdate({ target: computerConnection.computerId, set: connection })
+            .returning({ computerId: computerConnection.computerId })
             .get();
         if (!result) {
             throw new DatabaseError("database_unavailable", "The computer connection could not be recorded");
         }
     };
 
-    readonly disconnect = (identity: RuntimeConnectionIdentity, now: number): void => {
+    readonly disconnect = (identity: ComputerConnectionIdentity, now: number): void => {
         this.#database.orm
-            .update(runtimeConnection)
+            .update(computerConnection)
             .set({ disconnectedAt: now })
             .where(
                 and(
-                    eq(runtimeConnection.computerId, identity.computerId),
-                    eq(runtimeConnection.connectionEpoch, identity.connectionEpoch),
-                    isNull(runtimeConnection.disconnectedAt),
+                    eq(computerConnection.computerId, identity.computerId),
+                    eq(computerConnection.connectionEpoch, identity.connectionEpoch),
+                    isNull(computerConnection.disconnectedAt),
                 ),
             )
             .run();

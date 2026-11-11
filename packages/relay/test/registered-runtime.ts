@@ -9,8 +9,8 @@ import { computerDirectoryDrizzle } from "../src/components/management/storage/r
 import { SqliteComputerManagementStore } from "../src/components/management/storage/sqlite-computer-management-store.ts";
 import { relayDrizzle } from "../src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../src/infra/durable-object-sql-database.ts";
+import { computerPairing, computerRegistration } from "../src/schema/computer-relay-do/index.ts";
 import { machineAccount } from "../src/schema/d1/index.ts";
-import { runtimePairing, runtimeRegistration } from "../src/schema/project-do/index.ts";
 
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
@@ -54,7 +54,7 @@ export async function registerRuntimeFixture(computerId: string): Promise<void> 
         migrateComputerStorage(state.storage);
         const database = relayDrizzle(new DurableObjectDatabaseAdapter(state.storage), AbortSignal.timeout(10_000));
         const [pairing] = await database
-            .insert(runtimePairing)
+            .insert(computerPairing)
             .values({
                 computerId,
                 pairingCodeHash: `fixture-code-${computerId}`,
@@ -64,9 +64,9 @@ export async function registerRuntimeFixture(computerId: string): Promise<void> 
                 createdByOwnerCredentialId: `fixture-owner-${computerId}`,
             })
             .onConflictDoNothing()
-            .returning({ generation: runtimePairing.generation });
+            .returning({ generation: computerPairing.generation });
         if (pairing !== undefined) {
-            await database.insert(runtimeRegistration).values({
+            await database.insert(computerRegistration).values({
                 generation: pairing.generation,
                 claimedAt: registeredAt,
                 machineName: "Registered test Runtime",

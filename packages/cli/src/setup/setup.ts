@@ -261,7 +261,7 @@ interface ManagedConnection {
 interface VerifiedIdentity {
     readonly context: Context;
     /** Where the Machine's Runtime pairing stands, as the Relay records it. */
-    readonly runtimePairing: "unpaired" | "paired" | "revoked";
+    readonly computerPairing: "unpaired" | "paired" | "revoked";
 }
 
 /**
@@ -1129,11 +1129,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             fail("IDENTITY_CONFLICT");
         }
         // The Worker reads the Machine's Runtime pairing from the Relay, the same one every browser handoff opens.
-        const runtimePairing = text((await request(context, "/management/machine"))["runtimePairing"]);
-        if (runtimePairing !== "unpaired" && runtimePairing !== "paired" && runtimePairing !== "revoked") {
+        const computerPairing = text((await request(context, "/management/machine"))["computerPairing"]);
+        if (computerPairing !== "unpaired" && computerPairing !== "paired" && computerPairing !== "revoked") {
             fail("INVALID_RESPONSE");
         }
-        return { context, runtimePairing };
+        return { context, computerPairing };
     }
 
     async function runMorty(
@@ -1294,7 +1294,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareRuntime(
         context: Context,
         cwd: string,
-        runtimePairing: VerifiedIdentity["runtimePairing"],
+        computerPairing: VerifiedIdentity["computerPairing"],
         confirmedComputerId: string | null,
     ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
@@ -1304,7 +1304,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 status: "replacement_check",
                 reason,
                 computerId,
-                expectedComputerId: runtimePairing === "unpaired" ? null : computerId,
+                expectedComputerId: computerPairing === "unpaired" ? null : computerId,
                 managedConnectionCount,
                 approved: confirmedComputerId === computerId,
                 platform: process.platform,
@@ -1333,7 +1333,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             return { existing, managedConnectionCount: connections.length };
         };
-        switch (runtimePairing) {
+        switch (computerPairing) {
             case "paired": {
                 const { existing, managedConnectionCount } = await reusable(context.identity.computerId);
                 if (existing !== undefined) {
@@ -1831,7 +1831,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let machine = verified.context;
         emit({ status: "identity_ready", userId: machine.identity.userId, computerId: machine.identity.computerId });
-        const prepared = await prepareRuntime(machine, cwd, verified.runtimePairing, options.replaceProject);
+        const prepared = await prepareRuntime(machine, cwd, verified.computerPairing, options.replaceProject);
         machine = prepared.context;
         await startRuntime(machine, prepared.runtime, cwd, options.harness);
         await waitForRuntime(machine, prepared.runtime, options.harness, cwd);

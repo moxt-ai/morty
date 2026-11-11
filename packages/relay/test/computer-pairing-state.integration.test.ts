@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
 import { hashPairingCredential } from "../src/components/management/entity/pairing.ts";
-import { RuntimeDirectoryStorage } from "../src/components/management/storage/runtime-directory-storage.ts";
+import { ComputerDirectoryStorage } from "../src/components/management/storage/computer-directory-storage.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
@@ -133,7 +133,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     // Execute the original command against the real Project database after
     // newer transactions, as can happen when a database request is delayed.
     const claimed = await app.storage(async (storage) =>
-        new RuntimeDirectoryStorage(app.computerId, new DurableObjectDatabaseAdapter(storage)).claim(
+        new ComputerDirectoryStorage(app.computerId, new DurableObjectDatabaseAdapter(storage)).claim(
             {
                 computerId: pairing.computerId,
                 codeHash,

@@ -50,7 +50,7 @@ export class ComputerManagementBackendService {
         );
     readonly openHost = async (signal: AbortSignal): Promise<WebSocket> => {
         const access = await this.context.services.runtimePairings.authorizePairedHost(this.computerId, signal);
-        const response = await this.context.gateways.channelGateway.acceptHost(
+        const response = await this.context.gateways.computerRelayGateway.acceptHost(
             access,
             new Request("https://runtime.internal/host", { headers: { upgrade: "websocket" }, signal }),
             signal,

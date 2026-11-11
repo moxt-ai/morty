@@ -1,18 +1,18 @@
 import type { HeldRuntimeCredentials } from "./runtime-credentials.ts";
 
-export interface RuntimeConnectionInput {
+export interface ComputerConnectionInput {
     readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly relayOrigin: URL;
     readonly runtimeCredential: string;
 }
 
-export type RuntimeConnectionActivation = "active" | "stopped";
+export type ComputerConnectionActivation = "active" | "stopped";
 
 /** A saved pairing: the identity a Runtime presents to the relay, and whether it should run. */
-export class VerifiedRuntimeConnection {
+export class VerifiedComputerConnection {
     readonly kind = "verified";
-    readonly activation: RuntimeConnectionActivation;
+    readonly activation: ComputerConnectionActivation;
     readonly computerId: string;
     /** Fences work from an earlier pairing, even when this computer is paired again with the same identity. */
     readonly pairingGeneration: string;
@@ -22,7 +22,7 @@ export class VerifiedRuntimeConnection {
     readonly credentials: HeldRuntimeCredentials;
 
     constructor(
-        activation: RuntimeConnectionActivation,
+        activation: ComputerConnectionActivation,
         pairingGeneration: string,
         computerId: string,
         defaultWorkspace: string,

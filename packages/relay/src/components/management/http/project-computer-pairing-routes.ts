@@ -7,7 +7,7 @@ import { errorMiddleware, rethrowHonoError } from "../../../middleware/error-mid
 import { pairingTimeoutMiddleware } from "../../../middleware/pairing-timeout-middleware.ts";
 import { validateAgents, validateDisplayName, validateIdentifier, validatePairingCode } from "../entity/pairing.ts";
 
-export function createProjectRuntimePairingRoutes() {
+export function createProjectComputerPairingRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
@@ -34,20 +34,20 @@ export function createProjectRuntimePairingRoutes() {
         )
         .get("/runtimes/connect", async (context) => {
             const request = context.req.raw;
-            const connection = await context.var.relay.services.channels.connectRuntime(
+            const connection = await context.var.relay.services.computerConnections.connectRuntime(
                 bearerToken(request),
                 request.headers.get(RUNTIME_SUCCESSOR_CREDENTIAL_HEADER) ?? "",
                 request.signal,
             );
             switch (connection.kind) {
                 case "accepted":
-                    return await context.var.relay.gateways.channelGateway.acceptDaemon(
+                    return await context.var.relay.gateways.computerRelayGateway.acceptDaemon(
                         connection.access,
                         request,
                         request.signal,
                     );
                 case "revoked":
-                    return context.var.relay.gateways.channelGateway.refuseRevokedDaemon();
+                    return context.var.relay.gateways.computerRelayGateway.refuseRevokedDaemon();
             }
         });
 }

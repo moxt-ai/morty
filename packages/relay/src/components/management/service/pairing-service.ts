@@ -1,20 +1,20 @@
-import type { CloudflareChannelRuntime } from "../../../../../worker/src/gateway/cloudflare-channel-runtime.ts";
-import { RuntimeDescriptor } from "../../runtime/service/channel.ts";
+import type { CloudflareComputerRelay } from "../../../../../worker/src/gateway/cloudflare-computer-relay.ts";
+import { ComputerSummary } from "../../runtime/service/computer.ts";
 import { PairingDirectoryError } from "../entity/pairing.ts";
 import { ProjectPermission } from "../entity/project-authentication.ts";
 import type { PairingDirectoryService } from "./pairing-directory-service.ts";
 
 export class PairingService {
-    readonly #channels: CloudflareChannelRuntime;
+    readonly #channels: CloudflareComputerRelay;
     readonly #pairings: PairingDirectoryService;
 
     constructor(cx: {
         readonly services: { readonly pairings: PairingDirectoryService };
         readonly gateways: {
-            readonly channelGateway: CloudflareChannelRuntime;
+            readonly computerRelayGateway: CloudflareComputerRelay;
         };
     }) {
-        this.#channels = cx.gateways.channelGateway;
+        this.#channels = cx.gateways.computerRelayGateway;
         this.#pairings = cx.services.pairings;
     }
 
@@ -34,7 +34,7 @@ export class PairingService {
         return await Promise.all(
             channels.map(
                 async (channel) =>
-                    new RuntimeDescriptor(
+                    new ComputerSummary(
                         channel,
                         await this.#channels.readRuntimeStatus({ computerId: channel.computerId }, signal),
                     ),
@@ -55,7 +55,7 @@ export class PairingService {
                 "The project credential cannot access this Runtime",
             );
         }
-        return new RuntimeDescriptor(
+        return new ComputerSummary(
             channel,
             await this.#channels.readRuntimeStatus({ computerId: channel.computerId }, signal),
         );

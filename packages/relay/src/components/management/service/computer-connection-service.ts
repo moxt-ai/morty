@@ -1,20 +1,20 @@
-import type { CloudflareChannelRuntime } from "../../../../../worker/src/gateway/cloudflare-channel-runtime.ts";
+import type { CloudflareComputerRelay } from "../../../../../worker/src/gateway/cloudflare-computer-relay.ts";
 import { logger } from "../../../infra/logger.ts";
-import type { AgentDescriptor, VerifiedChannelAccess } from "../entity/pairing.ts";
+import type { AgentDescriptor, VerifiedComputerAccess } from "../entity/pairing.ts";
 import type { PairingDirectoryService } from "./pairing-directory-service.ts";
 
-export class ChannelService {
+export class ComputerConnectionService {
     readonly #pairings: PairingDirectoryService;
-    readonly #channelGateway: CloudflareChannelRuntime;
+    readonly #computerRelayGateway: CloudflareComputerRelay;
     constructor(cx: {
         readonly services: { readonly pairings: PairingDirectoryService };
         readonly gateways: {
-            readonly channelGateway: CloudflareChannelRuntime;
+            readonly computerRelayGateway: CloudflareComputerRelay;
         };
     }) {
-        const { channelGateway } = cx.gateways;
+        const { computerRelayGateway } = cx.gateways;
         this.#pairings = cx.services.pairings;
-        this.#channelGateway = channelGateway;
+        this.#computerRelayGateway = computerRelayGateway;
     }
     readonly updateAgentCatalog = (
         computerId: string,
@@ -33,7 +33,7 @@ export class ChannelService {
         successor: string,
         signal: AbortSignal,
     ): Promise<
-        { readonly kind: "accepted"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
+        { readonly kind: "accepted"; readonly access: VerifiedComputerAccess } | { readonly kind: "revoked" }
     > => {
         const rotation = await this.#pairings.rotateRuntimeCredential(token, successor, signal);
         switch (rotation.kind) {
@@ -51,7 +51,7 @@ export class ChannelService {
             },
             "A retired Runtime credential was presented; the Runtime was revoked",
         );
-        await this.#channelGateway.disconnectRuntime(rotation.access, signal);
+        await this.#computerRelayGateway.disconnectRuntime(rotation.access, signal);
         return { kind: "revoked" };
     };
 }

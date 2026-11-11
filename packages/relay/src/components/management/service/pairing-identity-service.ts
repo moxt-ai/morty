@@ -1,10 +1,10 @@
 import { DatabaseError } from "../../../infra/sql-database.ts";
-import type { VerifiedChannelAccess } from "../entity/pairing.ts";
+import type { VerifiedComputerAccess } from "../entity/pairing.ts";
 import { PairingDirectoryError, validateIdentifier } from "../entity/pairing.ts";
 import type { ComputerIdentityCredential } from "../entity/pairing-identity.ts";
 import type { PairingScopeRow } from "../entity/pairing-records.ts";
 import type { ProjectStorageContext } from "../entity/project-storage-context.ts";
-import type { ProjectStore, ProjectStoreResolver } from "../storage/project-store.ts";
+import type { ComputerRelayStore, ComputerRelayStoreResolver } from "../storage/computer-relay-store.ts";
 import type { ComputerManagementStorageDirectory } from "./computer-management-storage-directory.ts";
 
 /** A credential that matches nothing, including one stored for a Project that is no longer served. */
@@ -23,12 +23,12 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
  * that the Relay still serves that Project from the store that matched.
  */
 export class ComputerIdentityService {
-    readonly #sources: readonly ProjectStore[];
-    readonly #stores: ProjectStoreResolver;
+    readonly #sources: readonly ComputerRelayStore[];
+    readonly #stores: ComputerRelayStoreResolver;
     readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
     constructor(
-        sources: readonly ProjectStore[],
-        stores: ProjectStoreResolver,
+        sources: readonly ComputerRelayStore[],
+        stores: ComputerRelayStoreResolver,
         projects: Pick<ComputerManagementStorageDirectory, "resolve">,
     ) {
         this.#sources = [...sources];
@@ -36,7 +36,7 @@ export class ComputerIdentityService {
         this.#projects = projects;
     }
 
-    private readonly matchesPlacement = (source: ProjectStore, project: ProjectStorageContext): boolean =>
+    private readonly matchesPlacement = (source: ComputerRelayStore, project: ProjectStorageContext): boolean =>
         source === this.#stores.resolve(project.computerId);
 
     readonly authenticateProject = async (
@@ -65,12 +65,12 @@ export class ComputerIdentityService {
         successorHash: string,
         signal: AbortSignal,
     ): Promise<
-        { readonly kind: "rotated" | "reused"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
+        { readonly kind: "rotated" | "reused"; readonly access: VerifiedComputerAccess } | { readonly kind: "revoked" }
     > => {
         signal.throwIfAborted();
         try {
             const matches: {
-                readonly source: ProjectStore;
+                readonly source: ComputerRelayStore;
                 readonly kind: "rotated" | "reused";
                 readonly row: PairingScopeRow;
             }[] = [];
@@ -126,7 +126,7 @@ export class ComputerIdentityService {
     private readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
-            const matches: { readonly computerId: string; readonly source: ProjectStore }[] = [];
+            const matches: { readonly computerId: string; readonly source: ComputerRelayStore }[] = [];
             for (const source of this.#sources) {
                 for (const row of await source.findCredential(credential, signal)) {
                     signal.throwIfAborted();

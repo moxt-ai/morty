@@ -27,7 +27,7 @@ import * as v from "valibot";
 import type { ComputerBackendService } from "../../../../../relay/src/components/computer/service/computer-backend-service.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ComputerManagementError, relayIdentifier } from "../entity/computer-management.ts";
-import type { RuntimePairing } from "../entity/runtime-pairing.ts";
+import type { RuntimePairing } from "../entity/computer-pairing.ts";
 
 type ChatSessionTarget = {
     readonly target: NativeSessionTarget;

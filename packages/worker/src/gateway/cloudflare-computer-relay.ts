@@ -1,10 +1,10 @@
-import type { VerifiedChannelAccess } from "../../../relay/src/components/management/entity/pairing.ts";
-import type { ChannelGateway } from "../../../relay/src/components/runtime/gateway/channel-gateway.ts";
-import { RuntimeStatus } from "../../../relay/src/components/runtime/service/channel.ts";
+import type { VerifiedComputerAccess } from "../../../relay/src/components/management/entity/pairing.ts";
+import type { ComputerRelayGateway } from "../../../relay/src/components/runtime/gateway/computer-relay-gateway.ts";
+import { ComputerStatus } from "../../../relay/src/components/runtime/service/computer.ts";
 import { requestLogContext } from "../../../relay/src/infra/log-diagnostics.ts";
 import { logger } from "../../../relay/src/infra/logger.ts";
 
-export class CloudflareChannelRuntime implements ChannelGateway {
+export class CloudflareComputerRelay implements ComputerRelayGateway {
     readonly #namespace: DurableObjectNamespace;
 
     readonly #local: ((computerId: string, request: Request) => Promise<Response>) | undefined;
@@ -18,7 +18,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     }
 
     readonly acceptDaemon = async (
-        access: VerifiedChannelAccess,
+        access: VerifiedComputerAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -39,7 +39,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     readonly acceptHost = async (
-        access: VerifiedChannelAccess,
+        access: VerifiedComputerAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -50,7 +50,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         return await this.forward(access, new Request(endpoint, { headers, method: request.method, signal }), signal);
     };
 
-    readonly disconnectRuntime = async (access: VerifiedChannelAccess, signal: AbortSignal): Promise<void> => {
+    readonly disconnectRuntime = async (access: VerifiedComputerAccess, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         const headers = new Headers();
 
@@ -69,7 +69,10 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         }
     };
 
-    readonly readRuntimeStatus = async (access: VerifiedChannelAccess, signal: AbortSignal): Promise<RuntimeStatus> => {
+    readonly readRuntimeStatus = async (
+        access: VerifiedComputerAccess,
+        signal: AbortSignal,
+    ): Promise<ComputerStatus> => {
         const response = await this.forward(
             access,
             new Request("https://runtime.internal/runtime-status", {
@@ -90,11 +93,11 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         ) {
             throw new Error("The Runtime returned an invalid status");
         }
-        return new RuntimeStatus(Reflect.get(value, "online"));
+        return new ComputerStatus(Reflect.get(value, "online"));
     };
 
     private readonly forward = async (
-        access: VerifiedChannelAccess,
+        access: VerifiedComputerAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {
@@ -108,7 +111,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     private readonly fetchRuntime = async (
-        access: VerifiedChannelAccess,
+        access: VerifiedComputerAccess,
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {

@@ -44,12 +44,15 @@ the `sqlite3` CLI:
 
 ```sh
 sqlite3 <path.sqlite> '.tables'
-sqlite3 -header -column <path.sqlite> 'select * from chat_managed_session limit 5;'
 ```
 
-Durable Object and D1 files are WAL-backed. If a value looks stale, the Worker is
-likely still running; stop it with `remove` before reading, or accept the WAL as
-part of the live state.
+The current conversation directory is owned by the connected Runtime. Retained
+cloud tables from earlier releases are not evidence of current managed Sessions.
+
+Durable Object and D1 files are WAL-backed. Inspect them through SQLite so the WAL
+is included. To stop the stack before inspection while retaining its evidence,
+use `node scripts/local-dev.cjs remove --state-dir <stateDir> --keep-state`;
+`remove` without `--keep-state` deletes the isolated state directory.
 
 ## Common failure modes
 

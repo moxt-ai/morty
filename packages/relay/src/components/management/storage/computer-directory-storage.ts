@@ -4,12 +4,12 @@ import { type RelayDrizzleDatabase, relayDrizzle } from "../../../infra/drizzle-
 import type { SqlDatabase } from "../../../infra/sql-database.ts";
 import {
     auditEvent,
+    computerPairing,
+    computerRegistration,
+    computerRevocation,
     daemonCredential,
     retiredDaemonCredential,
-    runtimePairing,
-    runtimeRegistration,
-    runtimeRevocation,
-} from "../../../schema/project-do/index.ts";
+} from "../../../schema/computer-relay-do/index.ts";
 import type {
     PairingClaimRow,
     RuntimeCredentialRotation,
@@ -17,13 +17,13 @@ import type {
     RuntimePairingAudit,
     RuntimePairingRow,
 } from "../entity/pairing-records.ts";
-import { activeGeneration, currentGeneration } from "./runtime-generation.ts";
+import { activeGeneration, currentGeneration } from "./computer-generation.ts";
 
 const registrationFields = {
-    claimed_at: runtimeRegistration.claimedAt,
-    machine_name: runtimeRegistration.machineName,
-    workspace_name: runtimeRegistration.workspaceName,
-    agents_json: runtimeRegistration.agentsJson,
+    claimed_at: computerRegistration.claimedAt,
+    machine_name: computerRegistration.machineName,
+    workspace_name: computerRegistration.workspaceName,
+    agents_json: computerRegistration.agentsJson,
 };
 interface CreateRuntimePairing {
     readonly computerId: string;
@@ -69,7 +69,7 @@ const pairingAudit = (event: {
  * The computer's pairing generations. Each transition records a fact of one generation and its audit event together;
  * pairing the computer again starts a new generation instead of changing an earlier one.
  */
-export class RuntimeDirectoryStorage {
+export class ComputerDirectoryStorage {
     readonly #computerId: string;
     readonly #database: SqlDatabase;
 
@@ -87,19 +87,19 @@ export class RuntimeDirectoryStorage {
     private readonly generationQuery = (database: RelayDrizzleDatabase) =>
         database
             .select({
-                computer_id: runtimePairing.computerId,
-                poll_token_hash: runtimePairing.pollTokenHash,
-                expires_at: runtimePairing.expiresAt,
-                revoked_at: runtimeRevocation.revokedAt,
+                computer_id: computerPairing.computerId,
+                poll_token_hash: computerPairing.pollTokenHash,
+                expires_at: computerPairing.expiresAt,
+                revoked_at: computerRevocation.revokedAt,
                 registration: registrationFields,
             })
-            .from(runtimePairing)
-            .leftJoin(runtimeRegistration, eq(runtimeRegistration.generation, runtimePairing.generation))
-            .leftJoin(runtimeRevocation, eq(runtimeRevocation.generation, runtimePairing.generation));
+            .from(computerPairing)
+            .leftJoin(computerRegistration, eq(computerRegistration.generation, computerPairing.generation))
+            .leftJoin(computerRevocation, eq(computerRevocation.generation, computerPairing.generation));
 
     readonly readPairingCode = async (codeHash: string, signal: AbortSignal): Promise<PairingClaimRow | null> => {
         const rows = await this.generationQuery(relayDrizzle(this.#database, signal))
-            .where(and(eq(runtimePairing.computerId, this.#computerId), eq(runtimePairing.pairingCodeHash, codeHash)))
+            .where(and(eq(computerPairing.computerId, this.#computerId), eq(computerPairing.pairingCodeHash, codeHash)))
             .limit(1);
         return rows[0] ?? null;
     };
@@ -110,7 +110,7 @@ export class RuntimeDirectoryStorage {
             return null;
         }
         const rows = await this.generationQuery(relayDrizzle(this.#database, signal))
-            .where(inArray(runtimePairing.generation, currentGeneration(computerId)))
+            .where(inArray(computerPairing.generation, currentGeneration(computerId)))
             .limit(1);
         return rows[0] ?? null;
     };
@@ -121,17 +121,17 @@ export class RuntimeDirectoryStorage {
     ): Promise<RuntimePairingRow | null> => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({
-                computer_id: runtimePairing.computerId,
-                pairing_code_hash: runtimePairing.pairingCodeHash,
-                poll_token_hash: runtimePairing.pollTokenHash,
-                expires_at: runtimePairing.expiresAt,
-                created_by_owner_credential_id: runtimePairing.createdByOwnerCredentialId,
+                computer_id: computerPairing.computerId,
+                pairing_code_hash: computerPairing.pairingCodeHash,
+                poll_token_hash: computerPairing.pollTokenHash,
+                expires_at: computerPairing.expiresAt,
+                created_by_owner_credential_id: computerPairing.createdByOwnerCredentialId,
             })
-            .from(runtimePairing)
+            .from(computerPairing)
             .where(
                 and(
-                    eq(runtimePairing.computerId, this.#computerId),
-                    eq(runtimePairing.creationIdempotencyKey, idempotencyKey),
+                    eq(computerPairing.computerId, this.#computerId),
+                    eq(computerPairing.creationIdempotencyKey, idempotencyKey),
                 ),
             )
             .limit(1);
@@ -146,20 +146,20 @@ export class RuntimeDirectoryStorage {
         const database = relayDrizzle(this.#database, signal);
         const openGenerations = database
             .select({ open: count().as("open") })
-            .from(runtimePairing)
-            .leftJoin(runtimeRegistration, eq(runtimeRegistration.generation, runtimePairing.generation))
+            .from(computerPairing)
+            .leftJoin(computerRegistration, eq(computerRegistration.generation, computerPairing.generation))
             .where(
                 and(
-                    eq(runtimePairing.computerId, this.#computerId),
+                    eq(computerPairing.computerId, this.#computerId),
                     notInArray(
-                        runtimePairing.generation,
-                        database.select({ generation: runtimeRevocation.generation }).from(runtimeRevocation),
+                        computerPairing.generation,
+                        database.select({ generation: computerRevocation.generation }).from(computerRevocation),
                     ),
-                    or(isNotNull(runtimeRegistration.generation), gt(runtimePairing.expiresAt, value.now)),
+                    or(isNotNull(computerRegistration.generation), gt(computerPairing.expiresAt, value.now)),
                 ),
             )
             .as("open_generations");
-        const pairing = database.insert(runtimePairing).select(
+        const pairing = database.insert(computerPairing).select(
             database
                 .select({
                     // SQLite assigns the next generation in place of a null one.
@@ -179,7 +179,7 @@ export class RuntimeDirectoryStorage {
                 .select(
                     pairingAudit({
                         auditId: value.auditId,
-                        computerId: runtimePairing.computerId,
+                        computerId: computerPairing.computerId,
                         actorKind: value.actorKind,
                         actorId: bound(value.actorId, "actor_id"),
                         action: "runtime_pairing.requested",
@@ -187,8 +187,8 @@ export class RuntimeDirectoryStorage {
                         recordedAt: bound(value.now, "recorded_at"),
                     }),
                 )
-                .from(runtimePairing)
-                .where(eq(runtimePairing.creationIdempotencyKey, value.idempotencyKey)),
+                .from(computerPairing)
+                .where(eq(computerPairing.creationIdempotencyKey, value.idempotencyKey)),
         );
         const results = await this.#database.batch([this.statement(pairing), this.statement(audit)], signal);
         return results[0]?.meta.changes === 1;
@@ -210,35 +210,35 @@ export class RuntimeDirectoryStorage {
     ): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
         const claimable = database
-            .select({ generation: runtimePairing.generation })
-            .from(runtimePairing)
+            .select({ generation: computerPairing.generation })
+            .from(computerPairing)
             .where(
                 and(
-                    eq(runtimePairing.computerId, this.#computerId),
-                    inArray(runtimePairing.generation, currentGeneration(value.computerId)),
-                    eq(runtimePairing.pairingCodeHash, value.codeHash),
-                    gt(runtimePairing.expiresAt, value.now),
+                    eq(computerPairing.computerId, this.#computerId),
+                    inArray(computerPairing.generation, currentGeneration(value.computerId)),
+                    eq(computerPairing.pairingCodeHash, value.codeHash),
+                    gt(computerPairing.expiresAt, value.now),
                     notInArray(
-                        runtimePairing.generation,
-                        database.select({ generation: runtimeRegistration.generation }).from(runtimeRegistration),
+                        computerPairing.generation,
+                        database.select({ generation: computerRegistration.generation }).from(computerRegistration),
                     ),
                     notInArray(
-                        runtimePairing.generation,
-                        database.select({ generation: runtimeRevocation.generation }).from(runtimeRevocation),
+                        computerPairing.generation,
+                        database.select({ generation: computerRevocation.generation }).from(computerRevocation),
                     ),
                 ),
             );
         const credential = database.insert(daemonCredential).select(
             database
                 .select({
-                    generation: runtimePairing.generation,
+                    generation: computerPairing.generation,
                     tokenHash: bound(value.daemonHash, "token_hash"),
                 })
-                .from(runtimePairing)
-                .where(inArray(runtimePairing.generation, claimable)),
+                .from(computerPairing)
+                .where(inArray(computerPairing.generation, claimable)),
         );
         // The credential written just above marks the generation this claim registers.
-        const registration = database.insert(runtimeRegistration).select(
+        const registration = database.insert(computerRegistration).select(
             database
                 .select({
                     generation: daemonCredential.generation,
@@ -260,18 +260,18 @@ export class RuntimeDirectoryStorage {
                 .select(
                     pairingAudit({
                         auditId: value.auditId,
-                        computerId: runtimePairing.computerId,
+                        computerId: computerPairing.computerId,
                         actorKind: "runtime",
-                        actorId: runtimePairing.computerId,
+                        actorId: computerPairing.computerId,
                         action: "runtime_pairing.claimed",
                         details: "{}",
                         recordedAt: bound(value.now, "recorded_at"),
                     }),
                 )
-                .from(runtimePairing)
-                .innerJoin(runtimeRegistration, eq(runtimeRegistration.generation, runtimePairing.generation))
+                .from(computerPairing)
+                .innerJoin(computerRegistration, eq(computerRegistration.generation, computerPairing.generation))
                 .where(
-                    and(inArray(runtimePairing.generation, currentGeneration(value.computerId)), sql`changes() = 1`),
+                    and(inArray(computerPairing.generation, currentGeneration(value.computerId)), sql`changes() = 1`),
                 ),
         );
         const results = await this.#database.batch(
@@ -307,12 +307,12 @@ export class RuntimeDirectoryStorage {
 
     readonly readDaemon = async (computerId: string, tokenHash: string, signal: AbortSignal) => {
         const rows = await relayDrizzle(this.#database, signal)
-            .select({ computer_id: runtimePairing.computerId })
+            .select({ computer_id: computerPairing.computerId })
             .from(daemonCredential)
-            .innerJoin(runtimePairing, eq(runtimePairing.generation, daemonCredential.generation))
+            .innerJoin(computerPairing, eq(computerPairing.generation, daemonCredential.generation))
             .where(
                 and(
-                    eq(runtimePairing.computerId, this.#computerId),
+                    eq(computerPairing.computerId, this.#computerId),
                     eq(daemonCredential.tokenHash, tokenHash),
                     inArray(daemonCredential.generation, activeGeneration(computerId)),
                 ),
@@ -409,12 +409,12 @@ export class RuntimeDirectoryStorage {
         const database = relayDrizzle(this.#database, signal);
         const current = currentGeneration(value.computerId);
         const revocation = database
-            .insert(runtimeRevocation)
+            .insert(computerRevocation)
             .select(
                 database
-                    .select({ generation: runtimePairing.generation, revokedAt: bound(value.now, "revoked_at") })
-                    .from(runtimePairing)
-                    .where(inArray(runtimePairing.generation, current)),
+                    .select({ generation: computerPairing.generation, revokedAt: bound(value.now, "revoked_at") })
+                    .from(computerPairing)
+                    .where(inArray(computerPairing.generation, current)),
             )
             .onConflictDoNothing();
         const audit = database.insert(auditEvent).select(
@@ -427,18 +427,18 @@ export class RuntimeDirectoryStorage {
                         actorId: bound(value.actorId, "actor_id"),
                         action: "runtime_pairing.revoked",
                         details: "{}",
-                        recordedAt: runtimeRevocation.revokedAt,
+                        recordedAt: computerRevocation.revokedAt,
                     }),
                 )
-                .from(runtimeRevocation)
-                .where(and(inArray(runtimeRevocation.generation, current), sql`changes() = 1`)),
+                .from(computerRevocation)
+                .where(and(inArray(computerRevocation.generation, current), sql`changes() = 1`)),
         );
         await this.#database.batch([this.statement(revocation), this.statement(audit)], signal);
         // Reading the committed fact makes overlapping retries return the first revocation time.
         return await this.readRuntime(value.computerId, signal);
     };
 
-    readonly readChannel = async (computerId: string, signal: AbortSignal) => {
+    readonly readRegisteredComputer = async (computerId: string, signal: AbortSignal) => {
         const row = await this.readRuntime(computerId, signal);
         return row?.registration && row.revoked_at === null
             ? { computer_id: row.computer_id, ...row.registration }
@@ -446,19 +446,19 @@ export class RuntimeDirectoryStorage {
     };
 
     readonly listRuntimes = async (signal: AbortSignal) => {
-        const channel = await this.readChannel(this.#computerId, signal);
-        return channel === null ? [] : [channel];
+        const computer = await this.readRegisteredComputer(this.#computerId, signal);
+        return computer === null ? [] : [computer];
     };
 
     readonly updateAgents = async (computerId: string, tokenHash: string, agents: string, signal: AbortSignal) => {
         const database = relayDrizzle(this.#database, signal);
         return this.statement(
             database
-                .update(runtimeRegistration)
+                .update(computerRegistration)
                 .set({ agentsJson: agents })
                 .where(
                     inArray(
-                        runtimeRegistration.generation,
+                        computerRegistration.generation,
                         database
                             .select({ generation: daemonCredential.generation })
                             .from(daemonCredential)

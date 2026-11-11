@@ -5,7 +5,7 @@ import {
     ProtocolMessageError,
 } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import type { ChannelSocket, HistoryRequestKind } from "../service/channel-actor.ts";
+import type { HistoryRequestKind, RelaySocket } from "../service/computer-relay-actor.ts";
 import type {
     DaemonHeartbeat,
     RuntimePeers,
@@ -67,7 +67,7 @@ const attachmentSchema = v.union([
     }),
 ]);
 
-export class CloudflareChannelSocket implements RuntimeSocket {
+export class CloudflareRelaySocket implements RuntimeSocket {
     readonly #socket: WebSocket;
 
     constructor(socket: WebSocket) {
@@ -175,8 +175,8 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         );
     };
     readonly isOpen = (): boolean => this.#socket.readyState === WebSocket.OPEN;
-    readonly isSame = (socket: ChannelSocket): boolean =>
-        socket instanceof CloudflareChannelSocket && socket.#socket === this.#socket;
+    readonly isSame = (socket: RelaySocket): boolean =>
+        socket instanceof CloudflareRelaySocket && socket.#socket === this.#socket;
     readonly permitsSessionHistory = (): boolean => {
         const identity = this.identity();
         // Control hosts read Session history: the Relay's own connection and a project credential's connection.
@@ -216,7 +216,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
     };
 }
 
-export class CloudflareChannelPeers implements RuntimePeers {
+export class CloudflareRelayPeers implements RuntimePeers {
     readonly #state: DurableObjectState;
 
     constructor(state: DurableObjectState) {
@@ -225,26 +225,26 @@ export class CloudflareChannelPeers implements RuntimePeers {
 
     readonly sockets = () =>
         this.#state.getWebSockets().map((webSocket) => {
-            const socket = new CloudflareChannelSocket(webSocket);
+            const socket = new CloudflareRelaySocket(webSocket);
             return { socket, identity: socket.identity() };
         });
 
     readonly daemonConnections: RuntimePeers["daemonConnections"] = () =>
         this.#state.getWebSockets("daemon").map((webSocket) => {
-            const socket = new CloudflareChannelSocket(webSocket);
+            const socket = new CloudflareRelaySocket(webSocket);
             const answeredAt = this.#state.getWebSocketAutoResponseTimestamp(webSocket)?.getTime();
             const heartbeat: DaemonHeartbeat =
                 answeredAt === undefined ? { kind: "none" } : { kind: "received", at: answeredAt };
             return { heartbeat, identity: socket.identity(), socket };
         });
 
-    readonly daemons = (): readonly ChannelSocket[] =>
+    readonly daemons = (): readonly RelaySocket[] =>
         this.sockets()
             .filter(({ identity }) => identity.role === "daemon")
             .map(({ socket }) => socket);
 
-    readonly hosts = (): readonly ChannelSocket[] =>
-        this.#state.getWebSockets("host").map((socket) => new CloudflareChannelSocket(socket));
+    readonly hosts = (): readonly RelaySocket[] =>
+        this.#state.getWebSockets("host").map((socket) => new CloudflareRelaySocket(socket));
 
     readonly viewers = () =>
         this.sockets().flatMap(({ socket, identity }) =>
@@ -261,9 +261,9 @@ export class CloudflareChannelPeers implements RuntimePeers {
 
     readonly operations: RuntimePeers["operations"] = () => [];
 
-    readonly nativeRequests = (): readonly { readonly requestId: string; readonly socket: ChannelSocket }[] =>
+    readonly nativeRequests = (): readonly { readonly requestId: string; readonly socket: RelaySocket }[] =>
         this.#state.getWebSockets("native-request").map((webSocket) => {
-            const socket = new CloudflareChannelSocket(webSocket);
+            const socket = new CloudflareRelaySocket(webSocket);
             const identity = socket.identity();
             if (identity.role !== "host" || identity.nativeRequestId === undefined) {
                 throw new Error("A native request connection requires a reply address");
@@ -271,7 +271,7 @@ export class CloudflareChannelPeers implements RuntimePeers {
             return { requestId: identity.nativeRequestId, socket };
         });
 
-    readonly historyRecipients = (): readonly ChannelSocket[] =>
+    readonly historyRecipients = (): readonly RelaySocket[] =>
         this.sockets()
             .filter(({ socket }) => socket.permitsSessionHistory())
             .map(({ socket }) => socket);
@@ -284,7 +284,7 @@ export class CloudflareChannelPeers implements RuntimePeers {
             identity.role === "host" && identity.nativeRequestId !== undefined ? "native-request" : identity.role,
         ]);
         return {
-            socket: new CloudflareChannelSocket(server),
+            socket: new CloudflareRelaySocket(server),
             response: new Response(null, { status: 101, webSocket: pair[0] }),
         };
     };

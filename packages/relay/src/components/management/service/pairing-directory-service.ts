@@ -1,8 +1,9 @@
 import { isRuntimeCredentialSuccessor } from "@morty-build/client/protocol";
 import type { ComputerScope } from "../../runtime/entity/session.ts";
-import type { AgentDescriptor, ClaimedPairing, PairingStatus, VerifiedChannelAccess } from "../entity/pairing.ts";
+import { projectComputerPairingStatus, runtimeRevokedAt } from "../entity/computer-pairing-state.ts";
+import type { AgentDescriptor, ClaimedPairing, PairingStatus, VerifiedComputerAccess } from "../entity/pairing.ts";
 import {
-    ChannelDescriptor,
+    ComputerDescriptor,
     CreatedRuntimePairing,
     hashPairingCredential,
     normalizePairingCode,
@@ -22,16 +23,15 @@ import {
     ProjectPermission,
 } from "../entity/project-authentication.ts";
 import type { ProjectStorageContext } from "../entity/project-storage-context.ts";
-import { projectRuntimePairingStatus, runtimeRevokedAt } from "../entity/runtime-pairing-state.ts";
-import type { ProjectStore } from "../storage/project-store.ts";
+import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
 import type { ComputerManagementService } from "./computer-management-service.ts";
 import type { ComputerManagementStorageDirectory } from "./computer-management-storage-directory.ts";
+import { deriveRuntimeDaemonToken, deriveRuntimePairingSecrets } from "./computer-pairing-secrets.ts";
 import type { ComputerIdentityService } from "./pairing-identity-service.ts";
-import { deriveRuntimeDaemonToken, deriveRuntimePairingSecrets } from "./runtime-pairing-secrets.ts";
 
 export interface PairingDirectoryInfrastructure {
     readonly storages: {
-        readonly forProject: (project: ProjectStorageContext) => ProjectStore;
+        readonly forProject: (project: ProjectStorageContext) => ComputerRelayStore;
     };
     readonly services: {
         readonly identities: ComputerIdentityService;
@@ -70,7 +70,7 @@ export class PairingDirectoryService {
         successor: string,
         signal: AbortSignal,
     ): Promise<
-        { readonly kind: "rotated" | "reused"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
+        { readonly kind: "rotated" | "reused"; readonly access: VerifiedComputerAccess } | { readonly kind: "revoked" }
     > => {
         signal.throwIfAborted();
         const current = validateToken(token);
@@ -108,7 +108,7 @@ export class PairingDirectoryService {
     ): Promise<ProjectAccessContext> =>
         await this.#cx.services.projectAuthentication.authorizeProject(computerId, permission, signal);
 
-    readonly authorizePairedHost = async (computerId: string, signal: AbortSignal): Promise<VerifiedChannelAccess> => {
+    readonly authorizePairedHost = async (computerId: string, signal: AbortSignal): Promise<VerifiedComputerAccess> => {
         const access = await this.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
         if (!PROJECT_HOST_PERMISSIONS.every(access.permits)) {
             throw new ProjectAuthenticationError(
@@ -125,13 +125,17 @@ export class PairingDirectoryService {
         computerId: string,
         permission: ProjectPermission,
         signal: AbortSignal,
-    ): Promise<VerifiedChannelAccess> => {
+    ): Promise<VerifiedComputerAccess> => {
         const access = await this.authorizeProject(computerId, permission, signal);
         const storage = await this.projectStorage(access.scope, signal);
         return await this.readActivePairing(storage, computerId, signal);
     };
 
-    private readonly readActivePairing = async (storage: ProjectStore, computerId: string, signal: AbortSignal) => {
+    private readonly readActivePairing = async (
+        storage: ComputerRelayStore,
+        computerId: string,
+        signal: AbortSignal,
+    ) => {
         const row = await storage.readRuntime(validateIdentifier(computerId, "computer_id"), signal);
         if (row === null) {
             throw new PairingDirectoryError(
@@ -191,7 +195,7 @@ export class PairingDirectoryService {
         const secrets = await deriveRuntimePairingSecrets(pairingKey, owner.computerId, normalizedKey);
         const now = Date.now();
         const expiresAt = now + PAIRING_LIFETIME_MILLISECONDS;
-        let stored: Awaited<ReturnType<ProjectStore["requestRuntimePairing"]>>;
+        let stored: Awaited<ReturnType<ComputerRelayStore["requestRuntimePairing"]>>;
         try {
             stored = await storage.requestRuntimePairing(
                 {
@@ -240,7 +244,7 @@ export class PairingDirectoryService {
         if (row === null) {
             throw new PairingDirectoryError("pairing_not_found", "The Runtime pairing request was not found");
         }
-        return projectRuntimePairingStatus(row, Date.now());
+        return projectComputerPairingStatus(row, Date.now());
     };
 
     readonly revokeProjectRuntime = async (computerId: string, signal: AbortSignal): Promise<RevokedProjectRuntime> => {
@@ -323,13 +327,13 @@ export class PairingDirectoryService {
     readonly listProjectRuntimes = async (
         computerId: string,
         signal: AbortSignal,
-    ): Promise<readonly ChannelDescriptor[]> => {
+    ): Promise<readonly ComputerDescriptor[]> => {
         const access = await this.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
         const storage = await this.projectStorage(access.scope, signal);
         const runtimes = await storage.listRuntimes(signal);
         return runtimes.map(
             (row) =>
-                new ChannelDescriptor(
+                new ComputerDescriptor(
                     parseAgents(row.agents_json),
                     row.machine_name,
                     row.workspace_name,
@@ -356,7 +360,7 @@ export class PairingDirectoryService {
         // Whichever presented credential the Relay holds as current authorizes; holding it is the proof.
         for (const presented of successor === null ? [token] : [token, successor]) {
             const tokenHash = await hashPairingCredential(validateToken(presented));
-            let storage: ProjectStore;
+            let storage: ComputerRelayStore;
             try {
                 storage = await this.identityStorage({ kind: "daemon", computerId, tokenHash }, signal);
             } catch (cause) {

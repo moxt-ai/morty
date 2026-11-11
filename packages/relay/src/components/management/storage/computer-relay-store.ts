@@ -1,9 +1,9 @@
 import type { ComputerIdentityCredential } from "../entity/pairing-identity.ts";
 import type {
-    PairingChannelRow,
+    ComputerDirectoryRow,
     PairingClaimRow,
+    PairingComputerRow,
     PairingScopeRow,
-    RuntimeChannelRow,
     RuntimeCredentialRotation,
     RuntimeDirectoryRow,
     RuntimePairingRow,
@@ -54,7 +54,7 @@ export interface RevokeRuntime {
  * preconditions it checks and the writes it makes are evaluated together; no caller composes queries against Project
  * tables. A null or false result means the precondition did not hold and nothing was written.
  */
-export interface ProjectStore {
+export interface ComputerRelayStore {
     readonly updateAgentCatalog: (
         computerId: string,
         tokenHash: string,
@@ -64,7 +64,7 @@ export interface ProjectStore {
     /** The pairing generation whose daemon may act for the computer now; null while none may. */
     readonly readActiveGeneration: (computerId: string, signal: AbortSignal) => Promise<number | null>;
     readonly readRuntime: (computerId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
-    readonly listRuntimes: (signal: AbortSignal) => Promise<readonly RuntimeChannelRow[]>;
+    readonly listRuntimes: (signal: AbortSignal) => Promise<readonly ComputerDirectoryRow[]>;
     /**
      * Returns the pairing request created under the idempotency key, or creates one within the Runtime quota. A
      * refused request is audited.
@@ -73,7 +73,7 @@ export interface ProjectStore {
         value: RequestRuntimePairing,
         signal: AbortSignal,
     ) => Promise<RuntimePairingRequest>;
-    readonly readRuntimePairing: (computerId: string, signal: AbortSignal) => Promise<PairingChannelRow | null>;
+    readonly readRuntimePairing: (computerId: string, signal: AbortSignal) => Promise<PairingComputerRow | null>;
     readonly readPairingCode: (codeHash: string, signal: AbortSignal) => Promise<PairingClaimRow | null>;
     /**
      * Claims a pairing for a daemon. A replay with the credential it committed succeeds while the pairing is
@@ -97,6 +97,6 @@ export interface ProjectStore {
     ) => Promise<RuntimeCredentialRotation>;
 }
 
-export interface ProjectStoreResolver {
-    readonly resolve: (computerId: string) => ProjectStore;
+export interface ComputerRelayStoreResolver {
+    readonly resolve: (computerId: string) => ComputerRelayStore;
 }

@@ -4,7 +4,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
  * One pairing generation of the computer: the request that started it. Pairing the computer again starts a new
  * generation; an earlier one keeps its own facts. The latest generation is the computer's current one.
  */
-export const runtimePairing = sqliteTable("runtime_pairings", {
+export const computerPairing = sqliteTable("computer_pairings", {
     generation: integer("generation").primaryKey({ autoIncrement: true }),
     computerId: text("computer_id").notNull(),
     pairingCodeHash: text("pairing_code_hash").notNull().unique(),
@@ -16,7 +16,7 @@ export const runtimePairing = sqliteTable("runtime_pairings", {
 });
 
 /** The daemon that claimed a generation's pairing code, and the Agents it currently reports. */
-export const runtimeRegistration = sqliteTable("runtime_registrations", {
+export const computerRegistration = sqliteTable("computer_registrations", {
     generation: integer("generation").primaryKey(),
     claimedAt: integer("claimed_at").notNull(),
     machineName: text("machine_name").notNull(),
@@ -25,7 +25,7 @@ export const runtimeRegistration = sqliteTable("runtime_registrations", {
 });
 
 /** When a generation's access ended. Only an ended generation can be followed by a new one. */
-export const runtimeRevocation = sqliteTable("runtime_revocations", {
+export const computerRevocation = sqliteTable("computer_revocations", {
     generation: integer("generation").primaryKey(),
     revokedAt: integer("revoked_at").notNull(),
 });

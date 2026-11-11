@@ -4,13 +4,13 @@ import * as v from "valibot";
 const identifier = v.custom<Identifier>(isIdentifier);
 const projectSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
 export type ManagedProject = v.InferOutput<typeof projectSchema>;
-const machineSchema = v.object({ runtimePairing: v.picklist(["unpaired", "paired", "revoked"]) });
+const machineSchema = v.object({ computerPairing: v.picklist(["unpaired", "paired", "revoked"]) });
 
 /**
  * Where the Machine's Runtime pairing stands: not yet paired (or its pairing request is pending or expired), paired,
  * or revoked until setup pairs it again. The Relay owns this fact; the Worker reads it for the Machine.
  */
-export type RuntimePairing = v.InferOutput<typeof machineSchema>["runtimePairing"];
+export type RuntimePairing = v.InferOutput<typeof machineSchema>["computerPairing"];
 
 /** The Machine resource, read by setup and the page and polled by the browser for pairing changes. */
 export function machineUrl(origin: string, computerId: string): URL {
@@ -51,7 +51,7 @@ export class ManagementApi {
         ).computer;
 
     readonly readRuntimePairing = async (signal: AbortSignal): Promise<RuntimePairing> =>
-        v.parse(machineSchema, await this.#request("/machine", "GET", undefined, signal)).runtimePairing;
+        v.parse(machineSchema, await this.#request("/machine", "GET", undefined, signal)).computerPairing;
 
     readonly #request = async (
         path: string,

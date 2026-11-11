@@ -87,10 +87,10 @@ describe("Morty version command", () => {
                     signal,
                 ),
             ).toMatchObject({ kind: "error", code: "unsupported_operation" });
-            const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
+            const daemonPid = await readFile(join(control.stateDirectory, "daemon.lock"), "utf8");
             await expect(access(join(control.stateDirectory, "worker.lock"))).rejects.toMatchObject({ code: "ENOENT" });
             expect((await runCli(["start"], environment, signal)).code).toBe(0);
-            expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).toBe(daemonPid);
+            expect(await readFile(join(control.stateDirectory, "daemon.lock"), "utf8")).toBe(daemonPid);
             await expect(access(join(environment.MORTY_STATE_DIRECTORY, "npm"))).rejects.toMatchObject({
                 code: "ENOENT",
             });
@@ -100,7 +100,7 @@ describe("Morty version command", () => {
             expect(reported.stderr).toBe("");
             expect(reported.stdout).toBe(`CLI: ${cliPackage.version}\nDaemon: ${cliPackage.version}\n`);
             expect((await runCli(["restart"], environment, signal)).code).toBe(0);
-            expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).not.toBe(daemonPid);
+            expect(await readFile(join(control.stateDirectory, "daemon.lock"), "utf8")).not.toBe(daemonPid);
         } finally {
             await runCli(["quit"], environment, AbortSignal.timeout(10_000)).catch(() => undefined);
         }

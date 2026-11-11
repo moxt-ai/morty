@@ -1,6 +1,6 @@
 import { type AnyColumn, and, eq, inArray, max, notInArray } from "drizzle-orm";
 import { QueryBuilder } from "drizzle-orm/sqlite-core";
-import { runtimePairing, runtimeRegistration, runtimeRevocation } from "../../../schema/project-do/index.ts";
+import { computerPairing, computerRegistration, computerRevocation } from "../../../schema/computer-relay-do/index.ts";
 
 const query = new QueryBuilder();
 
@@ -10,9 +10,9 @@ type ComputerReference = string | AnyColumn;
 /** The computer's current pairing generation: its latest one. */
 export const currentGeneration = (computerId: ComputerReference) =>
     query
-        .select({ generation: max(runtimePairing.generation) })
-        .from(runtimePairing)
-        .where(eq(runtimePairing.computerId, computerId));
+        .select({ generation: max(computerPairing.generation) })
+        .from(computerPairing)
+        .where(eq(computerPairing.computerId, computerId));
 
 /**
  * The generation whose daemon may act for the computer: the current one, once a daemon claimed it, until its access
@@ -20,14 +20,14 @@ export const currentGeneration = (computerId: ComputerReference) =>
  */
 export const activeGeneration = (computerId: ComputerReference) =>
     query
-        .select({ generation: runtimeRegistration.generation })
-        .from(runtimeRegistration)
+        .select({ generation: computerRegistration.generation })
+        .from(computerRegistration)
         .where(
             and(
-                inArray(runtimeRegistration.generation, currentGeneration(computerId)),
+                inArray(computerRegistration.generation, currentGeneration(computerId)),
                 notInArray(
-                    runtimeRegistration.generation,
-                    query.select({ generation: runtimeRevocation.generation }).from(runtimeRevocation),
+                    computerRegistration.generation,
+                    query.select({ generation: computerRevocation.generation }).from(computerRevocation),
                 ),
             ),
         );

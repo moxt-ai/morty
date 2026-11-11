@@ -67,17 +67,17 @@ await writeMigrationModule(
     await sqlFiles(join(cli, "migrations/session-event-cache")),
 );
 await writeMigrationModule(
-    join(relay, "src/generated/runtime-connection-do-migrations.ts"),
-    "runtimeConnectionDurableObjectMigrations",
-    await sqlFiles(join(relay, "migrations/runtime-connection-do")),
+    join(relay, "src/generated/relay-operations-do-migrations.ts"),
+    "relayOperationsDurableObjectMigrations",
+    await sqlFiles(join(relay, "migrations/relay-operations-do")),
 );
 await writeMigrationModule(
-    join(relay, "src/generated/project-do-migrations.ts"),
+    join(relay, "src/generated/computer-relay-do-migrations.ts"),
     "computerDurableObjectMigrations",
-    await sqlFiles(join(relay, "migrations/project-do")),
+    await sqlFiles(join(relay, "migrations/computer-relay-do")),
 );
 await writeMigrationModule(
-    join(worker, "src/generated/project-do-migrations.ts"),
+    join(worker, "src/generated/computer-relay-do-migrations.ts"),
     "computerDurableObjectMigrations",
-    await sqlFiles(join(worker, "migrations/project-do")),
+    await sqlFiles(join(worker, "migrations/computer-relay-do")),
 );

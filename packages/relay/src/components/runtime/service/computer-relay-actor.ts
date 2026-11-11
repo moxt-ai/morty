@@ -88,7 +88,7 @@ function knownChunk(value: unknown, skipped: () => void) {
 
 export type HistoryRequestKind = "live" | "preview";
 
-export interface ChannelSocket {
+export interface RelaySocket {
     readonly sessionFilter?: NativeSessionTarget | undefined;
     readonly close: (code: number, reason: string) => void;
     readonly consumeAgentSettingsDiscovery: (requestId: string, harness: string) => boolean;
@@ -97,30 +97,30 @@ export interface ChannelSocket {
     readonly bindHistoryRequest: (kind: HistoryRequestKind, requestId: string) => void;
     readonly matchesHistoryRequest: (kind: HistoryRequestKind, requestId: string) => boolean;
     readonly isOpen: () => boolean;
-    readonly isSame: (socket: ChannelSocket) => boolean;
+    readonly isSame: (socket: RelaySocket) => boolean;
     readonly permitsSessionHistory: () => boolean;
     readonly send: (message: string | ArrayBuffer) => void;
     readonly trackAgentSettingsDiscovery: (requestId: string, harness: string) => "tracked" | "duplicate" | "busy";
 }
 
-export interface ChannelPeers {
+export interface RelayPeers {
     readonly viewers: () => readonly {
-        readonly socket: ChannelSocket;
+        readonly socket: RelaySocket;
         readonly target: NativeSessionTarget;
         readonly expiresAt: number;
     }[];
     readonly operations: () => readonly {
-        readonly socket: ChannelSocket;
+        readonly socket: RelaySocket;
         readonly requestId: string;
         readonly target: NativeSessionTarget | undefined;
     }[];
-    readonly daemons: () => readonly ChannelSocket[];
-    readonly hosts: () => readonly ChannelSocket[];
-    readonly nativeRequests: () => readonly { readonly requestId: string; readonly socket: ChannelSocket }[];
-    readonly historyRecipients: () => readonly ChannelSocket[];
+    readonly daemons: () => readonly RelaySocket[];
+    readonly hosts: () => readonly RelaySocket[];
+    readonly nativeRequests: () => readonly { readonly requestId: string; readonly socket: RelaySocket }[];
+    readonly historyRecipients: () => readonly RelaySocket[];
 }
 
-export class ChannelActor {
+export class ComputerRelayActor {
     #lastSkippedLogAt = Number.NEGATIVE_INFINITY;
     #skippedCount = 0;
 
@@ -142,14 +142,14 @@ export class ChannelActor {
         this.#lastSkippedLogAt = now;
         this.#skippedCount = 0;
     };
-    readonly #peers: ChannelPeers;
+    readonly #peers: RelayPeers;
     readonly #computerId: string;
     readonly #liveEvents: SessionLiveEventRelay;
 
     constructor(cx: {
         readonly config: { readonly computerId: string };
         readonly gateways: {
-            readonly peers: ChannelPeers;
+            readonly peers: RelayPeers;
         };
     }) {
         const { computerId } = cx.config;
@@ -166,7 +166,7 @@ export class ChannelActor {
         this.broadcastRuntimeStatus(true);
     };
 
-    readonly attachHost = (socket: ChannelSocket, _signal: AbortSignal): Promise<void> => {
+    readonly attachHost = (socket: RelaySocket, _signal: AbortSignal): Promise<void> => {
         socket.send(
             encodeRuntimeStatusEvent({
                 kind: RUNTIME_STATUS_KIND,
@@ -177,7 +177,7 @@ export class ChannelActor {
         return Promise.resolve();
     };
 
-    readonly detachDaemon = async (socket: ChannelSocket, _signal: AbortSignal): Promise<void> => {
+    readonly detachDaemon = async (socket: RelaySocket, _signal: AbortSignal): Promise<void> => {
         const anotherDaemonOnline = this.#peers
             .daemons()
             .some((candidate) => !candidate.isSame(socket) && candidate.isOpen());
@@ -189,7 +189,7 @@ export class ChannelActor {
     };
 
     readonly receiveDaemonMessage = async (
-        socket: ChannelSocket,
+        socket: RelaySocket,
         message: DaemonToRelayMessage | null,
         signal: AbortSignal,
         encoded?: string,
@@ -329,7 +329,7 @@ export class ChannelActor {
         }
     };
 
-    readonly receiveDaemonChunk = (_socket: ChannelSocket, message: unknown): void => {
+    readonly receiveDaemonChunk = (_socket: RelaySocket, message: unknown): void => {
         const chunk = knownChunk(message, () => this.recordSkipped("unsupported_daemon_frame"));
         if (chunk === null) {
             return;
@@ -347,7 +347,7 @@ export class ChannelActor {
         recipient.send(copyBinaryFrame(message));
     };
 
-    readonly receiveHostChunk = (socket: ChannelSocket, message: unknown): void => {
+    readonly receiveHostChunk = (socket: RelaySocket, message: unknown): void => {
         const chunk = knownChunk(message, () => this.recordSkipped("unsupported_host_frame"));
         if (chunk === null) {
             return;
@@ -365,11 +365,7 @@ export class ChannelActor {
         daemon.send(copyBinaryFrame(message));
     };
 
-    readonly receiveHostMessage = async (
-        socket: ChannelSocket,
-        message: unknown,
-        signal: AbortSignal,
-    ): Promise<void> => {
+    readonly receiveHostMessage = async (socket: RelaySocket, message: unknown, signal: AbortSignal): Promise<void> => {
         if (typeof message !== "string" || message.length > 8 * 1024 * 1024) {
             socket.close(1003, "Bounded text message required");
             return;
@@ -477,11 +473,7 @@ export class ChannelActor {
     };
 
     /** Sends a request to the daemon and lets the hosts watching its Session observe it. */
-    private readonly forwardControl = (
-        socket: ChannelSocket,
-        command: ServiceToDaemonRequest,
-        encoded: string,
-    ): void => {
+    private readonly forwardControl = (socket: RelaySocket, command: ServiceToDaemonRequest, encoded: string): void => {
         if (!this.sendToDaemon(command, encoded)) {
             this.refuseOffline(socket, command);
             return;
@@ -489,14 +481,14 @@ export class ChannelActor {
         this.broadcast(this.#peers.hosts(), encoded, "target" in command ? command.target : undefined);
     };
 
-    private readonly forwardPrompt = (socket: ChannelSocket, command: SessionPromptCommand, encoded: string): void => {
+    private readonly forwardPrompt = (socket: RelaySocket, command: SessionPromptCommand, encoded: string): void => {
         if (!this.sendToDaemon(command, encoded)) {
             this.refuseOffline(socket, command);
         }
     };
 
     /** Answers a request the daemon cannot receive at the address every answer to that request carries. */
-    private readonly refuseOffline = (socket: ChannelSocket, command: ServiceToDaemonRequest): void => {
+    private readonly refuseOffline = (socket: RelaySocket, command: ServiceToDaemonRequest): void => {
         const target = "target" in command ? command.target : undefined;
         socket.send(
             encodeSessionOperationFailedEvent({
@@ -510,7 +502,7 @@ export class ChannelActor {
     };
 
     private readonly forwardAgentSettingsDiscovery = (
-        socket: ChannelSocket,
+        socket: RelaySocket,
         command: AgentSettingsDiscoverCommand,
         encoded: string,
     ): void => {
@@ -586,7 +578,7 @@ export class ChannelActor {
     };
 
     private readonly forwardHistoryPage = (
-        socket: ChannelSocket,
+        socket: RelaySocket,
         kind: HistoryRequestKind,
         command: Extract<
             ServiceToDaemonMessage,
@@ -652,7 +644,7 @@ export class ChannelActor {
     };
 
     private readonly broadcast = (
-        sockets: readonly ChannelSocket[],
+        sockets: readonly RelaySocket[],
         message: string,
         target?: NativeSessionTarget,
     ): void => {

@@ -1,16 +1,16 @@
 import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../../management/entity/project-authentication.ts";
 import type { BackendProjectAccess } from "../../management/service/backend-project-access.ts";
 import type { ComputerManagementStorageDirectory } from "../../management/service/computer-management-storage-directory.ts";
-import type { ProjectStoreResolver } from "../../management/storage/project-store.ts";
+import type { ComputerRelayStoreResolver } from "../../management/storage/computer-relay-store.ts";
 import type { RuntimeSocketIdentity } from "./runtime-service.ts";
 
 export class RuntimeCredentialService {
-    readonly #stores: ProjectStoreResolver;
+    readonly #stores: ComputerRelayStoreResolver;
     readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
     readonly #access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
 
     constructor(
-        stores: ProjectStoreResolver,
+        stores: ComputerRelayStoreResolver,
         projects: Pick<ComputerManagementStorageDirectory, "resolve">,
         access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">,
     ) {

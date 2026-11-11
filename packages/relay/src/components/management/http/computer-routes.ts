@@ -6,12 +6,12 @@ import { bodyParser } from "../../../middleware/body-parser.ts";
 import { errorMiddleware, rethrowHonoError } from "../../../middleware/error-middleware.ts";
 import { validateAgents, validateIdentifier } from "../entity/pairing.ts";
 
-export function createChannelRoutes() {
+export function createComputerRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .put("/:computerId/catalog", bodyParser<RelayHttpEnvironment>(["agents"]), async (context) => {
-            const useCases = context.var.relay.services.channels;
+            const useCases = context.var.relay.services.computerConnections;
             const body = context.req.valid("json");
             const agents = validateAgents(body["agents"]);
             await useCases.updateAgentCatalog(

@@ -1,10 +1,10 @@
 export { auditEvent } from "./audit-event.ts";
-export { runtimeConnection } from "./runtime-connection.ts";
+export { computerConnection } from "./computer-connection.ts";
 export {
+    computerPairing,
+    computerRegistration,
+    computerRevocation,
     daemonCredential,
     retiredDaemonCredential,
-    runtimePairing,
-    runtimeRegistration,
-    runtimeRevocation,
-} from "./runtime-pairing.ts";
+} from "./computer-pairing.ts";
 export { sessionAccessRevocation } from "./session-access-revocation.ts";

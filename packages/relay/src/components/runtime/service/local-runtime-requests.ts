@@ -1,15 +1,15 @@
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { logger } from "../../../infra/logger.ts";
-import type { ChannelPeers, ChannelSocket, HistoryRequestKind } from "./channel-actor.ts";
+import type { HistoryRequestKind, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
 import type { RuntimeReplyConnection } from "./runtime-control-request.ts";
 
 class LocalRuntimeRequest extends EventTarget implements RuntimeReplyConnection {
     #state: number = WebSocket.OPEN;
-    readonly #dispatch: (socket: ChannelSocket, message: unknown) => Promise<void>;
+    readonly #dispatch: (socket: RelaySocket, message: unknown) => Promise<void>;
     readonly #release: () => void;
-    readonly server: ChannelSocket;
+    readonly server: RelaySocket;
 
-    constructor(dispatch: (socket: ChannelSocket, message: unknown) => Promise<void>, release: () => void) {
+    constructor(dispatch: (socket: RelaySocket, message: unknown) => Promise<void>, release: () => void) {
         super();
         this.#dispatch = dispatch;
         this.#release = release;
@@ -80,12 +80,12 @@ class LocalRuntimeRequest extends EventTarget implements RuntimeReplyConnection 
 }
 
 export class LocalRuntimeRequests {
-    readonly #routes = new Set<ReturnType<ChannelPeers["operations"]>[number]>();
+    readonly #routes = new Set<ReturnType<RelayPeers["operations"]>[number]>();
     readonly routes = () => [...this.#routes];
     readonly open = (
         requestId: string,
         target: NativeSessionTarget | undefined,
-        dispatch: (socket: ChannelSocket, message: unknown) => Promise<void>,
+        dispatch: (socket: RelaySocket, message: unknown) => Promise<void>,
     ) => {
         const connection = new LocalRuntimeRequest(dispatch, () => this.#routes.delete(route));
         const route = { socket: connection.server, requestId, target };

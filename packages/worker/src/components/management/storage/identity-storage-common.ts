@@ -1,5 +1,5 @@
 import type { HttpError } from "../../../infra/http-error.ts";
-import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
+import { createDatabase, type Database } from "../../../schema/computer-relay-do/database.ts";
 
 export interface AnonymousIdentity {
     readonly token: string;

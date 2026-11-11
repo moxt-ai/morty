@@ -1,5 +1,5 @@
 export * from "./components/management/entity/project-authentication.ts";
-export type * from "./components/management/storage/project-store.ts";
+export type * from "./components/management/storage/computer-relay-store.ts";
 export { SessionRuntimeError } from "./components/runtime/entity/session.ts";
 export {
     acceptWebSocketHttpTransport,

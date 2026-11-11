@@ -15,10 +15,10 @@ import {
 import { logger } from "../../../infra/logger.ts";
 import { PairingDirectoryError } from "../../management/entity/pairing.ts";
 import { ProjectPermission } from "../../management/entity/project-authentication.ts";
-import type { RuntimeConnectionIdentity } from "../entity/runtime-connection.ts";
+import type { ComputerConnectionIdentity } from "../entity/computer-connection.ts";
 import { ComputerScope } from "../entity/session.ts";
-import type { ChannelActor, ChannelPeers, ChannelSocket } from "./channel-actor.ts";
-import type { RuntimeConnectionService } from "./runtime-connection-service.ts";
+import type { ComputerRelayActor, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
+import type { DaemonConnectionService } from "./daemon-connection-service.ts";
 import { runtimeCommandPermission } from "./runtime-control-registry.ts";
 import type { RuntimeCredentialService } from "./runtime-credential-service.ts";
 import { RuntimeMessageScheduler, RuntimeMessageSchedulerCapacityError } from "./runtime-message-scheduler.ts";
@@ -65,11 +65,11 @@ export type RuntimeSocketIdentity =
           readonly computerId: string;
       };
 
-export interface RuntimeSocket extends ChannelSocket {
+export interface RuntimeSocket extends RelaySocket {
     readonly replaceDaemon: () => void;
 }
 
-export interface RuntimePeers extends ChannelPeers {
+export interface RuntimePeers extends RelayPeers {
     readonly sockets: () => readonly { readonly identity: RuntimeSocketIdentity; readonly socket: RuntimeSocket }[];
     /** Daemon connections with the time each one's heartbeat was last answered by the host. */
     readonly daemonConnections: () => readonly {
@@ -87,9 +87,9 @@ type RuntimePeer = ReturnType<RuntimePeers["sockets"]>[number];
 
 interface RuntimeContext {
     readonly services: {
-        readonly connections: RuntimeConnectionService;
+        readonly connections: DaemonConnectionService;
         readonly credentials: RuntimeCredentialService;
-        readonly channel: (scope: ComputerScope) => ChannelActor;
+        readonly relay: (scope: ComputerScope) => ComputerRelayActor;
     };
     readonly gateways: {
         readonly peers: RuntimePeers;
@@ -109,7 +109,7 @@ type DaemonSocketIdentity = Extract<RuntimeSocketIdentity, { readonly role: "dae
 
 export class RuntimeService {
     readonly #cx: RuntimeContext;
-    readonly #channels = new Map<string, ChannelActor>();
+    readonly #channels = new Map<string, ComputerRelayActor>();
     readonly #daemonMessages = new RuntimeMessageScheduler();
     readonly #attachments = new Set<{
         readonly controller: AbortController;
@@ -332,17 +332,17 @@ export class RuntimeService {
     };
 
     readonly attachDaemon = async (scope: ComputerScope, replaced: boolean, signal: AbortSignal): Promise<void> => {
-        const channel = this.channel(scope);
-        await channel.attachDaemon(replaced, signal);
+        const relay = this.relay(scope);
+        await relay.attachDaemon(replaced, signal);
     };
 
-    readonly attachHost = (scope: ComputerScope, socket: ChannelSocket, signal: AbortSignal) =>
-        this.channel(scope).attachHost(socket, signal);
+    readonly attachHost = (scope: ComputerScope, socket: RelaySocket, signal: AbortSignal) =>
+        this.relay(scope).attachHost(socket, signal);
 
     /** The public HTTP handler already authorized this operation; no host credential is involved. */
     readonly receiveOperation = async (
         scope: ComputerScope,
-        socket: ChannelSocket,
+        socket: RelaySocket,
         message: unknown,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -360,11 +360,11 @@ export class RuntimeService {
             if (daemon !== undefined && daemon.identity.computerId !== scope.computerId) {
                 throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
             }
-            const channel = this.channel(scope);
+            const relay = this.relay(scope);
             if (typeof message === "string") {
-                await channel.receiveHostMessage(socket, message, signal);
+                await relay.receiveHostMessage(socket, message, signal);
             } else {
-                channel.receiveHostChunk(socket, message);
+                relay.receiveHostChunk(socket, message);
             }
         } finally {
             await this.detachDaemons(silent);
@@ -385,12 +385,12 @@ export class RuntimeService {
             const silentDaemons = this.closeSilentDaemons();
             try {
                 if (identity.role === "relay") {
-                    const channel = this.channel(scope);
+                    const relay = this.relay(scope);
                     if (typeof message !== "string") {
-                        channel.receiveHostChunk(socket, message);
+                        relay.receiveHostChunk(socket, message);
                         return;
                     }
-                    await channel.receiveHostMessage(socket, message, signal);
+                    await relay.receiveHostMessage(socket, message, signal);
                     return;
                 }
                 if (identity.role === "viewer") {
@@ -398,7 +398,7 @@ export class RuntimeService {
                     return;
                 }
                 // Content bytes continue an upload, which needs Session write access like the content.write that
-                // started it. An unknown message needs only the connection's own access; the channel skips it.
+                // started it. An unknown message needs only the connection's own access; the relay skips it.
                 const command = typeof message === "string" ? decodeKnownServiceToDaemonMessage(message) : null;
                 const permission =
                     typeof message === "string"
@@ -416,12 +416,12 @@ export class RuntimeService {
                     case "granted":
                         break;
                 }
-                const channel = this.channel(scope);
+                const relay = this.relay(scope);
                 if (typeof message !== "string") {
-                    channel.receiveHostChunk(socket, message);
+                    relay.receiveHostChunk(socket, message);
                     return;
                 }
-                await channel.receiveHostMessage(socket, message, signal);
+                await relay.receiveHostMessage(socket, message, signal);
                 return;
             } finally {
                 await this.detachDaemons(silentDaemons);
@@ -434,7 +434,7 @@ export class RuntimeService {
                     if (!(await this.authorizeDaemonMessage(identity, socket, signal))) {
                         return;
                     }
-                    this.channel(scope).receiveDaemonChunk(socket, message);
+                    this.relay(scope).receiveDaemonChunk(socket, message);
                 });
             } catch (error) {
                 signal.throwIfAborted();
@@ -454,7 +454,7 @@ export class RuntimeService {
             daemonMessage = decodeDaemonToRelayMessage(message);
         } catch {
             // Reject this frame without disconnecting unrelated Sessions.
-            this.channel(scope).recordSkipped("invalid_daemon_message");
+            this.relay(scope).recordSkipped("invalid_daemon_message");
             return;
         }
         const lanes = daemonMessage === null ? ["runtime"] : this.daemonMessageLanes(daemonMessage);
@@ -464,8 +464,8 @@ export class RuntimeService {
                 if (!(await this.authorizeDaemonMessage(identity, socket, signal))) {
                     return;
                 }
-                const channel = this.channel(scope);
-                await channel.receiveDaemonMessage(socket, daemonMessage, signal, message);
+                const relay = this.relay(scope);
+                await relay.receiveDaemonMessage(socket, daemonMessage, signal, message);
             });
         } catch (error) {
             if (error instanceof RuntimeMessageSchedulerCapacityError) {
@@ -519,7 +519,7 @@ export class RuntimeService {
      * Closes a daemon connection that is no longer the current one, telling a replaced daemon to reconnect and the
      * daemon of an ended generation that its Runtime was revoked. True when it closed the connection.
      */
-    private readonly fenceDaemon = (identity: RuntimeConnectionIdentity, socket: RuntimeSocket): boolean => {
+    private readonly fenceDaemon = (identity: ComputerConnectionIdentity, socket: RuntimeSocket): boolean => {
         const standing = this.#cx.services.connections.standing(identity);
         switch (standing) {
             case "current":
@@ -547,7 +547,7 @@ export class RuntimeService {
         return ["runtime"];
     };
 
-    private readonly channel = (scope: ComputerScope): ChannelActor => {
+    private readonly relay = (scope: ComputerScope): ComputerRelayActor => {
         const key = JSON.stringify({
             computerId: scope.computerId,
         });
@@ -555,14 +555,14 @@ export class RuntimeService {
         if (existing !== undefined) {
             return existing;
         }
-        const channel = this.#cx.services.channel(scope);
-        this.#channels.set(key, channel);
-        return channel;
+        const relay = this.#cx.services.relay(scope);
+        this.#channels.set(key, relay);
+        return relay;
     };
 
     readonly detach = async (
         identity: RuntimeSocketIdentity,
-        socket: ChannelSocket,
+        socket: RelaySocket,
         signal: AbortSignal,
     ): Promise<void> => {
         // The latest connection detaches once it closes, also after its generation ended: what was sent into it
@@ -585,7 +585,7 @@ export class RuntimeService {
             return;
         }
         this.#cx.services.connections.disconnected(identity, Date.now());
-        await this.channel(new ComputerScope(identity.computerId)).detachDaemon(socket, signal);
+        await this.relay(new ComputerScope(identity.computerId)).detachDaemon(socket, signal);
     };
 
     private readonly closeSilentDaemons = (): readonly RuntimePeer[] => {

@@ -1,4 +1,4 @@
-import type { ProjectStore } from "@morty-build/relay";
+import type { ComputerRelayStore } from "@morty-build/relay";
 import { ComputerManagementService } from "../components/management/service/computer-management-service.ts";
 import { ComputerManagementStorageDirectory } from "../components/management/service/computer-management-storage-directory.ts";
 import { ComputerManagementStorage } from "../components/management/storage/computer-management-storage.ts";
@@ -9,7 +9,7 @@ import { SessionAccessService } from "../components/runtime/service/session-acce
 export function createRelayAccessServices(dependencies: {
     readonly database: D1Database;
     readonly stores: ComputerManagementStores;
-    readonly identityStores: readonly ProjectStore[];
+    readonly identityStores: readonly ComputerRelayStore[];
     readonly sessionSigningSecret: string;
 }) {
     const controlStorage = new ComputerManagementStorage(dependencies.database, dependencies.stores);

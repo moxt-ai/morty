@@ -1,11 +1,11 @@
 import { NativeSessionMap } from "@morty-build/client/native-session";
 import { encodeSessionWireEnvelope, type SessionWireEnvelope } from "@morty-build/client/protocol";
-import type { ChannelPeers } from "./channel-actor.ts";
+import type { RelayPeers } from "./computer-relay-actor.ts";
 
 export class SessionLiveEventRelay {
-    readonly #peers: ChannelPeers;
+    readonly #peers: RelayPeers;
 
-    constructor(peers: ChannelPeers) {
+    constructor(peers: RelayPeers) {
         this.#peers = peers;
     }
 

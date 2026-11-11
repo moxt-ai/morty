@@ -54,7 +54,7 @@ export class ManagementService {
         if (project === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { runtimePairing: await this.#relay.readRuntimePairing(project.computerId, signal) };
+        return { computerPairing: await this.#relay.readRuntimePairing(project.computerId, signal) };
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {

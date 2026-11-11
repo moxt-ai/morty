@@ -2,7 +2,12 @@ import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL, sql } from "drizzle-orm";
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
-import { browserCredential, browserDevice, continueLink, ownerCredential } from "../../../schema/project-do/index.ts";
+import {
+    browserCredential,
+    browserDevice,
+    continueLink,
+    ownerCredential,
+} from "../../../schema/computer-relay-do/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";

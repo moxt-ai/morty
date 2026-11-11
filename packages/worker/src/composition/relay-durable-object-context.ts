@@ -6,7 +6,7 @@ import type {
     ComputerManagementStore,
     ComputerManagementStores,
 } from "../../../relay/src/components/management/storage/computer-management-store.ts";
-import { CloudflareChannelPeers } from "../../../relay/src/components/runtime/gateway/cloudflare-channel-peers.ts";
+import { CloudflareRelayPeers } from "../../../relay/src/components/runtime/gateway/cloudflare-relay-peers.ts";
 import { createRuntimeContext } from "../../../relay/src/components/runtime/runtime-context.ts";
 
 export interface RelayDurableObjectEnvironment {
@@ -30,7 +30,7 @@ export function createRelayDurableObjectContext(
     return createRuntimeContext({
         storages: { projectStores: stores },
         services: { projects, projectAccess: new BackendProjectAccess(controlStorage) },
-        gateways: { peers: new CloudflareChannelPeers(state) },
+        gateways: { peers: new CloudflareRelayPeers(state) },
         utilities: { waitUntil: (operation) => state.waitUntil(operation) },
         doDatabase: storage.database,
     });
