@@ -12,7 +12,6 @@ import {
 } from "@morty-build/client/protocol";
 import { AcpConfigurationValueUnavailableError, AcpExecutionError } from "../../acp/acp-error.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
-import { agentSettingsAdapterForAgent } from "../../agent/settings/agent-settings-adapter.ts";
 import { operationErrorCode } from "../../infra/operation-error.ts";
 import type { AgentSettingsModelEffort, ResolveAgent } from "../api/session-api.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
@@ -115,12 +114,13 @@ export async function discoverAgentSettings(
             }
         }
     }
-    const adapter = agentSettingsAdapterForAgent(agent.harness);
     const modelEffort = await discoverModelEffort(
         command,
         agent,
         harnessAdapter,
-        adapter.modelEffortResolution,
+        agent.harness === "codex"
+            ? AGENT_MODEL_EFFORT_RESOLUTION_COMPLETE
+            : AGENT_MODEL_EFFORT_RESOLUTION_ON_MODEL_SELECTION,
         baseSnapshot.configOptions,
         selectedSnapshot.configOptions,
         unsupportedModels,
@@ -130,12 +130,12 @@ export async function discoverAgentSettings(
         signal,
     );
     const baseSettings = withoutUnsupportedModels(
-        settingsFromSnapshot(agent, baseSnapshot.configOptions),
+        settingsFromSnapshot(baseSnapshot.configOptions),
         baseModel?.id ?? "",
         modelEffort.unsupportedModelIds,
     );
     const settings = withoutUnsupportedModels(
-        settingsFromSnapshot(agent, selectedSnapshot.configOptions),
+        settingsFromSnapshot(selectedSnapshot.configOptions),
         baseModel?.id ?? "",
         modelEffort.unsupportedModelIds,
     );
@@ -168,14 +168,8 @@ function settingFromOption(option: SessionConfigOption): AgentSetting {
     };
 }
 
-function settingsFromSnapshot(
-    agent: AcpAgentDefinition,
-    configOptions: readonly SessionConfigOption[],
-): readonly AgentSetting[] {
-    const settings = [
-        ...agentSettingsAdapterForAgent(agent.harness).settings(agent).map(settingFromOption),
-        ...configOptions.map(settingFromOption),
-    ];
+function settingsFromSnapshot(configOptions: readonly SessionConfigOption[]): readonly AgentSetting[] {
+    const settings = configOptions.map(settingFromOption);
     const identifiers = new Set<string>();
     for (const setting of settings) {
         if (identifiers.has(setting.id)) {

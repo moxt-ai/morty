@@ -15,7 +15,7 @@ import type { AcpAgentDefinition } from "../agent/agent-definition.ts";
 import type { PromptContent } from "../client/prompt-content.ts";
 import type { AcpContentExternalizer, ExternalizeSessionUpdate } from "../content/content-externalizer.ts";
 import type { NativeSessionInfo, NativeSessionPage } from "../protocol/native-session.ts";
-import type { SessionConfigurationSelection } from "../protocol/session-config-protocol.ts";
+import type { SessionConfigurationSelection } from "../protocol/session-configuration.ts";
 import type { ProjectedToolCall } from "../tool-call-projection.ts";
 
 /** One page of a saved native session's events. */

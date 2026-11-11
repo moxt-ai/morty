@@ -17,7 +17,7 @@ import type {
 } from "../../native-history/preview-contract.ts";
 import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
 import { normalizeAcpCapabilities, restrictAcpSessionCapabilities } from "../../protocol/session-capabilities.ts";
-import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
+import { normalizeSessionConfiguration } from "../../protocol/session-configuration.ts";
 import { harnessSessionCallbacks } from "../harness-client-events.ts";
 import { HarnessHistoryPreviews } from "../harness-history-previews.ts";
 import { HarnessSession } from "../harness-session.ts";
@@ -27,7 +27,6 @@ import { openPreviewEventCache } from "../preview-event-cache.ts";
 import { codexClientCallbacks } from "./client-callbacks.ts";
 import { createCodexClient } from "./create-client.ts";
 
-const configuration = sessionConfigProtocolForAgent("codex");
 type CodexSession = HarnessSession<CodexAcpAgent>;
 type CodexOpened = Awaited<ReturnType<CodexAcpAgent["newSession"]>>;
 
@@ -105,7 +104,7 @@ export class CodexAdapter implements Adapter {
     readonly #opened = (session: CodexSession, params: AdapterSessionCreateParams, response: CodexOpened) => ({
         sessionId: session.sessionId,
         capabilities: restrictAcpSessionCapabilities(normalizeAcpCapabilities(CodexAcpAgent.capabilities()), response),
-        configOptions: configuration.normalizeLifecycle(response),
+        configOptions: normalizeSessionConfiguration(response),
         agentName: "Codex",
         agentVersion: params.scope.agent.agentVersion || CodexAcpAgent.capabilities().agentInfo.version,
         agentSettingsModelEffort: session.agent.agentSettingsModelEffort(),
@@ -256,7 +255,7 @@ export class CodexAdapter implements Adapter {
         params.signal.throwIfAborted();
         const session = this.#session(params);
         const { selection } = params;
-        const current = configuration.normalizeLifecycle(session.agent.sessionConfiguration());
+        const current = normalizeSessionConfiguration(session.agent.sessionConfiguration());
         const option = current.find((option) => option.id === selection.configId);
         if (!option || option.type !== selection.type || (option.type === "select" && option.values.length < 2)) {
             throw new AcpExecutionError(
@@ -284,7 +283,7 @@ export class CodexAdapter implements Adapter {
                 value: selection.type === "boolean" ? selection.booleanValue : selection.value,
             });
         }
-        const applied = configuration.normalizeLifecycle(session.agent.sessionConfiguration());
+        const applied = normalizeSessionConfiguration(session.agent.sessionConfiguration());
         if (
             !applied.some(
                 (value) =>

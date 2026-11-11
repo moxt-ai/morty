@@ -1,49 +1,9 @@
-import { methods } from "@agentclientprotocol/sdk/unstable";
 import type { SessionConfigOption, SessionConfigValue } from "@morty-build/client/protocol";
 export const MAXIMUM_CONFIG_OPTIONS = 100;
 
 export type SessionConfigurationSelection =
     | { readonly type: "boolean"; readonly configId: string; readonly booleanValue: boolean }
     | { readonly type: "select"; readonly configId: string; readonly value: string };
-
-interface SessionConfigChange {
-    readonly booleanValue: boolean;
-    readonly configId: string;
-    readonly signal: AbortSignal;
-    readonly value: string;
-}
-
-interface SessionConfigTransport {
-    readonly request: (
-        method: string,
-        params: Readonly<Record<string, unknown>>,
-        failureMessage: string,
-        signal: AbortSignal,
-    ) => Promise<unknown>;
-}
-
-export interface SessionConfigProtocol {
-    readonly configure: (
-        current: readonly SessionConfigOption[],
-        change: SessionConfigChange,
-        sessionId: string,
-        transport: SessionConfigTransport,
-    ) => Promise<readonly SessionConfigOption[]>;
-    readonly normalizeLifecycle: (response: unknown) => readonly SessionConfigOption[];
-    readonly normalizeUpdate: (
-        current: readonly SessionConfigOption[],
-        value: unknown,
-    ) => readonly SessionConfigOption[];
-}
-
-export class SessionConfigProtocolError extends Error {
-    readonly code = "invalid_session_configuration_response";
-
-    constructor(message: string, options: ErrorOptions = {}) {
-        super(message, options);
-        this.name = "SessionConfigProtocolError";
-    }
-}
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -218,12 +178,12 @@ function normalizeConfigOptions(value: unknown, modes: unknown): readonly Sessio
     return normalized.slice(0, MAXIMUM_CONFIG_OPTIONS);
 }
 
-function normalizeStandardLifecycle(response: unknown): readonly SessionConfigOption[] {
+export function normalizeSessionConfiguration(response: unknown): readonly SessionConfigOption[] {
     const lifecycle = isRecord(response) ? response : {};
     return normalizeConfigOptions(lifecycle["configOptions"], lifecycle["modes"]);
 }
 
-function replaceStandardConfigOptions(
+export function normalizeSessionConfigurationUpdate(
     current: readonly SessionConfigOption[],
     value: unknown,
 ): readonly SessionConfigOption[] {
@@ -232,72 +192,4 @@ function replaceStandardConfigOptions(
         ? next
         : [...current.filter((option) => option.category === "mode"), ...next].slice(0, MAXIMUM_CONFIG_OPTIONS);
     return withMode;
-}
-
-function updateCurrentValue(
-    current: readonly SessionConfigOption[],
-    configId: string,
-    value: string,
-): readonly SessionConfigOption[] {
-    return current.map((option) => (option.id === configId ? { ...option, currentValue: value } : option));
-}
-
-class StandardSessionConfigProtocol implements SessionConfigProtocol {
-    readonly configure = async (
-        current: readonly SessionConfigOption[],
-        change: SessionConfigChange,
-        sessionId: string,
-        transport: SessionConfigTransport,
-    ): Promise<readonly SessionConfigOption[]> => {
-        const existing = current.find((option) => option.id === change.configId);
-        if (existing === undefined) {
-            return current;
-        }
-        if (existing.type === "select" && existing.category === "mode") {
-            await transport.request(
-                methods.agent.session.setMode,
-                { modeId: change.value, sessionId: sessionId },
-                "ACP agent exited while setting the session mode",
-                change.signal,
-            );
-            return updateCurrentValue(current, existing.id, change.value);
-        }
-        const params: Readonly<Record<string, unknown>> =
-            existing.type === "boolean"
-                ? {
-                      configId: existing.id,
-                      sessionId: sessionId,
-                      type: "boolean",
-                      value: change.booleanValue,
-                  }
-                : {
-                      configId: existing.id,
-                      sessionId: sessionId,
-                      value: change.value,
-                  };
-        const response = await transport.request(
-            methods.agent.session.setConfigOption,
-            params,
-            "ACP agent exited while changing session configuration",
-            change.signal,
-        );
-        if (!isRecord(response) || !Array.isArray(response["configOptions"])) {
-            throw new SessionConfigProtocolError("The Agent returned an invalid session configuration response");
-        }
-        return replaceStandardConfigOptions(current, response["configOptions"]);
-    };
-
-    readonly normalizeLifecycle = (response: unknown): readonly SessionConfigOption[] =>
-        normalizeStandardLifecycle(response);
-
-    readonly normalizeUpdate = (
-        current: readonly SessionConfigOption[],
-        value: unknown,
-    ): readonly SessionConfigOption[] => replaceStandardConfigOptions(current, value);
-}
-
-const standardSessionConfigProtocol = new StandardSessionConfigProtocol();
-
-export function sessionConfigProtocolForAgent(_harness: string): SessionConfigProtocol {
-    return standardSessionConfigProtocol;
 }

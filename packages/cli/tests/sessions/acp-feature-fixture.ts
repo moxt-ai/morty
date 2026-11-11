@@ -2,15 +2,12 @@ import { fileURLToPath } from "node:url";
 
 import type {
     AcpSessionUpdate,
-    SessionCommandsUpdatedEvent,
-    SessionConfigUpdatedEvent,
     SessionElicitationRequestedEvent,
     SessionElicitationResolvedEvent,
     SessionEventPayload,
     SessionInfoUpdatedEvent,
     SessionLiveEvent,
     SessionPermissionRequestedEvent,
-    SessionPermissionResolvedEvent,
 } from "@morty-build/client/protocol";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { SessionObserver } from "../../src/engine/session/api/session-api.ts";
@@ -20,56 +17,32 @@ export const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", imp
 
 /** Folds the live session event stream into the shapes integration tests assert on. */
 export class RecordingObserver implements SessionObserver {
-    readonly commands: SessionCommandsUpdatedEvent[] = [];
-    readonly config: SessionConfigUpdatedEvent[] = [];
-    readonly elicitations: SessionElicitationRequestedEvent[] = [];
     readonly information: SessionInfoUpdatedEvent[] = [];
-    readonly permissions: SessionPermissionRequestedEvent[] = [];
-    readonly permissionResolutions: SessionPermissionResolvedEvent[] = [];
     readonly elicitationResolutions: SessionElicitationResolvedEvent[] = [];
     readonly events: { readonly event: SessionEventPayload; readonly position: number }[] = [];
     readonly permissionArrived = Promise.withResolvers<SessionPermissionRequestedEvent>();
     readonly elicitationArrived = Promise.withResolvers<SessionElicitationRequestedEvent>();
     readonly #eventWaiters: Array<(event: SessionEventPayload) => void> = [];
 
-    readonly onCommands = (event: SessionCommandsUpdatedEvent): Promise<void> => {
-        this.commands.push(event);
-        return Promise.resolve();
-    };
-
-    readonly onConfig = (event: SessionConfigUpdatedEvent): Promise<void> => {
-        this.config.push(event);
-        return Promise.resolve();
-    };
-
-    readonly onElicitation = (event: SessionElicitationRequestedEvent): Promise<void> => {
-        this.elicitations.push(event);
-        this.elicitationArrived.resolve(event);
-        return Promise.resolve();
-    };
-
     readonly onInfo = (event: SessionInfoUpdatedEvent): Promise<void> => {
         this.information.push(event);
         return Promise.resolve();
     };
 
-    readonly onPermission = (event: SessionPermissionRequestedEvent): Promise<void> => {
-        this.permissions.push(event);
-        this.permissionArrived.resolve(event);
-        return Promise.resolve();
-    };
-
-    readonly onPermissionResolved = (event: SessionPermissionResolvedEvent): Promise<void> => {
-        this.permissionResolutions.push(event);
-        return Promise.resolve();
-    };
-
-    readonly onElicitationResolved = (event: SessionElicitationResolvedEvent): Promise<void> => {
-        this.elicitationResolutions.push(event);
-        return Promise.resolve();
-    };
-
     readonly onSessionEvent = (liveEvent: SessionLiveEvent): Promise<void> => {
+        if (liveEvent.type === "lifecycle-metadata") {
+            switch (liveEvent.payload.kind) {
+                case "session.permission.requested":
+                    this.permissionArrived.resolve(liveEvent.payload.event);
+                    break;
+                case "session.elicitation.requested":
+                    this.elicitationArrived.resolve(liveEvent.payload.event);
+                    break;
+                case "session.elicitation.resolved":
+                    this.elicitationResolutions.push(liveEvent.payload.event);
+                    break;
+            }
+        }
         const event: SessionEventPayload =
             liveEvent.type === "acp"
                 ? { payload: liveEvent.payload, type: "acp" }

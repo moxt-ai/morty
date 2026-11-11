@@ -7,14 +7,10 @@ import type {
     SessionCapabilities,
     SessionCloseNoticeEvent,
     SessionCommand,
-    SessionCommandsUpdatedEvent,
     SessionConfigOption,
-    SessionConfigUpdatedEvent,
-    SessionElicitationRequestedEvent,
     SessionElicitationResolvedEvent,
     SessionInfoUpdatedEvent,
     SessionLiveEvent,
-    SessionPermissionRequestedEvent,
     SessionPermissionResolvedEvent,
     SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
@@ -107,25 +103,13 @@ export type PromptResult = AgentPromptResponse;
 export interface SessionObserver {
     readonly onBackgroundActivity?: (source: object, activity: BackgroundActivity) => void;
     readonly onSessionEvent?: (event: SessionLiveEvent) => Promise<void>;
-    readonly onCommands: (event: SessionCommandsUpdatedEvent) => Promise<void>;
-    readonly onConfig: (event: SessionConfigUpdatedEvent) => Promise<void>;
-    readonly onElicitation: (event: SessionElicitationRequestedEvent) => Promise<void>;
-    readonly onElicitationResolved: (event: SessionElicitationResolvedEvent) => Promise<void>;
     readonly onInfo: (event: SessionInfoUpdatedEvent) => Promise<void>;
-    readonly onPermission: (event: SessionPermissionRequestedEvent) => Promise<void>;
-    readonly onPermissionResolved: (event: SessionPermissionResolvedEvent) => Promise<void>;
 }
 
 export class NullSessionObserver implements SessionObserver {
     readonly onBackgroundActivity = (_source: object, _activity: BackgroundActivity): void => {};
     readonly onSessionEvent = (_event: SessionLiveEvent): Promise<void> => Promise.resolve();
-    readonly onCommands = (): Promise<void> => Promise.resolve();
-    readonly onConfig = (): Promise<void> => Promise.resolve();
-    readonly onElicitation = (): Promise<void> => Promise.resolve();
-    readonly onElicitationResolved = (): Promise<void> => Promise.resolve();
     readonly onInfo = (_event: SessionInfoUpdatedEvent): Promise<void> => Promise.resolve();
-    readonly onPermission = (): Promise<void> => Promise.resolve();
-    readonly onPermissionResolved = (): Promise<void> => Promise.resolve();
 }
 
 export interface SessionConfigurationSnapshot {

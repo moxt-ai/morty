@@ -6,7 +6,6 @@ import { AcpExecutionError } from "../../../acp/acp-error.ts";
 import { createPiClient } from "../../../acp/adapter/pi/create-client.ts";
 import { agentOperationError, waitForAgentOperation } from "../../../acp/connection/agent-operation.ts";
 import { normalizeAcpCapabilities } from "../../../acp/protocol/session-capabilities.ts";
-import type { ResolvedExecutable } from "../../../util/process/executable.ts";
 import type { LocalAgentDiscoveryContext } from "../../discovery/agent-discovery-context.ts";
 import { AgentProbeError } from "../../discovery/agent-probe-error.ts";
 import { type AgentReadinessProbeParams, filterEnvironment } from "../../discovery/agent-readiness.ts";
@@ -94,7 +93,6 @@ export class PiAgentSpecification extends LocalAgentSpecification {
     // The Pi ACP fork inlines embedded prompt resources into the turn message, so Morty
     // keeps the adapter's opt-in capability flag enabled for every launch it owns.
     override readonly createLaunchEnvironment = async (
-        _agent: ResolvedExecutable,
         context: LocalAgentDiscoveryContext,
     ): Promise<Readonly<Record<string, string>>> => {
         // Pi encodes the workspace path itself into a native session directory name. Long nested

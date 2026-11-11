@@ -14,7 +14,7 @@ import {
 } from "@morty-build/client/protocol";
 import { truncate } from "../../util/value-utils.ts";
 import type { BackgroundActivity, PromptDelegationStage } from "../agent/agent-lifecycle.ts";
-import { sessionConfigProtocolForAgent } from "../protocol/session-config-protocol.ts";
+import { normalizeSessionConfigurationUpdate } from "../protocol/session-configuration.ts";
 
 export type NativeSessionInfoChange =
     | { readonly kind: "title"; readonly value: string }
@@ -55,11 +55,7 @@ export type NativeSessionEvent =
       };
 
 /** Value conversion only; the harness owns state and the consumer owns publication. */
-export function nativeSessionEvent(
-    harness: string,
-    update: SessionUpdate,
-    value: unknown = update,
-): NativeSessionEvent {
+export function nativeSessionEvent(update: SessionUpdate, value: unknown = update): NativeSessionEvent {
     const payload = decodeAcpSessionUpdate(JSON.stringify(withMortyFields(update, value)));
     switch (update.sessionUpdate) {
         case "available_commands_update":
@@ -79,7 +75,7 @@ export function nativeSessionEvent(
             return {
                 kind: "configuration",
                 payload,
-                configOptions: sessionConfigProtocolForAgent(harness).normalizeUpdate([], update.configOptions),
+                configOptions: normalizeSessionConfigurationUpdate([], update.configOptions),
             };
         case "current_mode_update":
             return { kind: "mode", payload, modeId: update.currentModeId };

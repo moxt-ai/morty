@@ -75,7 +75,7 @@ export class HarnessClientEvents {
             for (const event of externalized.events) {
                 signal.throwIfAborted();
                 await waitForAgentOperation(
-                    params.onSessionEvent(sessionId, nativeSessionEvent(harness, externalized.agent, event)),
+                    params.onSessionEvent(sessionId, nativeSessionEvent(externalized.agent, event)),
                     signal,
                 );
             }
