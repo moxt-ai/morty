@@ -1,5 +1,5 @@
+import type { ProjectCredentialAuthority } from "../entity/authentication/project-authorization.ts";
 import { CloudflareChannelPeers } from "../gateway/cloudflare-channel-peers.ts";
-import type { ProjectCredentialAuthority } from "../gateway/project-access-authorizer.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStoreResolver } from "../infra/project-store.ts";

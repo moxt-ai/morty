@@ -4,11 +4,11 @@ import {
     RUNTIME_HEARTBEAT_MESSAGE,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
+import { computerRequestTarget } from "@morty-build/client/relay";
 import {
     acceptWebSocketHttpTransport,
     type ClaimPairing,
     createLocalSessionOperations,
-    createWorkerContext,
     DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
     RelaySockets,
@@ -19,26 +19,26 @@ import {
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
 import { logger } from "@morty-build/relay-core/logging";
-import { ComputerChat } from "../../../worker/src/components/project/computer-chat.ts";
-import { cloudComputerId } from "../../../worker/src/middleware/computer-context.ts";
-import { decodeComputerDurableObjectPath } from "../entity/computer-durable-object-path.ts";
-import { decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { ProjectAuditRow, RelayAuditRecord } from "../entity/relay-records.ts";
-import { SessionAccessSigner } from "../entity/session-access-credential.ts";
-import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
-import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
-import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
+import { migrateComputerStorage } from "../../../relay/src/durable-objects/migrate-computer-storage.ts";
+import { decodeComputerDurableObjectPath } from "../../../relay/src/entity/computer-durable-object-path.ts";
+import { decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
+import type { ProjectAuditRow, RelayAuditRecord } from "../../../relay/src/entity/relay-records.ts";
+import { SessionAccessSigner } from "../../../relay/src/entity/session-access-credential.ts";
+import { authorizeSessionContentUpload } from "../../../relay/src/http/session-content-upload.ts";
+import type { ComputerManagementStore } from "../../../relay/src/infra/computer-management-store.ts";
+import { ComputerBackendService } from "../../../relay/src/service/computer-backend-service.ts";
+import { SqliteComputerManagementStore } from "../../../relay/src/storage/sqlite-computer-management-store.ts";
+import { ComputerChat } from "../components/project/computer-chat.ts";
+import type { ConfiguredRelayBindings } from "../composition/relay-bindings.ts";
+import { createRelayDurableObjectContext } from "../composition/relay-durable-object-context.ts";
+import { createComputerRelayRoutes } from "../composition/relay-http.ts";
 import {
-    type ComputerRelayRelayBindings,
-    type ConfiguredRelayRelayBindings,
-    createRelayAccessServices,
-    createRelayGateways,
-    createRelayWorker,
-} from "../relay-worker.ts";
-import { ComputerBackendService } from "../service/computer-backend-service.ts";
-import { SqliteComputerManagementStore } from "../storage/sqlite-computer-management-store.ts";
-import { migrateComputerStorage } from "./migrate-computer-storage.ts";
-import { createRelayDurableObjectContext } from "./relay-durable-object-context.ts";
+    type ComputerExecution,
+    composeRelayContext,
+    createHostedRelayAccess,
+    createRelayPorts,
+} from "../composition/relay-services.ts";
+import { cloudComputerId } from "../middleware/computer-context.ts";
 
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
 
@@ -52,8 +52,8 @@ const uncancelled = new AbortController().signal;
  * Owns one computer's storage. Requests routed to the computer run here against that storage, and every other
  * Worker or Durable Object reaches it only through the typed operations below, each executed here as one unit.
  */
-export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
-    readonly #application = createRelayWorker();
+export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
+    readonly #routes = createComputerRelayRoutes();
     #store: Store | null = null;
 
     readonly #chat = new ComputerChat(
@@ -66,7 +66,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
     readonly #uploads = new WebSocketUploadBudget();
     #connections: ReturnType<ComputerRelay["createConnections"]> | undefined;
 
-    constructor(state: DurableObjectState, environment: ConfiguredRelayRelayBindings) {
+    constructor(state: DurableObjectState, environment: ConfiguredRelayBindings) {
         super(state, environment);
         state.setWebSocketAutoResponse(
             new WebSocketRequestResponsePair(RUNTIME_HEARTBEAT_MESSAGE, RUNTIME_HEARTBEAT_ACK_MESSAGE),
@@ -154,13 +154,10 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             }
             requestUrl.pathname = computerPath.requestPathname;
             const routedRequest = new Request(requestUrl, request);
-            const environment: ConfiguredRelayRelayBindings & ComputerRelayRelayBindings = {
+            return await this.#routes.fetch(routedRequest, {
                 ...this.env,
-                MORTY_LOCAL_CHANNEL: this.#localChannel,
-                MORTY_COMPUTER_STORE: store,
-                MORTY_COMPUTER_ID: computerId,
-            };
-            return await this.#application.fetch(routedRequest, environment);
+                execution: this.#execution(computerId, store),
+            });
         } catch (error) {
             request.signal.throwIfAborted();
             logger.error(
@@ -277,7 +274,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                     {
                         uploads: this.#uploads,
                         authorizeUpload: async (operation) => {
-                            const { sessionAccess } = createRelayAccessServices(this.env);
+                            const { sessionAccess } = createHostedRelayAccess(this.env);
                             const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
                             return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
                         },
@@ -288,17 +285,10 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                     },
                 );
             }
-            const environment = {
+            const response = await this.#routes.fetch(request, {
                 ...this.env,
-                MORTY_COMPUTER_ID: current.computerId,
-                MORTY_LOCAL_CHANNEL: this.#localChannel,
-                MORTY_COMPUTER_STORE: this.#operate(current.computerId),
-                MORTY_RUNTIME_EXECUTION: {
-                    computerId: current.computerId,
-                    operations: createLocalSessionOperations(this.#connectionsForComputer.context, current.computerId),
-                },
-            };
-            const response = await this.#application.fetch(request, environment);
+                execution: this.#execution(current.computerId, this.#operate(current.computerId)),
+            });
             if (response.status === 101) {
                 await this.scheduleConnectionChecks();
             }
@@ -311,26 +301,19 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return response;
     }
 
-    #backendServices(computerId: string): ComputerBackendService {
-        const environment = {
-            ...this.env,
-            MORTY_COMPUTER_ID: computerId,
-            MORTY_LOCAL_CHANNEL: this.#localChannel,
-            MORTY_COMPUTER_STORE: this.#operate(computerId),
-            MORTY_RUNTIME_EXECUTION: {
-                computerId,
-                operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
-            },
+    #execution(computerId: string, store: ComputerManagementStore): ComputerExecution {
+        return {
+            computerId,
+            store,
+            channel: this.#localChannel,
+            operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
         };
-        const access = createRelayAccessServices(environment);
-        const context = createWorkerContext({
-            applications: access.control,
-            authorization: access.control,
-            stores: access.stores,
-            identityStores: access.identityStores,
-            projects: access.projects,
-            gateways: createRelayGateways(environment),
-        });
+    }
+
+    #backendServices(computerId: string): ComputerBackendService {
+        const execution = this.#execution(computerId, this.#operate(computerId));
+        const access = createHostedRelayAccess(this.env, execution);
+        const context = composeRelayContext(access, createRelayPorts(this.env, execution));
         return new ComputerBackendService(
             computerId,
             context,

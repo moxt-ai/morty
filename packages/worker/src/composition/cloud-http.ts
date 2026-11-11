@@ -6,9 +6,11 @@ import { relayIdentifier } from "../components/management/entity/computer-manage
 import { ManagementError } from "../components/management/entity/management-error.ts";
 import { anonymousUserRoutes } from "../components/management/http/anonymous-user-routes.ts";
 import { createManagementApplication } from "../components/management/http/index.ts";
+import type { AccountProvisioner } from "../components/management/service/account-provisioning-service.ts";
 import { forwardComputerObject } from "../gateway/computer-object-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { cloudComputerContext, cloudComputerId } from "../middleware/computer-context.ts";
+import { accountProvisioner } from "./account-provisioning.ts";
 import type { ApplicationContext } from "./application-context.ts";
 
 type CloudHttpEnvironment = {
@@ -41,7 +43,14 @@ const unauthenticated = () => {
 };
 
 /** Worker-level requests are routed before any computer-scoped services are constructed. */
-export const cloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
+export const cloudRoutes = new Hono<{
+    readonly Bindings: CloudBindings;
+    readonly Variables: { readonly provisionAccount: AccountProvisioner };
+}>()
+    .use("/identity/anonymous-users", async (context, next) => {
+        context.set("provisionAccount", accountProvisioner(context.env));
+        await next();
+    })
     .route("/", anonymousUserRoutes)
     .all("/computers/:computerId/*", async (context) => {
         const id = v.parse(relayIdentifier, context.req.param("computerId"));

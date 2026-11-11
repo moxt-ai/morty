@@ -23,6 +23,7 @@
     },
     "dependencies": {
         "@morty-build/client": "workspace:*",
+        "@morty-build/relay": "workspace:*",
         "@morty-build/relay-core": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",

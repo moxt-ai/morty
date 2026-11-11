@@ -41,9 +41,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
-import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
-import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/relay-worker.ts";
+import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
+import { createRelayDurableObjectContext } from "../../worker/src/composition/relay-durable-object-context.ts";
+import { ComputerRelay as RelayRuntimeRelay } from "../../worker/src/do/computer-relay.ts";
+import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { computerManagementStore } from "./registered-runtime.ts";
 
@@ -120,7 +121,7 @@ class DaemonCredential {
     };
 }
 
-function bindings(): RelayRelayBindings {
+function bindings(): RelayBindings {
     return {
         RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
@@ -213,10 +214,7 @@ afterAll(async () => {
 describe.sequential("Relay Session-only boundary", () => {
     it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Relay permits Session authorization without advertising retired identity providers", async () => {
         const browserOrigin = "https://chat.test";
-        const worker = createTestMortyRelayApp(
-            new RelayAuthenticationConfiguration(new Set([browserOrigin])),
-            createRelayGateways,
-        );
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(new Set([browserOrigin])));
         const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
 
         const response = await worker.fetch(
@@ -242,7 +240,7 @@ describe.sequential("Relay Session-only boundary", () => {
     });
 
     it("Given a Session route the Relay no longer serves, When an app requests pending interactions, Then the Relay answers with a typed JSON not_found error", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
 
         const response = await worker.fetch(
@@ -260,7 +258,7 @@ describe.sequential("Relay Session-only boundary", () => {
 
     it("Given a linked Codex Runtime with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
         vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -1005,7 +1003,7 @@ describe.sequential("Relay Session-only boundary", () => {
     }, 180_000);
 
     it("Given a machine with no discovered local Agent, When it redeems a Runtime pairing and publishes its catalog, Then pairing succeeds and the Runtime advertises an empty Agent directory", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -1063,7 +1061,7 @@ describe.sequential("Relay Session-only boundary", () => {
  * before the Session credential is issued, so later times are explicit offsets from it.
  */
 async function connectRuntimeDaemon(slug: string, options: { readonly anchorClockToHeartbeat?: boolean } = {}) {
-    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const environment = bindings();
     const owner = await createOwner();
     const { computerId } = owner;
@@ -2230,7 +2228,7 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
     it("Given a linked Runtime, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Runtime and the invalid Turn is rejected as a client error", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -2459,7 +2457,7 @@ describe.sequential("Relay Turn submission", () => {
         if (gatedAgent === undefined) {
             throw new Error("Expected the shared Agent directory entry");
         }
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;
@@ -2590,7 +2588,7 @@ describe.sequential("Relay Turn submission", () => {
     });
 
     it("Given an Agent advertisement carrying fields and capability values the Relay cannot interpret, When it pairs, Then pairing rejects the invalid capabilities", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
         const owner = await createOwner();
         const { computerId } = owner;

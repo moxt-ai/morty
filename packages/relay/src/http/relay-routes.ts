@@ -8,20 +8,12 @@ import {
     type NativeSessionTarget,
     type TurnState,
 } from "@morty-build/client/protocol";
-import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
 import {
-    CloudflareChannelRuntime,
     ComputerScope,
-    createMortyApplication,
-    createWorkerContext,
+    createRelayProtocolRoutes,
     decodeSessionRequest,
-    errorMiddleware,
-    instrumentD1Database,
     interactionResponseRequest,
     PairingDirectoryError,
-    type RelayContext,
-    RequestAccessMetrics,
-    requestTimeoutMiddleware,
     SessionControl,
     sessionConfigurationRequest,
     sessionRenameRequest,
@@ -29,65 +21,26 @@ import {
     turnSteerRequest,
     turnSubmissionRequest,
     validateIdentifier,
-    type WorkerRuntimeGateways,
 } from "@morty-build/relay-core";
-import { type Context, type Handler, Hono } from "hono";
+import { Hono } from "hono";
 import * as v from "valibot";
-import {
-    type RelayAuthenticationEnvironment,
-    relayAuthenticationFromEnvironment,
-} from "./composition/relay-authentication-environment.ts";
-import type { RelayAuthenticationConfiguration } from "./entity/computer-management.ts";
-import { SessionAccessSigner } from "./entity/session-access-credential.ts";
-import {
-    type ComputerDurableObjectExecutionBindings,
-    type ComputerWorkerRoutingBindings,
-    routeComputerDurableObject,
-} from "./gateway/computer-durable-object-routing.ts";
-import { ComputerDurableObjectStores } from "./gateway/computer-durable-object-store.ts";
-import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
-import { createProjectApplication } from "./http/project-routes.ts";
-import { authorizeSessionContentUpload } from "./http/session-content-upload.ts";
-import { ComputerManagementStorageDirectory } from "./infra/computer-management-storage-directory.ts";
-import { createBrowserCors } from "./middleware/browser-cors.ts";
+import { createBrowserCors } from "../middleware/browser-cors.ts";
 import {
     initializeSessionAccessTargetMiddleware,
     sessionAccessTargetMiddleware,
-} from "./middleware/session-access-target.ts";
-import { ComputerManagementService } from "./service/computer-management-service.ts";
-import {
-    type SessionAccess,
-    SessionAccessService,
-    type SessionAccessTarget,
-} from "./service/session-access-service.ts";
-import { ComputerManagementStorage } from "./storage/computer-management-storage.ts";
+} from "../middleware/session-access-target.ts";
+import type { SessionAccess } from "../service/session-access-service.ts";
+import type { RelayHttpEnvironment } from "./relay-http-environment.ts";
+import { authorizeSessionContentUpload } from "./session-content-upload.ts";
 
-export interface RelayRelayBindings extends ComputerWorkerRoutingBindings {
-    readonly RELAY_DIRECTORY_DATABASE: D1Database;
-    /** Worker secret from which the Relay derives the keys that sign Session credentials. */
-    readonly MORTY_SESSION_SIGNING_SECRET: string;
-}
-
-export interface ComputerRelayRelayBindings extends RelayRelayBindings, ComputerDurableObjectExecutionBindings {}
-
-export interface RuntimeExecutionBindings extends RelayRelayBindings {
-    readonly MORTY_RUNTIME_EXECUTION: {
-        readonly computerId: string;
-        readonly operations: LocalSessionOperations;
-    };
-}
-type RelayApplicationBindings = RelayRelayBindings | ComputerRelayRelayBindings | RuntimeExecutionBindings;
-
-export interface ConfiguredRelayRelayBindings extends RelayRelayBindings, RelayAuthenticationEnvironment {
-    readonly APP_ORIGIN?: string;
-}
+export type { RelayHttpEnvironment } from "./relay-http-environment.ts";
 
 // A request a Session credential authorizes is routed to its ComputerRelay before any Session route runs.
-function sessionOperations(context: { readonly env: RelayApplicationBindings }) {
-    if (!("MORTY_RUNTIME_EXECUTION" in context.env)) {
+function sessionOperations(context: { readonly var: RelayHttpEnvironment["Variables"] }) {
+    if (context.var.sessionExecution.kind !== "local") {
         throw new Error("Session operations run only in the ComputerRelay");
     }
-    return context.env.MORTY_RUNTIME_EXECUTION.operations;
+    return context.var.sessionExecution.operations;
 }
 
 function nativeTarget(request: { readonly param: (name: string) => string | undefined }): NativeSessionTarget {
@@ -100,8 +53,7 @@ function nativeTarget(request: { readonly param: (name: string) => string | unde
 /** Session operations through a Session credential, each authorized for its own permission on that Session. */
 function authorizedSessionControl(
     context: {
-        readonly env: RelayApplicationBindings;
-        readonly var: { readonly relay: RelayContext };
+        readonly var: RelayHttpEnvironment["Variables"];
         readonly req: { readonly raw: Request };
     },
     access: SessionAccess,
@@ -138,71 +90,23 @@ function submittedTurnState(state: TurnAdmission["state"], answeredAt: string): 
     }
 }
 
-const projectApplication = createMortyApplication();
-const scopedProjectApplication = createProjectApplication();
-const RELAY_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 const sessionIdentifier = v.custom<Identifier>(isIdentifier);
 
-type DispatchEnvironment = {
-    readonly Bindings: RelayApplicationBindings;
-    readonly Variables: {
-        readonly control: ComputerManagementService;
-        readonly stores: ComputerDurableObjectStores;
-        readonly projects: ComputerManagementStorageDirectory;
-        readonly identityStores: readonly ProjectStore[];
-        readonly relay: RelayContext;
-        readonly sessionAccess: SessionAccessService;
-        readonly sessionAccessTarget: SessionAccessTarget;
-        readonly signal: AbortSignal;
-    };
-};
-
-function optionalExecutionContext(context: Pick<Context, "executionCtx">): Context["executionCtx"] | undefined {
-    try {
-        return context.executionCtx;
-    } catch {
-        return undefined;
-    }
+/** Unmatched protocol routes keep their stable machine-readable error when mounted into the host. */
+function notFoundResponse(): Response {
+    return Response.json(
+        { error: { code: "not_found", message: "The requested Morty resource does not exist" } },
+        { status: 404 },
+    );
 }
 
-export function createRelayAccessServices(environment: RelayApplicationBindings) {
-    const execution =
-        "MORTY_COMPUTER_STORE" in environment
-            ? { computerId: environment.MORTY_COMPUTER_ID, store: environment.MORTY_COMPUTER_STORE }
-            : null;
-    const stores = new ComputerDurableObjectStores(environment.COMPUTER_RELAY, execution);
-    const identityStores = execution === null ? [] : [execution.store];
-    const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
-    const control = new ComputerManagementService(controlStorage);
-    return {
-        stores,
-        identityStores,
-        control,
-        sessionAccess: new SessionAccessService(
-            control,
-            new SessionAccessSigner(environment.MORTY_SESSION_SIGNING_SECRET),
-        ),
-        projects: new ComputerManagementStorageDirectory(controlStorage),
-    };
-}
-
-export function createRelayApplication(
-    authentication: RelayAuthenticationConfiguration,
-    gateways: (environment: RelayApplicationBindings) => WorkerRuntimeGateways,
-): Hono<{ Bindings: RelayApplicationBindings }> {
-    const projectHandler: Handler<DispatchEnvironment> = (context) =>
-        scopedProjectApplication.fetch(context.req.raw, {
-            relay: context.var.relay,
-            allowedOrigins: authentication.allowedOrigins,
-        });
-
-    const sessionRoutes = new Hono<DispatchEnvironment>()
+export function createRelayRoutes() {
+    const sessionRoutes = new Hono<RelayHttpEnvironment>()
         .use(
             "*",
             createBrowserCors(
                 ["GET", "POST", "PUT"],
                 ["authorization", "content-type", "x-morty-byte-length", "x-morty-content-kind", "x-morty-file-name"],
-                authentication.allowedOrigins,
             ),
         )
         .get("/:sessionId/live-event-subscription-target", sessionAccessTargetMiddleware, async (context) => {
@@ -566,122 +470,11 @@ export function createRelayApplication(
                 context.req.raw.signal,
             );
         });
-    const projectRoutes = new Hono<DispatchEnvironment>()
-        .route("/harnesses/:harness/sessions", sessionRoutes)
-        .all("/pairings/*", projectHandler)
-        .all("/*", projectHandler);
-    const versionedRoutes = new Hono<DispatchEnvironment>()
-        .route("/computers/:computerId", projectRoutes)
-        .all("/pairings/*", projectHandler)
-        .all("/runtimes/connect", projectHandler)
-        .all("/*", projectHandler);
-
-    const application = new Hono<DispatchEnvironment>()
-        .use("*", errorMiddleware)
-        .use("*", requestTimeoutMiddleware<DispatchEnvironment>(RELAY_REQUEST_TIMEOUT_MILLISECONDS))
-        .use("*", async (context, next) => {
-            const runtimeRoute = await routeRuntimeSessionRequest(context.req.raw, context.env);
-            if (runtimeRoute !== null) {
-                return runtimeRoute;
-            }
-            const routed =
-                "MORTY_RUNTIME_EXECUTION" in context.env
-                    ? null
-                    : await routeComputerDurableObject(context.req.raw, context.env, authentication.allowedOrigins);
-            if (routed !== null) {
-                return routed;
-            }
-            return await next();
-        })
-        .onError((error) => {
-            throw error;
-        })
-        .use("*", async (context, next) => {
-            const environment = context.env;
-            const { stores, identityStores, control, sessionAccess, projects } = createRelayAccessServices(environment);
-            context.set("control", control);
-            context.set("sessionAccess", sessionAccess);
-            context.set("stores", stores);
-            context.set("projects", projects);
-            context.set("identityStores", identityStores);
-            await next();
-        })
-        .use("*", initializeSessionAccessTargetMiddleware)
-        .use("*", async (context, next) => {
-            const environment = context.env;
-            const { control, stores, projects, identityStores } = context.var;
-            const cx = createWorkerContext({
-                applications: control,
-                gateways: gateways(environment),
-                authorization: control,
-                stores,
-                identityStores,
-                projects,
-            });
-            context.set("relay", cx);
-            await next();
-        })
-        .route(MORTY_API_PREFIX, new Hono<DispatchEnvironment>().route("/v1", versionedRoutes))
-        .all("*", (context) => projectApplication.fetch(context.req.raw, context.var.relay));
-    const relayApplication: Hono<{ Bindings: RelayApplicationBindings }> = new Hono<{
-        Bindings: RelayApplicationBindings;
-    }>()
-        .onError((error) => {
-            throw error;
-        })
-        .all("*", async (context) => {
-            const metrics = new RequestAccessMetrics();
-            return metrics.appendServerTiming(
-                await application.fetch(
-                    context.req.raw,
-                    instrumentRelayDatabases(context.env, metrics),
-                    optionalExecutionContext(context),
-                ),
-            );
-        });
-    return relayApplication;
+    return new Hono<RelayHttpEnvironment>()
+        .use(`${MORTY_API_PREFIX}/v1/*`, initializeSessionAccessTargetMiddleware)
+        .use(`${MORTY_API_PREFIX}/channels/*`, initializeSessionAccessTargetMiddleware)
+        .route(`${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions`, sessionRoutes)
+        .route("/", createRelayProtocolRoutes())
+        .all(`${MORTY_API_PREFIX}/v1/*`, notFoundResponse)
+        .all(`${MORTY_API_PREFIX}/channels/*`, notFoundResponse);
 }
-
-function instrumentRelayDatabases(environment: RelayRelayBindings, metrics: RequestAccessMetrics): RelayRelayBindings {
-    return {
-        ...environment,
-        RELAY_DIRECTORY_DATABASE: instrumentD1Database(environment.RELAY_DIRECTORY_DATABASE, metrics),
-    };
-}
-
-export function createRelayGateways(environment: RelayApplicationBindings): WorkerRuntimeGateways {
-    return {
-        channel: new CloudflareChannelRuntime(
-            environment.COMPUTER_RELAY,
-            "MORTY_COMPUTER_STORE" in environment ? environment.MORTY_LOCAL_CHANNEL : undefined,
-        ),
-        ...("MORTY_RUNTIME_EXECUTION" in environment
-            ? { runtimeOperations: environment.MORTY_RUNTIME_EXECUTION.operations }
-            : {}),
-    };
-}
-
-export function createRelayWorker() {
-    const configuredApplications = new Map<string, ReturnType<typeof createRelayApplication>>();
-    return {
-        fetch: async (
-            request: Request,
-            environment: ConfiguredRelayRelayBindings,
-            executionContext?: ExecutionContext,
-        ): Promise<Response> => {
-            const key = environment.MORTY_ALLOWED_ORIGINS;
-            const configured = configuredApplications.get(key);
-            if (configured !== undefined) {
-                return await configured.fetch(request, environment, executionContext);
-            }
-            const created = createRelayApplication(
-                relayAuthenticationFromEnvironment(environment),
-                createRelayGateways,
-            );
-            configuredApplications.set(key, created);
-            return await created.fetch(request, environment, executionContext);
-        },
-    };
-}
-
-export { RelayAuthenticationConfiguration } from "./entity/computer-management.ts";

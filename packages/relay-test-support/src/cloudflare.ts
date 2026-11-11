@@ -13,7 +13,7 @@ import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 /** Prepare once per suite run; only immutable code is shared, never a runtime or its storage. */
 export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
     const bundle = await build({
-        entryPoints: [workerEntryPoint ?? fileURLToPath(new NodeURL("./relay-worker-entry.ts", import.meta.url))],
+        entryPoints: [workerEntryPoint ?? fileURLToPath(new NodeURL("./worker-entry.ts", import.meta.url))],
         bundle: true,
         external: ["cloudflare:*", "node:*"],
         loader: { ".txt": "text", ".sql": "text" },

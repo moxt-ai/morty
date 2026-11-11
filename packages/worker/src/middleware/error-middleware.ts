@@ -12,6 +12,9 @@ export function errorHandler<TEnvironment extends Env>(
     getLogger: (context: Context<TEnvironment>) => ErrorLogger,
 ): ErrorHandler<TEnvironment> {
     return (error, context) => {
+        if (context.req.raw.signal.aborted) {
+            throw error;
+        }
         getLogger(context).error({ err: error }, "Application request failed");
         if (error instanceof ValiError) {
             return json({ error: { code: "INVALID_REQUEST", message: "The request is invalid." } }, 400);

@@ -2,9 +2,12 @@ import type { ProjectLocationHint } from "@morty-build/client/protocol";
 import { PairingDirectoryError, type RuntimePairingRequest } from "@morty-build/relay-core/contracts";
 import { DatabaseError } from "@morty-build/relay-core/database";
 import { logger } from "@morty-build/relay-core/logging";
-import type { ComputerRelay } from "../durable-objects/computer-relay.ts";
-import { decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { ComputerManagementStore, ComputerManagementStores } from "../infra/computer-management-store.ts";
+import { decodeComputerPlacement } from "../../../relay/src/entity/computer-id.ts";
+import type {
+    ComputerManagementStore,
+    ComputerManagementStores,
+} from "../../../relay/src/infra/computer-management-store.ts";
+import type { ComputerRelay } from "../do/computer-relay.ts";
 
 const OPERATION_TIMEOUT_MILLISECONDS = 15_000;
 

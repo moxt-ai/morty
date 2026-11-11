@@ -1,5 +1,5 @@
+import type { ProjectAccessAuthorizer } from "../entity/authentication/project-authorization.ts";
 import type { ChannelGateway } from "../gateway/channel-gateway.ts";
-import type { ProjectAccessAuthorizer } from "../gateway/project-access-authorizer.ts";
 import type { MachineAccountDirectory } from "../infra/machine-account-directory.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.ts";

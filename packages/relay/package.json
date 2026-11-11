@@ -4,7 +4,8 @@
     "license": "Apache-2.0",
     "type": "module",
     "exports": {
-        ".": "./src/relay-worker.ts"
+        "./http": "./src/http/relay-routes.ts",
+        "./services": "./src/composition/relay-access-services.ts"
     },
     "scripts": {
         "pretest:integration": "pnpm --dir ../.. db:codegen",
