@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
     decodeContentChunkFrame,
     decodeMessageKind,
     decodeNativeSessionResult,
@@ -13,9 +16,9 @@ import {
     decodeSessionOperationFailedEvent,
     decodeSessionPromptCommand,
     decodeSessionReadyEvent,
+    encodeComputerLivenessReadyEvent,
     encodeFileReadCommand,
     encodeNativeSessionCommand,
-    encodeRuntimeLivenessReadyEvent,
     encodeSessionCancelCommand,
     encodeSessionCreateCommand,
     encodeSessionHistoryPageLoad,
@@ -24,9 +27,6 @@ import {
     FILE_FAILED_KIND,
     MORTY_API_PREFIX,
     NATIVE_SESSION_RESULT_KIND,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
     SESSION_CANCEL_KIND,
     SESSION_EVENT_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
@@ -38,12 +38,12 @@ import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { CodexAgentConnection } from "../../src/engine/acp/adapter/codex/agent-connection.ts";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
-import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { ComputerAgentDependencies } from "../../src/engine/agent/computer-agents.ts";
+import { ComputerLocalContext, createComputerConfig } from "../../src/engine/computer/config.ts";
+import { runComputer } from "../../src/engine/computer/run.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 class Messages {
     readonly #closed = Promise.withResolvers<never>();
@@ -56,8 +56,8 @@ class Messages {
         socket.on("message", (value, isBinary) => {
             const message = isBinary ? Buffer.from(value as Buffer) : value.toString();
             // Like the Relay's host, answer exactly the heartbeat text without the application.
-            if (message === RUNTIME_HEARTBEAT_MESSAGE) {
-                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            if (message === COMPUTER_HEARTBEAT_MESSAGE) {
+                socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
                 return;
             }
             const resolve = this.#waiting.shift();
@@ -67,7 +67,7 @@ class Messages {
                 resolve(message);
             }
         });
-        socket.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+        socket.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
     }
 
     readonly nextFrame = (): Promise<string | Buffer> => {
@@ -116,18 +116,18 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
         (options) => new CodexAgentConnection(options),
         codex.environment,
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "real-codex",
             defaultWorkspace: workspace,
             relayUrl,
         },
-        new RuntimeAgentDependencies([agent]),
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerAgentDependencies([agent]),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
 
     try {
         const socket = await connected.promise;
@@ -446,7 +446,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
     } finally {
         releaseProvider.resolve();
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }

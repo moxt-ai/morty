@@ -1,14 +1,14 @@
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { harness: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
+test.use({ computerAgent: { harness: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
 for (const width of [1440, 390]) {
     test(`Given a background tool at ${width}px, When its reply ends and the task later completes, Then the original card stays live and survives reload`, async ({
-        runtime,
+        computer,
     }) => {
-        const { page } = runtime;
+        const { page } = computer;
         await page.setViewportSize({ width, height: 900 });
-        await runtime.openPairedChat();
+        await computer.openPairedChat();
         const composer = page.getByRole("textbox", { name: "Message" });
         await composer.fill("start background verification");
         await page.getByRole("button", { name: "Send message" }).click();

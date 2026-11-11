@@ -1,27 +1,27 @@
 import {
-    decodeRuntimeDiagnosticsRequest,
-    decodeRuntimeDiagnosticsResult,
-    encodeRuntimeDiagnosticsRequest,
-    encodeRuntimeDiagnosticsResult,
-} from "../runtime/diagnostics.ts";
+    decodeComputerDiagnosticsRequest,
+    decodeComputerDiagnosticsResult,
+    encodeComputerDiagnosticsRequest,
+    encodeComputerDiagnosticsResult,
+} from "../computer/diagnostics.ts";
 import {
-    decodeRuntimeHeartbeatAckEvent,
-    decodeRuntimeHeartbeatEvent,
-    decodeRuntimeLivenessReadyEvent,
-    decodeRuntimePingCommand,
-    decodeRuntimePongEvent,
-    encodeRuntimeHeartbeatAckEvent,
-    encodeRuntimeHeartbeatEvent,
-    encodeRuntimeLivenessReadyEvent,
-    encodeRuntimePingCommand,
-    encodeRuntimePongEvent,
-    RUNTIME_HEARTBEAT_ACK_KIND,
-    RUNTIME_HEARTBEAT_KIND,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_PING_KIND,
-    RUNTIME_PONG_KIND,
-} from "../runtime/liveness.ts";
-import { decodeRuntimeUpgradeResult, encodeRuntimeUpgradeResult } from "../runtime/upgrade.ts";
+    COMPUTER_HEARTBEAT_ACK_KIND,
+    COMPUTER_HEARTBEAT_KIND,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_PING_KIND,
+    COMPUTER_PONG_KIND,
+    decodeComputerHeartbeatAckEvent,
+    decodeComputerHeartbeatEvent,
+    decodeComputerLivenessReadyEvent,
+    decodeComputerPingCommand,
+    decodeComputerPongEvent,
+    encodeComputerHeartbeatAckEvent,
+    encodeComputerHeartbeatEvent,
+    encodeComputerLivenessReadyEvent,
+    encodeComputerPingCommand,
+    encodeComputerPongEvent,
+} from "../computer/liveness.ts";
+import { decodeComputerUpgradeResult, encodeComputerUpgradeResult } from "../computer/upgrade.ts";
 import {
     AGENT_CATALOG_DISCOVER_KIND,
     AGENT_CATALOG_DISCOVERED_KIND,
@@ -312,22 +312,26 @@ const serviceToDaemonSignatures = {
         encodeNativeSessionCommand,
         decodeNativeSessionCommand,
     ),
-    [RUNTIME_HEARTBEAT_ACK_KIND]: defineMessageSignature(
-        RUNTIME_HEARTBEAT_ACK_KIND,
-        encodeRuntimeHeartbeatAckEvent,
-        decodeRuntimeHeartbeatAckEvent,
+    [COMPUTER_HEARTBEAT_ACK_KIND]: defineMessageSignature(
+        COMPUTER_HEARTBEAT_ACK_KIND,
+        encodeComputerHeartbeatAckEvent,
+        decodeComputerHeartbeatAckEvent,
     ),
-    [RUNTIME_LIVENESS_READY_KIND]: defineMessageSignature(
-        RUNTIME_LIVENESS_READY_KIND,
-        encodeRuntimeLivenessReadyEvent,
-        decodeRuntimeLivenessReadyEvent,
+    [COMPUTER_LIVENESS_READY_KIND]: defineMessageSignature(
+        COMPUTER_LIVENESS_READY_KIND,
+        encodeComputerLivenessReadyEvent,
+        decodeComputerLivenessReadyEvent,
     ),
-    "runtime.diagnostics.read": defineMessageSignature(
-        "runtime.diagnostics.read",
-        encodeRuntimeDiagnosticsRequest,
-        decodeRuntimeDiagnosticsRequest,
+    "computer.diagnostics.read": defineMessageSignature(
+        "computer.diagnostics.read",
+        encodeComputerDiagnosticsRequest,
+        decodeComputerDiagnosticsRequest,
     ),
-    [RUNTIME_PING_KIND]: defineMessageSignature(RUNTIME_PING_KIND, encodeRuntimePingCommand, decodeRuntimePingCommand),
+    [COMPUTER_PING_KIND]: defineMessageSignature(
+        COMPUTER_PING_KIND,
+        encodeComputerPingCommand,
+        decodeComputerPingCommand,
+    ),
     [SESSION_CANCEL_BEFORE_START_KIND]: defineMessageSignature(
         SESSION_CANCEL_BEFORE_START_KIND,
         encodeSessionCancelBeforeStartCommand,
@@ -434,16 +438,16 @@ export function encodeServiceToDaemonMessage(message: ServiceToDaemonMessage): s
     return serviceToDaemonSignatures[message.kind].encoder(message);
 }
 
-/** A message that asks the Runtime for an answer; liveness signals of the connection itself ask for none. */
+/** A message that asks the Computer for an answer; liveness signals of the connection itself ask for none. */
 export type ServiceToDaemonRequest = Exclude<
     ServiceToDaemonMessage,
-    { readonly kind: typeof RUNTIME_HEARTBEAT_ACK_KIND | typeof RUNTIME_LIVENESS_READY_KIND }
+    { readonly kind: typeof COMPUTER_HEARTBEAT_ACK_KIND | typeof COMPUTER_LIVENESS_READY_KIND }
 >;
 
 /**
  * The address of a request: every answer to it, `session.operation.failed` included, carries this value as its
  * `requestId`. A prompt is its own request, addressed by the Turn it creates; every other request names its address
- * in `requestId`. Senders, the Relay and the Runtime all address replies through this one rule.
+ * in `requestId`. Senders, the Relay and the Computer all address replies through this one rule.
  */
 export function requestReplyAddress(request: ServiceToDaemonRequest): string {
     return request.kind === SESSION_PROMPT_KIND ? request.commandId : request.requestId;
@@ -568,22 +572,22 @@ const daemonToServiceSignatures = {
         encodeNativeSessionResult,
         decodeNativeSessionResult,
     ),
-    [RUNTIME_HEARTBEAT_KIND]: defineMessageSignature(
-        RUNTIME_HEARTBEAT_KIND,
-        encodeRuntimeHeartbeatEvent,
-        decodeRuntimeHeartbeatEvent,
+    [COMPUTER_HEARTBEAT_KIND]: defineMessageSignature(
+        COMPUTER_HEARTBEAT_KIND,
+        encodeComputerHeartbeatEvent,
+        decodeComputerHeartbeatEvent,
     ),
-    "runtime.upgrade.result": defineMessageSignature(
-        "runtime.upgrade.result",
-        encodeRuntimeUpgradeResult,
-        decodeRuntimeUpgradeResult,
+    "computer.upgrade.result": defineMessageSignature(
+        "computer.upgrade.result",
+        encodeComputerUpgradeResult,
+        decodeComputerUpgradeResult,
     ),
-    "runtime.diagnostics.result": defineMessageSignature(
-        "runtime.diagnostics.result",
-        encodeRuntimeDiagnosticsResult,
-        decodeRuntimeDiagnosticsResult,
+    "computer.diagnostics.result": defineMessageSignature(
+        "computer.diagnostics.result",
+        encodeComputerDiagnosticsResult,
+        decodeComputerDiagnosticsResult,
     ),
-    [RUNTIME_PONG_KIND]: defineMessageSignature(RUNTIME_PONG_KIND, encodeRuntimePongEvent, decodeRuntimePongEvent),
+    [COMPUTER_PONG_KIND]: defineMessageSignature(COMPUTER_PONG_KIND, encodeComputerPongEvent, decodeComputerPongEvent),
     [SESSION_EVENT_KIND]: defineMessageSignature(
         SESSION_EVENT_KIND,
         encodeSessionEventEnvelope,

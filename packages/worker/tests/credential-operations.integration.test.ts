@@ -91,7 +91,7 @@ test("Given local, browser and recovery credentials, When their operations end a
     }
 });
 
-test("Given a browser that joined through a link, When it asks for recovery access, a Runtime pairing or the Machine's binding, Then only the machine's local credential may issue them", async () => {
+test("Given a browser that joined through a link, When it asks for recovery access, a Computer pairing or the Machine's binding, Then only the machine's local credential may issue them", async () => {
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         fetchPublicApplication(
@@ -130,7 +130,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
                 idempotencyKey: "shared-pairing",
             }),
             await request(`/chat/computers/${owner.computerId}/setup`, token, "POST", {
-                computerId: "shared-runtime",
+                computerId: "shared-computer",
                 harness: "codex",
             }),
         ]) {

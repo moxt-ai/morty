@@ -23,7 +23,7 @@ export interface RelayInfrastructure extends PairingInfrastructure {
     readonly authentication: { readonly projects: ProjectAccessAuthorizer };
     readonly gateways: {
         readonly channelGateway: ChannelGateway;
-        readonly runtimeOperations?: LocalSessionOperations;
+        readonly computerOperations?: LocalSessionOperations;
         readonly nowEpochMilliseconds: () => number;
     };
     readonly config: { readonly apiPrefix: string };
@@ -59,7 +59,7 @@ function createHttpContext(infrastructure: RelayInfrastructure, pairings: Pairin
         ...cx,
         services: Object.freeze({
             pairings,
-            runtimePairings: new PairingService(cx),
+            computerPairings: new PairingService(cx),
             channels: new ChannelService(cx),
         }),
     });

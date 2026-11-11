@@ -13,7 +13,7 @@ test("Given my message's acceptance is still in flight after its turn and a late
     const app = await createTestApp({ environment, connectAgent: true, clock: new TestClock("2030-01-01T00:00:00Z") });
     const { executionNetwork } = app;
     if (executionNetwork === null) {
-        throw new Error("Expected the real Runtime and proxy");
+        throw new Error("Expected the real Computer and proxy");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Acceptance order baseline");
     await app.waitForView(() => {
@@ -25,7 +25,7 @@ test("Given my message's acceptance is still in flight after its turn and a late
 
     const acceptance = executionNetwork.holdNextResponse("/turns");
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Acceptance arrives late");
-    // The Runtime ran and finished the message; only the service's answer to this browser is held back.
+    // The Computer ran and finished the message; only the service's answer to this browser is held back.
     const releaseAcceptance = await acceptance;
     const viewer = await app.openViewer();
     try {
@@ -68,7 +68,7 @@ test("Given a completed execution snapshot, When a buffered start event precedes
     const app = await createTestApp({ environment, connectAgent: true, clock: new TestClock("2030-01-01T00:00:00Z") });
     const { daemon, executionNetwork } = app;
     if (daemon === null || executionNetwork === null) {
-        throw new Error("Expected the real Runtime and proxy");
+        throw new Error("Expected the real Computer and proxy");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Execution snapshot baseline");
     await app.waitForView(() => {
@@ -96,7 +96,7 @@ test("Given a completed execution snapshot, When a buffered start event precedes
             output: [{ kind: "text", text: "Execution snapshot finished" }],
         });
         await terminal.observed;
-        // The real Runtime has recorded completion before this held request is sent to it.
+        // The real Computer has recorded completion before this held request is sent to it.
         releaseExecution();
         executionReleased = true;
         await viewer.queryElementByTestId(

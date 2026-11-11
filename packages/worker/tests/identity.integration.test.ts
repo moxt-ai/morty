@@ -369,7 +369,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         fixture.environment(),
     );
     expect(served.status).toBe(200);
-    expect(await served.json()).toEqual({ runtimePairing: "unpaired" });
+    expect(await served.json()).toEqual({ computerPairing: "unpaired" });
     const projectResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
             headers: { authorization: `Bearer ${identity.token}` },
@@ -389,7 +389,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     ).toBe(404);
 });
 
-test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
+test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists Computers, Then the available Computer options are returned", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const served = await worker.fetch(
@@ -400,7 +400,7 @@ test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists 
     );
     expect(served.status).toBe(200);
     const response = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/chat/computers/${identity.computerId}/setup/runtimes`, {
+        new Request(`${APP_ORIGIN}/morty/api/chat/computers/${identity.computerId}/setup/computers`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${identity.token}`,
@@ -411,7 +411,7 @@ test("Given a user with a draft Bot on a Project-scoped Relay, When setup lists 
         environment,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ runtimes: [] });
+    expect(await response.json()).toEqual({ computers: [] });
 });
 
 test("Given an anonymous user, When machine access is shared, Then the link adds one device within ten minutes and that device keeps access for a day until it ends it", async () => {

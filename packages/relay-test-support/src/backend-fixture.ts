@@ -6,11 +6,11 @@ import {
 } from "../../relay/src/relay-worker.ts";
 import { ComputerBackendService } from "../../relay/src/service/computer-backend-service.ts";
 import {
-    type RuntimeControlCommand,
-    requestRuntimeControl,
-} from "../../relay-core/src/service/pairing/runtime-control-request.ts";
+    type ComputerControlCommand,
+    requestComputerControl,
+} from "../../relay-core/src/service/pairing/computer-control-request.ts";
 
-/** Exercises real services through the Cloudflare storage and Runtime boundaries. */
+/** Exercises real services through the Cloudflare storage and Computer boundaries. */
 export function createTestComputerBackend(env: RelayRelayBindings, computerId: string) {
     const access = createRelayAccessServices(env);
     return new ComputerBackendService(
@@ -30,12 +30,12 @@ export function createTestComputerBackend(env: RelayRelayBindings, computerId: s
 }
 
 /** Local control scenarios use a real internal Host connection, with no retired HTTP management API. */
-export async function requestTestRuntimeControl(
+export async function requestTestComputerControl(
     env: RelayRelayBindings,
     computerId: string,
-    command: RuntimeControlCommand,
+    command: ComputerControlCommand,
     signal: AbortSignal,
 ) {
     const socket = await createTestComputerBackend(env, computerId).openHost(signal);
-    return requestRuntimeControl(socket, command, signal);
+    return requestComputerControl(socket, command, signal);
 }

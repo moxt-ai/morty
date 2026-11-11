@@ -171,7 +171,7 @@ test("Given opening a native session fails, When the user tries again, Then the 
         expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Machine first.");
     });
 
-    // The retry must run the whole open-session request again: once a Runtime answers
+    // The retry must run the whole open-session request again: once a Computer answers
     // for the redeemed access, the failure moves from the missing Agent to the
     // missing native session.
     await app.connectAgent({ harness: "pi", label: "Pi" });
@@ -262,13 +262,13 @@ test("Given an expired handoff with no retained access, When the user copies the
     );
 });
 
-test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Morty is disconnected instead of a transfer-link problem", {
+test("Given a native session handoff whose Computer went offline, When the page loads, Then the page reports Morty is disconnected instead of a transfer-link problem", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
         prepare: async (application) => {
-            const runtime = await application.connectAgent({ harness: "claude", label: "Claude" });
-            await runtime.disconnect();
+            const computer = await application.connectAgent({ harness: "claude", label: "Claude" });
+            await computer.disconnect();
         },
         page: {
             harness: "claude",
@@ -278,8 +278,8 @@ test("Given a native session handoff whose Runtime went offline, When the page l
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("Your Morty Runtime is disconnected");
-    expect(alert.textContent).toContain("Start your Morty Runtime");
+    expect(alert.textContent).toContain("Your Morty Computer is disconnected");
+    expect(alert.textContent).toContain("Start your Morty Computer");
     expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
 });
@@ -294,7 +294,7 @@ test("Given shared Morty access, When the user opens the user menu, Then replaci
     expect(queryByRole(document.body, "menuitem", { name: "Replace current user" })).toBeNull();
 });
 
-test("Given one Morty Worker and a connected Runtime, When the user refreshes Network latency, Then browser-to-Morty and Morty-to-Runtime measurements update without retired Relay hops", {
+test("Given one Morty Worker and a connected Computer, When the user refreshes Network latency, Then browser-to-Morty and Morty-to-Computer measurements update without retired Relay hops", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -311,9 +311,9 @@ test("Given one Morty Worker and a connected Runtime, When the user refreshes Ne
         expect(dialog.textContent).toContain("Browser ↔ Morty");
         expect(dialog.textContent).not.toContain("Browser ↔ Relay");
         expect(dialog.textContent).not.toContain("Morty ↔ Relay");
-        expect(dialog.textContent).toContain("Morty ↔ Runtime");
+        expect(dialog.textContent).toContain("Morty ↔ Computer");
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to Runtime latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to Computer latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 
     await app.user.click(getByRole(dialog, "button", { name: "Refresh network latency" }));
@@ -321,7 +321,7 @@ test("Given one Morty Worker and a connected Runtime, When the user refreshes Ne
     expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
     await app.waitForView(() => {
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to Runtime latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to Computer latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 });
 
@@ -393,7 +393,7 @@ test("Given the end confirmation, When the real API transport closes, Then an un
     app.transport.disconnect();
     // A dropped bridge is an ordinary failed request: Chat keeps working and
     // does not block the page with a connection dialog.
-    expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
+    expect(queryByRole(document.body, "dialog", { name: "Computer connection unavailable" })).toBeNull();
     await app.user.click(confirm);
 
     await app.waitForView(() =>
@@ -440,7 +440,7 @@ test("Given an unavailable connection, When current access cannot be prepared, T
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
     await app.waitForView(() => getByRole(document.body, "button", { name: "User menu" }));
     app.transport.disconnect();
-    expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
+    expect(queryByRole(document.body, "dialog", { name: "Computer connection unavailable" })).toBeNull();
     await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     await app.waitForView(() =>
@@ -563,7 +563,7 @@ for (const segments of [0, 4, 8]) {
     );
 }
 
-test("Given a handoff requests a missing directory, When it opens, Then the Runtime reports the directory failure before continuing the session", {
+test("Given a handoff requests a missing directory, When it opens, Then the Computer reports the directory failure before continuing the session", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -584,7 +584,7 @@ test("Given a handoff requests a missing directory, When it opens, Then the Runt
 });
 
 for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
-    test(`Given a handoff path over 1533 UTF-8 bytes with ${segment.charCodeAt(0)} characters, When the directory does not exist, Then the request reaches the Runtime's filesystem validation`, {
+    test(`Given a handoff path over 1533 UTF-8 bytes with ${segment.charCodeAt(0)} characters, When the directory does not exist, Then the request reaches the Computer's filesystem validation`, {
         timeout: 30_000,
     }, async () => {
         const workspace = join(tmpdir(), `missing-${crypto.randomUUID()}`, ...Array.from({ length: 8 }, () => segment));

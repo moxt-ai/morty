@@ -36,7 +36,7 @@ test("Given a configured session, When the Agent removes every configurable opti
     await sendPrompt(app, composer, "hold after first delta");
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected the connected Agent Runtime");
+        throw new Error("Expected the connected Agent Computer");
     }
     await daemon.continueReply("hold after first delta", {
         outcome: "complete",

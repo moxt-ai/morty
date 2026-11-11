@@ -7,14 +7,14 @@ type NetworkDiagnosticState =
     | {
           readonly browserMortyLatencyMs: number;
           readonly kind: "ready";
-          readonly runtimeLatencyMs: number;
+          readonly computerLatencyMs: number;
       }
     | { readonly kind: "failed"; readonly message: string };
 
 interface NetworkDiagnosticOperations {
     readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
     readonly measureServerHops: (signal: AbortSignal) => Promise<{
-        readonly runtimeLatencyMs: number;
+        readonly computerLatencyMs: number;
     }>;
 }
 
@@ -50,7 +50,7 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
                         state: {
                             browserMortyLatencyMs,
                             kind: "ready",
-                            runtimeLatencyMs: relay.runtimeLatencyMs,
+                            computerLatencyMs: relay.computerLatencyMs,
                         },
                     });
                 }

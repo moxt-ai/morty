@@ -36,7 +36,7 @@ import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { createWritableAcpStream } from "../support/agents/acp-stream.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
+import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { RecordingObserver } from "./acp-feature-fixture.ts";
 
@@ -237,7 +237,7 @@ describe("ACP conversation sessions", () => {
                 if (!(active instanceof FoundStoredSession)) {
                     throw new Error("Expected the active conversation to remain stored");
                 }
-                // Activity preserves the Agent's reported modification time rather than the Runtime clock.
+                // Activity preserves the Agent's reported modification time rather than the Computer clock.
                 expect(active.session.updatedAt).toBe("2026-09-05T00:00:00Z");
             } finally {
                 await reopenedManager.close();
@@ -700,7 +700,7 @@ describe("ACP conversation sessions", () => {
         }
     });
 
-    it("Given a managed Claude Code conversation, When the Runtime restarts, Then its Session remains discoverable", async () => {
+    it("Given a managed Claude Code conversation, When the Computer restarts, Then its Session remains discoverable", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-session-store-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
         const agent = new AcpAgentDefinition(
@@ -720,7 +720,7 @@ describe("ACP conversation sessions", () => {
         );
         const signal = new AbortController().signal;
         const firstStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
-        const firstRuntime = new SessionManager({
+        const firstComputer = new SessionManager({
             observer: new NullSessionObserver(),
             store: firstStore,
             adapters: acpAdapters,
@@ -738,14 +738,14 @@ describe("ACP conversation sessions", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const sessionTarget = await firstRuntime.createNativeSession({
+        const sessionTarget = await firstComputer.createNativeSession({
             agent,
             cwd: process.cwd(),
             signal,
         });
 
         try {
-            await firstRuntime.runPrompt({
+            await firstComputer.runPrompt({
                 agent,
                 commandId: "claude-first-turn",
                 cwd: process.cwd(),
@@ -756,12 +756,12 @@ describe("ACP conversation sessions", () => {
                 signal,
             });
         } finally {
-            await firstRuntime.close();
+            await firstComputer.close();
             firstStore.close();
         }
 
         const restartedStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
-        const restartedRuntime = new SessionManager({
+        const restartedComputer = new SessionManager({
             observer: new NullSessionObserver(),
             store: restartedStore,
             adapters: acpAdapters,
@@ -780,11 +780,11 @@ describe("ACP conversation sessions", () => {
             maxProcesses: null,
         });
         try {
-            expect(restartedRuntime.findSessions([sessionTarget])).toEqual([
+            expect(restartedComputer.findSessions([sessionTarget])).toEqual([
                 expect.objectContaining({ harness: "claude", prompted: true, target: sessionTarget }),
             ]);
         } finally {
-            await restartedRuntime.close();
+            await restartedComputer.close();
             restartedStore.close();
             await rm(temporaryDirectory, { force: true, recursive: true });
         }
@@ -1003,7 +1003,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given a conversation closed after its prompt was prepared, When the prompt runs, Then the Runtime reports session_closed without reporting the conversation working", async () => {
+    it("Given a conversation closed after its prompt was prepared, When the prompt runs, Then the Computer reports session_closed without reporting the conversation working", async () => {
         const statuses: SessionStatusChangedEvent[] = [];
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
@@ -1487,7 +1487,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an ACP Agent has a tool subprocess, When the turn is cancelled, Then Morty retains the process tree until Runtime shutdown", async () => {
+    it("Given an ACP Agent has a tool subprocess, When the turn is cancelled, Then Morty retains the process tree until Computer shutdown", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-cancel-tree-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({

@@ -103,7 +103,7 @@ function NetworkLatencyCard({ children }: { readonly children: ReactNode }) {
 function NetworkLatencyIntro({ computerId }: { readonly computerId: string | null }) {
     return (
         <div className="text-14 leading-5 text-muted-foreground">
-            <p>Round-trip latency for this browser and its connected Runtime.</p>
+            <p>Round-trip latency for this browser and its connected Computer.</p>
             <p className="mt-1">Relay location: {projectLocationLabel(computerId ?? "")}</p>
         </div>
     );
@@ -439,7 +439,7 @@ export function ConversationSidebar({
     readonly requests: Pick<
         BotChatApi,
         | "archiveManagedSession"
-        | "runtimeConfiguration"
+        | "computerConfiguration"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -463,9 +463,9 @@ export function ConversationSidebar({
         home.selection.kind === "ready" && pane !== null
             ? sessionExecutionContext(pane.session, home, paneConnection)
             : pendingExecutionContext(home, draftSettings);
-    const runtime = home.runtimeConfiguration?.runtime ?? null;
-    const computerName = runtime?.machineName ?? "";
-    const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
+    const computer = home.computerConfiguration?.computer ?? null;
+    const computerName = computer?.machineName ?? "";
+    const nativeAgents = computer === null ? [] : nativeSessionAgentTabs(computer);
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
     const titles = useStore(workspace.titles, (state) => state.titles);
@@ -1027,14 +1027,14 @@ export function ConversationSidebar({
                                                                     )}
                                                                 >
                                                                     <dt>
-                                                                        <NetworkHopLabel from="Morty" to="Runtime" />
+                                                                        <NetworkHopLabel from="Morty" to="Computer" />
                                                                     </dt>
                                                                     <dd
-                                                                        aria-label="Morty to Runtime latency"
+                                                                        aria-label="Morty to Computer latency"
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
-                                                                        {diagnostic.state.runtimeLatencyMs} ms
+                                                                        {diagnostic.state.computerLatencyMs} ms
                                                                     </dd>
                                                                 </div>
                                                             </dl>

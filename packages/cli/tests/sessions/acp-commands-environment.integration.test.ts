@@ -4,15 +4,15 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
-import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
-import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
+import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
+import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { fakeAgent, fakeAgentPath, RecordingObserver } from "./acp-feature-fixture.ts";
 
@@ -126,7 +126,7 @@ describe("acp commands environment", () => {
         }
     });
 
-    it("Given a managed Runtime has a login-shell-only Agent environment, When it starts an ACP session, Then the Agent receives that environment", async () => {
+    it("Given a managed Computer has a login-shell-only Agent environment, When it starts an ACP session, Then the Agent receives that environment", async () => {
         const workspace = await mkdtemp(join(tmpdir(), "morty-login-shell-workspace-"));
         const generatedImages = await mkdtemp(join(tmpdir(), "morty-login-shell-images-"));
         const observer = new RecordingObserver();
@@ -148,16 +148,16 @@ describe("acp commands environment", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const localContext = new RuntimeLocalContext(join(workspace, "state"), {
+        const localContext = new ComputerLocalContext(join(workspace, "state"), {
             FAKE_ACP_IMAGE_DIRECTORY: generatedImages,
             PATH: process.env["PATH"] ?? "",
         });
-        const config = createRuntimeConfig(
+        const config = createComputerConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 computerId: "login-shell-environment",
                 defaultWorkspace: workspace,
-                relayUrl: new URL("ws://127.0.0.1:8787/v1/runtimes/connect"),
+                relayUrl: new URL("ws://127.0.0.1:8787/v1/computers/connect"),
             },
             [fakeAgent()],
             localContext,

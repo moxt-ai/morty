@@ -46,7 +46,7 @@ const activeTurnSnapshotSchema = z
             .discriminatedUnion("kind", [sessionPermissionRequestedEventSchema, sessionElicitationRequestedEventSchema])
             .nullable(),
         sequence: z.number().int().nonnegative(),
-        // When the Runtime recorded the start of this running turn.
+        // When the Computer recorded the start of this running turn.
         startedAt: z.iso.datetime({ offset: true }),
         state: z.literal("running"),
     })
@@ -54,27 +54,27 @@ const activeTurnSnapshotSchema = z
 export type ActiveTurnSnapshot = z.infer<typeof activeTurnSnapshotSchema>;
 
 /**
- * Where one submitted command stands in the Runtime's execution receipts. Only the
- * Runtime that receives a command can say whether it arrived, so a client recovers an
+ * Where one submitted command stands in the Computer's execution receipts. Only the
+ * Computer that receives a command can say whether it arrived, so a client recovers an
  * unconfirmed submission from this rather than from Agent message identities.
  */
 const commandDeliverySchema = z.discriminatedUnion("state", [
     // No receipt: the command has not arrived. A delayed submission may still arrive later.
     z.object({ state: z.literal("unknown") }).readonly(),
-    // The Runtime holds the command and has not finished it; it may be waiting or running.
+    // The Computer holds the command and has not finished it; it may be waiting or running.
     z.object({ state: z.literal("accepted") }).readonly(),
     z.object({ state: z.literal("completed"), stopReason: z.string().max(2_048) }).readonly(),
     z.object({ code: identifier, state: z.literal("failed") }).readonly(),
-    // The command started, but the Runtime no longer retains its result.
+    // The command started, but the Computer no longer retains its result.
     z.object({ state: z.literal("expired") }).readonly(),
 ]);
 export type CommandDelivery = z.infer<typeof commandDeliverySchema>;
 
 /**
- * How the Session's most recent started command ended, from the Runtime's execution receipts.
+ * How the Session's most recent started command ended, from the Computer's execution receipts.
  * A client that missed the live outcome, after leaving, reloading or reconnecting, shows it from
- * this. While the Runtime retains the live receipt, a failure carries its bounded client-facing
- * lifecycle message. After a Runtime restart, it carries the sanitized
+ * this. While the Computer retains the live receipt, a failure carries its bounded client-facing
+ * lifecycle message. After a Computer restart, it carries the sanitized
  * durable summary: Agent error text may quote user input and is not persisted in receipts.
  */
 const lastTurnOutcomeSchema = z.discriminatedUnion("state", [
@@ -106,10 +106,10 @@ const nativeSessionRequestSchema = z.discriminatedUnion("action", [
         .object({
             ...requestEnvelope,
             action: z.literal("active-turn"),
-            // Asks the Runtime for this command's delivery alongside the execution snapshot. It is not
+            // Asks the Computer for this command's delivery alongside the execution snapshot. It is not
             // named `commandId`, which routes a request as the command it names.
             deliveryCommandId: identifier.optional(),
-            // The Runtime reads the Session it holds for this target.
+            // The Computer reads the Session it holds for this target.
             target: nativeSessionTargetSchema,
         })
         .readonly(),
@@ -135,10 +135,10 @@ const nativeSessionCommandSchema = z.discriminatedUnion("action", [
         .object({
             ...requestEnvelope,
             action: z.literal("active-turn"),
-            // Asks the Runtime for this command's delivery alongside the execution snapshot. It is not
+            // Asks the Computer for this command's delivery alongside the execution snapshot. It is not
             // named `commandId`, which routes a request as the command it names.
             deliveryCommandId: identifier.optional(),
-            // The Runtime reads the Session it holds for this target.
+            // The Computer reads the Session it holds for this target.
             target: nativeSessionTargetSchema,
         })
         .readonly(),
@@ -200,13 +200,13 @@ const nativeSessionResultSchema = z.discriminatedUnion("action", [
                     throughPosition: z.string().regex(/^(0|[1-9][0-9]*)$/),
                 })
                 .readonly(),
-            // Null when this Runtime has no retained Session for the requested identity.
+            // Null when this Computer has no retained Session for the requested identity.
             interactionState: sessionInteractionSnapshotSchema.nullable(),
             // Present only when the request named a command.
             command: commandDeliverySchema.optional(),
             // Absent while the last started command is running or none has started.
             lastTurn: lastTurnOutcomeSchema.optional(),
-            // The Runtime withdraws a queued command only before it starts.
+            // The Computer withdraws a queued command only before it starts.
             queuedCancellation: z.literal("before-start"),
         })
         .readonly(),

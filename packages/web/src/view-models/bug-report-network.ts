@@ -77,7 +77,7 @@ export async function collectNetworkDiagnostics(
             : probe(() => browser.measureMortyLatency(signal), signal, parent);
     const hopsResult =
         server === null
-            ? Promise.resolve(unavailable("NO_ACTIVE_RUNTIME"))
+            ? Promise.resolve(unavailable("NO_ACTIVE_COMPUTER"))
             : probe(() => server.readNetwork(signal), signal, parent);
     const [browserMorty, hops] = await Promise.all([browserMortyResult, hopsResult]);
     parent.throwIfAborted();
@@ -87,8 +87,8 @@ export async function collectNetworkDiagnostics(
         connection,
         measurements: {
             browserMorty: latency(browserMorty),
-            mortyRuntime:
-                hops.kind === "available" ? latency({ kind: "available", value: hops.value.runtimeLatencyMs }) : hops,
+            mortyComputer:
+                hops.kind === "available" ? latency({ kind: "available", value: hops.value.computerLatencyMs }) : hops,
         },
     };
 }

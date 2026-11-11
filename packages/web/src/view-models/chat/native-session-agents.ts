@@ -1,8 +1,8 @@
 import { decodeIdentifier, type Identifier } from "@morty-build/client/protocol";
 import {
     type ChatAgentSelection,
-    type ChatRuntime,
-    connectedChatRuntimeAgents,
+    type ChatComputer,
+    connectedChatComputerAgents,
 } from "../../services/chat/bot-chat-api.ts";
 
 export type NativeSessionAgent = ChatAgentSelection & { readonly installed: boolean; readonly value: string };
@@ -13,9 +13,9 @@ export function harnessValue(computerId: string, harness: string): string {
 
 const PI_HARNESS: Identifier = decodeIdentifier("pi");
 
-/** Runtime harness tabs: connected agents plus Pi when it is not on the Runtime. */
-export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSessionAgent[] {
-    const connected = connectedChatRuntimeAgents(runtime);
+/** Computer harness tabs: connected agents plus Pi when it is not on the Computer. */
+export function nativeSessionAgentTabs(computer: ChatComputer): readonly NativeSessionAgent[] {
+    const connected = connectedChatComputerAgents(computer);
     const installed = connected.map((agent) => ({
         ...agent,
         installed: true as const,
@@ -41,7 +41,7 @@ export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSes
     ];
 }
 
-/** A harness the configuration menu offers, as the Runtime configuration names it. */
+/** A harness the configuration menu offers, as the Computer configuration names it. */
 export interface HarnessOption {
     readonly harness: string;
     readonly installed: boolean;
@@ -50,9 +50,9 @@ export interface HarnessOption {
     readonly value: string;
 }
 
-/** The harnesses a configuration menu offers, derived from the Runtime configuration the page follows. */
-export function harnessOptions(runtime: ChatRuntime | null): readonly HarnessOption[] {
-    return (runtime === null ? [] : nativeSessionAgentTabs(runtime)).map((agent) => ({
+/** The harnesses a configuration menu offers, derived from the Computer configuration the page follows. */
+export function harnessOptions(computer: ChatComputer | null): readonly HarnessOption[] {
+    return (computer === null ? [] : nativeSessionAgentTabs(computer)).map((agent) => ({
         harness: agent.harness,
         installed: agent.installed,
         label: agent.label,
@@ -61,9 +61,9 @@ export function harnessOptions(runtime: ChatRuntime | null): readonly HarnessOpt
     }));
 }
 
-/** Existing sessions keep their Agent even if the Runtime no longer offers it. */
-export function sessionHarnessSelection(runtime: ChatRuntime | null, harness: string) {
-    const options = harnessOptions(runtime);
+/** Existing sessions keep their Agent even if the Computer no longer offers it. */
+export function sessionHarnessSelection(computer: ChatComputer | null, harness: string) {
+    const options = harnessOptions(computer);
     const selected = options.find((option) => option.harness === harness);
     if (selected !== undefined) {
         return { options, value: selected.value };
@@ -73,7 +73,7 @@ export function sessionHarnessSelection(runtime: ChatRuntime | null, harness: st
         installed: false,
         label: harness,
         tabLabel: harness,
-        value: harnessValue(runtime?.computerId ?? "", harness),
+        value: harnessValue(computer?.computerId ?? "", harness),
     };
     return { options: [...options, fallback], value: fallback.value };
 }

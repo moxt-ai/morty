@@ -1,4 +1,4 @@
-import type { RuntimeAccessContext } from "../../entity/authentication/project-authentication.ts";
+import type { ComputerAccessContext } from "../../entity/authentication/project-authentication.ts";
 import type { AgentDescriptor } from "../../entity/pairing/pairing.ts";
 import type { ChannelGateway } from "../../gateway/index.ts";
 import { logger } from "../../infra/logger.ts";
@@ -25,15 +25,17 @@ export class ChannelService {
     ) => this.#pairings.updateAgentCatalog(computerId, token, successor, agents, signal);
 
     /**
-     * Authorizes a daemon connection, rotating its credential. A reused credential ends the Runtime's access first; a
-     * daemon of a Runtime whose access ended is told so, so it stops instead of retrying.
+     * Authorizes a daemon connection, rotating its credential. A reused credential ends the Computer's access first; a
+     * daemon of a Computer whose access ended is told so, so it stops instead of retrying.
      */
-    readonly connectRuntime = async (
+    readonly connectComputer = async (
         token: string,
         successor: string,
         signal: AbortSignal,
-    ): Promise<{ readonly kind: "accepted"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }> => {
-        const rotation = await this.#pairings.rotateRuntimeCredential(token, successor, signal);
+    ): Promise<
+        { readonly kind: "accepted"; readonly access: ComputerAccessContext } | { readonly kind: "revoked" }
+    > => {
+        const rotation = await this.#pairings.rotateComputerCredential(token, successor, signal);
         switch (rotation.kind) {
             case "rotated":
                 return { kind: "accepted", access: rotation.access };
@@ -44,12 +46,12 @@ export class ChannelService {
         }
         logger.warn(
             {
-                event: "runtime_credential_reused",
+                event: "computer_credential_reused",
                 computerId: rotation.access.computerId,
             },
-            "A retired Runtime credential was presented; the Runtime was revoked",
+            "A retired Computer credential was presented; the Computer was revoked",
         );
-        await this.#channelGateway.disconnectRuntime(rotation.access, signal);
+        await this.#channelGateway.disconnectComputer(rotation.access, signal);
         return { kind: "revoked" };
     };
 }

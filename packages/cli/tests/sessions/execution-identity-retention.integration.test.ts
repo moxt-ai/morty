@@ -105,7 +105,7 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                     { length: 1_026 },
                     (_, index) => `z-rejected-${String(index).padStart(4, "0")}`,
                 );
-                // Content the Runtime never received fails each command before its Agent turn starts.
+                // Content the Computer never received fails each command before its Agent turn starts.
                 const unavailableAttachment = {
                     byteLength: 1,
                     contentKey: "0".repeat(64),

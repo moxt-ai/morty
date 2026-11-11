@@ -6,7 +6,7 @@ export default defineConfig({
         fileParallelism: true,
         maxWorkers: 4,
         include: [
-            "tests/{sessions,runtime,manual}/**/*.{contract,integration}.test.ts",
+            "tests/{sessions,computer,manual}/**/*.{contract,integration}.test.ts",
             "tests/agents/**/*.integration.test.ts",
         ],
         testTimeout: 120_000,

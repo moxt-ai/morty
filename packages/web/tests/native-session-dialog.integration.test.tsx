@@ -73,7 +73,7 @@ test("Given the first agent lists saved sessions, When the user opens Open Sessi
     expect(getByRole(dialog, "button", { name: "Open" }).hasAttribute("disabled")).toBe(false);
 });
 
-test("Given Pi is not installed on the Runtime, When the user opens Open Session and selects Pi, Then the dialog explains Pi is not installed", {
+test("Given Pi is not installed on the Computer, When the user opens Open Session and selects Pi, Then the dialog explains Pi is not installed", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -92,7 +92,7 @@ test("Given Pi is not installed on the Runtime, When the user opens Open Session
     });
 });
 
-test("Given Pi is installed on the Runtime, When the user opens Open Session, Then Pi appears once in the agent tabs", {
+test("Given Pi is installed on the Computer, When the user opens Open Session, Then Pi appears once in the agent tabs", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, agent: { harness: "pi", label: "Pi" } });
@@ -198,7 +198,7 @@ test("Given the user previewed a session, When they close Open Session and open 
     );
 });
 
-test("Given native sessions were discovered before the Runtime disconnected, When a preview fails, Then Open Session shows one error with one bug report action", {
+test("Given native sessions were discovered before the Computer disconnected, When a preview fails, Then Open Session shows one error with one bug report action", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, sessionIds: new Set(["preview-error-session"]) });
@@ -211,7 +211,7 @@ test("Given native sessions were discovered before the Runtime disconnected, Whe
         getByRole(document.body, "button", { name: "Native preview-error-session" }),
     );
     if (app.daemon === null) {
-        throw new Error("The scenario requires a connected Runtime.");
+        throw new Error("The scenario requires a connected Computer.");
     }
     await app.daemon.disconnect();
     act(() => fireEvent.click(entry));
@@ -224,7 +224,7 @@ test("Given native sessions were discovered before the Runtime disconnected, Whe
     await app.waitForView(() => getByRole(document.body, "dialog", { name: "Report a bug" }));
 });
 
-test("Given Open Session was opened while the Runtime was offline, When the Runtime comes back online, Then the open dialog lists its sessions without reopening", {
+test("Given Open Session was opened while the Computer was offline, When the Computer comes back online, Then the open dialog lists its sessions without reopening", {
     timeout: 60_000,
 }, async () => {
     const clock = new TestClock("2026-10-24T08:00:00Z");
@@ -235,7 +235,7 @@ test("Given Open Session was opened while the Runtime was offline, When the Runt
     });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("The scenario requires a connected Runtime.");
+        throw new Error("The scenario requires a connected Computer.");
     }
     const connection = (): string | null =>
         app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status");

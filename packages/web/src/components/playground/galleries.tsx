@@ -124,9 +124,9 @@ const agentOptions = [
 ] as const;
 
 const sessionAgents = [
-    { harness: "codex", label: "Codex", value: "runtime:codex" },
-    { harness: "claude-code", label: "Claude Code", value: "runtime:claude-code" },
-    { harness: "pi", label: "Pi", value: "runtime:pi" },
+    { harness: "codex", label: "Codex", value: "computer:codex" },
+    { harness: "claude-code", label: "Claude Code", value: "computer:claude-code" },
+    { harness: "pi", label: "Pi", value: "computer:pi" },
 ] as const;
 
 const toolStates = [
@@ -167,7 +167,7 @@ const dialogGalleryVariantDescription: Readonly<Partial<Record<DialogVariant, Re
         </>
     ),
     identitySharing: "Scan the code or open the link on the device you want to use.",
-    networkLatency: "Round-trip latency for this browser and its connected Runtime.",
+    networkLatency: "Round-trip latency for this browser and its connected Computer.",
     openSession: "Import a native agent session into Morty Chat.",
     workingDirectory: "Pick the folder the agent should use as its working directory.",
 };
@@ -1122,8 +1122,8 @@ function ComposerNoticeGallery() {
     };
     return (
         <div className="grid max-w-xl gap-6">
-            <Specimen layout="stack" title="Failure: runtime restarted mid-request">
-                <MortyAlert>The local runtime restarted while this request was running</MortyAlert>
+            <Specimen layout="stack" title="Failure: computer restarted mid-request">
+                <MortyAlert>The local computer restarted while this request was running</MortyAlert>
             </Specimen>
             <Specimen layout="stack" title="Failure: attachment rejected">
                 <MortyAlert>Files must be between 1 byte and 32 MB.</MortyAlert>
@@ -1631,10 +1631,10 @@ function NativeSessionDirectoryPlaceholderGallery() {
                     />
                 </NativeSessionDirectoryPlaceholderFrame>
             </Specimen>
-            <Specimen title="No runtime">
+            <Specimen title="No computer">
                 <NativeSessionDirectoryPlaceholderFrame>
                     <NativeSessionDirectoryPlaceholder
-                        description="Connect a runtime to browse saved sessions."
+                        description="Connect a computer to browse saved sessions."
                         icon={Unplug}
                         title="No local agent"
                     />
@@ -1665,7 +1665,7 @@ function NativeSessionDirectoryPlaceholderGallery() {
 
 function SessionAgentTabsGallery() {
     const [disabled, setDisabled] = useState(false);
-    const [value, setValue] = useState("runtime:codex");
+    const [value, setValue] = useState("computer:codex");
     const selected = sessionAgents.find((agent) => agent.value === value);
     return (
         <Specimen layout="stack" title="Try it">

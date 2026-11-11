@@ -7,7 +7,7 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
-test("Given a running turn, When I queue a message before the Runtime receives it, Then it stays visible exactly once through admission and execution", {
+test("Given a running turn, When I queue a message before the Computer receives it, Then it stays visible exactly once through admission and execution", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
@@ -15,7 +15,7 @@ test("Given a running turn, When I queue a message before the Runtime receives i
     const app = await createTestApp({ environment, connectAgent: true });
     const { daemon, executionNetwork } = app;
     if (daemon === null || executionNetwork === null) {
-        throw new Error("Expected a real Runtime and the execution transport proxy");
+        throw new Error("Expected a real Computer and the execution transport proxy");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.queryElementByTestId(dataTestId.sessionStatus);
@@ -46,7 +46,7 @@ test("Given a running turn, When I queue a message before the Runtime receives i
 });
 
 for (const eventOrder of ["before refusal", "after refusal"] as const) {
-    test(`Given a released Runtime starts queued work before a delayed steer arrives, When its lifecycle arrives ${eventOrder}, Then the completed reply has no stale queue error`, {
+    test(`Given a released Computer starts queued work before a delayed steer arrives, When its lifecycle arrives ${eventOrder}, Then the completed reply has no stale queue error`, {
         timeout: dedicatedEnvironmentTimeout,
     }, async () => {
         const environment = await createChatWorkerEnvironment(false, true);
@@ -54,7 +54,7 @@ for (const eventOrder of ["before refusal", "after refusal"] as const) {
         const app = await createTestApp({ environment, connectAgent: true });
         const { daemon, executionNetwork } = app;
         if (daemon === null || executionNetwork === null) {
-            throw new Error("Expected a real Runtime and the execution transport proxy");
+            throw new Error("Expected a real Computer and the execution transport proxy");
         }
         await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
         await app.queryElementByTestId(dataTestId.sessionStatus);
@@ -74,7 +74,7 @@ for (const eventOrder of ["before refusal", "after refusal"] as const) {
             if (eventOrder === "before refusal") {
                 await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
             }
-            // The Runtime refuses the late steer because the message already left the queue.
+            // The Computer refuses the late steer because the message already left the queue.
             const response = await release();
             expect(response).toMatchObject({ kind: "http.response", status: 409 });
             if (eventOrder === "after refusal") {
@@ -193,7 +193,7 @@ test("Given the daemon has queued work, When the user steers it into the active 
     }
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
@@ -250,7 +250,7 @@ test("Given a follow-up queued in a running Session starts while I view another 
     const app = await createTestApp({ environment, connectAgent: true });
     const { daemon } = app;
     if (daemon === null) {
-        throw new Error("Expected a real Runtime");
+        throw new Error("Expected a real Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
@@ -317,7 +317,7 @@ test("Given a follow-up is queued and the user has started another draft, When t
     expect(document.body.textContent).not.toContain("Files attached to this message");
 });
 
-test("Given I edit a queued follow-up, When I open another Session before the Runtime withdraws it, Then its text is back in that Session's composer when I return", {
+test("Given I edit a queued follow-up, When I open another Session before the Computer withdraws it, Then its text is back in that Session's composer when I return", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const queuedPrompt = "Rewrite the queued follow-up";
@@ -326,7 +326,7 @@ test("Given I edit a queued follow-up, When I open another Session before the Ru
     const app = await createTestApp({ environment, connectAgent: true });
     const { daemon, executionNetwork } = app;
     if (daemon === null || executionNetwork === null) {
-        throw new Error("Expected a real Runtime and the execution transport proxy");
+        throw new Error("Expected a real Computer and the execution transport proxy");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
@@ -341,7 +341,7 @@ test("Given I edit a queued follow-up, When I open another Session before the Ru
 
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
-    // The Runtime withdraws the message only after the user left its Session.
+    // The Computer withdraws the message only after the user left its Session.
     expect(await release()).toMatchObject({ kind: "http.response", status: 200 });
     const running = await app.waitForView(() => {
         const entry = app
@@ -396,7 +396,7 @@ test("Given a reply is running with a queued follow-up, When I edit the follow-u
         ).not.toContain("Turn stopped.");
     }
     if (app.daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await app.daemon.continueReply("wait for steering", {
         outcome: "complete",
@@ -500,7 +500,7 @@ test("Given two queued submissions are accepted before their snapshot arrives, W
     expect(document.body.textContent).not.toContain("Files attached to this message could not be restored here.");
 
     if (app.daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await app.daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
@@ -661,7 +661,7 @@ test("Given a viewer is loading history before seeing a queue item, When another
     );
     const queued = await app.queryElementByTestId(dataTestId.queuedMessage);
     if (app.executionNetwork === null || app.daemon === null) {
-        throw new Error("Expected a connected Runtime and real execution-read proxy");
+        throw new Error("Expected a connected Computer and real execution-read proxy");
     }
     const held = app.executionNetwork.holdNextExecution();
     const viewer = await app.openViewer();

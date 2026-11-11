@@ -3,18 +3,18 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readD1Migrations } from "@cloudflare/vitest-plugin";
 import {
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
-    runtimeCredentialSuccessor,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
+    computerCredentialSuccessor,
 } from "@morty-build/client/protocol";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
 const logs: Record<string, unknown>[] = [];
-let runtime: Miniflare;
+let computer: Miniflare;
 
 beforeAll(async () => {
     const bundle = await build({
@@ -37,7 +37,7 @@ beforeAll(async () => {
     if (output === undefined) {
         throw new Error("Expected the observability Worker bundle");
     }
-    runtime = new Miniflare(
+    computer = new Miniflare(
         convertV4MiniflareOptions({
             modules: true,
             script: output.text,
@@ -62,8 +62,8 @@ beforeAll(async () => {
             },
         }),
     );
-    await runtime.ready;
-    const bindings = await runtime.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
+    await computer.ready;
+    const bindings = await computer.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
     const directory = fileURLToPath(new URL("../../relay/migrations/d1", import.meta.url));
     for (const migration of await readD1Migrations(directory)) {
         await bindings.RELAY_DIRECTORY_DATABASE.batch(
@@ -73,11 +73,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-    await runtime?.dispose();
+    await computer?.dispose();
     const artifact = process.env["MORTY_LOG_E2E_ARTIFACT"];
     if (artifact !== undefined) {
         await mkdir(dirname(artifact), { recursive: true });
-        await writeFile(artifact, `${JSON.stringify({ runtime: "workerd", logs }, null, 2)}\n`);
+        await writeFile(artifact, `${JSON.stringify({ computer: "workerd", logs }, null, 2)}\n`);
     }
 });
 
@@ -101,7 +101,7 @@ async function api(
     init: { method?: string; headers?: Record<string, string>; body?: string },
     status: number,
 ) {
-    const response = await runtime.dispatchFetch(`https://relay.test/morty/api${path}`, {
+    const response = await computer.dispatchFetch(`https://relay.test/morty/api${path}`, {
         ...init,
         headers: {
             "content-type": "application/json",
@@ -127,14 +127,14 @@ async function provisionProject() {
     return { computerId: text(owner, "computerId"), appCredential: text(owner, "token") };
 }
 
-async function pairRuntime() {
+async function pairComputer() {
     const { computerId, appCredential } = await provisionProject();
     const pairing = await api(
         `/computers/${computerId}/management/pairing`,
         {
             method: "POST",
             headers: { authorization: `Bearer ${appCredential}` },
-            body: JSON.stringify({ idempotencyKey: "logging-runtime" }),
+            body: JSON.stringify({ idempotencyKey: "logging-computer" }),
         },
         201,
     );
@@ -154,19 +154,19 @@ async function pairRuntime() {
     return { computerId, pairing, claimed };
 }
 
-let loggingRuntime: Promise<{ readonly computerId: string }> | undefined;
+let loggingComputer: Promise<{ readonly computerId: string }> | undefined;
 
-/** Internal Runtime Relay scenarios enter after public pairing registered the Runtime in an active Project. */
-function registeredLoggingRuntime() {
-    loggingRuntime ??= pairRuntime().then(({ computerId }) => ({
+/** Internal Computer Relay scenarios enter after public pairing registered the Computer in an active Project. */
+function registeredLoggingComputer() {
+    loggingComputer ??= pairComputer().then(({ computerId }) => ({
         computerId,
     }));
-    return loggingRuntime;
+    return loggingComputer;
 }
 
 async function httpFailure(kind: string): Promise<Record<string, unknown>> {
     const start = logs.length;
-    const response = await runtime.dispatchFetch(`https://relay.test/failure/${kind}?token=QUERY_CANARY`, {
+    const response = await computer.dispatchFetch(`https://relay.test/failure/${kind}?token=QUERY_CANARY`, {
         method: "POST",
         headers: { authorization: "Bearer HEADER_CANARY", "cf-ray": "logging-test-ray" },
         body: "BODY_CANARY",
@@ -188,8 +188,8 @@ it("preserves nested error details and Cloudflare overload flags through the Wor
     const log = await httpFailure("nested");
     expect(log["err"]).toMatchObject({
         name: "Error",
-        message: "Runtime relay request failed",
-        stack: expect.stringContaining("Runtime relay request failed"),
+        message: "Computer relay request failed",
+        stack: expect.stringContaining("Computer relay request failed"),
         cause: {
             message: "Too many requests queued for the same Durable Object",
             stack: expect.stringContaining("Too many requests queued"),
@@ -223,31 +223,31 @@ it.each(["primitive", "object", "circular", "deep", "long", "secrets", "getter"]
 );
 
 // @no-uc: Technical regression; a failing DO hop must identify its target rather than only its caller.
-it("identifies the failing Runtime Durable Object through the public pairing and connect APIs", async () => {
-    const { computerId, claimed } = await pairRuntime();
+it("identifies the failing Computer Durable Object through the public pairing and connect APIs", async () => {
+    const { computerId, claimed } = await pairComputer();
     const start = logs.length;
-    const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/runtimes/connect", {
+    const response = await computer.dispatchFetch("https://relay.test/morty/api/v1/computers/connect", {
         headers: {
-            authorization: `Bearer ${text(claimed, "runtimeCredential")}`,
-            [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: runtimeCredentialSuccessor(text(claimed, "runtimeCredential")),
+            authorization: `Bearer ${text(claimed, "computerCredential")}`,
+            [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]: computerCredentialSuccessor(text(claimed, "computerCredential")),
             Upgrade: "websocket",
-            "x-test-runtime-failure": "1",
-            "cf-ray": "runtime-failure-ray",
+            "x-test-computer-failure": "1",
+            "cf-ray": "computer-failure-ray",
         },
     });
     expect(response.status).toBe(500);
     await response.text();
     await expect
-        .poll(() => logs.slice(start).find((log) => log["event"] === "runtime_relay_request_failed"))
+        .poll(() => logs.slice(start).find((log) => log["event"] === "computer_relay_request_failed"))
         .toBeDefined();
     expect(logs.slice(start)).toContainEqual(
         expect.objectContaining({
-            event: "runtime_relay_request_failed",
+            event: "computer_relay_request_failed",
             durableObjectId: expect.any(String),
             computerId,
             path: `/computers/${computerId}/daemon`,
-            cfRay: "runtime-failure-ray",
-            err: expect.objectContaining({ message: expect.stringContaining("Runtime DO overloaded") }),
+            cfRay: "computer-failure-ray",
+            err: expect.objectContaining({ message: expect.stringContaining("Computer DO overloaded") }),
         }),
     );
 });
@@ -281,8 +281,8 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
 
 // @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.
 it("keeps ordinary Host closes quiet after the real relay close callback completes", async () => {
-    const { computerId } = await registeredLoggingRuntime();
-    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
+    const { computerId } = await registeredLoggingComputer();
+    const response = await computer.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
         headers: {
             Upgrade: "websocket",
             "x-morty-computer-id": computerId,
@@ -299,13 +299,13 @@ it("keeps ordinary Host closes quiet after the real relay close callback complet
     );
     socket.accept();
     try {
-        expect(JSON.parse(String(await status))).toMatchObject({ kind: "runtime.status" });
+        expect(JSON.parse(String(await status))).toMatchObject({ kind: "computer.status" });
         const start = logs.length;
         socket.close(1000, "Control request complete");
         await expect
             .poll(() => logs.slice(start).find((log) => log["event"] === "test_websocket_close_completed"))
             .toBeDefined();
-        expect(logs.slice(start).filter((log) => String(log["event"]).startsWith("runtime_websocket_"))).toHaveLength(
+        expect(logs.slice(start).filter((log) => String(log["event"]).startsWith("computer_websocket_"))).toHaveLength(
             0,
         );
         expect(JSON.stringify(logs.slice(start))).not.toContain("HOST_CREDENTIAL_CANARY");
@@ -317,9 +317,9 @@ it("keeps ordinary Host closes quiet after the real relay close callback complet
 });
 
 async function daemon() {
-    const { computerId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingComputer();
     const start = logs.length;
-    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
+    const response = await computer.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
         headers: {
             Upgrade: "websocket",
             "x-morty-computer-id": computerId,
@@ -336,9 +336,9 @@ async function daemon() {
     socket.accept();
     try {
         await expect
-            .poll(() => logs.slice(start).find((log) => log["event"] === "runtime_websocket_accepted"))
+            .poll(() => logs.slice(start).find((log) => log["event"] === "computer_websocket_accepted"))
             .toBeDefined();
-        expect(JSON.parse(String(await ready))).toEqual({ kind: RUNTIME_LIVENESS_READY_KIND });
+        expect(JSON.parse(String(await ready))).toEqual({ kind: COMPUTER_LIVENESS_READY_KIND });
         return socket;
     } catch (error) {
         if (socket.readyState === 1) {
@@ -350,21 +350,21 @@ async function daemon() {
 
 // @no-uc: Technical regression; real close callbacks must retain peer diagnostics while detach and reconnect still work.
 it("records overload close details and connection epochs without logging healthy heartbeats", async () => {
-    const { computerId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingComputer();
     const socket = await daemon();
     try {
         const start = logs.length;
         const heartbeat = new Promise((resolve) =>
             socket.addEventListener("message", (event) => resolve(event.data), { once: true }),
         );
-        socket.send(RUNTIME_HEARTBEAT_MESSAGE);
-        expect(await heartbeat).toBe(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+        socket.send(COMPUTER_HEARTBEAT_MESSAGE);
+        expect(await heartbeat).toBe(COMPUTER_HEARTBEAT_ACK_MESSAGE);
         expect(logs.slice(start)).toHaveLength(0);
         socket.close(1013, "Service overloaded; retry later.");
         await expect
-            .poll(() => logs.find((log) => log["event"] === "runtime_websocket_closed" && log["closeCode"] === 1013))
+            .poll(() => logs.find((log) => log["event"] === "computer_websocket_closed" && log["closeCode"] === 1013))
             .toBeDefined();
-        const closed = logs.find((log) => log["event"] === "runtime_websocket_closed" && log["closeCode"] === 1013);
+        const closed = logs.find((log) => log["event"] === "computer_websocket_closed" && log["closeCode"] === 1013);
         expect(closed).toMatchObject({
             closeCode: 1013,
             closeReason: "Service overloaded; retry later.",
@@ -376,7 +376,7 @@ it("records overload close details and connection epochs without logging healthy
         });
         expect(logs).toContainEqual(
             expect.objectContaining({
-                event: "runtime_websocket_accepted",
+                event: "computer_websocket_accepted",
                 connectionEpoch: 1,
                 computerId,
             }),
@@ -384,7 +384,9 @@ it("records overload close details and connection epochs without logging healthy
         const next = await daemon();
         next.close(1000, "Test complete");
         await expect
-            .poll(() => logs.find((log) => log["event"] === "runtime_websocket_closed" && log["connectionEpoch"] === 2))
+            .poll(() =>
+                logs.find((log) => log["event"] === "computer_websocket_closed" && log["connectionEpoch"] === 2),
+            )
             .toBeDefined();
     } finally {
         if (socket.readyState === 1) {
@@ -395,18 +397,18 @@ it("records overload close details and connection epochs without logging healthy
 
 // @no-uc: Technical regression; relay-supplied errors must survive the exported hibernatable WebSocket callback.
 it("retains a relay WebSocket error and connection identity before closing the socket", async () => {
-    const { computerId } = await registeredLoggingRuntime();
+    const { computerId } = await registeredLoggingComputer();
     const socket = await daemon();
     try {
         const closed = new Promise<number>((resolve) =>
             socket.addEventListener("close", (event) => resolve(event.code), { once: true }),
         );
         const start = logs.length;
-        const responsePending = runtime.dispatchFetch(
+        const responsePending = computer.dispatchFetch(
             `https://relay.test/computers/${computerId}/inject-websocket-error`,
         );
         await expect
-            .poll(() => logs.slice(start).find((log) => log["event"] === "runtime_websocket_error"))
+            .poll(() => logs.slice(start).find((log) => log["event"] === "computer_websocket_error"))
             .toBeDefined();
         socket.close(1000, "Test complete");
         const response = await responsePending;
@@ -414,13 +416,13 @@ it("retains a relay WebSocket error and connection identity before closing the s
         expect(await closed).toBe(1011);
         expect(logs.slice(start)).toContainEqual(
             expect.objectContaining({
-                event: "runtime_websocket_error",
+                event: "computer_websocket_error",
                 role: "daemon",
                 connectionEpoch: expect.any(Number),
                 computerId,
                 durableObjectId: expect.any(String),
                 err: expect.objectContaining({
-                    message: "Runtime relay request failed",
+                    message: "Computer relay request failed",
                     cause: expect.objectContaining({ overloaded: true }),
                 }),
             }),

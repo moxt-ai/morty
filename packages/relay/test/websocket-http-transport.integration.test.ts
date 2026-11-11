@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { encodeContentChunkFrame } from "@morty-build/client/protocol";
 import {
     acceptWebSocketHttpTransport,
-    SessionRuntimeError,
+    SessionComputerError,
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
@@ -14,7 +14,7 @@ class FailingDaemonBoundary {
     readonly fetch = (_request: Request): Promise<Response> => {
         this.requests += 1;
         return Promise.reject(
-            new SessionRuntimeError("agent_execution_failed", "The local Agent exited before completing the request"),
+            new SessionComputerError("agent_execution_failed", "The local Agent exited before completing the request"),
         );
     };
 }
@@ -35,7 +35,7 @@ function nextMessage(socket: WebSocket): Promise<string> {
     });
 }
 
-it("Given a browser connection, When it requests a retired private Runtime API, Then the transport rejects the target rather than routing it as a supported operation", async () => {
+it("Given a browser connection, When it requests a retired private Computer API, Then the transport rejects the target rather than routing it as a supported operation", async () => {
     const computerId = "prj_ap_01_000000000000000000000001";
     const response = await SELF.fetch(`https://relay.test/morty/api/v1/computers/${computerId}/transport`, {
         headers: { Upgrade: "websocket" },
@@ -51,7 +51,7 @@ it("Given a browser connection, When it requests a retired private Runtime API, 
         socket.send(
             JSON.stringify({
                 kind: "http.request",
-                requestId: "retired-private-runtime",
+                requestId: "retired-private-computer",
                 method: "GET",
                 path: `/morty/api/v1/computers/${computerId}/daemon/agents`,
                 headers: [],
@@ -60,7 +60,7 @@ it("Given a browser connection, When it requests a retired private Runtime API, 
         );
         expect(JSON.parse(await answer)).toMatchObject({
             kind: "http.error",
-            requestId: "retired-private-runtime",
+            requestId: "retired-private-computer",
             code: "invalid_target",
             status: 400,
         });
@@ -69,7 +69,7 @@ it("Given a browser connection, When it requests a retired private Runtime API, 
     }
 });
 
-it("Given a browser connection, When it heartbeats through the public Relay transport, Then the Runtime acknowledges it and an unauthenticated Session request is rejected", async () => {
+it("Given a browser connection, When it heartbeats through the public Relay transport, Then the Computer acknowledges it and an unauthenticated Session request is rejected", async () => {
     const response = await SELF.fetch(
         "https://relay.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
@@ -108,7 +108,7 @@ it("Given a browser connection, When it heartbeats through the public Relay tran
     }
 });
 
-it("Given a Runtime-bound browser, When it addresses another computer, Then the request is rejected without closing the browser connection", async () => {
+it("Given a Computer-bound browser, When it addresses another computer, Then the request is rejected without closing the browser connection", async () => {
     const response = await SELF.fetch(
         "https://relay.test/morty/api/v1/computers/prj_ap_01_000000000000000000000001/transport",
         {
@@ -147,7 +147,7 @@ it("Given a Runtime-bound browser, When it addresses another computer, Then the 
     }
 });
 
-it("Given two browser connections to one Runtime, When their pending uploads exceed its shared budget, Then the second upload is refused and capacity is released after a failed transfer", async () => {
+it("Given two browser connections to one Computer, When their pending uploads exceed its shared budget, Then the second upload is refused and capacity is released after a failed transfer", async () => {
     const uploads = new WebSocketUploadBudget();
     const daemon = new TextDaemonBoundary("uploaded");
     const connect = () =>

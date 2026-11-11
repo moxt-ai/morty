@@ -21,14 +21,14 @@ export class SessionLiveEventRelay {
             events.push(event);
             eventsBySession.set(event.target, events);
         }
-        let runtimeMessage: string | undefined;
+        let computerMessage: string | undefined;
         const sessionMessages = new NativeSessionMap<string>();
         for (const host of this.#peers.hosts()) {
             const sessionFilter = host.sessionFilter;
             let message: string;
             if (sessionFilter === undefined) {
-                runtimeMessage ??= encodeSessionWireEnvelope(envelope);
-                message = runtimeMessage;
+                computerMessage ??= encodeSessionWireEnvelope(envelope);
+                message = computerMessage;
             } else {
                 const events = eventsBySession.get(sessionFilter);
                 if (events === undefined) {
@@ -42,7 +42,7 @@ export class SessionLiveEventRelay {
             try {
                 host.send(message);
             } catch {
-                host.close(1013, "Runtime channel backpressure");
+                host.close(1013, "Computer channel backpressure");
             }
         }
         for (const viewer of this.#peers.viewers()) {

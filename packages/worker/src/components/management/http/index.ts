@@ -5,8 +5,8 @@ import { ManagementError } from "../entity/management-error.ts";
 import { createAuthenticationRoutes } from "./authentication-routes.ts";
 import { createBotManagementRoutes } from "./bot-management-routes.ts";
 import { createComputerManagementRoutes } from "./computer-management-routes.ts";
+import { createComputerPairingRoutes } from "./computer-pairing-routes.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
-import { createRuntimePairingRoutes } from "./runtime-pairing-routes.ts";
 
 export function createManagementApplication(basePath = "/morty/api") {
     return new Hono<ManagementHttpEnvironment>()
@@ -19,5 +19,5 @@ export function createManagementApplication(basePath = "/morty/api") {
         .route("/", createAuthenticationRoutes())
         .route("/management", createBotManagementRoutes())
         .route("/management", createComputerManagementRoutes())
-        .route("/management", createRuntimePairingRoutes());
+        .route("/management", createComputerPairingRoutes());
 }

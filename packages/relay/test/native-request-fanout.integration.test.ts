@@ -6,7 +6,7 @@ import {
     encodeSessionOperationFailedEvent,
 } from "@morty-build/client/protocol";
 import { expect, it } from "vitest";
-import { registerRuntimeFixture } from "./registered-runtime.ts";
+import { registerComputerFixture } from "./registered-computer.ts";
 
 class Inbox {
     readonly received: Record<string, unknown>[] = [];
@@ -32,15 +32,15 @@ class Inbox {
     };
 }
 
-// @no-uc: Runtime transport regression. HTTP native queries must not multiply live-event egress.
+// @no-uc: Computer transport regression. HTTP native queries must not multiply live-event egress.
 it("isolates native query replies from live fanout across hibernation and daemon disconnect", async () => {
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(computerId);
+    await registerComputerFixture(computerId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const clients: WebSocket[] = [];
     const connect = async (path: string) => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
-        const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
+        const response = await relay.fetch(`https://computer-relay.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
 
@@ -50,7 +50,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
         expect(response.status).toBe(101);
         const socket = response.webSocket;
         if (socket === null) {
-            throw new Error("Expected an upgraded Runtime connection");
+            throw new Error("Expected an upgraded Computer connection");
         }
         const inbox = new Inbox(socket);
         clients.push(socket);
@@ -60,14 +60,14 @@ it("isolates native query replies from live fanout across hibernation and daemon
     try {
         const daemon = await connect("daemon");
         const viewer = await connect("host");
-        expect(await viewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await viewer.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
         const sessionViewer = await connect("host?harness=claude&sessionId=session-7");
-        expect(await sessionViewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await sessionViewer.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
         const queries = await Promise.all(
             Array.from({ length: 16 }, async (_, index) => {
                 const requestId = `query-${index}`;
                 const connection = await connect(`host?nativeRequestId=${requestId}`);
-                expect(await connection.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+                expect(await connection.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
                 return { ...connection, requestId };
             }),
         );
@@ -186,8 +186,8 @@ it("isolates native query replies from live fanout across hibernation and daemon
         daemon.socket.send(reply("query-7"));
         expect(await viewer.inbox.next()).toMatchObject({ kind: "native.session.result", requestId: "query-7" });
         daemon.socket.close(1000, "Controlled daemon restart");
-        expect(await viewer.inbox.next()).toMatchObject({ kind: "runtime.status", online: false });
-        expect(await queries[0]?.inbox.next()).toMatchObject({ kind: "runtime.status", online: false });
+        expect(await viewer.inbox.next()).toMatchObject({ kind: "computer.status", online: false });
+        expect(await queries[0]?.inbox.next()).toMatchObject({ kind: "computer.status", online: false });
     } finally {
         for (const socket of clients) {
             socket.close(1000, "Test complete");

@@ -8,7 +8,7 @@ export function registerQuitCommand(program: Command, context: CliContext): void
     program
         .command("stop")
         .alias("quit")
-        .description("stop the daemon and every active Runtime")
+        .description("stop the daemon and every active Computer")
         .action(async () => {
             const installation = await openMortyInstallation(context.shutdownSignal, process.env);
             await stopDaemon(installation.stateDirectory, context.shutdownSignal);

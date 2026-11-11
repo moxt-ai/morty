@@ -1,20 +1,20 @@
 import { DurableObject } from "cloudflare:workers";
 import {
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import {
     acceptWebSocketHttpTransport,
     type ClaimPairing,
+    type ComputerPairingRequest,
     createLocalSessionOperations,
     createWorkerContext,
     DurableObjectDatabaseAdapter,
     DurableObjectSqlDatabase,
     RelaySockets,
-    type RequestRuntimePairing,
-    type RevokeRuntime,
-    type RuntimePairingRequest,
+    type RequestComputerPairing,
+    type RevokeComputer,
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
@@ -25,7 +25,7 @@ import { decodeComputerDurableObjectPath } from "../entity/computer-durable-obje
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
 import type { ProjectAuditRow, RelayAuditRecord } from "../entity/relay-records.ts";
 import { SessionAccessSigner } from "../entity/session-access-credential.ts";
-import { computerRequestTarget } from "../gateway/runtime-session-routing.ts";
+import { computerRequestTarget } from "../gateway/computer-session-routing.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { ComputerManagementStore } from "../infra/computer-management-store.ts";
 import {
@@ -69,7 +69,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
     constructor(state: DurableObjectState, environment: ConfiguredRelayRelayBindings) {
         super(state, environment);
         state.setWebSocketAutoResponse(
-            new WebSocketRequestResponsePair(RUNTIME_HEARTBEAT_MESSAGE, RUNTIME_HEARTBEAT_ACK_MESSAGE),
+            new WebSocketRequestResponsePair(COMPUTER_HEARTBEAT_MESSAGE, COMPUTER_HEARTBEAT_ACK_MESSAGE),
         );
     }
 
@@ -86,8 +86,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                 logger.child({
                     durableObjectClass: "ComputerRelay",
                     durableObjectId: this.ctx.id.toString(),
-                    runtimeInstanceId: crypto.randomUUID(),
-                    runtimeInstanceStartedAt: Date.now(),
+                    computerInstanceId: crypto.randomUUID(),
+                    computerInstanceStartedAt: Date.now(),
                 }),
             ),
         };
@@ -188,20 +188,20 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).readActiveGeneration(computerId, uncancelled);
     }
 
-    async readRuntime(computerId: string): Promise<Result<"readRuntime">> {
-        return await this.#operate(computerId).readRuntime(computerId, uncancelled);
+    async readComputer(computerId: string): Promise<Result<"readComputer">> {
+        return await this.#operate(computerId).readComputer(computerId, uncancelled);
     }
 
-    async listRuntimes(computerId: string): Promise<Result<"listRuntimes">> {
-        return await this.#operate(computerId).listRuntimes(uncancelled);
+    async listComputers(computerId: string): Promise<Result<"listComputers">> {
+        return await this.#operate(computerId).listComputers(uncancelled);
     }
 
-    async requestRuntimePairing(computerId: string, value: RequestRuntimePairing): Promise<RuntimePairingRequest> {
-        return await this.#operate(computerId).requestRuntimePairing(value, uncancelled);
+    async requestComputerPairing(computerId: string, value: RequestComputerPairing): Promise<ComputerPairingRequest> {
+        return await this.#operate(computerId).requestComputerPairing(value, uncancelled);
     }
 
-    async readRuntimePairing(computerId: string): Promise<Result<"readRuntimePairing">> {
-        return await this.#operate(computerId).readRuntimePairing(computerId, uncancelled);
+    async readComputerPairing(computerId: string): Promise<Result<"readComputerPairing">> {
+        return await this.#operate(computerId).readComputerPairing(computerId, uncancelled);
     }
 
     async readPairingCode(computerId: string, codeHash: string): Promise<Result<"readPairingCode">> {
@@ -212,8 +212,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).claimPairing(value, uncancelled);
     }
 
-    async revokeRuntime(computerId: string, value: RevokeRuntime): Promise<Result<"revokeRuntime">> {
-        return await this.#operate(computerId).revokeRuntime(value, uncancelled);
+    async revokeComputer(computerId: string, value: RevokeComputer): Promise<Result<"revokeComputer">> {
+        return await this.#operate(computerId).revokeComputer(value, uncancelled);
     }
 
     async findCredential(
@@ -223,12 +223,12 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         return await this.#operate(computerId).findCredential(credential, uncancelled);
     }
 
-    async rotateRuntimeCredential(
+    async rotateComputerCredential(
         computerId: string,
         presentedHash: string,
         successorHash: string,
-    ): Promise<Result<"rotateRuntimeCredential">> {
-        return await this.#operate(computerId).rotateRuntimeCredential(presentedHash, successorHash, uncancelled);
+    ): Promise<Result<"rotateComputerCredential">> {
+        return await this.#operate(computerId).rotateComputerCredential(presentedHash, successorHash, uncancelled);
     }
 
     async holdsAccess(computerId: string, holder: SessionAccessHolder): Promise<boolean> {
@@ -267,7 +267,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
         const current = computerRequestTarget(request);
         if (current !== null) {
             if (!this.#owns(current.computerId)) {
-                return Response.json({ error: { code: "runtime_access_denied" } }, { status: 403 });
+                return Response.json({ error: { code: "computer_access_denied" } }, { status: 403 });
             }
             if (current.kind === "transport") {
                 return acceptWebSocketHttpTransport(
@@ -293,7 +293,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                 MORTY_COMPUTER_ID: current.computerId,
                 MORTY_LOCAL_CHANNEL: this.#localChannel,
                 MORTY_COMPUTER_STORE: this.#operate(current.computerId),
-                MORTY_RUNTIME_EXECUTION: {
+                MORTY_COMPUTER_EXECUTION: {
                     computerId: current.computerId,
                     operations: createLocalSessionOperations(this.#connectionsForComputer.context, current.computerId),
                 },
@@ -317,7 +317,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             MORTY_COMPUTER_ID: computerId,
             MORTY_LOCAL_CHANNEL: this.#localChannel,
             MORTY_COMPUTER_STORE: this.#operate(computerId),
-            MORTY_RUNTIME_EXECUTION: {
+            MORTY_COMPUTER_EXECUTION: {
                 computerId,
                 operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
             },

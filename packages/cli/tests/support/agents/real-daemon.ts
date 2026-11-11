@@ -6,18 +6,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
     decodeMessageKind,
     decodeNativeSessionResult,
     decodeSessionEventEnvelope,
     decodeSessionReadyEvent,
+    encodeComputerLivenessReadyEvent,
     encodeNativeSessionCommand,
-    encodeRuntimeLivenessReadyEvent,
     encodeSessionCreateCommand,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -28,18 +28,18 @@ import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
 import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-machine.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
+import { ComputerAgentDependencies } from "../../../src/engine/agent/computer-agents.ts";
 import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery/discover-local-agents.ts";
-import { RuntimeAgentDependencies } from "../../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
+import { ComputerLocalContext, createComputerConfig } from "../../../src/engine/computer/config.ts";
 import {
     HEARTBEAT_ACK_TIMEOUT_MILLISECONDS,
     HEARTBEAT_INTERVAL_MILLISECONDS,
-} from "../../../src/engine/runtime/relay/liveness.ts";
-import { runRuntime } from "../../../src/engine/runtime/run.ts";
+} from "../../../src/engine/computer/relay/liveness.ts";
+import { runComputer } from "../../../src/engine/computer/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
-import { memoryRuntimeCredentials } from "../runtime-credentials.ts";
+import { memoryComputerCredentials } from "../computer-credentials.ts";
 
 export interface DaemonConnectionPeer {
     /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
@@ -157,8 +157,8 @@ async function withDaemonConnection(
         }
     });
     const server = new WebSocketServer({ server: relay });
-    const runtimeTimer = withoutRelayLivenessDeadlines(timer);
-    let runtime: Promise<void> | undefined;
+    const computerTimer = withoutRelayLivenessDeadlines(timer);
+    let computer: Promise<void> | undefined;
     let execution = new AbortController();
     const cliEnvironment = { ...process.env, ...environment, MORTY_STATE_DIRECTORY: join(directory, "state") };
     const cli = async (args: readonly string[], deadline = signal): Promise<void> => {
@@ -202,15 +202,15 @@ async function withDaemonConnection(
             socket = connection;
             connection.on("message", (value, isBinary) => {
                 const message = isBinary ? Buffer.from(value as Buffer) : value.toString();
-                if (typeof message === "string" && message !== RUNTIME_HEARTBEAT_MESSAGE) {
+                if (typeof message === "string" && message !== COMPUTER_HEARTBEAT_MESSAGE) {
                     recentFrames.push(message);
                     if (recentFrames.length > 10) {
                         recentFrames.shift();
                     }
                 }
                 // Like the Relay's host, answer exactly the heartbeat text without the application.
-                if (message === RUNTIME_HEARTBEAT_MESSAGE) {
-                    connection.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                if (message === COMPUTER_HEARTBEAT_MESSAGE) {
+                    connection.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
                     return;
                 }
 
@@ -222,12 +222,12 @@ async function withDaemonConnection(
                     pending.resolve(message);
                 }
             });
-            connection.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+            connection.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
             connected.resolve();
         });
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/real-agent/daemon`);
         // Managed launches perform discovery in the production CLI; only an embedded
-        // runtime needs a catalog prepared by the fixture.
+        // computer needs a catalog prepared by the fixture.
         const config =
             launch === "embedded"
                 ? await (async () => {
@@ -244,15 +244,15 @@ async function withDaemonConnection(
                               `Real ${specification.label} unavailable: ${JSON.stringify(inventory.unavailable)}`,
                           );
                       }
-                      return createRuntimeConfig(
+                      return createComputerConfig(
                           {
-                              credentials: memoryRuntimeCredentials("r".repeat(43)),
+                              credentials: memoryComputerCredentials("r".repeat(43)),
                               computerId: "real-agent",
                               defaultWorkspace: workspace,
                               relayUrl,
                           },
-                          new RuntimeAgentDependencies([agent], adapters),
-                          new RuntimeLocalContext(
+                          new ComputerAgentDependencies([agent], adapters),
+                          new ComputerLocalContext(
                               directory,
                               { ...process.env, ...environment },
                               resolveMaxAcpProcesses(cliEnvironment),
@@ -267,7 +267,7 @@ async function withDaemonConnection(
                     computerId: "real-agent",
                     defaultWorkspace: workspace,
                     relayOrigin: new URL(`http://127.0.0.1:${port(relay)}`),
-                    runtimeCredential: "r".repeat(43),
+                    computerCredential: "r".repeat(43),
                 },
                 signal,
             );
@@ -277,8 +277,8 @@ async function withDaemonConnection(
                 await cli(["start"]);
             } else {
                 execution = new AbortController();
-                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), runtimeTimer);
-                void runtime.catch((error: unknown) => {
+                computer = runComputer(config, AbortSignal.any([signal, execution.signal]), computerTimer);
+                void computer.catch((error: unknown) => {
                     connected.reject(error);
                     waiter?.reject(error);
                 });
@@ -327,7 +327,7 @@ async function withDaemonConnection(
                     }
                 } else {
                     execution.abort();
-                    await runtime;
+                    await computer;
                 }
                 await restoreFiles?.();
                 await start();
@@ -383,7 +383,7 @@ async function withDaemonConnection(
         } finally {
             controller.abort();
             signal.removeEventListener("abort", stopWaiting);
-            await runtime?.catch(() => {});
+            await computer?.catch(() => {});
             for (const connection of server.clients) {
                 connection.terminate();
             }

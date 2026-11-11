@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import { openMortyInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
 import { discoverLocalAgentInventory } from "../../../engine/agent/discovery/discover-local-agents.ts";
-import { RuntimeLocalContext } from "../../../engine/runtime/config.ts";
+import { ComputerLocalContext } from "../../../engine/computer/config.ts";
 import { ensurePrivateDirectory } from "../../../engine/storage/files/local-files.ts";
 import { readStateDirectory } from "../../../storage/state-directory.ts";
 import type { CliContext } from "../../context.ts";
@@ -24,7 +24,7 @@ export function registerAgentsHandler(program: Command, context: CliContext): vo
         .option("--verbose", "include per-Agent detection timing")
         .action(async (options: AgentOptions) => {
             const installation = await openMortyInstallation(context.shutdownSignal, process.env);
-            const localContext = new RuntimeLocalContext(installation.stateDirectory, process.env);
+            const localContext = new ComputerLocalContext(installation.stateDirectory, process.env);
             const defaultWorkspace = join(readStateDirectory(), "workspace");
             await ensurePrivateDirectory(defaultWorkspace);
             const inventory = await discoverLocalAgentInventory({

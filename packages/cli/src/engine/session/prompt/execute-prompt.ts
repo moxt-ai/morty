@@ -14,7 +14,7 @@ import type { PromptLifecycle } from "./prompt-lifecycle.ts";
 export interface ExecutePromptOptions {
     readonly eventProjection: PromptLifecycle;
     readonly command: SessionPromptCommand;
-    /** The Session the prompt names, as this Runtime holds it. */
+    /** The Session the prompt names, as this Computer holds it. */
     readonly session: StoredSession;
     readonly resolveAgent: ResolveAgent;
     readonly readArtifact: ReadPromptArtifact;

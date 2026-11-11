@@ -2,6 +2,10 @@ import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "
 import { env } from "cloudflare:workers";
 import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
+    computerCredentialSuccessor,
     decodeContentChunkFrame,
     decodeDaemonToServiceMessage,
     decodeServiceToDaemonMessage,
@@ -31,22 +35,18 @@ import {
     encodeSessionTurnStoppedEvent,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
-    runtimeCredentialSuccessor,
     type SessionConfigReadResult,
 } from "@morty-build/client/protocol";
 import { DurableObjectSqlDatabase, RelaySockets, SessionControl } from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { requestTestRuntimeControl } from "../../relay-test-support/src/backend-fixture.ts";
-import { ComputerRelay as RelayRuntimeRelay } from "../src/durable-objects/computer-relay.ts";
+import { requestTestComputerControl } from "../../relay-test-support/src/backend-fixture.ts";
+import { ComputerRelay as RelayComputerRelay } from "../src/durable-objects/computer-relay.ts";
 import { createRelayDurableObjectContext } from "../src/durable-objects/relay-durable-object-context.ts";
 import { createRelayGateways, RelayAuthenticationConfiguration, type RelayRelayBindings } from "../src/relay-worker.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
-import { computerManagementStore } from "./registered-runtime.ts";
+import { computerManagementStore } from "./registered-computer.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -104,12 +104,12 @@ class DaemonCredential {
     }
 
     readonly connect = async (fetch: (request: Request) => Response | Promise<Response>): Promise<Response> => {
-        const successor = runtimeCredentialSuccessor(this.#current);
+        const successor = computerCredentialSuccessor(this.#current);
         const response = await fetch(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/runtimes/connect`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/computers/connect`, {
                 headers: {
                     authorization: `Bearer ${this.#current}`,
-                    [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: successor,
+                    [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]: successor,
                     Upgrade: "websocket",
                 },
             }),
@@ -259,7 +259,7 @@ describe.sequential("Relay Session-only boundary", () => {
         expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
     });
 
-    it("Given a linked Codex Runtime with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
+    it("Given a linked Codex Computer with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
         vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
@@ -270,7 +270,7 @@ describe.sequential("Relay Session-only boundary", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "private-reconnect-runtime" }),
+                    body: JSON.stringify({ idempotencyKey: "private-reconnect-computer" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -283,7 +283,7 @@ describe.sequential("Relay Session-only boundary", () => {
                 new Request(redemptionUrl, {
                     body: JSON.stringify({
                         agents: readyAgents,
-                        machineName: "Private reconnect Runtime",
+                        machineName: "Private reconnect Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "private-reconnect-workspace",
                     }),
@@ -300,7 +300,7 @@ describe.sequential("Relay Session-only boundary", () => {
             computerId,
         });
         const sessionId = "local-codex-session";
-        const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+        const daemonCredential = new DaemonCredential(text(claimed, "computerCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         expect(daemonResponse.status).toBe(101);
         if (daemonResponse.webSocket === null) {
@@ -313,10 +313,10 @@ describe.sequential("Relay Session-only boundary", () => {
         daemon.accept();
         host.accept();
         try {
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: true });
+            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
+            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
             const rollback = {
-                kind: "runtime.upgrade.result",
+                kind: "computer.upgrade.result",
                 requestId: "local-npm-upgrade",
                 version: "0.0.227",
                 targetVersion: "0.0.228",
@@ -329,7 +329,7 @@ describe.sequential("Relay Session-only boundary", () => {
             };
             daemon.send(JSON.stringify(rollback));
             expect(JSON.parse(await hostMessages.next())).toEqual(rollback);
-            const closeResponse = requestTestRuntimeControl(
+            const closeResponse = requestTestComputerControl(
                 env,
                 computerId,
                 { kind: "session.close", requestId: crypto.randomUUID(), target: nativeTarget("session-to-close") },
@@ -361,7 +361,7 @@ describe.sequential("Relay Session-only boundary", () => {
                 requestId: closeCommand.requestId,
                 target: nativeTarget("session-to-close"),
             });
-            const archiveResponse = requestTestRuntimeControl(
+            const archiveResponse = requestTestComputerControl(
                 env,
                 computerId,
                 { kind: "session.archive", requestId: crypto.randomUUID(), target: nativeTarget("session-to-close") },
@@ -384,7 +384,7 @@ describe.sequential("Relay Session-only boundary", () => {
             // Native HTTP probes use request-reply connections, while this viewer keeps its live subscription.
             for (const outcome of ["idle", "busy"] as const) {
                 const activeTurnResponse = new SessionControl(
-                    (command) => requestTestRuntimeControl(env, computerId, command, AbortSignal.timeout(10000)),
+                    (command) => requestTestComputerControl(env, computerId, command, AbortSignal.timeout(10000)),
                     nativeTarget(sessionId),
                 ).activeTurn();
                 const query = decodeServiceToDaemonMessage(await daemonMessages.next());
@@ -441,9 +441,9 @@ describe.sequential("Relay Session-only boundary", () => {
                     requestId: "settings-overflow",
                 }),
             );
-            host.send(JSON.stringify({ kind: "runtime.ping", requestId: "settings-capacity-barrier" }));
+            host.send(JSON.stringify({ kind: "computer.ping", requestId: "settings-capacity-barrier" }));
             expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject({
-                kind: "runtime.ping",
+                kind: "computer.ping",
                 requestId: "settings-capacity-barrier",
             });
             expect(
@@ -453,7 +453,7 @@ describe.sequential("Relay Session-only boundary", () => {
                 requestId: "settings-overflow",
                 code: "agent_settings_discovery_busy",
             });
-            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("runtime.ping");
+            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("computer.ping");
             for (const request of discoveryRequests) {
                 daemon.send(
                     JSON.stringify({
@@ -468,7 +468,7 @@ describe.sequential("Relay Session-only boundary", () => {
                     requestId: request.requestId,
                 });
             }
-            // Native imports and forks share this Runtime transport with configuration and live output.
+            // Native imports and forks share this Computer transport with configuration and live output.
             const closed = Promise.withResolvers<{ readonly kind: "closed"; readonly code: number }>();
             daemon.addEventListener("close", (event) => closed.resolve({ kind: "closed", code: event.code }), {
                 once: true,
@@ -507,12 +507,12 @@ describe.sequential("Relay Session-only boundary", () => {
                     requestId: "settings-before-wake",
                 }),
             );
-            host.send(JSON.stringify({ kind: "runtime.ping", requestId: "settings-duplicate-barrier" }));
+            host.send(JSON.stringify({ kind: "computer.ping", requestId: "settings-duplicate-barrier" }));
             expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject({
-                kind: "runtime.ping",
+                kind: "computer.ping",
                 requestId: "settings-duplicate-barrier",
             });
-            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("runtime.ping");
+            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("computer.ping");
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             for (const action of ["import", "fork"] as const) {
                 const requestId = `native-${action}-request`;
@@ -580,8 +580,8 @@ describe.sequential("Relay Session-only boundary", () => {
                     message: "Controlled discovery failure",
                 }),
             );
-            // Runtime and Session lanes can overtake each other. Keep this barrier
-            // on the settings response's Runtime lane to detect a dropped route.
+            // Computer and Session lanes can overtake each other. Keep this barrier
+            // on the settings response's Computer lane to detect a dropped route.
             const settingsBarrier = { ...rollback, requestId: "settings-response-barrier" };
             daemon.send(JSON.stringify(settingsBarrier));
             expect(JSON.parse(await hostMessages.next())).toMatchObject({
@@ -591,7 +591,7 @@ describe.sequential("Relay Session-only boundary", () => {
             });
             expect(JSON.parse(await hostMessages.next())).toEqual(settingsBarrier);
             vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-            // Unknown Runtime output keeps its explicit Session route and payload.
+            // Unknown Computer output keeps its explicit Session route and payload.
             daemon.send(
                 JSON.stringify({ kind: "session.future.changed", target: nativeTarget(sessionId), value: "future" }),
             );
@@ -647,7 +647,7 @@ describe.sequential("Relay Session-only boundary", () => {
             const prompt = decodeServiceToDaemonMessage(await daemonMessages.next());
             expect(prompt.kind).toBe("session.prompt");
             if (prompt.kind !== "session.prompt") {
-                throw new Error("Expected the prompt to reach the local Runtime");
+                throw new Error("Expected the prompt to reach the local Computer");
             }
             expect(decodeSessionPromptCommand(JSON.stringify(prompt)).prompt).toBe("show the local answer");
             const answer = liveEvent(nativeTarget(sessionId), "local answer");
@@ -788,9 +788,9 @@ describe.sequential("Relay Session-only boundary", () => {
                 truncated: false,
                 version: 2,
             });
-            // Direct Runtime HTTP owns the response until it completes; hibernate between requests.
+            // Direct Computer HTTP owns the response until it completes; hibernate between requests.
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            // A delayed result after the caller has finished must not disconnect the Runtime.
+            // A delayed result after the caller has finished must not disconnect the Computer.
             daemon.send(historyPage);
             const previewHistoryResponse = worker.fetch(
                 new Request(
@@ -835,7 +835,7 @@ describe.sequential("Relay Session-only boundary", () => {
                 queuedPromptRequests: [],
             });
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            // A delayed result after the caller has finished must not disconnect the Runtime.
+            // A delayed result after the caller has finished must not disconnect the Computer.
             daemon.send(previewHistoryPage);
             const failedPreviewHistoryResponse = worker.fetch(
                 new Request(
@@ -869,7 +869,7 @@ describe.sequential("Relay Session-only boundary", () => {
                     message: "The Codex thread is not loaded",
                 },
             });
-            // A Runtime that closed the Session refuses to load its history. The refusal is a typed conflict, so a
+            // A Computer that closed the Session refuses to load its history. The refusal is a typed conflict, so a
             // client can offer to reopen the Session instead of retrying the load.
             const closedHistoryResponse = worker.fetch(
                 new Request(
@@ -952,7 +952,7 @@ describe.sequential("Relay Session-only boundary", () => {
             transport.send(
                 JSON.stringify({
                     kind: "http.request",
-                    requestId: "runtime-agents",
+                    requestId: "computer-agents",
                     method: "GET",
                     path: `${MORTY_API_PREFIX}/v1/computers/${computerId}/daemon/agents`,
                     headers: [["authorization", `Bearer ${appCredential}`]],
@@ -961,7 +961,7 @@ describe.sequential("Relay Session-only boundary", () => {
             );
             expect(JSON.parse(await transportMessages.next())).toMatchObject({
                 kind: "http.error",
-                requestId: "runtime-agents",
+                requestId: "computer-agents",
                 code: "invalid_target",
                 status: 400,
             });
@@ -999,23 +999,23 @@ describe.sequential("Relay Session-only boundary", () => {
                 requestId: "settings-before-disconnect",
             });
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            daemon.close(1000, "Reconnect Runtime");
+            daemon.close(1000, "Reconnect Computer");
             expect(JSON.parse(await hostMessages.next())).toMatchObject({
                 kind: "agent.settings.discovery.failed",
                 requestId: "settings-before-disconnect",
-                code: "runtime_offline",
+                code: "computer_offline",
             });
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: false });
+            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: false });
             const reconnectResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
             expect(reconnectResponse.status).toBe(101);
             if (reconnectResponse.webSocket === null) {
-                throw new Error("Expected the reconnected Runtime socket");
+                throw new Error("Expected the reconnected Computer socket");
             }
             const reconnected = reconnectResponse.webSocket;
             const reconnectMessages = new SocketMessages(reconnected);
             reconnected.accept();
-            expect(decodeServiceToDaemonMessage(await reconnectMessages.next()).kind).toBe("runtime.liveness.ready");
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: true });
+            expect(decodeServiceToDaemonMessage(await reconnectMessages.next()).kind).toBe("computer.liveness.ready");
+            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
             host.send(
                 JSON.stringify({
                     kind: "agent.settings.discover",
@@ -1031,29 +1031,29 @@ describe.sequential("Relay Session-only boundary", () => {
             const replacementResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
             expect(replacementResponse.status).toBe(101);
             if (replacementResponse.webSocket === null) {
-                throw new Error("Expected the replacement Runtime socket");
+                throw new Error("Expected the replacement Computer socket");
             }
             const replacement = replacementResponse.webSocket;
             const replacementMessages = new SocketMessages(replacement);
             replacement.accept();
             try {
                 expect(decodeServiceToDaemonMessage(await replacementMessages.next()).kind).toBe(
-                    "runtime.liveness.ready",
+                    "computer.liveness.ready",
                 );
                 expect(JSON.parse(await hostMessages.next())).toMatchObject({
                     kind: "agent.settings.discovery.failed",
                     requestId: "settings-before-replacement",
-                    code: "runtime_offline",
+                    code: "computer_offline",
                 });
-                expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: true });
+                expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
             } finally {
                 replacement.close(1000, "Test complete");
             }
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "runtime.status", online: false });
+            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: false });
             await runInDurableObject(environment.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
                 const sessionTables = [
                     ...state.storage.sql.exec<{ name: string }>(
-                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('sessions', 'session_bindings', 'session_configuration_snapshots', 'turns', 'attempts', 'interactions', 'pending_work', 'command_receipts', 'session_event_receipts', 'reliable_event_receipts', 'runtime_active_sessions', 'runtime_disconnect')",
+                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('sessions', 'session_bindings', 'session_configuration_snapshots', 'turns', 'attempts', 'interactions', 'pending_work', 'command_receipts', 'session_event_receipts', 'reliable_event_receipts', 'computer_active_sessions', 'computer_disconnect')",
                     ),
                 ];
                 expect(sessionTables).toEqual([]);
@@ -1082,7 +1082,7 @@ describe.sequential("Relay Session-only boundary", () => {
         }
     }, 180_000);
 
-    it("Given a machine with no discovered local Agent, When it redeems a Runtime pairing and publishes its catalog, Then pairing succeeds and the Runtime advertises an empty Agent directory", async () => {
+    it("Given a machine with no discovered local Agent, When it redeems a Computer pairing and publishes its catalog, Then pairing succeeds and the Computer advertises an empty Agent directory", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
         const owner = await createOwner();
@@ -1092,7 +1092,7 @@ describe.sequential("Relay Session-only boundary", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "unattended-runtime" }),
+                    body: JSON.stringify({ idempotencyKey: "unattended-computer" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -1105,7 +1105,7 @@ describe.sequential("Relay Session-only boundary", () => {
                     body: JSON.stringify({
                         agents: [],
                         futureClientField: "unknown keys are tolerated",
-                        machineName: "Unattended Runtime",
+                        machineName: "Unattended Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "unattended-workspace",
                     }),
@@ -1116,14 +1116,14 @@ describe.sequential("Relay Session-only boundary", () => {
             ),
             200,
         );
-        const runtimeCredential = text(claimed, "runtimeCredential");
+        const computerCredential = text(claimed, "computerCredential");
 
         expect(await backend.agents(AbortSignal.timeout(10000))).toMatchObject({ agents: [], computerId });
 
         const catalogUpdate = await worker.fetch(
             new Request(`${relayOrigin}${MORTY_API_PREFIX}/channels/${text(claimed, "computerId")}/catalog`, {
                 body: JSON.stringify({ agents: [], "ignored keys are tolerated": true }),
-                headers: { authorization: `Bearer ${runtimeCredential}`, "content-type": "application/json" },
+                headers: { authorization: `Bearer ${computerCredential}`, "content-type": "application/json" },
                 method: "PUT",
             }),
             environment,
@@ -1134,13 +1134,13 @@ describe.sequential("Relay Session-only boundary", () => {
 });
 
 /**
- * Pairs a Runtime, connects its daemon with liveness, and grants Chat access to one Session.
+ * Pairs a Computer, connects its daemon with liveness, and grants Chat access to one Session.
  *
  * Cloudflare stamps heartbeat answers with its own clock, which fake timers cannot move. With
  * `anchorClockToHeartbeat`, the daemon heartbeats once and the fake clock is set to that answer
  * before the Session credential is issued, so later times are explicit offsets from it.
  */
-async function connectRuntimeDaemon(slug: string, options: { readonly anchorClockToHeartbeat?: boolean } = {}) {
+async function connectComputerDaemon(slug: string, options: { readonly anchorClockToHeartbeat?: boolean } = {}) {
     const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
     const environment = bindings();
     const owner = await createOwner();
@@ -1163,7 +1163,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: readyAgents,
-                        machineName: `${slug} Runtime`,
+                        machineName: `${slug} Computer`,
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: `${slug}-workspace`,
                     }),
@@ -1174,13 +1174,13 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
             ),
             200,
         );
-        return new DaemonCredential(text(claimed, "runtimeCredential"));
+        return new DaemonCredential(text(claimed, "computerCredential"));
     };
     const sessionId = `${slug}-session`;
-    const daemonCredential = await pairComputer(`${slug}-runtime`);
+    const daemonCredential = await pairComputer(`${slug}-computer`);
     const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
     if (daemonResponse.webSocket === null) {
-        throw new Error("Expected the Runtime socket");
+        throw new Error("Expected the Computer socket");
     }
     const daemon = daemonResponse.webSocket;
     const daemonMessages = new SocketMessages(daemon);
@@ -1188,11 +1188,11 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         daemon.addEventListener("close", resolve, { once: true });
     });
     daemon.accept();
-    expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
+    expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
     /** Heartbeats exactly as the daemon does and returns when Cloudflare answered, by its own clock. */
     const heartbeat = async (): Promise<number> => {
-        daemon.send(RUNTIME_HEARTBEAT_MESSAGE);
-        expect(await daemonMessages.next()).toBe(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+        daemon.send(COMPUTER_HEARTBEAT_MESSAGE);
+        expect(await daemonMessages.next()).toBe(COMPUTER_HEARTBEAT_ACK_MESSAGE);
         return await runInDurableObject(environment.COMPUTER_RELAY.getByName(computerId), (_instance, state) => {
             const socket = state.getWebSockets("daemon")[0];
             const answeredAt = socket === undefined ? null : state.getWebSocketAutoResponseTimestamp(socket);
@@ -1218,7 +1218,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         computerId,
         sessionTarget: nativeTarget(sessionId),
         revoke: async () => {
-            await backend.revokeRuntime(AbortSignal.timeout(10000));
+            await backend.revokeComputer(AbortSignal.timeout(10000));
             return new Response(null, { status: 204 });
         },
         reconnect: () => daemonCredential.connect((request) => worker.fetch(request, environment)),
@@ -1331,7 +1331,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         daemonMessages,
         heartbeat,
         readOnline: async () => (await backend.agents(AbortSignal.timeout(10000)))["online"],
-        /** Starts the submitted Turn: the Runtime records its start and answers the submission as running. */
+        /** Starts the submitted Turn: the Computer records its start and answers the submission as running. */
         startTurn: (commandId: string, position: string) => {
             daemon.send(
                 encodeSessionEventEnvelope({
@@ -1363,7 +1363,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 }),
             );
         },
-        issueRuntimeCredential: async (_targetComputerId: string) =>
+        issueComputerCredential: async (_targetComputerId: string) =>
             (await issueSession(computerId, nativeTarget(sessionId))).credential,
         queryActiveTurn: async (signal: AbortSignal) =>
             worker.fetch(
@@ -1385,7 +1385,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 ),
                 environment,
             ),
-        submitRuntimeTurn: (
+        submitComputerTurn: (
             idempotencyKey: string,
             credentialTransform: (credential: string) => string = (credential) => credential,
             requestedSessionId: string = sessionId,
@@ -1434,10 +1434,10 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
 }
 
 it.each(["text", "binary"])(
-    "Given a connected Runtime, When revocation commits but disconnect delivery fails and a %s message arrives, Then later events reach no viewer and the daemon is closed",
+    "Given a connected Computer, When revocation commits but disconnect delivery fails and a %s message arrives, Then later events reach no viewer and the daemon is closed",
     async (format) => {
-        const runtime = await connectRuntimeDaemon(`revoked-stream-${format}`);
-        const response = await runtime.subscribe();
+        const computer = await connectComputerDaemon(`revoked-stream-${format}`);
+        const response = await computer.subscribe();
         expect(response.status).toBe(101);
         const viewer = response.webSocket;
         if (viewer === null) {
@@ -1450,7 +1450,7 @@ it.each(["text", "binary"])(
         });
         viewer.accept();
         const deliver = (message: string | Uint8Array) =>
-            runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
+            runInDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectSqlDatabase(state.storage);
                 const context = createRelayDurableObjectContext(state, bindings(), {
@@ -1471,7 +1471,7 @@ it.each(["text", "binary"])(
                 );
                 const daemon = state.getWebSockets("daemon")[0];
                 if (daemon === undefined) {
-                    throw new Error("Expected the accepted Runtime connection");
+                    throw new Error("Expected the accepted Computer connection");
                 }
                 await relay.webSocketMessage(
                     daemon,
@@ -1480,89 +1480,89 @@ it.each(["text", "binary"])(
                 await Promise.all(pending);
             });
         try {
-            await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
+            await deliver(liveEvent(computer.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
-            await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
+            await runInDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), (_instance, state) => {
+                state.storage.sql.exec(`CREATE TRIGGER reject_computer_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
-                await expect(runtime.revoke()).rejects.toMatchObject({ code: "runtime_disconnect_failed" });
+                await expect(computer.revoke()).rejects.toMatchObject({ code: "computer_disconnect_failed" });
             } finally {
-                await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                    state.storage.sql.exec("DROP TRIGGER reject_runtime_disconnect");
+                await runInDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), (_instance, state) => {
+                    state.storage.sql.exec("DROP TRIGGER reject_computer_disconnect");
                 });
             }
-            // A revoked Runtime's daemon is told so, and stops instead of retrying.
-            const reconnected = await runtime.reconnect();
+            // A revoked Computer's daemon is told so, and stops instead of retrying.
+            const reconnected = await computer.reconnect();
             expect(reconnected.status).toBe(101);
             const refused = reconnected.webSocket;
             if (refused === null) {
-                throw new Error("Expected the refused Runtime socket");
+                throw new Error("Expected the refused Computer socket");
             }
             const refusal = new Promise<CloseEvent>((resolve) =>
                 refused.addEventListener("close", resolve, { once: true }),
             );
             refused.accept();
-            expect(await refusal).toMatchObject({ code: 1008, reason: "Runtime revoked" });
+            expect(await refusal).toMatchObject({ code: 1008, reason: "Computer revoked" });
             await deliver(
                 format === "text"
-                    ? liveEvent(runtime.sessionTarget, "after revocation")
+                    ? liveEvent(computer.sessionTarget, "after revocation")
                     : encodeContentChunkFrame({
                           bytes: new Uint8Array([1, 2]),
                           requestId: "revoked-file",
                           sequence: 0,
                       }),
             );
-            expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Runtime revoked" });
+            expect(await computer.daemonClosed).toMatchObject({ code: 1008, reason: "Computer revoked" });
             expect(received).toHaveLength(1);
-            expect((await runtime.revoke()).status).toBe(204);
+            expect((await computer.revoke()).status).toBe(204);
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
             viewer.close(1000, "Test complete");
         }
     },
 );
 
-it("Given a Runtime its owner revoked and then paired again, When the earlier daemon reconnects with its saved credential, Then the Relay tells it the Runtime was revoked while the new daemon connects", async () => {
-    const runtime = await connectRuntimeDaemon("paired-again");
+it("Given a Computer its owner revoked and then paired again, When the earlier daemon reconnects with its saved credential, Then the Relay tells it the Computer was revoked while the new daemon connects", async () => {
+    const computer = await connectComputerDaemon("paired-again");
     try {
-        expect((await runtime.revoke()).status).toBe(204);
-        expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Runtime revoked" });
-        const replacement = await runtime.pairAgain("paired-again-replacement");
+        expect((await computer.revoke()).status).toBe(204);
+        expect(await computer.daemonClosed).toMatchObject({ code: 1008, reason: "Computer revoked" });
+        const replacement = await computer.pairAgain("paired-again-replacement");
 
-        const earlier = await runtime.reconnect();
+        const earlier = await computer.reconnect();
 
         expect(earlier.status).toBe(101);
         const refused = earlier.webSocket;
         if (refused === null) {
-            throw new Error("Expected the refused Runtime socket");
+            throw new Error("Expected the refused Computer socket");
         }
         const refusal = new Promise<CloseEvent>((resolve) =>
             refused.addEventListener("close", resolve, { once: true }),
         );
         refused.accept();
-        expect(await refusal).toMatchObject({ code: 1008, reason: "Runtime revoked" });
-        const connected = await runtime.connect(replacement);
+        expect(await refusal).toMatchObject({ code: 1008, reason: "Computer revoked" });
+        const connected = await computer.connect(replacement);
         const daemon = connected.webSocket;
         if (daemon === null) {
-            throw new Error("Expected the paired Runtime socket");
+            throw new Error("Expected the paired Computer socket");
         }
         const messages = new SocketMessages(daemon);
         daemon.accept();
-        expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("runtime.liveness.ready");
+        expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("computer.liveness.ready");
         daemon.close(1000, "Test complete");
     } finally {
-        runtime.daemon.close(1000, "Test complete");
+        computer.daemon.close(1000, "Test complete");
     }
 });
 
-it("Given Chat reads the Session execution naming an unconfirmed command, When the Runtime reports that command's delivery, Then the Relay returns the delivery", async () => {
-    const runtime = await connectRuntimeDaemon("command-delivery");
+it("Given Chat reads the Session execution naming an unconfirmed command, When the Computer reports that command's delivery, Then the Relay returns the delivery", async () => {
+    const computer = await connectComputerDaemon("command-delivery");
     try {
-        const response = runtime.readSessionExecution("unconfirmed-command");
+        const response = computer.readSessionExecution("unconfirmed-command");
         const first = await Promise.race([
-            runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+            computer.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
             response.then((answered) => ({ kind: "response" as const, response: answered })),
         ]);
         if (first.kind === "response") {
@@ -1575,12 +1575,12 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
             throw new Error("Expected the Session execution read to reach the daemon");
         }
         expect(query.deliveryCommandId).toBe("unconfirmed-command");
-        runtime.daemon.send(
+        computer.daemon.send(
             encodeNativeSessionResult({
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId: query.requestId,
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
                 turn: null,
                 queued: [],
                 command: { state: "completed", stopReason: "end_turn" },
@@ -1593,16 +1593,16 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
             command: { state: "completed", stopReason: "end_turn" },
         });
     } finally {
-        runtime.daemon.close(1000, "Test complete");
+        computer.daemon.close(1000, "Test complete");
     }
 });
 
-it("Given Chat reads the Session execution after missing a turn's outcome, When the Runtime reports the last turn, Then the Relay returns the outcome", async () => {
-    const runtime = await connectRuntimeDaemon("last-turn");
+it("Given Chat reads the Session execution after missing a turn's outcome, When the Computer reports the last turn, Then the Relay returns the outcome", async () => {
+    const computer = await connectComputerDaemon("last-turn");
     try {
-        const response = runtime.readSessionExecution();
+        const response = computer.readSessionExecution();
         const first = await Promise.race([
-            runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+            computer.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
             response.then((answered) => ({ kind: "response" as const, response: answered })),
         ]);
         if (first.kind === "response") {
@@ -1615,12 +1615,12 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
             throw new Error("Expected the Session execution read to reach the daemon");
         }
         expect(query).not.toHaveProperty("deliveryCommandId");
-        runtime.daemon.send(
+        computer.daemon.send(
             encodeNativeSessionResult({
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId: query.requestId,
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
@@ -1640,71 +1640,71 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
             lastTurn: { commandId: "failed-command", state: "failed", code: "model_unavailable" },
         });
     } finally {
-        runtime.daemon.close(1000, "Test complete");
+        computer.daemon.close(1000, "Test complete");
     }
 });
 
 describe.sequential("Relay Turn submission", () => {
     it.each(["session"] as const)(
-        "Given %s access cancels a Turn, When the Runtime reports cancellation or prior completion, Then the response reports the Turn's actual stop reason",
+        "Given %s access cancels a Turn, When the Computer reports cancellation or prior completion, Then the response reports the Turn's actual stop reason",
         async (access) => {
-            const runtime = await connectRuntimeDaemon(`legacy-queue-cancel-${access.replace(" ", "-")}`);
+            const computer = await connectComputerDaemon(`legacy-queue-cancel-${access.replace(" ", "-")}`);
             try {
                 for (const stopReason of ["cancelled", "end_turn"] as const) {
                     const turnId = `legacy-${stopReason}`;
                     const body = {};
                     const path = `/turns/${turnId}/cancel`;
-                    const response = runtime.sessionControlRequest(path, body);
-                    const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+                    const response = computer.sessionControlRequest(path, body);
+                    const cancellation = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
                     expect(cancellation).toEqual({
                         commandId: turnId,
                         kind: "session.cancel",
                         requestId: expect.any(String),
-                        target: runtime.sessionTarget,
+                        target: computer.sessionTarget,
                     });
                     if (cancellation.kind !== "session.cancel") {
                         throw new Error("Expected a cancellation");
                     }
-                    runtime.daemon.send(
+                    computer.daemon.send(
                         encodeSessionTurnStoppedEvent({
                             commandId: turnId,
                             kind: "session.turn.stopped",
                             requestId: cancellation.requestId,
-                            target: runtime.sessionTarget,
+                            target: computer.sessionTarget,
                             stopReason,
                         }),
                     );
                     expect(await responseJson(await response, 200)).toEqual({ turnId, stopReason });
                 }
             } finally {
-                runtime.daemon.close(1000, "Test complete");
+                computer.daemon.close(1000, "Test complete");
             }
         },
     );
 
     it.each(["session"] as const)(
-        "Given %s access withdraws a queued message, When the Runtime refuses because it already started, Then the conditional endpoint rejects the edit",
+        "Given %s access withdraws a queued message, When the Computer refuses because it already started, Then the conditional endpoint rejects the edit",
         async (access) => {
-            const runtime = await connectRuntimeDaemon(`conditional-queue-cancel-${access}`);
+            const computer = await connectComputerDaemon(`conditional-queue-cancel-${access}`);
             try {
                 const body = {};
                 const path = "/turns/queued-command/cancel-before-start";
-                const response = runtime.sessionControlRequest(path, body);
-                const withdrawal = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+                const response = computer.sessionControlRequest(path, body);
+                const withdrawal = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
                 expect(withdrawal).toEqual({
                     commandId: "queued-command",
                     kind: "session.cancel-before-start",
                     requestId: expect.any(String),
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                 });
                 if (withdrawal.kind !== "session.cancel-before-start") {
                     throw new Error("Expected a withdrawal");
                 }
-                runtime.daemon.send(
+                computer.daemon.send(
                     encodeSessionOperationFailedEvent({
                         kind: "session.operation.failed",
                         requestId: withdrawal.requestId,
-                        target: runtime.sessionTarget,
+                        target: computer.sessionTarget,
                         code: "turn_already_started",
                         message: "The message already started and could not be withdrawn",
                     }),
@@ -1713,12 +1713,12 @@ describe.sequential("Relay Turn submission", () => {
                     error: { code: "turn_already_started" },
                 });
             } finally {
-                runtime.daemon.close(1000, "Test complete");
+                computer.daemon.close(1000, "Test complete");
             }
         },
     );
 
-    // @no-uc: Compatibility; trusted backends must control a Runtime Session without delegated Session access.
+    // @no-uc: Compatibility; trusted backends must control a Computer Session without delegated Session access.
     it.each([
         {
             label: "cancels the selected message",
@@ -1776,46 +1776,46 @@ describe.sequential("Relay Turn submission", () => {
             expected: { accepted: true },
         },
     ] as const)("Session access $label", async (operation) => {
-        const runtime = await connectRuntimeDaemon(`app-control-${operation.command.kind.replaceAll(".", "-")}`);
+        const computer = await connectComputerDaemon(`app-control-${operation.command.kind.replaceAll(".", "-")}`);
         try {
-            const response = runtime.appSessionRequest(operation.path, operation);
+            const response = computer.appSessionRequest(operation.path, operation);
             const first = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
-            expect(command).toMatchObject({ ...operation.command, target: runtime.sessionTarget });
+            expect(command).toMatchObject({ ...operation.command, target: computer.sessionTarget });
             if (!("requestId" in command)) {
                 throw new Error("Expected the command to name its own request");
             }
-            runtime.daemon.send(
-                JSON.stringify({ ...operation.reply, requestId: command.requestId, target: runtime.sessionTarget }),
+            computer.daemon.send(
+                JSON.stringify({ ...operation.reply, requestId: command.requestId, target: computer.sessionTarget }),
             );
             expect(await responseJson(await response, 200)).toMatchObject(operation.expected);
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
 
-    // @no-uc: Technical regression; a read-only App credential must load a Runtime event page through its cursor.
-    it("Session access restores a Runtime event page with read permission", async () => {
-        const runtime = await connectRuntimeDaemon("app-history");
+    // @no-uc: Technical regression; a read-only App credential must load a Computer event page through its cursor.
+    it("Session access restores a Computer event page with read permission", async () => {
+        const computer = await connectComputerDaemon("app-history");
         try {
-            const readOnly = await runtime.issueRuntimeCredential(runtime.computerId);
-            const response = runtime.appSessionRequest("/events-v2?limit=2&cursor=previous-event", {
+            const readOnly = await computer.issueComputerCredential(computer.computerId);
+            const response = computer.appSessionRequest("/events-v2?limit=2&cursor=previous-event", {
                 method: "GET",
                 credential: readOnly,
             });
             const first = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
             expect(command).toMatchObject({
                 kind: "session.live-history.v2.page.load",
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
                 eventLimit: 2,
                 cursor: "previous-event",
             });
@@ -1831,46 +1831,46 @@ describe.sequential("Relay Turn submission", () => {
                 truncated: true,
                 version: 2 as const,
             };
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeSessionHistoryPageLoaded({
                     kind: "session.live-history.v2.page.loaded",
                     requestId: command.requestId,
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     events: { events: page, queuedPromptRequests: [] },
                 }),
             );
             expect(await responseJson(await response, 200)).toEqual(page);
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
 
-    it("Given Runtime read permission, When an App reads Session configuration, Then the matching Runtime settings are returned without write permission", async () => {
-        const runtime = await connectRuntimeDaemon("app-configuration-read");
+    it("Given Computer read permission, When an App reads Session configuration, Then the matching Computer settings are returned without write permission", async () => {
+        const computer = await connectComputerDaemon("app-configuration-read");
         try {
-            const readOnly = await runtime.issueRuntimeCredential(runtime.computerId);
-            const response = runtime.appSessionRequest("/configuration", { method: "GET", credential: readOnly });
+            const readOnly = await computer.issueComputerCredential(computer.computerId);
+            const response = computer.appSessionRequest("/configuration", { method: "GET", credential: readOnly });
             const first = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
-            expect(command).toMatchObject({ kind: "session.config.read", target: runtime.sessionTarget });
+            expect(command).toMatchObject({ kind: "session.config.read", target: computer.sessionTarget });
             if (command.kind !== "session.config.read") {
                 throw new Error("Expected a configuration request");
             }
             const result: SessionConfigReadResult = {
                 kind: "session.config.read.result",
                 requestId: command.requestId,
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
                 configurationRevision: "revision-1",
                 configOptions: [],
             };
-            runtime.daemon.send(encodeSessionConfigReadResult(result));
+            computer.daemon.send(encodeSessionConfigReadResult(result));
             expect(await responseJson(await response, 200)).toEqual(result);
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
 
@@ -1896,18 +1896,18 @@ describe.sequential("Relay Turn submission", () => {
         { label: "empty event page", path: "/events-v2?limit=0", method: "GET" },
         { label: "empty event cursor", path: "/events-v2?cursor=", method: "GET" },
     ])("Session access reports $label as an invalid request", async (operation) => {
-        const runtime = await connectRuntimeDaemon("app-invalid-request");
+        const computer = await connectComputerDaemon("app-invalid-request");
         try {
-            expect(await responseJson(await runtime.appSessionRequest(operation.path, operation), 400)).toMatchObject({
+            expect(await responseJson(await computer.appSessionRequest(operation.path, operation), 400)).toMatchObject({
                 error: { code: "invalid_request" },
             });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
 
     it("Session access uploads raw attachment chunks before submitting a reference-only Turn", async () => {
-        const runtime = await connectRuntimeDaemon("app-binary-attachment");
+        const computer = await connectComputerDaemon("app-binary-attachment");
         try {
             const bytes = new Uint8Array(400 * 1024).map((_value, index) => index % 251);
             const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -1918,28 +1918,28 @@ describe.sequential("Relay Turn submission", () => {
                 name: "screenshot.png",
                 uri: "attachment:///screenshot.png",
             };
-            const upload = runtime.uploadContent(contentKey, bytes, metadata);
-            const write = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+            const upload = computer.uploadContent(contentKey, bytes, metadata);
+            const write = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
             expect(write).toMatchObject({
                 byteLength: bytes.byteLength,
                 contentKey,
                 contentKind: "image",
                 kind: "content.write",
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
             });
             if (write.kind !== "content.write") {
                 throw new Error("Expected a content write command");
             }
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeContentReadyEvent({
                     kind: "content.ready",
                     requestId: write.requestId,
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                 }),
             );
             const chunks: Uint8Array[] = [];
             for (;;) {
-                const frame = await runtime.daemonMessages.nextFrame();
+                const frame = await computer.daemonMessages.nextFrame();
                 if (typeof frame === "string") {
                     const command = decodeServiceToDaemonMessage(frame);
                     if (command.kind === "content.commit" && command.requestId === write.requestId) {
@@ -1963,13 +1963,13 @@ describe.sequential("Relay Turn submission", () => {
             }
             expect(uploadedBytes).toEqual(bytes);
             expect(chunks.length).toBeGreaterThan(1);
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeContentAvailableEvent({
                     byteLength: bytes.byteLength,
                     contentKey,
                     kind: "content.available",
                     requestId: write.requestId,
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                 }),
             );
             const attachment = await responseJson(await upload, 200);
@@ -1982,7 +1982,7 @@ describe.sequential("Relay Turn submission", () => {
             expect(attachment).toEqual({ byteLength: bytes.byteLength, contentKey, ...attachmentMetadata });
 
             const idempotencyKey = "binary-attachment-turn";
-            const response = runtime.appSessionRequest("/turns", {
+            const response = computer.appSessionRequest("/turns", {
                 method: "POST",
                 body: {
                     content: "Describe the pasted screenshot.",
@@ -1993,7 +1993,7 @@ describe.sequential("Relay Turn submission", () => {
                 },
             });
             const first = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
@@ -2005,22 +2005,22 @@ describe.sequential("Relay Turn submission", () => {
                 kind: "session.prompt",
                 commandId: idempotencyKey,
             });
-            runtime.startTurn(idempotencyKey, "1");
+            computer.startTurn(idempotencyKey, "1");
             expect(await responseJson(await response, 200)).toMatchObject({ turnId: idempotencyKey });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
 
     it("Given a cancelled file response, When a late chunk arrives, Then the shared daemon remains available", async () => {
-        const runtime = await connectRuntimeDaemon("cancelled-file-chunk");
+        const computer = await connectComputerDaemon("cancelled-file-chunk");
         try {
-            const pending = runtime.readFile("/workspace/image.png");
-            const read = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+            const pending = computer.readFile("/workspace/image.png");
+            const read = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
             if (read.kind !== "file.read") {
                 throw new Error("Expected a file read command");
             }
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeFileBeginEvent({
                     byteLength: 2,
                     kind: "file.begin",
@@ -2028,13 +2028,13 @@ describe.sequential("Relay Turn submission", () => {
                     modifiedAt: "2026-09-18T00:00:00.000Z",
                     name: "image.png",
                     requestId: read.requestId,
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                 }),
             );
             const response = await pending;
             await response.body?.cancel();
 
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeContentChunkFrame({
                     bytes: new Uint8Array([1, 2]),
                     requestId: read.requestId,
@@ -2042,12 +2042,12 @@ describe.sequential("Relay Turn submission", () => {
                 }),
             );
 
-            const query = runtime.queryActiveTurn(new AbortController().signal);
-            const command = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+            const query = computer.queryActiveTurn(new AbortController().signal);
+            const command = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
             if (command.kind !== "native.session.request") {
                 throw new Error("Expected an unrelated native query to reach the daemon");
             }
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeNativeSessionResult({
                     action: "active-turn",
                     kind: "native.session.result",
@@ -2056,27 +2056,27 @@ describe.sequential("Relay Turn submission", () => {
                     executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                     interactionState: null,
                     requestId: command.requestId,
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     turn: null,
                 }),
             );
             expect(await responseJson(await query, 200)).toMatchObject({ action: "active-turn", turn: null });
-            expect(runtime.daemon.readyState).toBe(WebSocket.OPEN);
+            expect(computer.daemon.readyState).toBe(WebSocket.OPEN);
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
 
     // @no-uc: Technical regression; independent Durable Object clocks must not reject newly issued credentials.
     it.each([900, 30_000])(
-        "accepts a Session credential issued %i milliseconds ahead of RuntimeRelay",
+        "accepts a Session credential issued %i milliseconds ahead of ComputerRelay",
         async (skew) => {
-            const runtime = await connectRuntimeDaemon(`clock-skew-${skew}`);
+            const computer = await connectComputerDaemon(`clock-skew-${skew}`);
             try {
                 vi.setSystemTime(Date.now() - skew);
-                const submitted = runtime.submitRuntimeTurn("skewed-command");
+                const submitted = computer.submitComputerTurn("skewed-command");
                 const first = await Promise.race([
-                    runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+                    computer.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
                     submitted.then((response) => ({ kind: "response" as const, response })),
                 ]);
                 if (first.kind === "response") {
@@ -2088,13 +2088,13 @@ describe.sequential("Relay Turn submission", () => {
                     kind: "session.prompt",
                     commandId: "skewed-command",
                 });
-                runtime.startTurn("skewed-command", "1");
+                computer.startTurn("skewed-command", "1");
                 expect(await responseJson(await submitted, 200)).toMatchObject({
                     idempotencyKey: "skewed-command",
                     state: { kind: "running" },
                 });
             } finally {
-                runtime.daemon.close(1000, "Test complete");
+                computer.daemon.close(1000, "Test complete");
             }
         },
     );
@@ -2103,105 +2103,105 @@ describe.sequential("Relay Turn submission", () => {
         { offset: -30_001, code: "project_credential_invalid" },
         { offset: 900_000, code: "credential_expired" },
     ])("refuses a credential at verifier offset $offset with $code", async ({ offset, code }) => {
-        const runtime = await connectRuntimeDaemon(`clock-rejected-${Math.abs(offset)}`);
+        const computer = await connectComputerDaemon(`clock-rejected-${Math.abs(offset)}`);
         try {
             vi.setSystemTime(Date.now() + offset);
-            expect(await responseJson(await runtime.submitRuntimeTurn("invalid-time"), 401)).toMatchObject({
+            expect(await responseJson(await computer.submitComputerTurn("invalid-time"), 401)).toMatchObject({
                 error: { code },
             });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
     // @no-uc: Technical regression; future-time tolerance must not admit correctly signed invalid lifetimes.
     it.each([0, -1, 900_001])("refuses a signed credential with lifetime %i", async (lifetime) => {
-        const runtime = await connectRuntimeDaemon(`invalid-lifetime-${Math.abs(lifetime)}`);
+        const computer = await connectComputerDaemon(`invalid-lifetime-${Math.abs(lifetime)}`);
         try {
-            const credential = await runtime.resignCredential(relaySigner, lifetime);
+            const credential = await computer.resignCredential(relaySigner, lifetime);
             vi.setSystemTime(Date.now() - 900);
             expect(
-                await responseJson(await runtime.submitRuntimeTurn("invalid-lifetime", () => credential), 401),
+                await responseJson(await computer.submitComputerTurn("invalid-lifetime", () => credential), 401),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
-    it("Given an authorized token for another Project, When it selects an existing Runtime, Then that Runtime refuses the Project mismatch", async () => {
-        const owner = await connectRuntimeDaemon("direct-owner");
-        const other = await connectRuntimeDaemon("direct-other-project");
+    it("Given an authorized token for another Project, When it selects an existing Computer, Then that Computer refuses the Project mismatch", async () => {
+        const owner = await connectComputerDaemon("direct-owner");
+        const other = await connectComputerDaemon("direct-other-project");
         try {
-            const credential = await other.issueRuntimeCredential(owner.computerId);
+            const credential = await other.issueComputerCredential(owner.computerId);
             expect(
                 await responseJson(
-                    await other.submitRuntimeTurn("foreign-project", () => credential, undefined, owner.computerId),
+                    await other.submitComputerTurn("foreign-project", () => credential, undefined, owner.computerId),
                     403,
                 ),
-            ).toMatchObject({ error: { code: "runtime_access_denied" } });
+            ).toMatchObject({ error: { code: "computer_access_denied" } });
         } finally {
             owner.daemon.close(1000, "Test complete");
             other.daemon.close(1000, "Test complete");
         }
     });
     it("Given an executing native query, When its HTTP caller cancels, Then cancellation reaches the daemon", async () => {
-        const runtime = await connectRuntimeDaemon("direct-cancellation");
+        const computer = await connectComputerDaemon("direct-cancellation");
         const controller = new AbortController();
         try {
-            const pending = runtime.queryActiveTurn(controller.signal).then(
+            const pending = computer.queryActiveTurn(controller.signal).then(
                 (response) => response.status,
                 (cause: unknown) => cause,
             );
-            const command = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+            const command = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
             if (command.kind !== "native.session.request") {
                 throw new Error("Expected a native query");
             }
             controller.abort(new DOMException("Caller left", "AbortError"));
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 kind: "native.session.cancel",
                 requestId: command.requestId,
             });
             expect(await pending).toBeInstanceOf(DOMException);
         } finally {
             controller.abort();
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a Session credential, When direct Runtime HTTP receives a forged, wrong-Session, or expired credential, Then it rejects the request before execution", async () => {
-        const runtime = await connectRuntimeDaemon("direct-authorization");
+    it("Given a Session credential, When direct Computer HTTP receives a forged, wrong-Session, or expired credential, Then it rejects the request before execution", async () => {
+        const computer = await connectComputerDaemon("direct-authorization");
         try {
             expect(
                 await responseJson(
-                    await runtime.submitRuntimeTurn("forged", (credential) => `${credential.slice(0, -6)}AAAAAA`),
+                    await computer.submitComputerTurn("forged", (credential) => `${credential.slice(0, -6)}AAAAAA`),
                     401,
                 ),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
             expect(
                 await responseJson(
-                    await runtime.submitRuntimeTurn("wrong-session", (credential) => credential, "different-session"),
+                    await computer.submitComputerTurn("wrong-session", (credential) => credential, "different-session"),
                     403,
                 ),
             ).toMatchObject({ error: { code: "project_permission_denied" } });
             vi.setSystemTime(new Date("2026-09-18T00:16:00.000Z"));
-            expect(await responseJson(await runtime.submitRuntimeTurn("expired"), 401)).toMatchObject({
+            expect(await responseJson(await computer.submitComputerTurn("expired"), 401)).toMatchObject({
                 error: { code: "credential_expired" },
             });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
-    it("Given an unrelated credential digest, When a Session credential is signed with it, Then direct Runtime HTTP rejects it before execution", async () => {
-        const runtime = await connectRuntimeDaemon("stored-digest-forgery");
+    it("Given an unrelated credential digest, When a Session credential is signed with it, Then direct Computer HTTP rejects it before execution", async () => {
+        const computer = await connectComputerDaemon("stored-digest-forgery");
         try {
-            const forged = await runtime.resignCredential(storedDigestSigner);
+            const forged = await computer.resignCredential(storedDigestSigner);
             expect(
-                await responseJson(await runtime.submitRuntimeTurn("stored-digest", () => forged), 401),
+                await responseJson(await computer.submitComputerTurn("stored-digest", () => forged), 401),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
     it("Given an open Session view, When the Relay signing secret rotates, Then the connection check closes the old view and only new credentials reconnect", async () => {
-        const runtime = await connectRuntimeDaemon("signing-key-rotation");
-        const response = await runtime.subscribe();
+        const computer = await connectComputerDaemon("signing-key-rotation");
+        const response = await computer.subscribe();
         const view = response.webSocket;
         if (view === null) {
             throw new Error("Expected the live Session view");
@@ -2210,12 +2210,12 @@ describe.sequential("Relay Turn submission", () => {
         view.accept();
         try {
             const signingSecret = "rotated-test-only-session-signing-secret";
-            const reissued = await runtime.resignCredential(async () => await relaySigningKey(signingSecret));
+            const reissued = await computer.resignCredential(async () => await relaySigningKey(signingSecret));
             const statuses = await runInDurableObject(
-                env.COMPUTER_RELAY.getByName(runtime.computerId),
+                env.COMPUTER_RELAY.getByName(computer.computerId),
                 async (_instance, state) => {
                     // Reconstruct the production object with the same persisted sockets and a newly deployed binding.
-                    const rotated = new RelayRuntimeRelay(state, {
+                    const rotated = new RelayComputerRelay(state, {
                         ...bindings(),
                         MORTY_ALLOWED_ORIGINS: '["*"]',
                         MORTY_SESSION_SIGNING_SECRET: signingSecret,
@@ -2224,11 +2224,11 @@ describe.sequential("Relay Turn submission", () => {
                     const connect = async (credential: string) =>
                         await rotated.fetch(
                             new Request(
-                                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/harnesses/${runtime.sessionTarget.harness}/sessions/${runtime.sessionTarget.sessionId}/events-v2`,
+                                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computer.computerId}/harnesses/${computer.sessionTarget.harness}/sessions/${computer.sessionTarget.sessionId}/events-v2`,
                                 { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
                             ),
                         );
-                    const rejected = await connect(runtime.credential);
+                    const rejected = await connect(computer.credential);
                     const accepted = await connect(reissued);
                     accepted.webSocket?.accept();
                     accepted.webSocket?.close(1000, "Test complete");
@@ -2239,15 +2239,15 @@ describe.sequential("Relay Turn submission", () => {
             expect(await closed).toMatchObject({ code: 1008, reason: "Session signing key rotated" });
         } finally {
             view.close(1000, "Test complete");
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a Session credential, When HTTP reaches RuntimeRelay directly, Then the command executes without a project relay hop and remains correlated", async () => {
-        const runtime = await connectRuntimeDaemon("direct-runtime");
+    it("Given a Session credential, When HTTP reaches ComputerRelay directly, Then the command executes without a project relay hop and remains correlated", async () => {
+        const computer = await connectComputerDaemon("direct-computer");
         try {
-            const submitted = runtime.submitRuntimeTurn("direct-command");
+            const submitted = computer.submitComputerTurn("direct-command");
             const first = await Promise.race([
-                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 submitted.then((response) => ({ kind: "response", message: String(response.status) })),
             ]);
             expect(first.kind).toBe("command");
@@ -2255,13 +2255,13 @@ describe.sequential("Relay Turn submission", () => {
                 kind: "session.prompt",
                 commandId: "direct-command",
             });
-            runtime.startTurn("direct-command", "1");
+            computer.startTurn("direct-command", "1");
             expect(await responseJson(await submitted, 200)).toMatchObject({ state: { kind: "running" } });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a linked Runtime, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Runtime and the invalid Turn is rejected as a client error", async () => {
+    it("Given a linked Computer, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Computer and the invalid Turn is rejected as a client error", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
         const environment = bindings();
         const owner = await createOwner();
@@ -2271,7 +2271,7 @@ describe.sequential("Relay Turn submission", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "long-prompt-runtime" }),
+                    body: JSON.stringify({ idempotencyKey: "long-prompt-computer" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -2283,7 +2283,7 @@ describe.sequential("Relay Turn submission", () => {
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: readyAgents,
-                        machineName: "Long prompt Runtime",
+                        machineName: "Long prompt Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "long-prompt-workspace",
                     }),
@@ -2295,16 +2295,16 @@ describe.sequential("Relay Turn submission", () => {
             200,
         );
         const sessionId = "long-prompt-session";
-        const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+        const daemonCredential = new DaemonCredential(text(claimed, "computerCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         if (daemonResponse.webSocket === null) {
-            throw new Error("Expected the Runtime socket");
+            throw new Error("Expected the Computer socket");
         }
         const daemon = daemonResponse.webSocket;
         const daemonMessages = new SocketMessages(daemon);
         daemon.accept();
         try {
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
+            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
             const sessionAccess = await issueSession(computerId, nativeTarget(sessionId));
             const submitTurn = (idempotencyKey: string, content: string, attachments: readonly unknown[]) =>
                 worker.fetch(
@@ -2329,7 +2329,7 @@ describe.sequential("Relay Turn submission", () => {
             const longTurn = submitTurn("long-first-turn", longPrompt, []);
             const delivered = decodeServiceToDaemonMessage(await daemonMessages.next());
             if (delivered.kind !== "session.prompt") {
-                throw new Error("Expected the long Turn to reach the Runtime");
+                throw new Error("Expected the long Turn to reach the Computer");
             }
             expect(delivered.prompt).toBe(longPrompt);
             daemon.send(
@@ -2360,7 +2360,7 @@ describe.sequential("Relay Turn submission", () => {
             );
             const cancellation = decodeServiceToDaemonMessage(await daemonMessages.next());
             if (cancellation.kind !== "session.cancel") {
-                throw new Error("Expected the cancellation to reach the Runtime");
+                throw new Error("Expected the cancellation to reach the Computer");
             }
             expect(cancellation.requestId).not.toBe(cancellation.commandId);
             daemon.send(
@@ -2406,7 +2406,7 @@ describe.sequential("Relay Turn submission", () => {
                 turnId: "long-first-turn",
             });
 
-            // An appended Turn the Runtime queues is answered as queued.
+            // An appended Turn the Computer queues is answered as queued.
             const queuedTurn = worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns`,
@@ -2451,7 +2451,7 @@ describe.sequential("Relay Turn submission", () => {
                                 body: JSON.stringify({
                                     content: "describe this",
                                     disposition: "append",
-                                    idempotencyKey: "invalid-runtime-turn",
+                                    idempotencyKey: "invalid-computer-turn",
                                     attachments: [{ kind: "image" }],
                                     sessionConfigurations: [],
                                 }),
@@ -2486,7 +2486,7 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
 
-    it("Given an Agent whose capability advertisement withholds steering and Session renaming, When Chat steers a Turn or renames the Session, Then the Relay forwards both and the Runtime's own answer decides", async () => {
+    it("Given an Agent whose capability advertisement withholds steering and Session renaming, When Chat steers a Turn or renames the Session, Then the Relay forwards both and the Computer's own answer decides", async () => {
         const gatedAgent = readyAgents[0];
         if (gatedAgent === undefined) {
             throw new Error("Expected the shared Agent directory entry");
@@ -2500,7 +2500,7 @@ describe.sequential("Relay Turn submission", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "capability-gated-commands-runtime" }),
+                    body: JSON.stringify({ idempotencyKey: "capability-gated-commands-computer" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -2523,7 +2523,7 @@ describe.sequential("Relay Turn submission", () => {
                                 },
                             },
                         ],
-                        machineName: "Capability-gated commands Runtime",
+                        machineName: "Capability-gated commands Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "capability-gated-commands-workspace",
                     }),
@@ -2545,18 +2545,18 @@ describe.sequential("Relay Turn submission", () => {
         });
 
         // The Relay no longer decides from the catalog. It forwards the steer
-        // to the Runtime, whose own rejection answers with the same
+        // to the Computer, whose own rejection answers with the same
         // machine-readable code and a terminal status.
-        const daemonCredential = new DaemonCredential(text(claimed, "runtimeCredential"));
+        const daemonCredential = new DaemonCredential(text(claimed, "computerCredential"));
         const daemonResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
         if (daemonResponse.webSocket === null) {
-            throw new Error("Expected the Runtime socket");
+            throw new Error("Expected the Computer socket");
         }
         const daemon = daemonResponse.webSocket;
         const daemonMessages = new SocketMessages(daemon);
         daemon.accept();
         try {
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("runtime.liveness.ready");
+            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
             const steer = worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/turns/some-active-turn/disposition`,
@@ -2571,7 +2571,7 @@ describe.sequential("Relay Turn submission", () => {
             const forwarded = decodeServiceToDaemonMessage(await daemonMessages.next());
             expect(forwarded).toMatchObject({ kind: "session.prompt.disposition", target: nativeTarget(sessionId) });
             if (forwarded.kind !== "session.prompt.disposition") {
-                throw new Error("Expected the steer to reach the Runtime");
+                throw new Error("Expected the steer to reach the Computer");
             }
             daemon.send(
                 encodeSessionOperationFailedEvent({
@@ -2587,7 +2587,7 @@ describe.sequential("Relay Turn submission", () => {
             });
 
             // A rename forwards unchanged even though no listed Agent
-            // advertises renaming: the Runtime renames the stored Session
+            // advertises renaming: the Computer renames the stored Session
             // itself, exactly as it does for Agents without the extension.
             const rename = worker.fetch(
                 new Request(
@@ -2631,7 +2631,7 @@ describe.sequential("Relay Turn submission", () => {
         const pairing = await responseJson(
             await ownerRequest(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${computerId}/management/pairing`, {
-                    body: JSON.stringify({ idempotencyKey: "malformed-capabilities-runtime" }),
+                    body: JSON.stringify({ idempotencyKey: "malformed-capabilities-computer" }),
                     headers: credentialHeaders(appCredential),
                     method: "POST",
                 }),
@@ -2655,7 +2655,7 @@ describe.sequential("Relay Turn submission", () => {
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/pairings/${text(pairing, "computerId")}/redeem`, {
                     body: JSON.stringify({
                         agents: [malformed],
-                        machineName: "Malformed capabilities Runtime",
+                        machineName: "Malformed capabilities Computer",
                         pairingCode: text(pairing, "pairingCode"),
                         workspaceName: "malformed-capabilities-workspace",
                     }),
@@ -2669,40 +2669,40 @@ describe.sequential("Relay Turn submission", () => {
         expect(rejected).toMatchObject({ error: { code: "invalid_agents" } });
     });
 
-    it("Given a daemon that heartbeats and then falls silent, When Chat submits Turns, Then they reach it while it heartbeats and are refused as runtime_offline once the silence outlasts the heartbeat deadline", async () => {
-        const runtime = await connectRuntimeDaemon("silent-daemon", { anchorClockToHeartbeat: true });
+    it("Given a daemon that heartbeats and then falls silent, When Chat submits Turns, Then they reach it while it heartbeats and are refused as computer_offline once the silence outlasts the heartbeat deadline", async () => {
+        const computer = await connectComputerDaemon("silent-daemon", { anchorClockToHeartbeat: true });
         // The clock now reads when Cloudflare answered the daemon's heartbeat.
         const heartbeatAt = Date.now();
         try {
             vi.setSystemTime(heartbeatAt + 20_000);
-            const delivered = runtime.submitTurn("heartbeating-turn");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            const delivered = computer.submitTurn("heartbeating-turn");
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "heartbeating-turn",
                 kind: "session.prompt",
             });
-            runtime.startTurn("heartbeating-turn", "1");
+            computer.startTurn("heartbeating-turn", "1");
             expect(await responseJson(await delivered, 200)).toMatchObject({ turnId: "heartbeating-turn" });
 
             // A Turn sent before the deadline still reaches the connection, which never answers it.
             vi.setSystemTime(heartbeatAt + 30_000);
-            const stranded = runtime.submitTurn("stranded-turn");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            const stranded = computer.submitTurn("stranded-turn");
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "stranded-turn",
                 kind: "session.prompt",
             });
 
             // Once the silence outlasts the deadline, the next Turn is refused at once and releases the stranded one.
             vi.setSystemTime(heartbeatAt + 36_000);
-            expect(await responseJson(await runtime.submitTurn("after-silence-turn"), 503)).toMatchObject({
-                error: { code: "runtime_offline" },
+            expect(await responseJson(await computer.submitTurn("after-silence-turn"), 503)).toMatchObject({
+                error: { code: "computer_offline" },
             });
-            expect(await responseJson(await stranded, 503)).toMatchObject({ error: { code: "runtime_offline" } });
-            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Runtime heartbeat timed out" });
+            expect(await responseJson(await stranded, 503)).toMatchObject({ error: { code: "computer_offline" } });
+            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             // Cloudflare's clock has not reached the times set above, and the run does not finish
             // tearing down while the test clock is still ahead of it.
             vi.setSystemTime(heartbeatAt);
-            runtime.daemon.close();
+            computer.daemon.close();
         }
     });
 
@@ -2710,74 +2710,79 @@ describe.sequential("Relay Turn submission", () => {
         { kind: "permission", responderId: "member-1", outcome: "selected", optionId: "allow_once" },
         { kind: "elicitation", responderId: "member-1", action: "accept", content: '{"answer":"continue"}' },
     ] as const)(
-        "Given a daemon whose heartbeats stopped, When an app answers a pending $kind request, Then the answer is refused at once as runtime_offline",
+        "Given a daemon whose heartbeats stopped, When an app answers a pending $kind request, Then the answer is refused at once as computer_offline",
         async (body) => {
-            const runtime = await connectRuntimeDaemon(`offline-${body.kind}-answer`, { anchorClockToHeartbeat: true });
+            const computer = await connectComputerDaemon(`offline-${body.kind}-answer`, {
+                anchorClockToHeartbeat: true,
+            });
             // The clock now reads when Cloudflare answered the daemon's heartbeat.
             const heartbeatAt = Date.now();
             try {
                 vi.setSystemTime(heartbeatAt + 36_000);
-                const answer = await runtime.appSessionRequest("/interactions/offline-interaction/responses", {
+                const answer = await computer.appSessionRequest("/interactions/offline-interaction/responses", {
                     method: "POST",
                     body,
                 });
-                expect(await responseJson(answer, 503)).toMatchObject({ error: { code: "runtime_offline" } });
-                expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Runtime heartbeat timed out" });
+                expect(await responseJson(answer, 503)).toMatchObject({ error: { code: "computer_offline" } });
+                expect(await computer.daemonClosed).toMatchObject({
+                    code: 4001,
+                    reason: "Computer heartbeat timed out",
+                });
             } finally {
                 vi.setSystemTime(heartbeatAt);
-                runtime.daemon.close();
+                computer.daemon.close();
             }
         },
     );
 
-    it("Given a daemon whose heartbeats stopped, When an app reads the Runtime, Then it is reported offline and its connection is closed", async () => {
-        const runtime = await connectRuntimeDaemon("silent-presence", { anchorClockToHeartbeat: true });
+    it("Given a daemon whose heartbeats stopped, When an app reads the Computer, Then it is reported offline and its connection is closed", async () => {
+        const computer = await connectComputerDaemon("silent-presence", { anchorClockToHeartbeat: true });
         // The clock now reads when Cloudflare answered the daemon's heartbeat.
         const heartbeatAt = Date.now();
         try {
             vi.setSystemTime(heartbeatAt + 30_000);
-            expect(await runtime.readOnline()).toBe(true);
+            expect(await computer.readOnline()).toBe(true);
 
             vi.setSystemTime(heartbeatAt + 36_000);
-            expect(await runtime.readOnline()).toBe(false);
-            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Runtime heartbeat timed out" });
+            expect(await computer.readOnline()).toBe(false);
+            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             vi.setSystemTime(heartbeatAt);
-            runtime.daemon.close();
+            computer.daemon.close();
         }
     });
 
     it("Given a daemon using fixed-text heartbeats, When it sends a noncanonical heartbeat near its deadline, Then only host auto-responses renew its liveness", async () => {
-        const runtime = await connectRuntimeDaemon("noncanonical-heartbeat", { anchorClockToHeartbeat: true });
+        const computer = await connectComputerDaemon("noncanonical-heartbeat", { anchorClockToHeartbeat: true });
         const heartbeatAt = Date.now();
         try {
             vi.setSystemTime(heartbeatAt + 30_000);
-            runtime.daemon.send(JSON.stringify({ extra: "ignored", kind: "runtime.heartbeat" }));
-            expect(await runtime.readOnline()).toBe(true);
+            computer.daemon.send(JSON.stringify({ extra: "ignored", kind: "computer.heartbeat" }));
+            expect(await computer.readOnline()).toBe(true);
 
             vi.setSystemTime(heartbeatAt + 36_000);
-            expect(await runtime.readOnline()).toBe(false);
-            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Runtime heartbeat timed out" });
+            expect(await computer.readOnline()).toBe(false);
+            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             vi.setSystemTime(heartbeatAt);
-            runtime.daemon.close();
+            computer.daemon.close();
         }
     });
 
     it("Given a daemon that never heartbeats after it connected, When its first heartbeat is overdue, Then it is reported offline and its connection is closed", async () => {
-        const runtime = await connectRuntimeDaemon("unproven-daemon");
+        const computer = await connectComputerDaemon("unproven-daemon");
         const connectedAt = Date.now();
         try {
             // The first heartbeat follows attachment, which has 30 seconds, then the usual silence limit applies.
             vi.setSystemTime(connectedAt + 65_000);
-            expect(await runtime.readOnline()).toBe(true);
+            expect(await computer.readOnline()).toBe(true);
 
             vi.setSystemTime(connectedAt + 65_001);
-            expect(await runtime.readOnline()).toBe(false);
-            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Runtime heartbeat timed out" });
+            expect(await computer.readOnline()).toBe(false);
+            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             vi.setSystemTime(connectedAt);
-            runtime.daemon.close();
+            computer.daemon.close();
         }
     });
 });
@@ -2807,8 +2812,8 @@ function forkResult(requestId: string, target: NativeSessionTarget) {
     };
 }
 
-it("Given a Fork in flight, When it is requested again concurrently and after Relay eviction, Then each Runtime request carries the operation identity and the Relay keeps no outcome of its own", async () => {
-    const runtime = await connectRuntimeDaemon("fork-operation-identity");
+it("Given a Fork in flight, When it is requested again concurrently and after Relay eviction, Then each Computer request carries the operation identity and the Relay keeps no outcome of its own", async () => {
+    const computer = await connectComputerDaemon("fork-operation-identity");
     const input = {
         harness: "codex",
         sessionId: "native-source",
@@ -2816,9 +2821,9 @@ it("Given a Fork in flight, When it is requested again concurrently and after Re
     };
     const operationId = "retained-fork-operation";
     try {
-        const first = runtime.forkNative(operationId, input);
+        const first = computer.forkNative(operationId, input);
         // The controlled daemon owns fork allocation; the request never carries a destination.
-        const fork = record(JSON.parse(await runtime.daemonMessages.next()));
+        const fork = record(JSON.parse(await computer.daemonMessages.next()));
         expect(fork).toMatchObject({
             kind: "native.session.request",
             action: "fork",
@@ -2827,31 +2832,31 @@ it("Given a Fork in flight, When it is requested again concurrently and after Re
             directory: ".",
         });
         expect(fork).not.toHaveProperty("targetSessionId");
-        const concurrent = runtime.forkNative(operationId, input);
+        const concurrent = computer.forkNative(operationId, input);
         expect(
-            await responseJson(await runtime.forkNative(operationId, { ...input, sessionId: "another-source" }), 409),
+            await responseJson(await computer.forkNative(operationId, { ...input, sessionId: "another-source" }), 409),
         ).toMatchObject({ error: { code: "idempotency_conflict" } });
         const forkTarget = nativeTarget("harness-fork-destination");
-        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+        computer.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
 
         const original = await responseJson(await first, 200);
 
         expect(original).toMatchObject({ action: "fork", target: forkTarget });
         expect(await responseJson(await concurrent, 200)).toEqual(original);
 
-        await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
-        const replayed = runtime.forkNative(operationId, input);
-        // The Runtime answers the retry from the receipt it keeps under the same operation identity.
-        expect(record(JSON.parse(await runtime.daemonMessages.next()))).toEqual(fork);
-        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+        await evictDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), { webSockets: "hibernate" });
+        const replayed = computer.forkNative(operationId, input);
+        // The Computer answers the retry from the receipt it keeps under the same operation identity.
+        expect(record(JSON.parse(await computer.daemonMessages.next()))).toEqual(fork);
+        computer.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         expect(await responseJson(await replayed, 200)).toEqual(original);
     } finally {
-        runtime.daemon.close(1000, "Fork recovery scenario completed");
+        computer.daemon.close(1000, "Fork recovery scenario completed");
     }
 });
 
-it("Given the Runtime rejects a Fork, When the same operation is retried, Then the rejection is reported and the retry forks again", async () => {
-    const runtime = await connectRuntimeDaemon("fork-rejected");
+it("Given the Computer rejects a Fork, When the same operation is retried, Then the rejection is reported and the retry forks again", async () => {
+    const computer = await connectComputerDaemon("fork-rejected");
     const input = {
         harness: "codex",
         sessionId: "native-source",
@@ -2859,14 +2864,14 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
     };
     const operationId = "rejected-fork-operation";
     const forkCommand = async () => {
-        const fork = record(JSON.parse(await runtime.daemonMessages.next()));
+        const fork = record(JSON.parse(await computer.daemonMessages.next()));
         expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", sessionId: "native-source" });
         return fork;
     };
     try {
-        const first = runtime.forkNative(operationId, input);
+        const first = computer.forkNative(operationId, input);
         const rejected = await forkCommand();
-        runtime.daemon.send(
+        computer.daemon.send(
             JSON.stringify({
                 kind: "session.operation.failed",
                 code: "native_session_unsupported",
@@ -2876,23 +2881,23 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
         );
         expect(await responseJson(await first, 503)).toMatchObject({ error: { code: "native_session_unsupported" } });
 
-        const retried = runtime.forkNative(operationId, input);
+        const retried = computer.forkNative(operationId, input);
         const fork = await forkCommand();
         expect(text(fork, "requestId")).toBe(text(rejected, "requestId"));
         expect(fork).not.toHaveProperty("targetSessionId");
         const forkTarget = nativeTarget("harness-fork-after-refusal");
-        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+        computer.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         const forked = await responseJson(await retried, 200);
         expect(forked).toMatchObject({ action: "fork", target: forkTarget });
     } finally {
-        runtime.daemon.close(1000, "Fork rejection scenario completed");
+        computer.daemon.close(1000, "Fork rejection scenario completed");
     }
 });
 
-it("Given an anonymous browser knows a Runtime, When it declares a full-budget upload, Then it is rejected and an authorized browser can still upload", async () => {
-    const runtime = await connectRuntimeDaemon("upload-admission");
-    const anonymous = (await runtime.transport()).webSocket;
-    const browser = (await runtime.transport()).webSocket;
+it("Given an anonymous browser knows a Computer, When it declares a full-budget upload, Then it is rejected and an authorized browser can still upload", async () => {
+    const computer = await connectComputerDaemon("upload-admission");
+    const anonymous = (await computer.transport()).webSocket;
+    const browser = (await computer.transport()).webSocket;
     if (anonymous === null || browser === null) {
         throw new Error("Expected browser transports");
     }
@@ -2903,20 +2908,20 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
     const path =
         MORTY_API_PREFIX +
         "/v1/computers/" +
-        runtime.computerId +
+        computer.computerId +
         "/harnesses/" +
-        runtime.sessionTarget.harness +
+        computer.sessionTarget.harness +
         "/sessions/" +
-        runtime.sessionTarget.sessionId +
+        computer.sessionTarget.sessionId +
         "/content/" +
         "a".repeat(64);
     // Alter the first character of the 43-character signature. Its last character carries two
     // padding bits that decoding ignores, so editing that one can leave the signature valid.
-    const signatureStart = runtime.credential.length - 43;
+    const signatureStart = computer.credential.length - 43;
     const forgedCredential =
-        runtime.credential.slice(0, signatureStart) +
-        (runtime.credential[signatureStart] === "A" ? "B" : "A") +
-        runtime.credential.slice(signatureStart + 1);
+        computer.credential.slice(0, signatureStart) +
+        (computer.credential[signatureStart] === "A" ? "B" : "A") +
+        computer.credential.slice(signatureStart + 1);
     const declaration = {
         kind: "http.request",
         requestId: "unauthorized",
@@ -2946,7 +2951,7 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
                 requestId: "authorized",
                 bodyByteLength: 1,
                 headers: [
-                    ["authorization", `Bearer ${runtime.credential}`],
+                    ["authorization", `Bearer ${computer.credential}`],
                     ["x-morty-byte-length", "1"],
                     ["x-morty-content-kind", "resource"],
                     ["content-type", "text/plain"],
@@ -2956,31 +2961,31 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
             }),
         );
         browser.send(encodeContentChunkFrame({ requestId: "authorized", sequence: 0, bytes: new Uint8Array([120]) }));
-        const command = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+        const command = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
         expect(command.kind).toBe("content.write");
         if (command.kind !== "content.write") {
             throw new Error("Expected authorized upload");
         }
-        runtime.daemon.send(
+        computer.daemon.send(
             encodeContentReadyEvent({
                 kind: "content.ready",
                 requestId: command.requestId,
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
             }),
         );
-        const frame = await runtime.daemonMessages.nextFrame();
+        const frame = await computer.daemonMessages.nextFrame();
         const arrayBuffer = typeof frame === "object" && frame !== null ? Reflect.get(frame, "arrayBuffer") : undefined;
         const binary = typeof arrayBuffer === "function" ? await Reflect.apply(arrayBuffer, frame, []) : frame;
         expect(decodeContentChunkFrame(binary).bytes).toEqual(new Uint8Array([120]));
-        expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+        expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
             kind: "content.commit",
             requestId: command.requestId,
         });
-        runtime.daemon.send(
+        computer.daemon.send(
             encodeContentAvailableEvent({
                 kind: "content.available",
                 requestId: command.requestId,
-                target: runtime.sessionTarget,
+                target: computer.sessionTarget,
                 contentKey: "a".repeat(64),
                 byteLength: 1,
             }),
@@ -2989,11 +2994,11 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
     } finally {
         anonymous.close();
         browser.close();
-        runtime.daemon.close();
+        computer.daemon.close();
     }
 });
 
-describe("Runtime prompt acknowledgements", () => {
+describe("Computer prompt acknowledgements", () => {
     const lifecycleFrame = (
         sessionTarget: NativeSessionTarget,
         eventId: string,
@@ -3015,14 +3020,14 @@ describe("Runtime prompt acknowledgements", () => {
             ],
         });
 
-    it("Given pending submissions, When the Runtime answers another request, Then only the reply naming each submission answers it", async () => {
-        const runtime = await connectRuntimeDaemon("named-queue-change");
+    it("Given pending submissions, When the Computer answers another request, Then only the reply naming each submission answers it", async () => {
+        const computer = await connectComputerDaemon("named-queue-change");
         try {
-            const credential = await runtime.issueRuntimeCredential(runtime.computerId);
+            const credential = await computer.issueComputerCredential(computer.computerId);
             const queue = (idempotencyKey: string) =>
-                env.COMPUTER_RELAY.getByName(runtime.computerId).fetch(
+                env.COMPUTER_RELAY.getByName(computer.computerId).fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/harnesses/${runtime.sessionTarget.harness}/sessions/${runtime.sessionTarget.sessionId}/turns`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computer.computerId}/harnesses/${computer.sessionTarget.harness}/sessions/${computer.sessionTarget.sessionId}/turns`,
                         {
                             method: "POST",
                             headers: credentialHeaders(credential),
@@ -3036,34 +3041,34 @@ describe("Runtime prompt acknowledgements", () => {
                 );
 
             const rejected = queue("rejected-command");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "rejected-command",
             });
             // Another request's answer, or this command's own lifecycle, does not answer this submission; the
-            // Runtime's reply naming it does.
-            runtime.daemon.send(
+            // Computer's reply naming it does.
+            computer.daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "other-command",
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     state: "queued",
                 }),
             );
-            runtime.daemon.send(
-                lifecycleFrame(runtime.sessionTarget, "rejected-failed", "1", {
+            computer.daemon.send(
+                lifecycleFrame(computer.sessionTarget, "rejected-failed", "1", {
                     code: "agent_unavailable",
                     commandId: "rejected-command",
                     kind: "prompt.failed-before-start",
                     message: "The Agent is unavailable",
                 }),
             );
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeSessionOperationFailedEvent({
                     code: "agent_unavailable",
                     kind: "session.operation.failed",
                     message: "The Agent is unavailable",
                     requestId: "rejected-command",
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                 }),
             );
             const failure = await rejected;
@@ -3071,14 +3076,14 @@ describe("Runtime prompt acknowledgements", () => {
             expect(await failure.json()).toMatchObject({ error: { code: "agent_unavailable" } });
 
             const admitted = queue("admitted-command");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "admitted-command",
             });
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "admitted-command",
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     state: "queued",
                 }),
             );
@@ -3087,60 +3092,60 @@ describe("Runtime prompt acknowledgements", () => {
                 turnId: "admitted-command",
             });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     }, 30_000);
 
-    it("Given a completed prompt, When it is retried with the same command identifier, Then the Runtime's acceptance answers the retry", async () => {
-        const runtime = await connectRuntimeDaemon("retried-prompt");
+    it("Given a completed prompt, When it is retried with the same command identifier, Then the Computer's acceptance answers the retry", async () => {
+        const computer = await connectComputerDaemon("retried-prompt");
         try {
-            const first = runtime.submitRuntimeTurn("retried-command");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            const first = computer.submitComputerTurn("retried-command");
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "retried-command",
                 kind: "session.prompt",
             });
-            runtime.startTurn("retried-command", "1");
+            computer.startTurn("retried-command", "1");
             expect((await first).status).toBe(200);
-            runtime.daemon.send(
-                lifecycleFrame(runtime.sessionTarget, "retried-completed", "2", {
+            computer.daemon.send(
+                lifecycleFrame(computer.sessionTarget, "retried-completed", "2", {
                     commandId: "retried-command",
                     kind: "prompt.completed",
                     stopReason: "end_turn",
                 }),
             );
 
-            const retry = runtime.submitRuntimeTurn("retried-command");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            const retry = computer.submitComputerTurn("retried-command");
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "retried-command",
                 kind: "session.prompt",
             });
-            runtime.daemon.send(
+            computer.daemon.send(
                 JSON.stringify({
                     kind: "session.prompt.accepted",
                     requestId: "retried-command",
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     state: "settled",
                 }),
             );
             expect(await responseJson(await retry, 200)).toMatchObject({ turnId: "retried-command" });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     }, 30_000);
 
     it("Given a prompt that already settled, When it is retried with the same idempotency key, Then the Turn is reported indeterminate instead of running", async () => {
-        const runtime = await connectRuntimeDaemon("settled-retry");
+        const computer = await connectComputerDaemon("settled-retry");
         try {
-            const retry = runtime.submitRuntimeTurn("settled-command");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            const retry = computer.submitComputerTurn("settled-command");
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "settled-command",
                 kind: "session.prompt",
             });
-            runtime.daemon.send(
+            computer.daemon.send(
                 JSON.stringify({
                     kind: "session.prompt.accepted",
                     requestId: "settled-command",
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     state: "settled",
                 }),
             );
@@ -3152,39 +3157,39 @@ describe("Runtime prompt acknowledgements", () => {
                 turnId: "settled-command",
             });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     }, 30_000);
     it("Given a submitted prompt whose Agent is still starting, When the Turn is cancelled before it starts, Then the submission is answered by that outcome instead of waiting for its deadline", async () => {
-        const runtime = await connectRuntimeDaemon("cancelled-before-start");
+        const computer = await connectComputerDaemon("cancelled-before-start");
         try {
-            const submission = runtime.submitTurn("preparing-command");
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+            const submission = computer.submitTurn("preparing-command");
+            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
                 commandId: "preparing-command",
                 kind: "session.prompt",
             });
-            const cancel = runtime.sessionControlRequest("/turns/preparing-command/cancel", {});
-            const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+            const cancel = computer.sessionControlRequest("/turns/preparing-command/cancel", {});
+            const cancellation = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
             if (cancellation.kind !== "session.cancel") {
-                throw new Error("Expected the cancellation to reach the Runtime");
+                throw new Error("Expected the cancellation to reach the Computer");
             }
             expect(cancellation.commandId).toBe("preparing-command");
             // A command cancelled before it starts answers its submission as settled, and the cancellation with
             // how it stopped.
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "preparing-command",
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     state: "settled",
                 }),
             );
-            runtime.daemon.send(
+            computer.daemon.send(
                 encodeSessionTurnStoppedEvent({
                     commandId: "preparing-command",
                     kind: "session.turn.stopped",
                     requestId: cancellation.requestId,
-                    target: runtime.sessionTarget,
+                    target: computer.sessionTarget,
                     stopReason: "cancelled",
                 }),
             );
@@ -3195,7 +3200,7 @@ describe("Runtime prompt acknowledgements", () => {
                 turnId: "preparing-command",
             });
         } finally {
-            runtime.daemon.close(1000, "Test complete");
+            computer.daemon.close(1000, "Test complete");
         }
     }, 30_000);
 });

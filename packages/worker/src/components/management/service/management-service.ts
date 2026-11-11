@@ -44,13 +44,13 @@ export class ManagementService {
         return identity;
     };
 
-    /** The owner's Machine: where its Runtime pairing stands, read from the Relay that owns it. */
+    /** The owner's Machine: where its Computer pairing stands, read from the Relay that owns it. */
     readonly readMachine = async (userId: string, signal: AbortSignal) => {
         const project = await this.readProject(userId, signal);
         if (project === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { runtimePairing: await this.#relay.readRuntimePairing(project.computerId, signal) };
+        return { computerPairing: await this.#relay.readComputerPairing(project.computerId, signal) };
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {
@@ -78,13 +78,13 @@ export class ManagementService {
         return project;
     };
 
-    readonly createRuntimePairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
+    readonly createComputerPairing = async (userId: string, idempotencyKey: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
         const pairing = await this.#relay.createPairing(project.computerId, idempotencyKey, signal);
         return pairing;
     };
 
-    readonly readRuntimePairing = async (userId: string, signal: AbortSignal) => {
+    readonly readComputerPairing = async (userId: string, signal: AbortSignal) => {
         const project = await this.#requireProject(userId, signal);
         return await this.#relay.readPairing(project.computerId, signal);
     };
@@ -116,7 +116,7 @@ export class ManagementService {
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {
         const project = await this.readProject(userId, signal);
         if (project === null) {
-            throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Runtime.", 409);
+            throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Computer.", 409);
         }
         return project;
     };

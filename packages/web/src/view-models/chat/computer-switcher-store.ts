@@ -99,18 +99,18 @@ export function createComputerSwitcher(options: {
                             }
                             const requests = options.requests(identity);
                             try {
-                                const pairing = await requests.readRuntimePairing(signal);
+                                const pairing = await requests.readComputerPairing(signal);
                                 signal.throwIfAborted();
                                 if (pairing !== "paired") {
                                     return choice;
                                 }
-                                const configuration = await requests.runtimeConfiguration(signal);
+                                const configuration = await requests.computerConfiguration(signal);
                                 signal.throwIfAborted();
-                                rememberComputerName(identity, configuration.runtime.machineName);
+                                rememberComputerName(identity, configuration.computer.machineName);
                                 return {
                                     ...choice,
-                                    name: configuration.runtime.machineName || choice.name,
-                                    status: configuration.runtime.online ? "online" : "offline",
+                                    name: configuration.computer.machineName || choice.name,
+                                    status: configuration.computer.online ? "online" : "offline",
                                 };
                             } finally {
                                 requests.close();

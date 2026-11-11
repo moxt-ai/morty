@@ -41,7 +41,7 @@ const readExecution = (peer: DaemonConnectionPeer, target: NativeSessionTarget, 
         }),
     );
 
-/** The Runtime's answer to `requestId`: the execution it read, or the failure it refused the request with. */
+/** The Computer's answer to `requestId`: the execution it read, or the failure it refused the request with. */
 const answer = async (peer: DaemonConnectionPeer, requestId: string) => {
     for (;;) {
         const raw = await peer.nextMessage();
@@ -75,7 +75,7 @@ const withAgent = async (scenario: (peer: RealDaemonPeer) => Promise<void>): Pro
     }
 };
 
-test("Given a Session whose prompt is running, When a client prompts it and reads its execution naming only the Session, Then the Runtime runs the prompt in the Session's own Agent and directory and reports the running turn", async () => {
+test("Given a Session whose prompt is running, When a client prompts it and reads its execution naming only the Session, Then the Computer runs the prompt in the Session's own Agent and directory and reports the running turn", async () => {
     await withAgent(async (peer) => {
         const commandId = randomUUID();
         prompt(peer, peer.target, commandId, "hold after first delta");
@@ -102,7 +102,7 @@ test("Given a Session whose prompt is running, When a client prompts it and read
     });
 }, 90_000);
 
-test("Given a native Session the Runtime does not hold, When a client prompts it or reads its execution, Then the Runtime refuses both as session_not_found", async () => {
+test("Given a native Session the Computer does not hold, When a client prompts it or reads its execution, Then the Computer refuses both as session_not_found", async () => {
     await withAgent(async (peer) => {
         const unknown = { harness: peer.target.harness, sessionId: randomUUID() };
         const commandId = randomUUID();

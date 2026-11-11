@@ -6,6 +6,10 @@ import {
     AGENT_SETTINGS_DISCOVERED_KIND,
     AGENT_SETTINGS_DISCOVERY_FAILED_KIND,
     type AgentSettingsDiscoverCommand,
+    COMPUTER_HEARTBEAT_ACK_KIND,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_PONG_KIND,
+    COMPUTER_STATUS_KIND,
     CONTENT_AVAILABLE_KIND,
     CONTENT_READY_KIND,
     type DaemonToRelayMessage,
@@ -13,7 +17,7 @@ import {
     decodeContentChunkFrame,
     decodeKnownServiceToDaemonMessage,
     encodeAgentSettingsDiscoveryFailedEvent,
-    encodeRuntimeStatusEvent,
+    encodeComputerStatusEvent,
     encodeServiceToDaemonMessage,
     encodeSessionOperationFailedEvent,
     FILE_BEGIN_KIND,
@@ -22,10 +26,6 @@ import {
     NATIVE_SESSION_RESULT_KIND,
     type NativeSessionTarget,
     ProtocolMessageError,
-    RUNTIME_HEARTBEAT_ACK_KIND,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_PONG_KIND,
-    RUNTIME_STATUS_KIND,
     readNativeSessionTarget,
     requestReplyAddress,
     SESSION_ARCHIVED_KIND,
@@ -53,12 +53,12 @@ import {
     type SessionPromptCommand,
     WORKSPACE_ENTRIES_KIND,
 } from "@morty-build/client/protocol";
-import { SessionRuntimeError } from "../../entity/do/session.ts";
+import { SessionComputerError } from "../../entity/do/session.ts";
 import { logger } from "../../infra/logger.ts";
 import type { SessionStatusNotifications } from "../../infra/session-status-notifications.ts";
 import { SessionLiveEventRelay } from "./session-live-event-relay.ts";
 
-function sessionErrorCloseCode(error: SessionRuntimeError): 1008 | 1013 {
+function sessionErrorCloseCode(error: SessionComputerError): 1008 | 1013 {
     if (error.code === "session_busy") {
         return 1013;
     }
@@ -165,13 +165,13 @@ export class ChannelActor {
         if (replacedExistingConnection) {
             this.failPendingAgentSettingsDiscoveries();
         }
-        this.broadcastRuntimeStatus(true);
+        this.broadcastComputerStatus(true);
     };
 
     readonly attachHost = (socket: ChannelSocket, _signal: AbortSignal): Promise<void> => {
         socket.send(
-            encodeRuntimeStatusEvent({
-                kind: RUNTIME_STATUS_KIND,
+            encodeComputerStatusEvent({
+                kind: COMPUTER_STATUS_KIND,
                 online: this.hasOnlineDaemon(),
                 computerId: this.#computerId,
             }),
@@ -187,7 +187,7 @@ export class ChannelActor {
             return;
         }
         this.failPendingAgentSettingsDiscoveries();
-        this.broadcastRuntimeStatus(false);
+        this.broadcastComputerStatus(false);
     };
 
     readonly receiveDaemonMessage = async (
@@ -320,7 +320,7 @@ export class ChannelActor {
             if (signal.aborted) {
                 throw error;
             }
-            if (error instanceof SessionRuntimeError) {
+            if (error instanceof SessionComputerError) {
                 socket.close(sessionErrorCloseCode(error), error.code);
                 return;
             }
@@ -343,7 +343,7 @@ export class ChannelActor {
             // The HTTP caller can cancel after the daemon has already queued its next
             // chunk. The operation route is gone by the time that frame arrives, but
             // this is not a daemon protocol violation and must not interrupt unrelated
-            // Sessions sharing the Runtime connection.
+            // Sessions sharing the Computer connection.
             return;
         }
         recipient.send(copyBinaryFrame(message));
@@ -362,7 +362,7 @@ export class ChannelActor {
         }
         const daemon = this.#peers.daemons().find((candidate) => candidate.isOpen());
         if (daemon === undefined) {
-            throw new SessionRuntimeError("runtime_offline", "The local runtime is offline");
+            throw new SessionComputerError("computer_offline", "The local computer is offline");
         }
         daemon.send(copyBinaryFrame(message));
     };
@@ -401,8 +401,8 @@ export class ChannelActor {
                     }
                     this.forwardHistoryPage(socket, "preview", command, message);
                     return;
-                case RUNTIME_HEARTBEAT_ACK_KIND:
-                case RUNTIME_LIVENESS_READY_KIND:
+                case COMPUTER_HEARTBEAT_ACK_KIND:
+                case COMPUTER_LIVENESS_READY_KIND:
                     // Liveness belongs to the daemon's own connection; a host has none to signal.
                     return;
                 default:
@@ -413,7 +413,7 @@ export class ChannelActor {
             if (signal.aborted) {
                 throw error;
             }
-            if (error instanceof SessionRuntimeError) {
+            if (error instanceof SessionComputerError) {
                 socket.close(sessionErrorCloseCode(error), error.code);
                 return;
             }
@@ -465,9 +465,9 @@ export class ChannelActor {
                 return;
             case WORKSPACE_ENTRIES_KIND:
                 return;
-            case "runtime.upgrade.result":
-            case "runtime.diagnostics.result":
-            case RUNTIME_PONG_KIND:
+            case "computer.upgrade.result":
+            case "computer.diagnostics.result":
+            case COMPUTER_PONG_KIND:
                 return;
             case SESSION_OPERATION_FAILED_KIND:
                 return;
@@ -502,9 +502,9 @@ export class ChannelActor {
         const target = "target" in command ? command.target : undefined;
         socket.send(
             encodeSessionOperationFailedEvent({
-                code: "runtime_offline",
+                code: "computer_offline",
                 kind: SESSION_OPERATION_FAILED_KIND,
-                message: "The local runtime is offline",
+                message: "The local computer is offline",
                 requestId: requestReplyAddress(command),
                 ...(target === undefined ? {} : { target }),
             }),
@@ -537,9 +537,9 @@ export class ChannelActor {
             socket.consumeAgentSettingsDiscoveryFailure(requestId);
             socket.send(
                 encodeAgentSettingsDiscoveryFailedEvent({
-                    code: "runtime_offline",
+                    code: "computer_offline",
                     kind: AGENT_SETTINGS_DISCOVERY_FAILED_KIND,
-                    message: "The local runtime is offline",
+                    message: "The local computer is offline",
                     requestId,
                 }),
             );
@@ -601,7 +601,7 @@ export class ChannelActor {
         // Internal history connections belong to one operation; only its reply address survives hibernation.
         socket.bindHistoryRequest(kind, requestReplyAddress(command));
         if (!this.sendToDaemon(command, encoded)) {
-            socket.close(1013, "Runtime offline");
+            socket.close(1013, "Computer offline");
         }
     };
 
@@ -611,9 +611,9 @@ export class ChannelActor {
                 if (socket.isOpen()) {
                     socket.send(
                         encodeAgentSettingsDiscoveryFailedEvent({
-                            code: "runtime_offline",
+                            code: "computer_offline",
                             kind: AGENT_SETTINGS_DISCOVERY_FAILED_KIND,
-                            message: "The local runtime is offline",
+                            message: "The local computer is offline",
                             requestId,
                         }),
                     );
@@ -637,10 +637,10 @@ export class ChannelActor {
 
     private readonly hasOnlineDaemon = (): boolean => this.#peers.daemons().some((socket) => socket.isOpen());
 
-    private readonly broadcastRuntimeStatus = (online: boolean): void => {
+    private readonly broadcastComputerStatus = (online: boolean): void => {
         if (!online) {
             for (const { socket } of this.#peers.viewers()) {
-                socket.close(1000, "Runtime offline");
+                socket.close(1000, "Computer offline");
             }
         }
         this.broadcast(
@@ -649,7 +649,7 @@ export class ChannelActor {
                 ...this.#peers.operations().map(({ socket }) => socket),
                 ...this.#peers.nativeRequests().map(({ socket }) => socket),
             ],
-            encodeRuntimeStatusEvent({ kind: RUNTIME_STATUS_KIND, online, computerId: this.#computerId }),
+            encodeComputerStatusEvent({ kind: COMPUTER_STATUS_KIND, online, computerId: this.#computerId }),
         );
     };
 

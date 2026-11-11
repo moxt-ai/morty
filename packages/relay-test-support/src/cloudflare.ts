@@ -29,7 +29,7 @@ export async function prepareTestMortyRelayBindings(workerEntryPoint?: string) {
     return (allowedOrigins: ReadonlySet<string> = new Set(["*"])) => createRelayBindings(script, allowedOrigins);
 }
 
-/** Owns the real Cloudflare adapters for Runtime/Worker integration scenarios. */
+/** Owns the real Cloudflare adapters for Computer/Worker integration scenarios. */
 function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<string>) {
     const options = {
         name: "morty-test-relay",

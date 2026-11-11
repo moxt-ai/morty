@@ -37,7 +37,7 @@ type QueueFeedback =
 type QueuedMessageRequest = "steering" | "deleting" | "withdrawn";
 
 /**
- * How a request on the queue ended: the Runtime did it, refused it, never received it, or may have done it without
+ * How a request on the queue ended: the Computer did it, refused it, never received it, or may have done it without
  * confirming.
  */
 type QueueRequestOutcome =
@@ -47,7 +47,7 @@ type QueueRequestOutcome =
     | { readonly kind: "unconfirmed"; readonly cause: unknown };
 
 /**
- * The Session's requests on the Runtime's queue. They run on the Session's operations, so switching panes neither ends
+ * The Session's requests on the Computer's queue. They run on the Session's operations, so switching panes neither ends
  * a request nor loses what it returns. Original files remain owned by delivery.
  */
 export interface SessionMessageQueueStore {
@@ -56,17 +56,17 @@ export interface SessionMessageQueueStore {
     readonly deleteMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<void>;
     /**
      * Takes a queued message out of the queue and back into the composer for editing. The text returns whenever the
-     * Runtime may have withdrawn the message, so a withdrawal it did not confirm never loses the text.
+     * Computer may have withdrawn the message, so a withdrawal it did not confirm never loses the text.
      */
     readonly editMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<void>;
     readonly dismissFailure: () => void;
-    /** Resolves whether the Runtime took the message into the running turn. */
+    /** Resolves whether the Computer took the message into the running turn. */
     readonly steerMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<boolean>;
 }
 
 /**
  * The failure of the user's last request on the queue. A failure to steer a message says nothing once the message has
- * left the Runtime's `queued` messages.
+ * left the Computer's `queued` messages.
  */
 export function queueFailure(
     queue: Pick<SessionMessageQueueStore, "feedback">,
@@ -81,7 +81,7 @@ export function queueFailure(
         : feedback.message;
 }
 
-/** The Runtime's queue, enriched from the Session's sole copy of local submitted messages. */
+/** The Computer's queue, enriched from the Session's sole copy of local submitted messages. */
 export function queuedMessages(
     queued: readonly QueuedCommand[],
     queue: Pick<SessionMessageQueueStore, "requests">,
@@ -127,13 +127,13 @@ function withRequest(
 export const createSessionMessageQueueStore = (options: {
     readonly sessionTarget: NativeSessionTarget;
     readonly connection: SessionOperationConnection;
-    /** The Runtime confirmed it withdrew a message. */
+    /** The Computer confirmed it withdrew a message. */
     readonly withdrawn: (commandId: string) => void;
     /** A message taken back for editing returns to the Session's composer. */
     readonly returned: (message: ChatQueuedMessage) => void;
 }) =>
     createStore<SessionMessageQueueStore>()((set, get) => {
-        /** Marks `message` with `request` while the Runtime handles it, unless a request on it already runs. */
+        /** Marks `message` with `request` while the Computer handles it, unless a request on it already runs. */
         const begin = (
             message: ChatQueuedMessage | null,
             request: "steering" | "deleting",
@@ -185,7 +185,7 @@ export const createSessionMessageQueueStore = (options: {
                 options.withdrawn(commandId);
                 return outcome;
             }
-            // The message shows again for as long as the Runtime's queue lists it.
+            // The message shows again for as long as the Computer's queue lists it.
             set((state) => ({
                 feedback: {
                     kind: "failed",

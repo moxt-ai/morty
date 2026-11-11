@@ -541,20 +541,20 @@ test("Given another Session is selected, When the user closes a background Sessi
     });
 });
 
-test("Given a saved Session whose Runtime becomes unavailable, When the user closes it, Then closing fails visibly, the entry stays and closing again after reconnecting removes it", {
+test("Given a saved Session whose Computer becomes unavailable, When the user closes it, Then closing fails visibly, the entry stays and closing again after reconnecting removes it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     await sendPrompt(
         app,
         await app.queryElementByTestId(dataTestId.messageComposer),
-        "Close with an unavailable Runtime",
+        "Close with an unavailable Computer",
     );
     const conversation = await app.queryElementByTestId(dataTestId.managedConversation);
     flushSync(() => fireEvent.contextMenu(conversation));
     const close = await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Close session" }));
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.daemon.disconnect();
 
@@ -562,7 +562,7 @@ test("Given a saved Session whose Runtime becomes unavailable, When the user clo
 
     await app.waitForView(() =>
         expect(getAllByRole(document.body, "alert").map((alert) => alert.textContent)).toContainEqual(
-            expect.stringContaining("Your Morty Runtime is disconnected."),
+            expect.stringContaining("Your Morty Computer is disconnected."),
         ),
     );
     expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(1);

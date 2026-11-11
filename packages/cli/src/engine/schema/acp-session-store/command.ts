@@ -4,7 +4,7 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-o
 /**
  * Every command a Session admitted and what became of it. A row is the command's only authority: its identity, its
  * admission order and its fate change together, and only a command that settled before it started is ever forgotten.
- * `interrupted-before-start` is a command a Runtime restart settled before it started; it alone may be admitted again.
+ * `interrupted-before-start` is a command a Computer restart settled before it started; it alone may be admitted again.
  */
 export const command = sqliteTable(
     "command",

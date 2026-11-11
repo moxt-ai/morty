@@ -6,7 +6,7 @@ import { recordBrowserError } from "../../services/diagnostics/browser-diagnosti
 import { formatError, isSessionClosedFailure } from "../format-error.ts";
 import type { SessionOperationConnection } from "./session-operation-connection.ts";
 
-// Runtime snapshots own current settings. Live updates and history reloads request a new
+// Computer snapshots own current settings. Live updates and history reloads request a new
 // snapshot; historical configuration events never become current settings. The revision
 // travels with its snapshot and is sent only for explicit edits.
 
@@ -30,12 +30,12 @@ export interface SessionSettingsStore {
     readonly change: SettingsChange;
     /** Shows the settings a pane opening the Session read with it. */
     readonly opened: (snapshot: ConfigurationSnapshot) => void;
-    /** Shows settings the Runtime reported. */
+    /** Shows settings the Computer reported. */
     readonly adopt: (snapshot: ConfigurationSnapshot) => void;
     /**
      * Refines the shown settings from an authoritative read, made whenever the
      * history is loaded again. The conversation stays usable while the
-     * read runs, a Runtime that cannot answer keeps the current settings, and settings adopted after the
+     * read runs, a Computer that cannot answer keeps the current settings, and settings adopted after the
      * read started win. A newer read replaces an unfinished one.
      */
     readonly readInBackground: (

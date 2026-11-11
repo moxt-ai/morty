@@ -1,14 +1,14 @@
 import { createServer, request as httpRequest } from "node:http";
 import {
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
     decodeNativeSessionRequest,
     decodeNativeSessionResult,
     type NativeSessionTarget,
-    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 
-/** Drops a real Runtime transport at the Fork boundary; never fabricates a reply. */
+/** Drops a real Computer transport at the Fork boundary; never fabricates a reply. */
 export async function createForkLossProxy(upstream: string, loss: "request" | "result") {
     const server = createServer((incoming, outgoing) => {
         const forwarded = httpRequest(
@@ -34,7 +34,7 @@ export async function createForkLossProxy(upstream: string, loss: "request" | "r
         url.protocol = "ws:";
         const relay = new WebSocket(url, {
             headers: Object.fromEntries(
-                ["authorization", RUNTIME_SUCCESSOR_CREDENTIAL_HEADER].flatMap((name) => {
+                ["authorization", COMPUTER_SUCCESSOR_CREDENTIAL_HEADER].flatMap((name) => {
                     const value = request.headers[name];
                     return typeof value === "string" ? [[name, value]] : [];
                 }),

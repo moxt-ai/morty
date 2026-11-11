@@ -15,7 +15,7 @@ import {
 import { z } from "zod";
 import type { CommandFate, CommandLedgerTable, LedgerCommand } from "../../storage/session/command-ledger-table.ts";
 
-export type RuntimeExecutionReceipt =
+export type ComputerExecutionReceipt =
     | Readonly<{
           attemptId: string;
           commandId: string;
@@ -156,7 +156,7 @@ const storedOutcome = (stored: string): RestatedOutcome | undefined => {
 };
 
 /**
- * The Runtime's answers about the commands it admitted, read from the command ledger, which alone records what
+ * The Computer's answers about the commands it admitted, read from the command ledger, which alone records what
  * became of each command.
  */
 export class ExecutionReceipts {
@@ -515,14 +515,14 @@ export class ExecutionReceipts {
                               kind: "prompt.failed",
                               commandId: command.commandId,
                               attemptId: command.attemptId,
-                              code: "runtime_restarted",
-                              message: "The local runtime restarted while this request was running",
+                              code: "computer_restarted",
+                              message: "The local computer restarted while this request was running",
                           }
                         : {
                               kind: "prompt.failed-before-start",
                               commandId: command.commandId,
-                              code: "runtime_restarted",
-                              message: "The local runtime restarted before this request started",
+                              code: "computer_restarted",
+                              message: "The local computer restarted before this request started",
                           },
             };
             const recordedAt = new Date().toISOString();
@@ -549,7 +549,7 @@ export class ExecutionReceipts {
         sessionTarget: NativeSessionTarget,
         commandJson: string,
         admits: () => boolean,
-    ): RuntimeExecutionReceipt => {
+    ): ComputerExecutionReceipt => {
         const commandHash = createHash("sha256").update(commandJson).digest("hex");
         const standing = this.#standing(commandId, sessionTarget);
         switch (standing.kind) {

@@ -68,8 +68,9 @@ await writeMigrationModule(
     await sqlFiles(join(cli, "migrations/session-event-cache")),
 );
 await writeMigrationModule(
-    join(relayCore, "src/generated/runtime-connection-do-migrations.ts"),
-    "runtimeConnectionDurableObjectMigrations",
+    join(relayCore, "src/generated/computer-connection-do-migrations.ts"),
+    "computerConnectionDurableObjectMigrations",
+    // The migration directory is retained history, not the current domain name.
     await sqlFiles(join(relayCore, "migrations/runtime-connection-do")),
 );
 await writeMigrationModule(

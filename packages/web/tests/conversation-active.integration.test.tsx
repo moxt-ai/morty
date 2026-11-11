@@ -98,7 +98,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -184,7 +184,7 @@ test("Given a conversation is running in the background, When it completes after
     await app.queryElementByTestId(dataTestId.sessionStatus);
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
     await refreshSessions(app);
@@ -269,7 +269,7 @@ test("Given a running reply, When the user reads the conversation, Then its work
     });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await daemon.continueReply("hold after first delta", {
         outcome: "complete",
@@ -293,13 +293,13 @@ test("Given a running reply, When the user reads the conversation, Then its work
     });
 });
 
-test("Given a message waited in the queue, When its turn starts, Then the working timer counts from the Runtime's start, not from when it was queued", {
+test("Given a message waited in the queue, When its turn starts, Then the working timer counts from the Computer's start, not from when it was queued", {
     timeout: 60_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a real Runtime");
+        throw new Error("Expected a real Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));

@@ -23,7 +23,7 @@ const executionResultSchema = z
 const reconciliationSchema = z
     .object({
         detectedAt: timestampSchema,
-        reason: z.enum(["connection_lost", "dispatch_indeterminate", "runtime_restarted"]),
+        reason: z.enum(["connection_lost", "dispatch_indeterminate", "computer_restarted"]),
     })
     .readonly();
 

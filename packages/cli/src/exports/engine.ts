@@ -1,16 +1,16 @@
 export type {
+    ComputerConnectionInput,
+    ComputerCredentialRotation,
+    ComputerCredentials,
     ConnectionManager,
     EngineLoopConnection,
-    MortyRuntimeConnection,
-    MortyRuntimeEngineParams,
-    MortyRuntimePairingOptions,
+    MortyComputerConnection,
+    MortyComputerEngineParams,
+    MortyComputerPairingOptions,
     RunLoopParams,
-    RuntimeConnectionInput,
-    RuntimeCredentialRotation,
-    RuntimeCredentials,
-    VerifiedRuntimeConnection,
-} from "../engine/runtime/engine.ts";
+    VerifiedComputerConnection,
+} from "../engine/computer/engine.ts";
 export {
-    MortyRuntimeEngine,
-    RuntimeRelayRevokedError,
-} from "../engine/runtime/engine.ts";
+    ComputerRelayRevokedError,
+    MortyComputerEngine,
+} from "../engine/computer/engine.ts";

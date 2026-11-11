@@ -1,12 +1,12 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { harness: "settings-test", name: "Settings Agent" } });
+test.use({ computerAgent: { harness: "settings-test", name: "Settings Agent" } });
 
 test("Given consecutive user messages, When I hover the earlier message, Then its copy button does not overlap the next message", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
-    await runtime.openPairedChat();
+    const { page } = computer;
+    await computer.openPairedChat();
 
     await page.getByRole("textbox", { name: "Message" }).fill("hold with consecutive user messages");
     await page.getByRole("button", { name: "Send message" }).click();

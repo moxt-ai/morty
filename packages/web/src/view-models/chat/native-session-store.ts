@@ -1,6 +1,6 @@
 import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/channel";
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi, ChatRuntime, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatComputer, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
 import { harnessValue, type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMortySession } from "./open-session.ts";
@@ -10,7 +10,7 @@ type NativeSessionDirectory =
     | {
           readonly kind: "loading";
           readonly scope: "initial" | "refresh";
-          /** The listing the request in flight is for, or null while the page waits for the Runtime. */
+          /** The listing the request in flight is for, or null while the page waits for the Computer. */
           readonly listing: string | null;
       }
     | { readonly kind: "empty" }
@@ -47,7 +47,7 @@ type ForkIntent = {
 };
 
 export interface NativeSessionStore {
-    /** The agent tab the user chose, by `computerId:harness`; the tabs themselves come from the Runtime configuration. */
+    /** The agent tab the user chose, by `computerId:harness`; the tabs themselves come from the Computer configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -61,8 +61,8 @@ export interface NativeSessionStore {
     /** Stops discovery and preview requests when the dialog closes. */
     readonly stop: () => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
-    /** The Runtime configuration the page follows changed: the listing follows the agent it now offers. */
-    readonly runtimeChanged: () => void;
+    /** The Computer configuration the page follows changed: the listing follows the agent it now offers. */
+    readonly computerChanged: () => void;
     readonly selectAgent: (value: string) => void;
     readonly select: (entry: NativeSessionEntry, signal: AbortSignal) => Promise<void>;
     readonly open: (action: "import" | "fork", signal: AbortSignal) => Promise<void>;
@@ -93,7 +93,7 @@ export function nativeSessionPresentation(model: NativeSessionStore, sessions: r
     };
 }
 
-/** The agent tab a listing is for: the chosen tab while the Runtime still offers it, else the first installed one. */
+/** The agent tab a listing is for: the chosen tab while the Computer still offers it, else the first installed one. */
 function chosenAgent(agents: readonly NativeSessionAgent[], selected: string): NativeSessionAgent | undefined {
     return agents.find((item) => item.value === selected) ?? agents.find((item) => item.installed) ?? agents[0];
 }
@@ -112,15 +112,15 @@ function relistMatch(
     return entries.find((entry) => entry.sessionId === previewed.sessionId);
 }
 
-/** What a listing shows for an agent, to tell whether the Runtime configuration still matches it. */
+/** What a listing shows for an agent, to tell whether the Computer configuration still matches it. */
 function listingFor(agent: NativeSessionAgent | undefined): string {
     return agent === undefined ? "empty" : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.value}`;
 }
 
 export const createNativeSessionStore = (
     requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">,
-    /** The Runtime the page follows, the one owner of which agents it offers. */
-    runtime: () => ChatRuntime | null,
+    /** The Computer the page follows, the one owner of which agents it offers. */
+    computer: () => ChatComputer | null,
     onOpen: (session: OpenMortySession) => void,
 ) => {
     let selection: AbortController | null = null;
@@ -143,11 +143,11 @@ export const createNativeSessionStore = (
         forkIntent: null,
         error: "",
         load: async (parent) => {
-            const current = runtime();
+            const current = computer();
             const agent = current === null ? undefined : chosenAgent(nativeSessionAgentTabs(current), get().selected);
             const listing = current === null ? null : listingFor(agent);
             const before = get().directory;
-            // The Runtime runs one native session operation per agent at a time: a request it is still carrying
+            // The Computer runs one native session operation per agent at a time: a request it is still carrying
             // out answers for this listing too, and cancelling it to send the same request again would only be
             // refused as busy.
             if (listing !== null && before.kind === "loading" && before.listing === listing) {
@@ -162,7 +162,7 @@ export const createNativeSessionStore = (
             const previewedEntry = previewed.kind === "empty" ? null : previewed.entry;
             set({ directory: { kind: "loading", scope, listing }, preview: { kind: "empty" }, error: "" });
             if (current === null) {
-                // The page has not heard from the Runtime yet; its first configuration starts the listing.
+                // The page has not heard from the Computer yet; its first configuration starts the listing.
                 return;
             }
             try {
@@ -211,7 +211,7 @@ export const createNativeSessionStore = (
                 const next = relistMatch(entries, previewedEntry) ?? entries[0];
                 if (next !== undefined) {
                     // Only the dialog's lifetime cancels this preview. A discovery restart must not abort it, or a
-                    // Runtime configuration refresh right after opening would strand the pane on its skeleton.
+                    // Computer configuration refresh right after opening would strand the pane on its skeleton.
                     void get().select(next, lifetime.signal);
                 }
             } catch (cause) {
@@ -225,10 +225,10 @@ export const createNativeSessionStore = (
                 }
             }
         },
-        runtimeChanged: () => {
-            const current = runtime();
+        computerChanged: () => {
+            const current = computer();
             // An Open, Fork or Load more the user sent keeps running: restarting discovery would cancel a request
-            // the Runtime may already be carrying out. Its end checks the listing against the configuration again.
+            // the Computer may already be carrying out. Its end checks the listing against the configuration again.
             if (current === null || get().operation !== "idle") {
                 return;
             }
@@ -257,7 +257,7 @@ export const createNativeSessionStore = (
                 return;
             }
             // Selecting the auto-selected entry again must retain its in-flight native read.
-            // Cancelling and restarting it races the Runtime's operation ownership.
+            // Cancelling and restarting it races the Computer's operation ownership.
             if (
                 (preview.kind === "loading" || preview.kind === "ready") &&
                 preview.entry.sessionId === entry.sessionId
@@ -355,7 +355,7 @@ export const createNativeSessionStore = (
             } finally {
                 if (!signal.aborted) {
                     set({ operation: "idle" });
-                    get().runtimeChanged();
+                    get().computerChanged();
                 }
             }
         },
@@ -400,7 +400,7 @@ export const createNativeSessionStore = (
             } finally {
                 if (!signal.aborted) {
                     set({ operation: "idle" });
-                    get().runtimeChanged();
+                    get().computerChanged();
                 }
             }
         },

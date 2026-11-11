@@ -11,7 +11,7 @@ test("Given a local file link in an active response, When more output arrives du
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await daemon.writeFiles(new Map([["/workspace/index.html", { content: interactiveHtml, mediaType: "text/html" }]]));
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");

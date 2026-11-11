@@ -1,4 +1,55 @@
 export {
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
+    computerCredentialSuccessor,
+    isComputerCredentialSuccessor,
+} from "./computer/credential.ts";
+export type {
+    ComputerDiagnosticsRequest,
+    ComputerDiagnosticsResult,
+} from "./computer/diagnostics.ts";
+export {
+    decodeComputerDiagnosticsRequest,
+    decodeComputerDiagnosticsResult,
+    encodeComputerDiagnosticsRequest,
+    encodeComputerDiagnosticsResult,
+} from "./computer/diagnostics.ts";
+export type {
+    ComputerHeartbeatAckEvent,
+    ComputerHeartbeatEvent,
+    ComputerLivenessReadyEvent,
+    ComputerPingCommand,
+    ComputerPongEvent,
+    ComputerStatusEvent,
+} from "./computer/liveness.ts";
+export {
+    COMPUTER_HEARTBEAT_ACK_KIND,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_KIND,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_PING_KIND,
+    COMPUTER_PONG_KIND,
+    COMPUTER_STATUS_KIND,
+    decodeComputerHeartbeatAckEvent,
+    decodeComputerHeartbeatEvent,
+    decodeComputerLivenessReadyEvent,
+    decodeComputerPingCommand,
+    decodeComputerPongEvent,
+    decodeComputerStatusEvent,
+    encodeComputerHeartbeatAckEvent,
+    encodeComputerHeartbeatEvent,
+    encodeComputerLivenessReadyEvent,
+    encodeComputerPingCommand,
+    encodeComputerPongEvent,
+    encodeComputerStatusEvent,
+} from "./computer/liveness.ts";
+export type { ComputerUpgradeResult } from "./computer/upgrade.ts";
+export {
+    decodeComputerUpgradeResult,
+    decodeComputerUpgradeVersion,
+    encodeComputerUpgradeResult,
+} from "./computer/upgrade.ts";
+export {
     MORTY_API_PREFIX,
     MORTY_API_VERSION,
     MortyApiConfigurationError,
@@ -6,73 +57,16 @@ export {
     mortyApiUrl,
     parseMortyApiPrefix,
 } from "./relay/morty-api.ts";
-
 export type { ProjectLocationHint } from "./relay/project-location.ts";
-
 export {
     isProjectLocationHint,
     PROJECT_LOCATION_HINTS,
 } from "./relay/project-location.ts";
-
 export type { ProjectPermissionName } from "./relay/project-permission.ts";
-
 export {
     PROJECT_PERMISSION_NAMES,
     RELAY_APP_PROJECT_PERMISSIONS,
 } from "./relay/project-permission.ts";
-export {
-    isRuntimeCredentialSuccessor,
-    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
-    runtimeCredentialSuccessor,
-} from "./runtime/credential.ts";
-export type {
-    RuntimeDiagnosticsRequest,
-    RuntimeDiagnosticsResult,
-} from "./runtime/diagnostics.ts";
-export {
-    decodeRuntimeDiagnosticsRequest,
-    decodeRuntimeDiagnosticsResult,
-    encodeRuntimeDiagnosticsRequest,
-    encodeRuntimeDiagnosticsResult,
-} from "./runtime/diagnostics.ts";
-export type {
-    RuntimeHeartbeatAckEvent,
-    RuntimeHeartbeatEvent,
-    RuntimeLivenessReadyEvent,
-    RuntimePingCommand,
-    RuntimePongEvent,
-    RuntimeStatusEvent,
-} from "./runtime/liveness.ts";
-export {
-    decodeRuntimeHeartbeatAckEvent,
-    decodeRuntimeHeartbeatEvent,
-    decodeRuntimeLivenessReadyEvent,
-    decodeRuntimePingCommand,
-    decodeRuntimePongEvent,
-    decodeRuntimeStatusEvent,
-    encodeRuntimeHeartbeatAckEvent,
-    encodeRuntimeHeartbeatEvent,
-    encodeRuntimeLivenessReadyEvent,
-    encodeRuntimePingCommand,
-    encodeRuntimePongEvent,
-    encodeRuntimeStatusEvent,
-    RUNTIME_HEARTBEAT_ACK_KIND,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_KIND,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_PING_KIND,
-    RUNTIME_PONG_KIND,
-    RUNTIME_STATUS_KIND,
-} from "./runtime/liveness.ts";
-
-export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
-
-export {
-    decodeRuntimeUpgradeResult,
-    decodeRuntimeUpgradeVersion,
-    encodeRuntimeUpgradeResult,
-} from "./runtime/upgrade.ts";
 
 export type {
     SessionAccessClaims,

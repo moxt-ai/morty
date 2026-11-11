@@ -28,7 +28,7 @@ test("Given streamed HTML examples, When the response grows and completes, Then 
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Runtime");
+        throw new Error("Expected a controlled Agent Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));

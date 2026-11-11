@@ -1,11 +1,11 @@
 import { expect, test } from "./infra/test.ts";
 
 test("Given the browser denies clipboard access, When I copy a response and then allow access, Then I receive manual-copy guidance and can retry successfully", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
+    const { page } = computer;
     await page.clock.install({ time: new Date("2026-10-27T12:00:00Z") });
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("distinguish agent work");
     await page.getByRole("button", { name: "Send message" }).click();
     const response = page
@@ -18,7 +18,7 @@ test("Given the browser denies clipboard access, When I copy a response and then
         await permissions.send("Browser.setPermission", {
             permission: { name: "clipboard-write" },
             setting: "denied",
-            origin: runtime.origin,
+            origin: computer.origin,
         });
         await copy.click();
         await expect(response.getByRole("alert")).toContainText("select the response and copy it manually");

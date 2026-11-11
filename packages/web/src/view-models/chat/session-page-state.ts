@@ -25,9 +25,9 @@ import { createSessionSettingsStore, type SessionSettingsStore } from "./session
 import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
 
 /**
- * What the page holds for one Session, whichever pane shows it: the Session's execution as the Runtime reported it,
+ * What the page holds for one Session, whichever pane shows it: the Session's execution as the Computer reported it,
  * what the user is writing, the messages the page submitted, and what the user asked the Session to do: its requests
- * on the Runtime's queue, a stop, a settings change, answers to the Agent and a confirmed rename. A pane is replaced on
+ * on the Computer's queue, a stop, a settings change, answers to the Agent and a confirmed rename. A pane is replaced on
  * every re-read or reconnection and only follows the Session's connection and timeline, feeding what it observes into
  * the execution state; this state lasts as long as the page, so no replacement resets a Session fact or ends a Session
  * operation.
@@ -35,11 +35,11 @@ import { createSessionTaskControlsStore, type SessionTaskControlsStore } from ".
 export interface SessionPageState {
     /** The Session's operations lifetime on this page; only its end cancels what the user asked the Session to do. */
     readonly lifetime: AbortSignal;
-    /** How the Session's operations reach the Runtime through the connection of the pane following the Session. */
+    /** How the Session's operations reach the Computer through the connection of the pane following the Session. */
     readonly connection: SessionOperationConnection;
     readonly composer: StoreApi<SessionComposerStore>;
     readonly delivery: StoreApi<SessionDeliveryStore>;
-    /** The Session's execution: the one place that orders what the Runtime reports about it. */
+    /** The Session's execution: the one place that orders what the Computer reports about it. */
     readonly execution: StoreApi<SessionExecutionStore>;
     readonly interactions: StoreApi<SessionInteractionStore>;
     readonly queue: StoreApi<SessionMessageQueueStore>;
@@ -82,7 +82,7 @@ export function createSessionPageState(options: {
                 centralSessionStorage.write(unsentEntry, content);
             }
         },
-        runtime: () => execution.getState().state,
+        computer: () => execution.getState().state,
     });
     const tasks = createSessionTaskControlsStore({ clock: options.clock, sessionTarget, connection });
     const queue = createSessionMessageQueueStore({
@@ -138,11 +138,11 @@ export function createSessionPageState(options: {
             }
         },
     });
-    // What the page derives from the Runtime's account follows every move of the execution state.
+    // What the page derives from the Computer's account follows every move of the execution state.
     const execution = createSessionExecutionStore({
         changed: (previous, next) => {
             delivery.getState().observe();
-            // Drafts follow the questions the Runtime's account leaves pending, not those a pane opened without.
+            // Drafts follow the questions the Computer's account leaves pending, not those a pane opened without.
             if (next.interactions !== previous.interactions && next.coverage.kind === "covered") {
                 interactions.getState().questionsChanged(pendingQuestionIds(next.interactions));
             }

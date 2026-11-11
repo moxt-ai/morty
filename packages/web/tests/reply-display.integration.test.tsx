@@ -47,7 +47,7 @@ async function startControlled(prompt: string, clock?: TestClock): Promise<TestA
 
 function controlledDaemon(app: TestApp): NonNullable<TestApp["daemon"]> {
     if (app.daemon === null) {
-        throw new Error("Expected a controlled Agent Runtime");
+        throw new Error("Expected a controlled Agent Computer");
     }
     return app.daemon;
 }
@@ -262,7 +262,7 @@ test("Given a reply is streaming, When Chat loses its connection and recovers, T
     });
 });
 
-test("Given a reply is streaming, When the Runtime restarts, Then the partial reply stays once and the turn is reported as failed rather than complete", {
+test("Given a reply is streaming, When the Computer restarts, Then the partial reply stays once and the turn is reported as failed rather than complete", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -279,7 +279,7 @@ test("Given a reply is streaming, When the Runtime restarts, Then the partial re
 
     await app.waitForView(() => {
         expect(getByRole(document.body, "alert").textContent).toContain(
-            "The local runtime restarted while this request was running",
+            "The local computer restarted while this request was running",
         );
         expect(queryAllByText(document.body, "Partial reply", { exact: true })).toHaveLength(1);
         expect(agentReplies()).toHaveLength(1);

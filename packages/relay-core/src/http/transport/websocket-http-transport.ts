@@ -84,7 +84,7 @@ function transportError(code: WebSocketTransportErrorCode): WebSocketTransportEr
     return new WebSocketTransportError(code);
 }
 
-/** Shared by browser connections owned by one Runtime, not by unrelated Runtimes. */
+/** Shared by browser connections owned by one Computer, not by unrelated Computers. */
 export class WebSocketUploadBudget {
     #bytes = 0;
     #requests = 0;
@@ -116,21 +116,21 @@ class PendingBinaryUpload {
     readonly byteLength: number;
     readonly message: Readonly<Record<string, unknown>>;
     readonly #connectionBudget: WebSocketUploadBudget;
-    readonly #runtimeBudget: WebSocketUploadBudget;
+    readonly #computerBudget: WebSocketUploadBudget;
     readonly #onFailure: (cause: unknown) => Promise<void>;
 
     constructor(
         byteLength: number,
         message: Readonly<Record<string, unknown>>,
         connectionBudget: WebSocketUploadBudget,
-        runtimeBudget: WebSocketUploadBudget,
+        computerBudget: WebSocketUploadBudget,
         onFailure: (cause: unknown) => Promise<void>,
     ) {
         connectionBudget.reserve(byteLength);
         this.byteLength = byteLength;
         this.message = message;
         this.#connectionBudget = connectionBudget;
-        this.#runtimeBudget = runtimeBudget;
+        this.#computerBudget = computerBudget;
         this.#onFailure = onFailure;
         this.#timeout = setTimeout(() => {
             void this.fail(transportError("request_timeout"));
@@ -147,7 +147,7 @@ class PendingBinaryUpload {
                 await this.fail(response);
                 return;
             }
-            this.#runtimeBudget.reserve(this.byteLength);
+            this.#computerBudget.reserve(this.byteLength);
             this.#state = "authorized";
             this.#ready.resolve(true);
         } catch (cause) {
@@ -162,7 +162,7 @@ class PendingBinaryUpload {
             return;
         }
         if (this.#state === "authorized") {
-            this.#runtimeBudget.release(this.byteLength);
+            this.#computerBudget.release(this.byteLength);
         }
         this.#state = "closed";
         clearTimeout(this.#timeout);
@@ -317,7 +317,7 @@ export function acceptWebSocketHttpTransport(
         | { readonly kind: "open"; readonly socket: WebSocket }
     >();
     // Buffer in-flight chunks within this connection while admission is authorized.
-    // Only verified uploads may consume the Runtime-wide budget.
+    // Only verified uploads may consume the Computer-wide budget.
     const connectionUploads = new WebSocketUploadBudget();
     const binaryRequests = new Map<string, PendingBinaryUpload>();
     const browserOrigin = request.headers.get("origin");

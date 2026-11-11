@@ -1,5 +1,5 @@
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
-import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
+import type { BotComputerConfiguration } from "../../services/chat/bot-chat-api.ts";
 import { type BotChatHomeStore, homeCanStartConversation } from "./bot-chat-home-store.ts";
 import { connectionPresentation } from "./connection-presentation.ts";
 import { directoryName } from "./directory-name.ts";
@@ -17,7 +17,7 @@ export function pendingExecutionContext(
     const base: ExecutionContext = {
         ...connectionPresentation(home, null),
         harness: "",
-        machine: home.runtimeConfiguration?.runtime.machineName.trim() || (loading ? "Loading…" : "Unknown"),
+        machine: home.computerConfiguration?.computer.machineName.trim() || (loading ? "Loading…" : "Unknown"),
         agent: loading ? "Loading…" : "Unknown",
         directory: null,
         directoryName: loading ? "Loading…" : "Unknown",
@@ -29,13 +29,13 @@ export function pendingExecutionContext(
     switch (settings.kind) {
         case "ready":
         case "refreshing": {
-            // The draft only chose which agent runs; its names come from the Runtime configuration the page follows.
-            const runtime = home.runtimeConfiguration?.runtime;
-            const offered = runtime?.agents.find((agent) => agent.harness === settings.selectedAgent.harness);
+            // The draft only chose which agent runs; its names come from the Computer configuration the page follows.
+            const computer = home.computerConfiguration?.computer;
+            const offered = computer?.agents.find((agent) => agent.harness === settings.selectedAgent.harness);
             return {
                 ...base,
                 harness: settings.selectedAgent.harness,
-                machine: runtime?.machineName.trim() || settings.selectedAgent.machineName.trim() || "Unknown",
+                machine: computer?.machineName.trim() || settings.selectedAgent.machineName.trim() || "Unknown",
                 agent: offered?.label.trim() || settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
                 directoryName: directoryName(settings.cwd.directoryLabel),
@@ -52,9 +52,9 @@ export function pendingExecutionContext(
 
 function sessionHarnessIdentity(
     session: SelectedMortySession,
-    configuration: BotRuntimeConfiguration | null,
+    configuration: BotComputerConfiguration | null,
 ): { readonly harness: string; readonly agent: string } {
-    const agent = configuration?.runtime.agents.find((candidate) => candidate.harness === session.harness);
+    const agent = configuration?.computer.agents.find((candidate) => candidate.harness === session.harness);
     return {
         harness: session.harness,
         agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
@@ -66,7 +66,7 @@ export function activeHarnessMark(
     settings: DraftControlsStore["settings"],
 ): { readonly harness: string; readonly label: string } {
     if (home.selection.kind === "ready") {
-        const identity = sessionHarnessIdentity(home.selection.session, home.runtimeConfiguration);
+        const identity = sessionHarnessIdentity(home.selection.session, home.computerConfiguration);
         return { harness: identity.harness, label: identity.agent };
     }
     const context = pendingExecutionContext(home, settings);
@@ -78,13 +78,13 @@ export function sessionExecutionContext(
     home: BotChatHomeStore,
     connection: SessionConnection,
 ): ExecutionContext {
-    const configuration = home.runtimeConfiguration;
+    const configuration = home.computerConfiguration;
     const identity = sessionHarnessIdentity(session, configuration);
 
     return {
         ...connectionPresentation(home, connection),
         harness: identity.harness,
-        machine: configuration?.runtime.machineName.trim() || "Unknown",
+        machine: configuration?.computer.machineName.trim() || "Unknown",
         agent: identity.agent,
         directory: session.result.ready.directoryLabel,
         directoryName: directoryName(session.result.ready.directoryLabel),

@@ -1,0 +1,31 @@
+import { AdapterRegistry } from "../acp/adapter/adapter-registry.ts";
+import { harnessAdapters } from "../acp/adapter/registry.ts";
+import { AcpContentExternalizer } from "../acp/content/content-externalizer.ts";
+import type { AdapterDependencies, AdapterResolver } from "../acp/native-history/preview-contract.ts";
+import type { CatalogAgent } from "./catalog.ts";
+
+export function createComputerAdapterRegistry(
+    adapters: AdapterResolver,
+    processes: AdapterDependencies["processes"],
+    externalize: ConstructorParameters<typeof AcpContentExternalizer>[0],
+    linkedResources: ConstructorParameters<typeof AcpContentExternalizer>[1],
+) {
+    const contentExternalizer = new AcpContentExternalizer(externalize, linkedResources);
+    const externalizeSessionUpdate: AcpContentExternalizer["update"] = (sessionTarget, update, signal) =>
+        contentExternalizer.update(sessionTarget, update, signal);
+    return {
+        adapters: new AdapterRegistry(adapters, { processes, contentExternalizer }),
+        externalizeSessionUpdate,
+    };
+}
+
+/** Local Agent inventory and its explicitly registered harness adapters. */
+export class ComputerAgentDependencies {
+    readonly agents: readonly CatalogAgent[];
+    readonly adapters: AdapterResolver;
+
+    constructor(agents: readonly CatalogAgent[], adapters: AdapterResolver = harnessAdapters) {
+        this.agents = agents;
+        this.adapters = adapters;
+    }
+}

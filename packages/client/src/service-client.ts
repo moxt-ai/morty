@@ -86,7 +86,7 @@ export interface MortyCredentialProvider {
 
 export interface DiscoverMortyAgentSettingsRequest {
     /**
-     * The directory a new Session would start in; omitted, the Runtime's default directory. The result's `directory`
+     * The directory a new Session would start in; omitted, the Computer's default directory. The result's `directory`
      * names the directory actually inspected.
      */
     readonly directory?: string;
@@ -868,7 +868,7 @@ export class MortyTurnResources {
             turnId,
         );
 
-    /** Withdraws a queued prompt only when the Runtime confirms it did not execute. */
+    /** Withdraws a queued prompt only when the Computer confirms it did not execute. */
     readonly cancelQueued = async (
         sessionTarget: NativeSessionTarget,
         turnId: string,

@@ -8,7 +8,7 @@ async function replyWithMarkdown(markdown: string, outcome: "hold" | "complete")
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Runtime");
+        throw new Error("Expected a controlled Agent Computer");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {

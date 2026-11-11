@@ -2,11 +2,11 @@ import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 test("Given an online computer, when the browser loses and regains its network, then the switcher and both computer lists agree", async ({
-    runtime,
+    computer,
 }) => {
-    const { page } = runtime;
+    const { page } = computer;
     await page.clock.install({ time: new Date("2026-10-29T00:00:00Z") });
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     const switcher = page.getByRole("button", { name: /Switch computer/ });
     await expect(switcher).toHaveAttribute("data-connection-status", "connected");
     await switcher.click();
@@ -26,7 +26,7 @@ test("Given an online computer, when the browser loses and regains its network, 
     await page.getByRole("button", { name: "Open navigation" }).click();
     const mobileChoice = page
         .getByRole("navigation", { name: "Computers" })
-        .getByRole("button", { name: /^(Online )?Browser test Runtime/ });
+        .getByRole("button", { name: /^(Online )?Browser test Computer/ });
     await expect(mobileChoice).toContainText("Unavailable");
     await expect(mobileChoice).not.toContainText("Online");
 

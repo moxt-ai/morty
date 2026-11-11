@@ -29,7 +29,7 @@ for (const agent of [
             dataTestId.messageComposer,
             (element) => element instanceof HTMLTextAreaElement && !element.disabled,
         );
-        expect(notice.textContent).toContain("Controlled Agent Runtime");
+        expect(notice.textContent).toContain("Controlled Agent Computer");
         expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
         const details = getByText(notice, "Technical details").closest("details");
         const steps = getByText(notice, "View steps").closest("details");
@@ -51,7 +51,7 @@ for (const agent of [
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Keep my next message");
         if (agent.harness === "claude") {
             if (app.daemon === null) {
-                throw new Error("Expected the connected Runtime");
+                throw new Error("Expected the connected Computer");
             }
             await app.daemon.disconnect();
             await showReconnectNotice(app, clock);

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { MortyRuntimeEngine } from "../../../engine/runtime/engine.ts";
-import { describeRelayFailure } from "../../../engine/runtime/relay/diagnostics.ts";
+import { MortyComputerEngine } from "../../../engine/computer/engine.ts";
+import { describeRelayFailure } from "../../../engine/computer/relay/diagnostics.ts";
 import { ensureProbeDirectory } from "../../../storage/diagnostics/relay-probe-files.ts";
 import { configuredProbeProxy, failureCode, type RelayProbeRole, readProbeConfiguration } from "./config.ts";
 import { collectRouteEvidence, type RouteEvidence } from "./routes.ts";
@@ -56,7 +56,7 @@ export async function runRelayProbeWorker(
         ]);
         const workspace = join(directory, "workspace");
         await ensureProbeDirectory(workspace);
-        const engine = new MortyRuntimeEngine({
+        const engine = new MortyComputerEngine({
             engineDataDir: join(directory, "state"),
             agentLaunchEnvironment: { HOME: join(directory, "home"), PATH: "" },
         });

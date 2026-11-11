@@ -11,7 +11,7 @@ import type { ChatWorkspace } from "./chat-workspace.ts";
 export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
     const home = workspace.home.getState();
     const project = modelDiagnosticProjection();
-    const runtime = home.runtimeConfiguration?.runtime;
+    const computer = home.computerConfiguration?.computer;
     if (home.selection.kind === "draft") {
         const settings = workspace.draftControls.getState().settings;
         if (settings.kind !== "ready") {
@@ -22,8 +22,8 @@ export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
         return {
             kind: "available",
             view: "draft",
-            computerId: runtime?.computerId ?? null,
-            runtimeOnline: runtime?.online ?? false,
+            computerId: computer?.computerId ?? null,
+            computerOnline: computer?.online ?? false,
             agent: { harness: diagnosticAgent(catalog.harness), version: diagnosticVersion(catalog.agentVersion) },
             catalog: {
                 source: "agent-settings",
@@ -50,8 +50,8 @@ export function chatDiagnostics(workspace: ChatWorkspace): ChatDiagnostics {
     return {
         kind: "available",
         view: "session",
-        computerId: runtime?.computerId ?? null,
-        runtimeOnline: runtime?.online ?? false,
+        computerId: computer?.computerId ?? null,
+        computerOnline: computer?.online ?? false,
         agent: { harness: diagnosticAgent(ready.harness), version: diagnosticVersion(ready.agentVersion) },
         catalog: {
             source: "session-ready",

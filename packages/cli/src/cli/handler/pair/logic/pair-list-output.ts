@@ -1,13 +1,13 @@
-import type { VerifiedRuntimeConnection } from "../../../../engine/runtime/connection/runtime-connection.ts";
+import type { VerifiedComputerConnection } from "../../../../engine/computer/connection/computer-connection.ts";
 import { writeExistingFile } from "../../../../storage/files/output-file.ts";
 
 export interface SavedPairSummary {
     readonly computerId: string;
-    readonly status: VerifiedRuntimeConnection["activation"];
+    readonly status: VerifiedComputerConnection["activation"];
     readonly workspace: string;
 }
 
-export function savedPairSummary(connection: VerifiedRuntimeConnection): SavedPairSummary {
+export function savedPairSummary(connection: VerifiedComputerConnection): SavedPairSummary {
     return {
         computerId: connection.computerId,
         workspace: connection.defaultWorkspace,

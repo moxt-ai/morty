@@ -1,10 +1,10 @@
-import { refreshAgentCatalog } from "../../engine/runtime/catalog/refresh-agent-catalog.ts";
-import type { RuntimeConfig } from "../../engine/runtime/config.ts";
-import { prepareRuntimeConnection } from "../../engine/runtime/pairing.ts";
-import { RuntimeRelayRevokedError } from "../../engine/runtime/relay/runtime-revocation.ts";
-import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
-import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
-import { RuntimeTurnActivity } from "../../engine/session/turn/runtime-turn-activity.ts";
+import { refreshAgentCatalog } from "../../engine/computer/catalog/refresh-agent-catalog.ts";
+import { ComputerLoop } from "../../engine/computer/computer-loop.ts";
+import type { ComputerConfig } from "../../engine/computer/config.ts";
+import { prepareComputerConnection } from "../../engine/computer/pairing.ts";
+import { ComputerRelayRevokedError } from "../../engine/computer/relay/computer-revocation.ts";
+import { ComputerAgentProcesses } from "../../engine/session/process/computer-agent-processes.ts";
+import { ComputerTurnActivity } from "../../engine/session/turn/computer-turn-activity.ts";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
 import { logDirectory, WORKER_LIFECYCLE_LOG_FILENAME } from "../../engine/storage/logs/log-files.ts";
@@ -16,10 +16,10 @@ import { serveLocalControl } from "../control/local-server.ts";
 import { openMortyInstallation } from "../pairing/pair-local-machine.ts";
 import { surviveUnhandledRejections, type UnhandledRejectionGuard } from "./unhandled-rejection.ts";
 
-class DaemonRuntimeError extends Error {
-    readonly code = "worker_runtime_failed";
+class DaemonComputerError extends Error {
+    readonly code = "worker_computer_failed";
     constructor(pairingGeneration: string, cause: unknown) {
-        super(`Runtime pairing ${pairingGeneration} failed`, { cause });
+        super(`Computer pairing ${pairingGeneration} failed`, { cause });
     }
 }
 
@@ -68,7 +68,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     const shutdown = new AbortController();
     const combined = AbortSignal.any([signal, shutdown.signal]);
     try {
-        await runDaemonRuntime(version, combined, shutdown, rejectionGuard);
+        await runDaemonComputer(version, combined, shutdown, rejectionGuard);
     } catch (cause) {
         const control = await openMortyInstallation(AbortSignal.timeout(5_000), process.env);
         new BoundedLineLog(logDirectory(control.stateDirectory), WORKER_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
@@ -84,7 +84,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     }
 }
 
-async function runDaemonRuntime(
+async function runDaemonComputer(
     version: string,
     combined: AbortSignal,
     shutdown: AbortController,
@@ -106,19 +106,19 @@ async function runDaemonRuntime(
     try {
         const installation = control;
         rejectionGuard.bindStateDirectory(control.stateDirectory);
-        const turnActivity = new RuntimeTurnActivity();
-        const agentProcesses = new RuntimeAgentProcesses();
+        const turnActivity = new ComputerTurnActivity();
+        const agentProcesses = new ComputerAgentProcesses();
         let active:
             | {
                   readonly pairingGeneration: string;
-                  readonly config: RuntimeConfig;
+                  readonly config: ComputerConfig;
                   readonly controller: AbortController;
                   readonly completion: Promise<void>;
               }
             | undefined;
         const fail = (pairingGeneration: string, cause: unknown): void => {
-            console.error(`Runtime pairing ${pairingGeneration} failed; stopping the daemon`, cause);
-            shutdown.abort(new DaemonRuntimeError(pairingGeneration, cause));
+            console.error(`Computer pairing ${pairingGeneration} failed; stopping the daemon`, cause);
+            shutdown.abort(new DaemonComputerError(pairingGeneration, cause));
         };
         const reconcile = async (): Promise<void> => {
             const connection = await installation.currentConnection(combined);
@@ -132,7 +132,7 @@ async function runDaemonRuntime(
             }
             if (connection?.activation === "active") {
                 try {
-                    const config = await prepareRuntimeConnection(
+                    const config = await prepareComputerConnection(
                         installation,
                         connection,
                         combined,
@@ -141,8 +141,8 @@ async function runDaemonRuntime(
                     );
                     const controller = new AbortController();
                     // Process diagnostics live beside the shared control directory,
-                    // so every Runtime can include them in bug reports.
-                    const loop = new RuntimeLoop(async () => config, {
+                    // so every Computer can include them in bug reports.
+                    const loop = new ComputerLoop(async () => config, {
                         processLogsDirectory: control.stateDirectory,
                         turnActivity,
                         agentProcesses,
@@ -150,28 +150,28 @@ async function runDaemonRuntime(
                     const completion = loop.run(AbortSignal.any([combined, controller.signal])).then(
                         () => {
                             if (!combined.aborted && !controller.signal.aborted) {
-                                fail(connection.pairingGeneration, new Error("The Runtime stopped unexpectedly"));
+                                fail(connection.pairingGeneration, new Error("The Computer stopped unexpectedly"));
                             }
                         },
                         async (cause: unknown) => {
                             if (combined.aborted || controller.signal.aborted) {
                                 return;
                             }
-                            if (!(cause instanceof RuntimeRelayRevokedError)) {
+                            if (!(cause instanceof ComputerRelayRevokedError)) {
                                 fail(connection.pairingGeneration, cause);
                                 return;
                             }
-                            // A revoked Runtime never connects again; setup pairs this computer anew, and the daemon
+                            // A revoked Computer never connects again; setup pairs this computer anew, and the daemon
                             // keeps running to serve that pairing.
                             lifecycleLog.record(
                                 JSON.stringify({
-                                    kind: "runtime_revoked",
+                                    kind: "computer_revoked",
                                     pairingGeneration: connection.pairingGeneration,
                                     timestamp: new Date().toISOString(),
                                 }),
                             );
                             console.error(
-                                "Morty disconnected this Runtime: its connection key was used somewhere else. Run Morty setup on this computer again to reconnect.",
+                                "Morty disconnected this Computer: its connection key was used somewhere else. Run Morty setup on this computer again to reconnect.",
                             );
                             await installation
                                 .setConnectionActivation(connection.pairingGeneration, "stopped", combined)
@@ -205,7 +205,7 @@ async function runDaemonRuntime(
                 return { kind: "error", code: "unsupported_operation", message: "Unknown local control operation" };
             }
             // A reload, such as `morty start` after the user installs or signs in to an Agent, also re-reads the
-            // Agent inventory of Runtimes that were already running; Runtimes it starts read it themselves.
+            // Agent inventory of Computers that were already running; Computers it starts read it themselves.
             const pending = reload.then(async () => {
                 const previous = active;
                 await reconcile();
@@ -252,7 +252,7 @@ async function runDaemonRuntime(
                     }
                 },
             );
-            if (shutdown.signal.reason instanceof DaemonRuntimeError) {
+            if (shutdown.signal.reason instanceof DaemonComputerError) {
                 throw shutdown.signal.reason;
             }
         } finally {

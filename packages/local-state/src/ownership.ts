@@ -13,7 +13,7 @@ function missing(cause: unknown): boolean {
     return cause instanceof Error && "code" in cause && cause.code === "ENOENT";
 }
 
-/** Called before setup, control or Runtime writes. Never adopt an unmarked nonempty directory. */
+/** Called before setup, control or Computer writes. Never adopt an unmarked nonempty directory. */
 export async function claimMortyState(root: string, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     await mkdir(root, { recursive: true, mode: 0o700 });

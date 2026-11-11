@@ -2,13 +2,13 @@ import { createServer, request } from "node:http";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, expect, test, vi } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
-import { createFakeAgentHarnessRuntime } from "../support/relay-agent-harness.ts";
+import { createFakeAgentHarnessComputer } from "../support/relay-agent-harness.ts";
 import { createForkLossProxy } from "./fixtures/fork-loss-proxy.ts";
 
 afterEach(() => vi.useRealTimers());
 
 test.each(["request", "result"] as const)(
-    "Given the Runtime Fork %s is lost, When the operation is retried after reconnect, Then one Fork exists and a completed Fork remains recoverable without its source",
+    "Given the Computer Fork %s is lost, When the operation is retried after reconnect, Then one Fork exists and a completed Fork remains recoverable without its source",
     async (loss) => {
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
         await using relay = await startTestRelay();
@@ -19,7 +19,7 @@ test.each(["request", "result"] as const)(
         const connected = Promise.withResolvers<void>();
         const reconnected = Promise.withResolvers<void>();
         let wasDisconnected = false;
-        await using runtime = await createFakeAgentHarnessRuntime({
+        await using computer = await createFakeAgentHarnessComputer({
             credential: project.token,
             origin: relay.baseUrl,
             relayOrigin: proxy.origin,
@@ -27,7 +27,7 @@ test.each(["request", "result"] as const)(
             server: relay.app,
             signal,
             sessionIds: new Set(["native-fork-source"]),
-            runtimeOptions: {
+            computerOptions: {
                 onConnectionStatus: (status) => {
                     if (status === "reconnecting") {
                         wasDisconnected = true;
@@ -42,8 +42,8 @@ test.each(["request", "result"] as const)(
             },
         });
         await connected.promise;
-        await runtime.api.nativeSessions(
-            runtime.computerId,
+        await computer.api.nativeSessions(
+            computer.computerId,
             {
                 action: "list",
                 harness: "claude",
@@ -59,16 +59,16 @@ test.each(["request", "result"] as const)(
             directory: ".",
             sessionId: "native-fork-source",
         };
-        const fork = () => runtime.api.forkNativeSession(runtime.computerId, operationId, input, signal);
-        await expect(fork()).rejects.toMatchObject({ code: "runtime_offline" });
+        const fork = () => computer.api.forkNativeSession(computer.computerId, operationId, input, signal);
+        await expect(fork()).rejects.toMatchObject({ code: "computer_offline" });
         const lost = await proxy.lost;
         await disconnected.promise;
         await vi.advanceTimersByTimeAsync(500);
         await reconnected.promise;
         if (loss === "result") {
-            await runtime.removeNativeSession("native-fork-source");
+            await computer.removeNativeSession("native-fork-source");
         }
-        // The Runtime answers a retry from the receipt it keeps under the operation, or forks once if the Fork never
+        // The Computer answers a retry from the receipt it keeps under the operation, or forks once if the Fork never
         // reached it.
         const [first, concurrent] = await Promise.all([fork(), fork()]);
         expect(concurrent).toEqual(first);
@@ -77,7 +77,7 @@ test.each(["request", "result"] as const)(
         }
         expect(first.ready).toMatchObject({ target: first.target, harness: "claude", restored: true });
         expect(await fork()).toEqual(first);
-        const sessions = await runtime.api.managedSessions(signal);
+        const sessions = await computer.api.managedSessions(signal);
         expect(sessions).toHaveLength(1);
         expect(sessions[0]?.target).toEqual(first.target);
     },
@@ -88,7 +88,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     await using relay = await startTestRelay();
     const signal = new AbortController().signal;
     const project = await relay.createOwner();
-    const runtime = await relay.connectAgent(
+    const computer = await relay.connectAgent(
         project.computerId,
         undefined,
         new Set(["recovery-native-source", "another-native-source"]),
@@ -162,7 +162,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         });
         expect(conflict.status).toBe(409);
         expect(await conflict.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
-        const after = await runtime.api.managedSessions(signal);
+        const after = await computer.api.managedSessions(signal);
         expect(after).toHaveLength(1); // One tracked fork for the user's one intent; the native source was never imported.
     } finally {
         proxy.closeAllConnections();

@@ -86,7 +86,7 @@ test("Given Session creation failed for my first message, When the computer goes
     creation.reject();
     await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
     await daemon.disconnect();
-    // The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
+    // The Worker checks the Computer every 5 s and retries a failed check 5 s later, so one change can take two checks.
     await app.waitForView(
         () => expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", true),
         20_000,
@@ -153,11 +153,11 @@ test("Given my first message is waiting for Session creation, When the page relo
     );
 });
 
-test("Given my first message's Session was just created, When the page reloads before the Runtime takes the message, Then the message returns to that Session's composer unsent", {
+test("Given my first message's Session was just created, When the page reloads before the Computer takes the message, Then the message returns to that Session's composer unsent", {
     timeout: 60_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
-    // Reload the moment the page follows the created Session, before its pane can reach the Runtime.
+    // Reload the moment the page follows the created Session, before its pane can reach the Computer.
     const reloading = Promise.withResolvers<TestApp>();
     let reloaded = false;
     const observer = new MutationObserver(() => {

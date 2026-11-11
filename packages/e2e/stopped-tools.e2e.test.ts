@@ -1,7 +1,7 @@
 import { expect, test } from "./infra/test.ts";
-import type { createTestRuntime } from "./infra/test-runtime.ts";
+import type { createTestComputer } from "./infra/test-computer.ts";
 
-type E2EPage = Awaited<ReturnType<typeof createTestRuntime>>["page"];
+type E2EPage = Awaited<ReturnType<typeof createTestComputer>>["page"];
 
 /** Tools sit behind each turn's step summary; expands every summary, including ones that streamed in since. */
 async function expectTools(page: E2EPage, label: string, count: number) {
@@ -14,14 +14,14 @@ async function expectTools(page: E2EPage, label: string, count: number) {
     }).toPass();
 }
 
-test.use({ runtimeAgent: { harness: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
+test.use({ computerAgent: { harness: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
 for (const width of [1440, 390]) {
     test(`Given a running tool at ${width}px, When I stop and reload the turn, Then unfinished tools are interrupted, the stop stays where it ended, and later turns preserve that outcome`, async ({
-        runtime,
+        computer,
     }, testInfo) => {
-        const { page } = runtime;
+        const { page } = computer;
         await page.setViewportSize({ width, height: 900 });
-        await runtime.openPairedChat();
+        await computer.openPairedChat();
         const composer = page.getByRole("textbox", { name: "Message" });
         await composer.fill("hold unfinished tools");
         await page.getByRole("button", { name: "Send message" }).click();

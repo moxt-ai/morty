@@ -171,7 +171,7 @@ try {
     await expect(page.getByText(reply, { exact: true })).toHaveCount(2, { timeout: 90_000 });
     await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeHidden({ timeout: 90_000 });
     await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeVisible({ timeout: 90_000 });
-    await page.getByRole("textbox", { name: "Message", exact: true }).fill("Continue after the Runtime restart.");
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill("Continue after the Computer restart.");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByText(reply, { exact: true })).toHaveCount(3, { timeout: 90_000 });
     await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeHidden({ timeout: 90_000 });

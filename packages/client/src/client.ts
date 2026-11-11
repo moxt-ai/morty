@@ -1,9 +1,9 @@
 import {
+    COMPUTER_STATUS_KIND,
+    decodeComputerStatusEvent,
     decodeKnownDaemonToServiceMessage,
     decodeMessageKind,
-    decodeRuntimeStatusEvent,
     type NativeSessionTarget,
-    RUNTIME_STATUS_KIND,
     type SessionElicitationRespondCommand,
     type SessionPermissionResolvedEvent,
 } from "@morty-build/client/protocol";
@@ -141,8 +141,8 @@ export class MortyClient {
         try {
             const encoded = readMessageText(event);
             const kind = decodeMessageKind(encoded);
-            if (kind === RUNTIME_STATUS_KIND) {
-                this.#onStatus(decodeRuntimeStatusEvent(encoded).online);
+            if (kind === COMPUTER_STATUS_KIND) {
+                this.#onStatus(decodeComputerStatusEvent(encoded).online);
                 return;
             }
             decodeKnownDaemonToServiceMessage(encoded);

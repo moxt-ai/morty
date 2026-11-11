@@ -7,7 +7,7 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { draftHarnessSelection, draftShownOptions } from "../../view-models/chat/draft-controls-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
-import { runtimeDisconnectedMessage } from "../../view-models/format-error.ts";
+import { computerDisconnectedMessage } from "../../view-models/format-error.ts";
 
 function DraftChatControlsSkeleton() {
     return (
@@ -29,8 +29,8 @@ export function DraftChatControls({
     readonly disabled: boolean;
 }) {
     const viewModel = useExternalStore(workspace.draftControls);
-    // The picker offers the Agents the Runtime offers now, which can change while the draft is open.
-    const runtimeConfiguration = useStore(workspace.home, (state) => state.runtimeConfiguration);
+    // The picker offers the Agents the Computer offers now, which can change while the draft is open.
+    const computerConfiguration = useStore(workspace.home, (state) => state.computerConfiguration);
     const signal = workspace.chatSignal();
     const { settings } = viewModel;
     const retry = () => {
@@ -40,7 +40,7 @@ export function DraftChatControls({
         return <DraftChatControlsSkeleton />;
     }
     if (settings.kind === "failed" || settings.kind === "unreachable") {
-        const message = settings.kind === "unreachable" ? runtimeDisconnectedMessage : settings.message;
+        const message = settings.kind === "unreachable" ? computerDisconnectedMessage : settings.message;
         return (
             <div className="flex min-w-0 items-center gap-1">
                 <span className="sr-only" role="alert">
@@ -79,7 +79,7 @@ export function DraftChatControls({
     }
     const switching = settings.kind === "switching";
     const settingsLoading = switching || settings.kind === "refreshing";
-    const harness = draftHarnessSelection(settings, runtimeConfiguration);
+    const harness = draftHarnessSelection(settings, computerConfiguration);
     // Settings kept on screen while new ones load cannot be changed.
     const options = draftShownOptions(settings);
     const model = options.find((option) => option.category === "model" && option.type !== "boolean");

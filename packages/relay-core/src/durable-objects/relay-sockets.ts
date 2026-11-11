@@ -29,7 +29,7 @@ export class RelaySockets {
 
     async fetch(request: Request): Promise<Response> {
         return await this.withOperationSignal(
-            async (signal) => await this.#dependencies.applications.runtime.fetch(new Request(request, { signal })),
+            async (signal) => await this.#dependencies.applications.computer.fetch(new Request(request, { signal })),
             request.signal,
         );
     }
@@ -40,7 +40,7 @@ export class RelaySockets {
         const close = () => controller.abort(new DOMException("The channel socket closed", "AbortError"));
         webSocket.addEventListener("close", close, { once: true });
         try {
-            await this.#dependencies.services.runtime.receiveMessage(
+            await this.#dependencies.services.computer.receiveMessage(
                 socket.identity(),
                 socket,
                 message,
@@ -49,8 +49,8 @@ export class RelaySockets {
         } catch (error) {
             if (!controller.signal.aborted || error !== controller.signal.reason) {
                 this.#logger.error(
-                    { ...socketLogContext(webSocket), err: error, event: "runtime_websocket_message_failed" },
-                    "Runtime WebSocket message failed",
+                    { ...socketLogContext(webSocket), err: error, event: "computer_websocket_message_failed" },
+                    "Computer WebSocket message failed",
                 );
             }
             throw error;
@@ -64,29 +64,29 @@ export class RelaySockets {
         close: { readonly code: number; readonly reason: string; readonly wasClean: boolean },
     ): Promise<void> {
         // Complete the peer's close handshake, including viewers consumed inside this same DO.
-        webSocket.close(1000, "Runtime connection closed");
+        webSocket.close(1000, "Computer connection closed");
         const context = socketLogContext(webSocket);
         const details = {
             ...context,
             closeCode: close.code,
             closeReason: diagnosticText(close.reason),
             wasClean: close.wasClean,
-            event: "runtime_websocket_closed",
+            event: "computer_websocket_closed",
         };
         if (!close.wasClean || (close.code !== 1000 && close.code !== 1001)) {
-            this.#logger.warn(details, "Runtime WebSocket closed");
+            this.#logger.warn(details, "Computer WebSocket closed");
         } else if (context.role === "daemon" || context.role === "replaced-daemon") {
-            this.#logger.info(details, "Runtime WebSocket closed");
+            this.#logger.info(details, "Computer WebSocket closed");
         }
         const socket = new CloudflareChannelSocket(webSocket);
         try {
             await this.withOperationSignal((signal) =>
-                this.#dependencies.services.runtime.detach(socket.identity(), socket, signal),
+                this.#dependencies.services.computer.detach(socket.identity(), socket, signal),
             );
         } catch (error) {
             this.#logger.error(
-                { ...details, err: error, event: "runtime_websocket_detach_failed" },
-                "Runtime WebSocket detach failed",
+                { ...details, err: error, event: "computer_websocket_detach_failed" },
+                "Computer WebSocket detach failed",
             );
             throw error;
         }
@@ -94,13 +94,13 @@ export class RelaySockets {
 
     /** Closes the host connections and live Session views whose credential no longer authorizes them. */
     async reauthorizeConnections(): Promise<void> {
-        await this.withOperationSignal((signal) => this.#dependencies.services.runtime.reauthorizeConnections(signal));
+        await this.withOperationSignal((signal) => this.#dependencies.services.computer.reauthorizeConnections(signal));
     }
 
     webSocketError(socket: WebSocket, error: unknown): void {
         this.#logger.error(
-            { ...socketLogContext(socket), err: error, event: "runtime_websocket_error" },
-            "Runtime WebSocket error",
+            { ...socketLogContext(socket), err: error, event: "computer_websocket_error" },
+            "Computer WebSocket error",
         );
         socket.close(1011, "WebSocket error");
     }
@@ -111,7 +111,7 @@ export class RelaySockets {
     ): Promise<T> => {
         const controller = new AbortController();
         const timer = setTimeout(
-            () => controller.abort(new DOMException("Runtime operation timed out", "TimeoutError")),
+            () => controller.abort(new DOMException("Computer operation timed out", "TimeoutError")),
             30_000,
         );
         try {

@@ -248,13 +248,13 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
     expect(dialog.textContent).not.toContain("Local execution. Remote access you can revoke.");
 });
 
-test("Given a paired Bot, When its Runtime disconnects, Then the disconnected status is visible", {
+test("Given a paired Bot, When its Computer disconnects, Then the disconnected status is visible", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
         prepare: async (application) => {
-            const runtime = await application.connectAgent();
-            await runtime.disconnect();
+            const computer = await application.connectAgent();
+            await computer.disconnect();
         },
     });
     await app.queryElementByTestId(
@@ -326,7 +326,7 @@ test("Given a paired computer, When a user opens Agent configuration, Then its h
     expect(getByRole(harnesses, "radio", { name: "Pi" }).getAttribute("aria-disabled")).toBe("true");
 });
 
-test("Given a Bot has a recent directory from another harness, When its Runtime configuration loads, Then the directory remains available", {
+test("Given a Bot has a recent directory from another harness, When its Computer configuration loads, Then the directory remains available", {
     timeout: 30_000,
 }, async () => {
     const created = await createTestApp({
@@ -517,7 +517,7 @@ test("Given a conversation whose settings the user left untouched, When the user
     }
 });
 
-test("Given a chosen New Session directory the Runtime briefly cannot read, When the draft loads in the default directory and the directory returns, Then the next draft starts in the chosen directory again", {
+test("Given a chosen New Session directory the Computer briefly cannot read, When the draft loads in the default directory and the directory returns, Then the next draft starts in the chosen directory again", {
     timeout: 90_000,
 }, async () => {
     const root = await mkdtemp(join(tmpdir(), "morty-chosen-directory-"));
@@ -642,7 +642,7 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
     const configurationTrigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
     expect(configurationTrigger.textContent).toContain("Test Small");
     expect(configurationTrigger.textContent).not.toContain("Codex");
-    expect(configurationTrigger.textContent).not.toContain("Controlled Agent Runtime");
+    expect(configurationTrigger.textContent).not.toContain("Controlled Agent Computer");
     expect(configurationTrigger.querySelector(".lucide-sliders-horizontal")).toBeNull();
     expect(app.elementByTestId(dataTestId.harnessTriggerMark, configurationTrigger)).toBeDefined();
 });

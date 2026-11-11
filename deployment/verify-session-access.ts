@@ -2,8 +2,8 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import * as v from "valibot";
-import { memoryRuntimeCredentials } from "../packages/cli/tests/support/runtime-credentials.ts";
-import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../tests/support/fake-daemon/runtime.ts";
+import { memoryComputerCredentials } from "../packages/cli/tests/support/computer-credentials.ts";
+import { connectControlledAgentComputer, createMortyFakeDaemon } from "../tests/support/fake-daemon/computer.ts";
 import { mortyReply } from "../tests/support/fake-daemon/scenarios.ts";
 
 const targets = v.parse(
@@ -60,7 +60,7 @@ const pairing = v.parse(
 const behavior = { harness: "codex", agentName: "Controlled verification Agent", reply: mortyReply };
 const harness = createMortyFakeDaemon(behavior);
 const claim = v.parse(
-    v.object({ runtimeCredential: v.string() }),
+    v.object({ computerCredential: v.string() }),
     await request(`/morty/api/v1/pairings/${owner.computerId}/redeem`, 200, undefined, {
         pairingCode: pairing.pairingCode,
         machineName: "Deployment verification",
@@ -68,13 +68,13 @@ const claim = v.parse(
         agents: harness.catalog,
     }),
 );
-await using _runtime = await connectControlledAgentRuntime({
+await using _computer = await connectControlledAgentComputer({
     behavior,
     signal,
     connection: {
         computerId: owner.computerId,
         origin: origin.origin,
-        credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+        credentials: memoryComputerCredentials(claim.computerCredential),
     },
 });
 const chat = `/morty/api/chat/computers/${owner.computerId}`;
@@ -129,7 +129,7 @@ await writeFile(
             architecture: "single-worker",
             revision: process.env["EXPECTED_REVISION"],
             configuredSigningKeyVerified: true,
-            runtimeVerificationStatus: 200,
+            computerVerificationStatus: 200,
             forgeryStatus: 401,
             retiredEndpointsStatus: 404,
             endedHolderStatus: 401,

@@ -6,7 +6,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { flushSync } from "react-dom";
 import * as v from "valibot";
 import { afterAll, afterEach } from "vitest";
-import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
+import type { ControlledAgent } from "../../../../tests/support/fake-daemon/computer.ts";
 import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
 import { encodeIdentityScope, identityScopeSchema } from "../../src/services/identity/identity-scope-url.ts";
@@ -267,7 +267,7 @@ export async function createTestApp(
             activeApps.delete(app);
             // A real reload gets a fresh page with its own Chat API
             // transport; the reloaded document keeps the live server and
-            // Runtime fixtures but replaces the disposed transport so a
+            // Computer fixtures but replaces the disposed transport so a
             // late close from the old socket cannot reject its requests.
             const transport = new TestApiTransport(current.origin);
             transport.open();

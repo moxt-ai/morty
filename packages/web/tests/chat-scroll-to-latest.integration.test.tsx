@@ -68,7 +68,7 @@ test("Given an Agent is working while the latest message is out of view, When th
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Runtime");
+        throw new Error("Expected a controlled Agent Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.queryElementByTestId(dataTestId.sessionStatus);

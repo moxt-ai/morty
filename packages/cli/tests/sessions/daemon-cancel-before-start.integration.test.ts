@@ -18,7 +18,7 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-test("Given a command already completed, When a delayed queue edit cancels it before start, Then the Runtime refuses to claim that it was withdrawn", async () => {
+test("Given a command already completed, When a delayed queue edit cancels it before start, Then the Computer refuses to claim that it was withdrawn", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
     const directory = await mkdtemp(join(tmpdir(), "morty-late-queue-edit-"));
@@ -35,7 +35,7 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                         disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
-                        prompt: "Complete before the edit reaches the Runtime",
+                        prompt: "Complete before the edit reaches the Computer",
                         target: peer.target,
                     }),
                 );
@@ -303,7 +303,7 @@ function fileCreated(directory: string, name: string): Promise<void> {
     return created.promise;
 }
 
-test("Given a prompt still loading its conversation's saved history, When the client withdraws it, Then the Runtime withdraws it before it starts and the next prompt runs", async () => {
+test("Given a prompt still loading its conversation's saved history, When the client withdraws it, Then the Computer withdraws it before it starts and the next prompt runs", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-30T00:00:00Z"));
     const directory = await mkdtemp(join(tmpdir(), "morty-withdraw-loading-"));

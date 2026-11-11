@@ -1,9 +1,9 @@
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeAgentSettingsDiscoverCommand,
+    decodeComputerDiagnosticsResult,
     decodeNativeSessionRequest,
     decodeNativeSessionResult,
-    decodeRuntimeDiagnosticsResult,
     decodeSessionArchiveCommand,
     decodeSessionArchivedEvent,
     decodeSessionCreateCommand,
@@ -27,7 +27,7 @@ import * as v from "valibot";
 import type { ComputerBackendService } from "../../../../../relay/src/service/computer-backend-service.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ComputerManagementError, relayIdentifier } from "../entity/computer-management.ts";
-import type { RuntimePairing } from "../entity/runtime-pairing.ts";
+import type { ComputerPairing } from "../entity/computer-pairing.ts";
 
 type ChatSessionTarget = {
     readonly target: NativeSessionTarget;
@@ -85,7 +85,7 @@ export class LocalComputerService {
         }
         const deadline = new AbortController();
         const timer = setTimeout(
-            () => deadline.abort(new DOMException("Runtime operation timed out", "TimeoutError")),
+            () => deadline.abort(new DOMException("Computer operation timed out", "TimeoutError")),
             timeout,
         );
         const signal = AbortSignal.any([parent, deadline.signal]);
@@ -100,7 +100,7 @@ export class LocalComputerService {
             if (cause instanceof ComputerManagementError || isHttpError(cause)) {
                 throw cause;
             }
-            throw new ComputerManagementError("RELAY_UNAVAILABLE", "Morty could not complete Runtime setup.", 502, {
+            throw new ComputerManagementError("RELAY_UNAVAILABLE", "Morty could not complete Computer setup.", 502, {
                 cause,
             });
         } finally {
@@ -114,7 +114,7 @@ export class LocalComputerService {
     });
     readonly readPairing = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.readPairing(signal), 15_000);
-    readonly readRuntimePairing = async (computerId: string, signal: AbortSignal): Promise<RuntimePairing> => {
+    readonly readComputerPairing = async (computerId: string, signal: AbortSignal): Promise<ComputerPairing> => {
         try {
             const pairing = await this.readPairing(computerId, signal);
             switch (pairing.status) {
@@ -132,30 +132,30 @@ export class LocalComputerService {
             throw cause;
         }
     };
-    readonly revokeRuntime = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(computerId, signal, (computer, signal) => computer.revokeRuntime(signal), 15_000);
-    readonly chatRuntimes = async (computerId: string, signal: AbortSignal) => {
-        const runtimes = await this.#run(computerId, signal, (computer, signal) => computer.runtimes(signal), 15_000);
-        return runtimes.map(({ computerId, machineName, online, agents }) => ({
+    readonly revokeComputer = async (computerId: string, signal: AbortSignal) =>
+        await this.#run(computerId, signal, (computer, signal) => computer.revokeComputer(signal), 15_000);
+    readonly chatComputers = async (computerId: string, signal: AbortSignal) => {
+        const computers = await this.#run(computerId, signal, (computer, signal) => computer.computers(signal), 15_000);
+        return computers.map(({ computerId, machineName, online, agents }) => ({
             computerId,
             machineName,
             online,
             agents: agents.map(({ harness, label }) => ({ harness, label })),
         }));
     };
-    readonly getChatRuntimeAgents = async (computerId: string, signal: AbortSignal) =>
+    readonly getChatComputerAgents = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.agents(signal), 15_000);
-    readonly readRuntimeDiagnostics = async (computerId: string, signal: AbortSignal) =>
+    readonly readComputerDiagnostics = async (computerId: string, signal: AbortSignal) =>
         await this.#run(
             computerId,
             signal,
             async (computer, signal) =>
-                decodeRuntimeDiagnosticsResult(JSON.stringify(await computer.diagnostics(signal))),
+                decodeComputerDiagnosticsResult(JSON.stringify(await computer.diagnostics(signal))),
             10_000,
         );
-    readonly measureRuntimeLatency = async (computerId: string, signal: AbortSignal) =>
+    readonly measureComputerLatency = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.latency(signal), 15_000);
-    readonly openChatRuntimeHost = async (computerId: string, signal: AbortSignal) =>
+    readonly openChatComputerHost = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.openHost(signal), 20_000);
     readonly listChatDirectory = async (computerId: string, directory: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) =>
@@ -404,7 +404,7 @@ export class LocalComputerService {
         input: { readonly harness: string; readonly sessionId: string; readonly directory: string },
         signal: AbortSignal,
     ) => await this.#run(computerId, signal, (computer, signal) => computer.fork(operationId, input, signal));
-    readonly previewRuntimeNativeEvents = async (
+    readonly previewComputerNativeEvents = async (
         computerId: string,
         target: NativeSessionTarget,
         directory: string,

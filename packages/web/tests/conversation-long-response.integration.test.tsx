@@ -8,7 +8,7 @@ async function startLongResponse(text: string) {
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Runtime");
+        throw new Error("Expected a controlled Agent Computer");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,

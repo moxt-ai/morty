@@ -65,7 +65,7 @@ jobs:
           path: .release
           run-id: ${{ inputs.artifact_run_id }}
           github-token: ${{ github.token }}
-      - name: Compile source Runtime adapters used by deployment verification
+      - name: Compile source Computer adapters used by deployment verification
         run: pnpm --dir packages/cli run prebuild
       - name: Restore source maps for the exact archived browser release
         if: env.OPERATION == 'restore'

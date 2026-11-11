@@ -164,7 +164,7 @@ function readFailure(cause: unknown, timedOut: boolean, path: string): Extract<F
     if (timedOut || code === "operation_timeout") {
         return { kind: "failed", code: "timeout", path, message: "The local file preview timed out. Try reloading." };
     }
-    if (code === "runtime_offline" || code === "session_not_connected") {
+    if (code === "computer_offline" || code === "session_not_connected") {
         return {
             kind: "failed",
             code: "offline",

@@ -4,16 +4,16 @@ import type { SessionManager } from "../manager/session-manager.ts";
 import { resolveSessionDirectory } from "../workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 
-/** A Session this Runtime holds, ready to use. */
+/** A Session this Computer holds, ready to use. */
 export interface HeldSession {
     readonly options: SessionPrepareOptions;
-    /** The directory the Session runs in, as this Runtime recorded it. */
+    /** The directory the Session runs in, as this Computer recorded it. */
     readonly directory: string;
     readonly directoryLabel: string;
 }
 
 /**
- * Resolves a command that names only a Session's target into the Session this Runtime holds: the Agent its target
+ * Resolves a command that names only a Session's target into the Session this Computer holds: the Agent its target
  * names, and the directory it records, authorized again before use. A target it holds no Session for is refused as
  * `session_not_found`.
  */

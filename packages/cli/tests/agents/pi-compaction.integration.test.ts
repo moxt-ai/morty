@@ -93,7 +93,7 @@ test("Given pi compacts the conversation, When the daemon relays the turn, Then 
         // pi returns the summary it retained from its compact RPC.
         expect(summaryText.join("").length).toBeGreaterThan(0);
 
-        // Given a compacted native session, a Runtime restart must replay the
+        // Given a compacted native session, a Computer restart must replay the
         // conversation rather than just Pi's current model context.
         await peer.restart();
         const requestId = randomUUID();

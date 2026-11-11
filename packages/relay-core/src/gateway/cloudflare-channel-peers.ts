@@ -7,11 +7,11 @@ import {
 import * as v from "valibot";
 import type { ChannelSocket, HistoryRequestKind } from "../service/channel/channel-actor.ts";
 import type {
+    ComputerPeers,
+    ComputerSocket,
+    ComputerSocketIdentity,
     DaemonHeartbeat,
-    RuntimePeers,
-    RuntimeSocket,
-    RuntimeSocketIdentity,
-} from "../service/channel/runtime-service.ts";
+} from "../service/channel/computer-service.ts";
 
 // Four maximum-length routes fit alongside connection identity within the attachment budget.
 const MAX_SETTINGS_DISCOVERY_ROUTES = 4;
@@ -67,7 +67,7 @@ const attachmentSchema = v.union([
     }),
 ]);
 
-export class CloudflareChannelSocket implements RuntimeSocket {
+export class CloudflareChannelSocket implements ComputerSocket {
     readonly #socket: WebSocket;
 
     constructor(socket: WebSocket) {
@@ -79,7 +79,7 @@ export class CloudflareChannelSocket implements RuntimeSocket {
         return identity.role === "host" || identity.role === "viewer" ? identity.sessionFilter : undefined;
     }
 
-    readonly identity = (): RuntimeSocketIdentity => {
+    readonly identity = (): ComputerSocketIdentity => {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         if (attachment.role === "host") {
             return {
@@ -210,13 +210,13 @@ export class CloudflareChannelSocket implements RuntimeSocket {
     private readonly hostAttachment = () => {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         if (attachment.role !== "host") {
-            throw new Error("A Runtime socket cannot carry a Host control request");
+            throw new Error("A Computer socket cannot carry a Host control request");
         }
         return attachment;
     };
 }
 
-export class CloudflareChannelPeers implements RuntimePeers {
+export class CloudflareChannelPeers implements ComputerPeers {
     readonly #state: DurableObjectState;
 
     constructor(state: DurableObjectState) {
@@ -229,7 +229,7 @@ export class CloudflareChannelPeers implements RuntimePeers {
             return { socket, identity: socket.identity() };
         });
 
-    readonly daemonConnections: RuntimePeers["daemonConnections"] = () =>
+    readonly daemonConnections: ComputerPeers["daemonConnections"] = () =>
         this.#state.getWebSockets("daemon").map((webSocket) => {
             const socket = new CloudflareChannelSocket(webSocket);
             const answeredAt = this.#state.getWebSocketAutoResponseTimestamp(webSocket)?.getTime();
@@ -259,7 +259,7 @@ export class CloudflareChannelPeers implements RuntimePeers {
                 : [],
         );
 
-    readonly operations: RuntimePeers["operations"] = () => [];
+    readonly operations: ComputerPeers["operations"] = () => [];
 
     readonly nativeRequests = (): readonly { readonly requestId: string; readonly socket: ChannelSocket }[] =>
         this.#state.getWebSockets("native-request").map((webSocket) => {
@@ -276,7 +276,7 @@ export class CloudflareChannelPeers implements RuntimePeers {
             .filter(({ socket }) => socket.permitsSessionHistory())
             .map(({ socket }) => socket);
 
-    readonly accept: RuntimePeers["accept"] = (identity) => {
+    readonly accept: ComputerPeers["accept"] = (identity) => {
         const pair = new WebSocketPair();
         const server = pair[1];
         server.serializeAttachment(attachment(identity));
@@ -290,6 +290,6 @@ export class CloudflareChannelPeers implements RuntimePeers {
     };
 }
 
-function attachment(identity: RuntimeSocketIdentity): v.InferInput<typeof attachmentSchema> {
+function attachment(identity: ComputerSocketIdentity): v.InferInput<typeof attachmentSchema> {
     return identity.role === "host" ? { ...identity, pendingAgentSettingsDiscoveries: [] } : identity;
 }

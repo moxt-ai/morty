@@ -9,8 +9,8 @@ export type ClosedSessionHandling = "reopen" | "keep-closed";
 export type SessionEnding = "close" | "archive";
 
 /**
- * Where a Session stands in this Runtime apart from its Agent process. A Session without an entry is open, and so is
- * one no longer held: whether the Runtime holds a Session is the Session store's fact, so an archived Session leaves
+ * Where a Session stands in this Computer apart from its Agent process. A Session without an entry is open, and so is
+ * one no longer held: whether the Computer holds a Session is the Session store's fact, so an archived Session leaves
  * no entry behind.
  */
 type SessionLifecycle =

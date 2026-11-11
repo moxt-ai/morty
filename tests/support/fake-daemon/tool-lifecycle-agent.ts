@@ -4,7 +4,7 @@ import {
     type ControlledSessionUpdate,
     controlledSessionUpdates,
     fakeDaemonCapabilities,
-} from "@morty-build/runtime-test-support/fake-daemon";
+} from "@morty-build/computer-test-support/fake-daemon";
 import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import type {
     AcpEndpointTermination,

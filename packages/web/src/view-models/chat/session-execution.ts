@@ -12,16 +12,16 @@ import type { DeliveryPlacement, DeliveryState } from "./session-delivery-store.
 import { type DelegationStage, requestedInteraction, type SessionLifecycleFact } from "./session-lifecycle.ts";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
-// What the page knows about one Session's execution: the current turn, the Runtime's queue, the Agent's pending
-// requests, and what the Runtime has shown of each command. Every fact about the execution, a live lifecycle event, an
+// What the page knows about one Session's execution: the current turn, the Computer's queue, the Agent's pending
+// requests, and what the Computer has shown of each command. Every fact about the execution, a live lifecycle event, an
 // execution read, the service's acceptance of a submission, enters through `applyExecutionFact`, and only there is it
 // decided whether a fact is newer than what the state already holds. The page keeps this state for the Session, so it
 // outlives the pane that follows the Session; the pane feeds facts in and performs the reads the transitions ask for.
 
-/** The Runtime's account of the Session's execution, as one read returns it. */
+/** The Computer's account of the Session's execution, as one read returns it. */
 type SessionExecutionSnapshot = Awaited<ReturnType<MortyClient["sessions"]["readSessionExecution"]>>;
 
-/** A message the Runtime holds queued behind the running turn. */
+/** A message the Computer holds queued behind the running turn. */
 export type QueuedCommand = SessionExecutionSnapshot["queued"][number];
 
 /** A point of the Session's execution log: its generation, and a position that only grows within it. */
@@ -43,10 +43,10 @@ type InteractionChange = Extract<
 /** What a lifecycle event says about the Session's execution. */
 export type LiveExecutionChange =
     | InteractionChange
-    /** The Runtime's queue changed; only a read tells what it holds now. */
+    /** The Computer's queue changed; only a read tells what it holds now. */
     | { readonly kind: "queue-changed" }
     /**
-     * The Runtime started the command at `startedAt`. A command that `steers` joined the running execution instead of
+     * The Computer started the command at `startedAt`. A command that `steers` joined the running execution instead of
      * starting one, so it does not become the turn to stop.
      */
     | {
@@ -55,7 +55,7 @@ export type LiveExecutionChange =
           readonly startedAt: number;
           readonly steers: boolean;
       }
-    /** The Runtime handed the command to the native session's owner, which reached `stage` with it at `at`. */
+    /** The Computer handed the command to the native session's owner, which reached `stage` with it at `at`. */
     | {
           readonly kind: "turn-delegated";
           readonly commandId: string;
@@ -84,9 +84,9 @@ export type SessionExecutionFact =
       }
     | LiveExecutionFact
     /**
-     * The Runtime's account of the execution through `snapshot.executionPosition`, for a read that began when the
+     * The Computer's account of the execution through `snapshot.executionPosition`, for a read that began when the
      * state's `executionReadBasis` was `basis`. `deliveryCommandId` names the command whose delivery the read asked for;
-     * `readAt`, when it returned, dates a running turn whose Runtime does not report its start.
+     * `readAt`, when it returned, dates a running turn whose Computer does not report its start.
      */
     | {
           readonly kind: "read";
@@ -110,19 +110,19 @@ export type SessionExecutionFact =
     | { readonly kind: "turn-submitted" }
     /** The pane's timeline shows the `shown` commands' own messages; its history records the `recorded` commands. */
     | { readonly kind: "history"; readonly shown: readonly string[]; readonly recorded: readonly string[] }
-    /** The Runtime closed the Session, which runs and queues nothing and asks nothing of the user. */
+    /** The Computer closed the Session, which runs and queues nothing and asks nothing of the user. */
     | { readonly kind: "closed" };
 
-/** What the Runtime has shown this page about one of the Session's commands. */
-interface RuntimeCommand {
+/** What the Computer has shown this page about one of the Session's commands. */
+interface ComputerCommand {
     /**
-     * When this page learned the Runtime holds the command: how many commands it had learned of before. Commands are
+     * When this page learned the Computer holds the command: how many commands it had learned of before. Commands are
      * never forgotten, so this orders them in the order they were learned.
      */
     readonly learnedAt: number;
     /** The timeline showed the command's own message. */
     readonly shown: boolean;
-    /** The Runtime reported the command's turn ended. */
+    /** The Computer reported the command's turn ended. */
     readonly ended: boolean;
 }
 
@@ -140,19 +140,19 @@ type ExecutionCoverage =
 export interface SessionExecutionState {
     readonly coverage: ExecutionCoverage;
     readonly turn: CurrentTurn;
-    /** The messages the Runtime holds queued, as last observed. */
+    /** The messages the Computer holds queued, as last observed. */
     readonly queued: readonly QueuedCommand[];
     /** The queue the last applied read listed, and the `basis` it began with: what it could not have seen. */
     readonly listing: { readonly queued: ReadonlySet<string>; readonly basis: number } | null;
     /** The Agent's requests in arrival order, each with its latest resolution. */
     readonly interactions: readonly SessionInteraction[];
-    readonly commands: ReadonlyMap<string, RuntimeCommand>;
+    readonly commands: ReadonlyMap<string, ComputerCommand>;
 }
 
 type SessionExecutionEffect =
-    /** The state needs a fresh read of the Runtime's execution before it is current again. */
+    /** The state needs a fresh read of the Computer's execution before it is current again. */
     | { readonly kind: "read" }
-    /** The Runtime reported what runs and what is queued; the timeline marks it at this point. */
+    /** The Computer reported what runs and what is queued; the timeline marks it at this point. */
     | { readonly kind: "mark-timeline"; readonly running: string | null; readonly queued: readonly string[] };
 
 interface SessionExecutionTransition {
@@ -175,13 +175,13 @@ function settled(state: SessionExecutionState): SessionExecutionTransition {
     return { state, effects: [] };
 }
 
-/** Records that the Runtime holds `commandIds`, and that it showed or ended them. */
+/** Records that the Computer holds `commandIds`, and that it showed or ended them. */
 function learn(
     state: SessionExecutionState,
     commandIds: readonly string[],
     fact: "holds" | "shows" | "ended",
 ): SessionExecutionState {
-    let commands: Map<string, RuntimeCommand> | null = null;
+    let commands: Map<string, ComputerCommand> | null = null;
     for (const commandId of commandIds) {
         const current = commands ?? state.commands;
         const known = current.get(commandId);
@@ -408,8 +408,8 @@ function applyRead(
         return replayHeld(settled({ ...state, coverage: { kind: "covered", position: coverage.position } }), held);
     }
     const running = snapshot.turn;
-    // Only the Runtime knows whether a submission arrived, including one that finished while no pane followed the
-    // Session. A Runtime or Relay that cannot report it omits the delivery, and the submission stays unconfirmed. The
+    // Only the Computer knows whether a submission arrived, including one that finished while no pane followed the
+    // Session. A Computer or Relay that cannot report it omits the delivery, and the submission stays unconfirmed. The
     // execution receipt of a running command confirms its delivery even when admission and live events were lost.
     let next = learn(
         state,
@@ -542,17 +542,17 @@ export function executionReadBasis(state: SessionExecutionState): number {
     return state.commands.size;
 }
 
-/** Whether the Runtime has shown it holds the command: listed, running, ended, recorded or confirmed by a receipt. */
-export function runtimeHoldsCommand(state: SessionExecutionState, commandId: string): boolean {
+/** Whether the Computer has shown it holds the command: listed, running, ended, recorded or confirmed by a receipt. */
+export function computerHoldsCommand(state: SessionExecutionState, commandId: string): boolean {
     return state.commands.has(commandId);
 }
 
 /**
- * Whether the Runtime's own account now shows a message the service accepted, so the page no longer needs its copy.
+ * Whether the Computer's own account now shows a message the service accepted, so the page no longer needs its copy.
  * A message that runs as a turn is covered once the timeline shows it; history names each turn's command. A message
  * shown in the queue keeps its files there until it starts or a read that could see it no longer lists it.
  */
-export function runtimeCoversMessage(
+export function computerCoversMessage(
     state: SessionExecutionState,
     message: { readonly commandId: string; readonly placement: DeliveryPlacement },
 ): boolean {
@@ -649,7 +649,7 @@ export interface SessionExecutionStore {
 }
 
 export function createSessionExecutionStore(ports: {
-    /** The state moved, which what the page derives from the Runtime's account follows. */
+    /** The state moved, which what the page derives from the Computer's account follows. */
     readonly changed: (previous: SessionExecutionState, next: SessionExecutionState) => void;
 }) {
     return createStore<SessionExecutionStore>()((set, get) => ({

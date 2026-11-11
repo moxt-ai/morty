@@ -1,7 +1,7 @@
 import { nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
 import {
+    decodeComputerStatusEvent,
     decodeMessageKind,
-    decodeRuntimeStatusEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionStatusChangedEvent,
     type NativeSessionTarget,
@@ -11,14 +11,14 @@ import {
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
-import { runtimeRevoked } from "../../management/entity/runtime-pairing.ts";
+import { computerRevoked } from "../../management/entity/computer-pairing.ts";
 import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
 const OPENED_SESSION_CREDENTIAL_SECONDS = 900;
-/** The most Sessions one Session list read returns: the Runtime's own bound. */
+/** The most Sessions one Session list read returns: the Computer's own bound. */
 const LISTED_SESSION_LIMIT = 500;
 const RENEWED_SESSION_CREDENTIAL_SECONDS = 600;
 /** The Relay issues no Session credential that lasts less than this. */
@@ -37,15 +37,15 @@ function sessionCredentialLifetime(usualSeconds: number, accessExpiresAt: number
 }
 
 /**
- * Sent once the stream reaches the Runtime. `sessions: "owned"` promises that `statuses` holds the current status of
- * each Session the Runtime holds for the computer's owner and that the changes of every such Session follow, including
+ * Sent once the stream reaches the Computer. `sessions: "owned"` promises that `statuses` holds the current status of
+ * each Session the Computer holds for the computer's owner and that the changes of every such Session follow, including
  * Sessions created later.
  */
 export const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
 
 /**
  * What the managed Session stream tells a client: it now follows the Sessions as they currently are, a Session's
- * activity changed, or the Runtime closed a Session.
+ * activity changed, or the Computer closed a Session.
  */
 export type ManagedSessionEvent =
     | {
@@ -116,8 +116,8 @@ function notInRecentSessions(): never {
 }
 
 /**
- * Morty's Sessions on a computer are the Sessions its Runtime holds: the Runtime alone says which exist, and the cloud
- * keeps no list of its own. A computer has one owner, whom every authorized scope acts as, so each Session the Runtime
+ * Morty's Sessions on a computer are the Sessions its Computer holds: the Computer alone says which exist, and the cloud
+ * keeps no list of its own. A computer has one owner, whom every authorized scope acts as, so each Session the Computer
  * holds is the scope's.
  */
 export class ChatService {
@@ -152,46 +152,46 @@ export class ChatService {
         return { userId, accessExpiresAt, holder, computerId, signal };
     };
 
-    readonly runtimeConfiguration = async (scope: ChatScope) => {
-        await this.#requirePairedRuntime(scope);
+    readonly computerConfiguration = async (scope: ChatScope) => {
+        await this.#requirePairedComputer(scope);
         return {
-            runtime: await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal),
+            computer: await this.#relay.getChatComputerAgents(scope.computerId, scope.signal),
         };
     };
 
     readonly daemonDiagnostics = async (scope: ChatScope) => {
-        await this.#requirePairedRuntime(scope);
-        return await this.#relay.readRuntimeDiagnostics(scope.computerId, scope.signal);
+        await this.#requirePairedComputer(scope);
+        return await this.#relay.readComputerDiagnostics(scope.computerId, scope.signal);
     };
 
     readonly networkDiagnostic = async (scope: ChatScope) => {
-        await this.#requirePairedRuntime(scope);
-        return { runtimeLatencyMs: await this.#relay.measureRuntimeLatency(scope.computerId, scope.signal) };
+        await this.#requirePairedComputer(scope);
+        return { computerLatencyMs: await this.#relay.measureComputerLatency(scope.computerId, scope.signal) };
     };
 
-    readonly setupRuntimes = async (scope: ChatScope) => ({
-        runtimes: await this.#relay.chatRuntimes(scope.computerId, scope.signal),
+    readonly setupComputers = async (scope: ChatScope) => ({
+        computers: await this.#relay.chatComputers(scope.computerId, scope.signal),
     });
 
     readonly listDirectory = async (scope: ChatScope, directory: string) => {
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
         const listing = await this.#relay.listChatDirectory(scope.computerId, directory, scope.signal);
         return listing;
     };
 
     /**
-     * Requires the computer to have a paired Runtime, as the Relay records it. Until it has one the Machine needs an
-     * Agent connected; once its Runtime was revoked it needs setup run again.
+     * Requires the computer to have a paired Computer, as the Relay records it. Until it has one the Machine needs an
+     * Agent connected; once its Computer was revoked it needs setup run again.
      */
-    readonly #requirePairedRuntime = async (scope: ChatScope): Promise<void> => {
-        const pairing = await this.#relay.readRuntimePairing(scope.computerId, scope.signal);
+    readonly #requirePairedComputer = async (scope: ChatScope): Promise<void> => {
+        const pairing = await this.#relay.readComputerPairing(scope.computerId, scope.signal);
         switch (pairing) {
             case "paired":
                 return;
             case "unpaired":
                 throw new ComputerManagementError("AGENT_REQUIRED", "Connect an Agent to this Machine first.", 409);
             case "revoked":
-                throw runtimeRevoked();
+                throw computerRevoked();
             default:
                 return pairing satisfies never;
         }
@@ -207,7 +207,7 @@ export class ChatService {
         operation: () => Promise<Result>,
     ): Promise<Result> => this.#runSessionOperation(nativeSessionKey(target), scope.signal, operation);
 
-    /** The Runtime's description of a Session it holds; a Session it does not hold is not in Recent sessions. */
+    /** The Computer's description of a Session it holds; a Session it does not hold is not in Recent sessions. */
     readonly #heldSession = async (scope: ChatScope, target: NativeSessionTarget) =>
         (await this.#relay.queryChatSessions(scope.computerId, [target], scope.signal)).find((session) =>
             sameNativeSession(session.target, target),
@@ -225,29 +225,25 @@ export class ChatService {
         return this.#sessionOperations.run(sessionKey, signal, operation);
     };
 
-    readonly #requireNativeSessionRuntime = async (scope: ChatScope, requestedComputerId: string) => {
-        // The client names the Runtime its native-session identity came from. Discovery and entry identifiers belong to
-        // that Runtime and must not be silently redirected to another one.
+    readonly #requireNativeSessionComputer = async (scope: ChatScope, requestedComputerId: string) => {
+        // The client names the Computer its native-session identity came from. Discovery and entry identifiers belong to
+        // that Computer and must not be silently redirected to another one.
         if (requestedComputerId !== scope.computerId) {
-            throw new ComputerManagementError("BOT_RUNTIME_FIXED", "This request names a different computer.", 409);
+            throw new ComputerManagementError("BOT_COMPUTER_FIXED", "This request names a different computer.", 409);
         }
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
     };
 
-    readonly #requireRuntimeAgent = async (scope: ChatScope, harness: string) => {
-        const runtime = await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal);
-        if (!runtime.agents.some((agent) => agent.harness === harness)) {
-            throw new ComputerManagementError(
-                "AGENT_UNAVAILABLE",
-                "Choose an agent provided by this Machine's Runtime.",
-                409,
-            );
+    readonly #requireComputerAgent = async (scope: ChatScope, harness: string) => {
+        const computer = await this.#relay.getChatComputerAgents(scope.computerId, scope.signal);
+        if (!computer.agents.some((agent) => agent.harness === harness)) {
+            throw new ComputerManagementError("AGENT_UNAVAILABLE", "Choose an agent provided by this Computer.", 409);
         }
     };
 
-    /** The Sessions the Runtime holds, most recently updated first. */
+    /** The Sessions the Computer holds, most recently updated first. */
     readonly managedSessions = async (scope: ChatScope) => {
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
         const sessions = await this.#relay.listChatSessions(scope.computerId, LISTED_SESSION_LIMIT, scope.signal);
         return {
             sessions: sessions.map((session) => ({
@@ -263,7 +259,7 @@ export class ChatService {
     };
 
     /**
-     * Publishes the current status of each Session the Runtime holds with the following notice, then their activity
+     * Publishes the current status of each Session the Computer holds with the following notice, then their activity
      * changes and close notices, until the stream ends. Sessions created or archived while the stream runs need no new
      * stream.
      */
@@ -272,9 +268,9 @@ export class ChatService {
         publish: (event: ManagedSessionEvent) => Promise<void>,
         signal: AbortSignal,
     ): Promise<void> => {
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
         scope.signal.throwIfAborted();
-        const socket = await this.#relay.openChatRuntimeHost(scope.computerId, signal);
+        const socket = await this.#relay.openChatComputerHost(scope.computerId, signal);
         // The authorization deadline bounds opening the stream, not the reads made while it runs.
         const following: ChatScope = { ...scope, signal };
         await new Promise<void>((_resolve, reject) => {
@@ -315,7 +311,7 @@ export class ChatService {
             };
             const aborted = (): void => finish(signal.reason);
             const closed = (): void =>
-                finish(new ComputerManagementError("RUNTIME_UNAVAILABLE", "The local Runtime disconnected.", 503));
+                finish(new ComputerManagementError("COMPUTER_UNAVAILABLE", "The local Computer disconnected.", 503));
             const message = (event: MessageEvent): void => {
                 try {
                     if (typeof event.data !== "string") {
@@ -327,8 +323,8 @@ export class ChatService {
                     }
                     refreshLiveness();
                     const kind = decodeMessageKind(event.data);
-                    if (kind === "runtime.status") {
-                        if (!decodeRuntimeStatusEvent(event.data).online) {
+                    if (kind === "computer.status") {
+                        if (!decodeComputerStatusEvent(event.data).online) {
                             closed();
                         }
                         return;
@@ -358,7 +354,7 @@ export class ChatService {
             socket.addEventListener("close", closed, { once: true });
             socket.addEventListener("error", closed, { once: true });
             socket.addEventListener("message", message);
-            // The current statuses are read once the socket follows the Runtime, so no change falls between the two. A
+            // The current statuses are read once the socket follows the Computer, so no change falls between the two. A
             // change that arrives while they are read is published after them and wins.
             inOrder(async () => {
                 const { sessions } = await this.managedSessions(following);
@@ -382,8 +378,8 @@ export class ChatService {
         scope: ChatScope,
         draft: { readonly harness: string; readonly workspaceRef: string },
     ) => {
-        await this.#requirePairedRuntime(scope);
-        await this.#requireRuntimeAgent(scope, draft.harness);
+        await this.#requirePairedComputer(scope);
+        await this.#requireComputerAgent(scope, draft.harness);
         const discovered = await this.#relay.discoverChatAgentSettings(
             scope.computerId,
             { computerId: scope.computerId, ...draft },
@@ -393,7 +389,7 @@ export class ChatService {
     };
 
     readonly openChat = async (scope: ChatScope, input: OpenChatInput) => {
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
         const access =
             "conversationKey" in input
                 ? await this.#openNewChat(scope, input)
@@ -402,12 +398,12 @@ export class ChatService {
     };
 
     /**
-     * First send creates a harness Session under an operation identity derived from the draft. The Runtime keeps the
+     * First send creates a harness Session under an operation identity derived from the draft. The Computer keeps the
      * creation's receipt under it, so a retry after a lost answer opens the Session the first attempt created instead
      * of creating another.
      */
     readonly #openNewChat = async (scope: ChatScope, input: NewChatInput) => {
-        await this.#requireRuntimeAgent(scope, input.harness);
+        await this.#requireComputerAgent(scope, input.harness);
         const session = {
             operationId: await chatOperationId(scope, input.conversationKey),
 
@@ -447,9 +443,9 @@ export class ChatService {
         );
     };
 
-    /** Issues a credential for a Session the Runtime holds. */
+    /** Issues a credential for a Session the Computer holds. */
     readonly nativeSessionAccess = async (scope: ChatScope, target: NativeSessionTarget) => {
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
         const session = await this.#heldSession(scope, target);
         return await this.#relay.nativeSessionAccess(
             scope.computerId,
@@ -462,7 +458,7 @@ export class ChatService {
 
     readonly managedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
         return await this.#withSession(scope, target, async () => {
-            await this.#requirePairedRuntime(scope);
+            await this.#requirePairedComputer(scope);
             const session = await this.#heldSession(scope, target);
             const restored = await this.#relay.readChatSession(scope.computerId, target, scope.signal);
             if (!sameNativeSession(restored.ready.target, session.target)) {
@@ -477,19 +473,19 @@ export class ChatService {
     };
 
     /**
-     * Archives the Session on the Runtime, which closes it and forgets it, so it leaves the list. It answers only once
-     * the Runtime no longer holds the Session, and fails as the Runtime does otherwise, so a Session the Runtime still
-     * holds stays listed. Archiving a Session the Runtime does not hold succeeds.
+     * Archives the Session on the Computer, which closes it and forgets it, so it leaves the list. It answers only once
+     * the Computer no longer holds the Session, and fails as the Computer does otherwise, so a Session the Computer still
+     * holds stays listed. Archiving a Session the Computer does not hold succeeds.
      */
     readonly archiveManagedSession = async (scope: ChatScope, target: NativeSessionTarget) => {
-        await this.#requirePairedRuntime(scope);
+        await this.#requirePairedComputer(scope);
         return await this.#withSession(scope, target, async () => ({
             target: await this.#relay.archiveChatSession(scope.computerId, target, scope.signal),
         }));
     };
 
     readonly nativeSessions = async (scope: ChatScope, requestedComputerId: string, input: NativeListInput) => {
-        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionComputer(scope, requestedComputerId);
         const result = await this.#relay.nativeSessions(scope.computerId, input, scope.signal);
         if (result.action !== "list") {
             throw new ComputerManagementError(
@@ -503,12 +499,12 @@ export class ChatService {
 
     /** Imports the native session a setup handoff names, found by its native identifier in the default workspace. */
     readonly continueNativeSession = async (scope: ChatScope, harness: string, sessionId: string) => {
-        const runtime =
-            (await this.#relay.readRuntimePairing(scope.computerId, scope.signal)) === "paired"
-                ? await this.#relay.getChatRuntimeAgents(scope.computerId, scope.signal)
+        const computer =
+            (await this.#relay.readComputerPairing(scope.computerId, scope.signal)) === "paired"
+                ? await this.#relay.getChatComputerAgents(scope.computerId, scope.signal)
                 : undefined;
-        const agent = runtime?.agents.find((item) => item.harness === harness);
-        if (runtime === undefined || agent === undefined) {
+        const agent = computer?.agents.find((item) => item.harness === harness);
+        if (computer === undefined || agent === undefined) {
             throw new ComputerManagementError("HARNESS_UNAVAILABLE", "The handoff harness is unavailable.", 409);
         }
         const found = await this.#relay.findNativeSessionBySessionId(
@@ -542,8 +538,8 @@ export class ChatService {
         requestedComputerId: string,
         input: NativePreviewInput,
     ) => {
-        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
-        const events = await this.#relay.previewRuntimeNativeEvents(
+        await this.#requireNativeSessionComputer(scope, requestedComputerId);
+        const events = await this.#relay.previewComputerNativeEvents(
             scope.computerId,
             { harness: input.harness, sessionId: input.sessionId },
             input.directory,
@@ -559,7 +555,7 @@ export class ChatService {
         sessionId: string,
         input: NativeEntryInput,
     ) => {
-        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionComputer(scope, requestedComputerId);
         const result = await this.#relay.nativeSessions(
             scope.computerId,
             { ...input, sessionId, action: "import" },
@@ -581,7 +577,7 @@ export class ChatService {
         operationId: string,
         input: NativePreviewInput,
     ) => {
-        await this.#requireNativeSessionRuntime(scope, requestedComputerId);
+        await this.#requireNativeSessionComputer(scope, requestedComputerId);
         // Operation identity belongs to this user and Machine, even when they share a Relay Project.
         const scopedOperationId = await scopedNativeForkOperationId(
             scope.computerId,
@@ -591,14 +587,14 @@ export class ChatService {
     };
 
     /**
-     * Setup's check that the computer's paired Runtime offers `harness` and can open its settings in the default
-     * working directory. It records nothing: whether the Machine has a Runtime is the Relay's pairing.
+     * Setup's check that the computer's paired Computer offers `harness` and can open its settings in the default
+     * working directory. It records nothing: the Relay owns the Computer's pairing state.
      */
     readonly verifyAgent = async (scope: ChatScope, input: AgentSetupInput) => {
         if (input.computerId !== scope.computerId) {
-            throw new ComputerManagementError("BOT_RUNTIME_FIXED", "This request names a different computer.", 409);
+            throw new ComputerManagementError("BOT_COMPUTER_FIXED", "This request names a different computer.", 409);
         }
-        await this.#requireRuntimeAgent(scope, input.harness);
+        await this.#requireComputerAgent(scope, input.harness);
         await this.#relay.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
         return { status: "active" };
     };

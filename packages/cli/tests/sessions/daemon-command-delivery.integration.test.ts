@@ -65,8 +65,8 @@ const readExecution = async (peer: RealDaemonPeer, commandId?: string) => {
     }
 };
 
-// @no-uc: Compatibility; a reconnecting client recovers an unconfirmed submission from the Runtime's execution receipt.
-test("Given commands the Runtime finished, failed, is running or never received, When a client reads the Session execution naming each command, Then the Runtime reports each command's delivery, also after a restart", async () => {
+// @no-uc: Compatibility; a reconnecting client recovers an unconfirmed submission from the Computer's execution receipt.
+test("Given commands the Computer finished, failed, is running or never received, When a client reads the Session execution naming each command, Then the Computer reports each command's delivery, also after a restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-command-delivery-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
@@ -109,7 +109,7 @@ test("Given commands the Runtime finished, failed, is running or never received,
                     command: { state: "completed", stopReason: "end_turn" },
                 });
                 expect((await readExecution(peer, running)).result).toMatchObject({
-                    command: { state: "failed", code: "runtime_restarted" },
+                    command: { state: "failed", code: "computer_restarted" },
                 });
                 expect((await readExecution(peer, neverReceived)).result).toMatchObject({
                     command: { state: "unknown" },
@@ -161,12 +161,12 @@ test("Given a running turn and a later queued command, When the clock moves back
                     {
                         commandId: queued,
                         state: "failed",
-                        code: "runtime_restarted",
+                        code: "computer_restarted",
                     },
                     {
                         commandId: queued,
                         state: "failed",
-                        code: "runtime_restarted",
+                        code: "computer_restarted",
                     },
                 ]);
                 expect(first).toEqual(second);
@@ -187,7 +187,7 @@ test("Given a running turn and a later queued command, When the clock moves back
     }
 }, 90_000);
 
-// @no-uc: Compatibility; a client that missed a turn's live outcome recovers it from the Runtime's execution receipts.
+// @no-uc: Compatibility; a client that missed a turn's live outcome recovers it from the Computer's execution receipts.
 test("Given turns that complete, fail, run or are interrupted by a restart, When a client reads the Session execution, Then it reports how the last started turn ended until a newer turn replaces it", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-last-turn-"));
     try {
@@ -248,7 +248,7 @@ test("Given turns that complete, fail, run or are interrupted by a restart, When
 
                 await peer.restart();
                 expect((await readExecution(peer)).result).toMatchObject({
-                    lastTurn: { commandId: interrupted, state: "failed", code: "runtime_restarted" },
+                    lastTurn: { commandId: interrupted, state: "failed", code: "computer_restarted" },
                 });
 
                 const next = randomUUID();

@@ -1,17 +1,17 @@
 import { join } from "node:path";
 import { claimMortyState } from "@morty-build/local-state";
-import type { VerifiedRuntimeConnection } from "../../engine/runtime/connection/runtime-connection.ts";
+import type { VerifiedComputerConnection } from "../../engine/computer/connection/computer-connection.ts";
 import {
-    RuntimeInstallationStore,
-    RuntimeInstallationStoreError,
-} from "../../engine/runtime/connection/runtime-installation-store.ts";
+    ComputerInstallationStore,
+    ComputerInstallationStoreError,
+} from "../../engine/computer/connection/computer-installation-store.ts";
 import {
     PairingClientError,
-    pairRuntimeConnection,
+    pairComputerConnection,
     parsePairingCode,
     parseRelayOrigin,
     validateComputerId,
-} from "../../engine/runtime/pairing.ts";
+} from "../../engine/computer/pairing.ts";
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
@@ -55,7 +55,7 @@ function parsePairCommand(arguments_: readonly string[], defaultWorkspace: strin
 export async function openMortyInstallation(
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<RuntimeInstallationStore> {
+): Promise<ComputerInstallationStore> {
     const root = readStateDirectory(environment);
     try {
         await claimMortyState(root, signal);
@@ -63,22 +63,22 @@ export async function openMortyInstallation(
         await validateLocalPath(root, true, true, signal);
     } catch (cause) {
         signal.throwIfAborted();
-        throw new RuntimeInstallationStoreError(
+        throw new ComputerInstallationStoreError(
             "installation_unavailable",
             "The local installation cannot be initialized",
             { cause },
         );
     }
-    return await RuntimeInstallationStore.open(join(root, "machine"), signal);
+    return await ComputerInstallationStore.open(join(root, "machine"), signal);
 }
 
 export async function pairLocalMachine(
     arguments_: readonly string[],
     signal: AbortSignal = new AbortController().signal,
-): Promise<VerifiedRuntimeConnection> {
+): Promise<VerifiedComputerConnection> {
     const requested = parsePairCommand(arguments_, "");
     const installation = await openMortyInstallation(signal, process.env);
-    return await pairRuntimeConnection(
+    return await pairComputerConnection(
         installation,
         {
             pairingCode: requested.code,

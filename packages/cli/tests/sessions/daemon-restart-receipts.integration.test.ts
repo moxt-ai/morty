@@ -71,7 +71,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                         event.type === "lifecycle-metadata" &&
                         (event.payload.kind === "prompt.failed" || event.payload.kind === "prompt.failed-before-start")
                     ) {
-                        expect(event.payload.code).toBe("runtime_restarted");
+                        expect(event.payload.code).toBe("computer_restarted");
                         outcomes.set(event.payload.commandId, event.payload.kind);
                     }
                 }

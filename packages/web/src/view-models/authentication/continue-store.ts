@@ -144,7 +144,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 getToken: async () => storedToken(identity.userId) ?? identity.token,
                 replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
                 waitForChange: async () => {
-                    throw new Error("Runtime updates are unavailable while continuing this session.");
+                    throw new Error("Computer updates are unavailable while continuing this session.");
                 },
             });
             set({
@@ -158,11 +158,11 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             });
             try {
                 // A handoff supplies a requested path, never filesystem authority.
-                // Resolve it through the Runtime before recording a browser preference.
-                const configuration = await chat.runtimeConfiguration(signal);
+                // Resolve it through the Computer before recording a browser preference.
+                const configuration = await chat.computerConfiguration(signal);
                 const directory = await chat.directory(handoff.workspace, signal);
                 signal.throwIfAborted();
-                saveLastCwdPreference(configuration.runtime.computerId, handoff.harness, directory.directory);
+                saveLastCwdPreference(configuration.computer.computerId, handoff.harness, directory.directory);
                 saveRecentCwdPreference(identity.computerId, {
                     directory: directory.directory,
                     directoryLabel: directory.directoryLabel,

@@ -18,13 +18,13 @@ import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./supp
 const recoveredFailure = "Internal error: The controlled Agent rejected this turn.";
 
 for (const submission of ["rejected", "upload-failed"] as const) {
-    test(`Given a failed turn followed by a ${submission} message, When the Runtime silently reconnects, Then the latest submission result survives without reviving the old failure`, {
+    test(`Given a failed turn followed by a ${submission} message, When the Computer silently reconnects, Then the latest submission result survives without reviving the old failure`, {
         timeout: 60_000,
     }, async () => {
         const app = await createTestApp({ connectAgent: true, clock: new TestClock("2026-10-28T08:00:00Z") });
         const daemon = app.daemon;
         if (daemon === null) {
-            throw new Error("Expected the connected Runtime");
+            throw new Error("Expected the connected Computer");
         }
         await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
         await app.waitForView(() => {
@@ -225,7 +225,7 @@ test("Given a Session whose last turn failed, When I reload the page, Then the s
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     await app.waitForView(() => expect(entryStatus(app, "Established session")).toBe("Session failed"));
 
-    // The failure is the Runtime's to report, not only the memory of the page that watched it.
+    // The failure is the Computer's to report, not only the memory of the page that watched it.
     const reloaded = await app.reload();
     await reloaded.waitForView(() => expect(entryStatus(reloaded, "Established session")).toBe("Session failed"));
 });

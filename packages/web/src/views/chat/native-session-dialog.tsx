@@ -217,7 +217,7 @@ export function NativeSessionDialog({
     /** Created by the owner when the dialog opens; it starts discovery itself. */
     readonly store: StoreApi<NativeSessionStore>;
     readonly sessions: readonly ManagedChatSession[];
-    /** The agent tabs, as the Runtime configuration the page follows offers them. */
+    /** The agent tabs, as the Computer configuration the page follows offers them. */
     readonly agents: readonly NativeSessionAgent[];
     readonly onClose: () => void;
     /** The phone sheet drills into the previewed session's detail. */
@@ -290,7 +290,7 @@ export function NativeSessionDialog({
                                         <NativeSessionDirectoryPlaceholder
                                             icon={Unplug}
                                             title="No local agent"
-                                            description="Connect a runtime to browse saved sessions."
+                                            description="Connect a computer to browse saved sessions."
                                         />
                                     )}
                                     {model.directory.kind === "agent-unavailable" && (

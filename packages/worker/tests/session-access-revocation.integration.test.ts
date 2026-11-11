@@ -10,14 +10,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-test("Given a browser opening a Session, When its device is revoked before the Runtime finishes creation, Then its pending open cannot grant fresh Session access", async () => {
+test("Given a browser opening a Session, When its device is revoked before the Computer finishes creation, Then its pending open cannot grant fresh Session access", async () => {
     const cloud = await createIdentityFixture();
     const creation = Promise.withResolvers<void>();
     const continueCreation = Promise.withResolvers<void>();
     let hold = false;
     try {
         const owner = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(owner.computerId, owner.token, [
+        await using computer = await cloud.connectAgent(owner.computerId, owner.token, [
             {
                 harness: "configuration-test",
                 label: "Configuration Test",
@@ -45,7 +45,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
         expect(
             (
                 await request(`${chat}/setup`, owner.token, {
-                    computerId: runtime.computerId,
+                    computerId: computer.computerId,
                     harness: "configuration-test",
                 })
             ).status,
@@ -89,11 +89,11 @@ test("Given a browser opening a Session, When its device is revoked before the R
     }
 }, 45_000);
 
-test("Given a device with an open Session, When its owner disconnects it while the Runtime is offline, Then device and Session access are revoked together without a retry", async () => {
+test("Given a device with an open Session, When its owner disconnects it while the Computer is offline, Then device and Session access are revoked together without a retry", async () => {
     const cloud = await createIdentityFixture();
     try {
         const owner = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(owner.computerId, owner.token);
+        await using computer = await cloud.connectAgent(owner.computerId, owner.token);
         const request = (path: string, token: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             worker.fetch(
                 new Request(`${APP_ORIGIN}/morty/api/${path}`, {
@@ -146,14 +146,14 @@ test("Given a device with an open Session, When its owner disconnects it while t
                 ),
             );
         expect((await readAccess()).status).toBe(200);
-        await runtime.disconnect();
+        await computer.disconnect();
         const failed = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");
 
         expect.soft(failed.status).toBe(200);
         expect.soft(await failed.json()).toEqual({ status: "device_access_ended" });
         expect((await request(`${project}/session`, browser)).status).toBe(401);
 
-        await runtime.reconnect();
+        await computer.reconnect();
         const remaining = await request(`${project}/identity/devices`, owner.token);
         expect(await remaining.json()).toMatchObject({ devices: [] });
         const denied = await readAccess();
@@ -164,10 +164,10 @@ test("Given a device with an open Session, When its owner disconnects it while t
     }
 }, 60_000);
 
-/** The owner's computer with a connected Runtime, and the requests a browser or the owner make against it. */
+/** The owner's computer with a connected Computer, and the requests a browser or the owner make against it. */
 async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFixture>>) {
     const owner = await cloud.createAnonymousUser();
-    const runtime = await cloud.connectAgent(owner.computerId, owner.token);
+    const computer = await cloud.connectAgent(owner.computerId, owner.token);
     const request = (path: string, token: string, body?: object, method = body === undefined ? "GET" : "POST") =>
         worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/${path}`, {
@@ -232,14 +232,14 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
             );
         return { deviceId: device.id, token, readConversation, watchConversation };
     };
-    return { owner, runtime, request, project, joinBrowser };
+    return { owner, computer, request, project, joinBrowser };
 }
 
 test("Given two browsers reading their conversations, one watching it live, When the owner removes that one, Then its live view ends and it stops reading while the other keeps reading with the access it holds", async () => {
     const cloud = await createIdentityFixture();
     try {
-        const { owner, runtime, request, project, joinBrowser } = await sharedComputer(cloud);
-        await using _runtime = runtime;
+        const { owner, computer, request, project, joinBrowser } = await sharedComputer(cloud);
+        await using _computer = computer;
         const removed = await joinBrowser("Removed browser");
         const kept = await joinBrowser("Kept browser");
         const removedView = await removed.watchConversation();
@@ -263,8 +263,8 @@ test("Given two browsers reading their conversations, one watching it live, When
 test("Given a browser reading its conversation, When it ends its own access, Then the access it already holds no longer reads the conversation", async () => {
     const cloud = await createIdentityFixture();
     try {
-        const { runtime, request, project, joinBrowser } = await sharedComputer(cloud);
-        await using _runtime = runtime;
+        const { computer, request, project, joinBrowser } = await sharedComputer(cloud);
+        await using _computer = computer;
         const browser = await joinBrowser("Leaving browser");
 
         const ended = await request(`${project}/identity/v1/browser-access`, browser.token, undefined, "DELETE");

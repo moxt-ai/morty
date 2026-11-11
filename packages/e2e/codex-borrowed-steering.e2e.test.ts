@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { MortyRuntimeEngine } from "@morty-build/cli/engine";
+import { MortyComputerEngine } from "@morty-build/cli/engine";
 import { expect, test } from "@playwright/test";
 import { chromium, firefox, webkit } from "playwright-core";
 import { CodexAppServerClient } from "../../packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
@@ -85,8 +85,8 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.
         await chat.useBrowserIdentity({ computerId, token });
         const pairing = await chat.createPairing();
-        const engine = new MortyRuntimeEngine({
-            engineDataDir: join(harness.workDirectory, "runtime"),
+        const engine = new MortyComputerEngine({
+            engineDataDir: join(harness.workDirectory, "computer"),
             agentLaunchEnvironment: environment,
         });
         const paired = await engine.pair(

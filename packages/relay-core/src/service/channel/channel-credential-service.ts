@@ -7,7 +7,7 @@ export class ChannelCredentialService {
         this.#store = store;
     }
 
-    /** The Runtime's active pairing generation; null while none is. */
+    /** The Computer's active pairing generation; null while none is. */
     readonly activeGeneration = async (
         identity: { readonly computerId: string },
         signal: AbortSignal,

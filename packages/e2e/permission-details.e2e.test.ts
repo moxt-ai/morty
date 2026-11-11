@@ -1,13 +1,13 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { harness: "interaction-test", name: "Interaction Agent" } });
+test.use({ computerAgent: { harness: "interaction-test", name: "Interaction Agent" } });
 for (const width of [1440, 390]) {
     test(`Given a pending permission at ${width}px, When the user reloads and approves the exact input, Then the agent continues with that decision`, async ({
-        runtime,
+        computer,
     }, testInfo) => {
-        const { page } = runtime;
+        const { page } = computer;
         await page.setViewportSize({ width, height: 900 });
-        await runtime.openPairedChat();
+        await computer.openPairedChat();
         await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
         await page.getByRole("button", { name: "Send message" }).click();
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
@@ -44,11 +44,11 @@ for (const width of [1440, 390]) {
 
 for (const width of [320, 390]) {
     test(`Given a long permission title and choice at ${width}px, When I review and approve it, Then all details and decisions fit the phone width`, async ({
-        runtime,
+        computer,
     }, testInfo) => {
-        const { page } = runtime;
+        const { page } = computer;
         await page.setViewportSize({ width, height: 900 });
-        await runtime.openPairedChat();
+        await computer.openPairedChat();
         await page.getByRole("textbox", { name: "Message" }).fill("request long permission");
         await page.getByRole("button", { name: "Send message" }).click();
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
@@ -79,11 +79,11 @@ for (const width of [320, 390]) {
 }
 
 test("Given a pending permission on a phone-height screen, When it appears, Then every decision is visible and reachable without scrolling", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
+    const { page } = computer;
     await page.setViewportSize({ width: 390, height: 664 });
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
     await page.getByRole("button", { name: "Send message" }).click();
     const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
@@ -112,11 +112,11 @@ test("Given a pending permission on a phone-height screen, When it appears, Then
 });
 
 test("Given a permission whose title and choice are longer than a phone line, When it appears at 390px, Then the text wraps between words and only the long path breaks", async ({
-    runtime,
+    computer,
 }) => {
-    const { page } = runtime;
+    const { page } = computer;
     await page.setViewportSize({ width: 390, height: 900 });
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("request long permission");
     await page.getByRole("button", { name: "Send message" }).click();
     const permission = page.getByRole("alertdialog", { name: "Agent permission request" });

@@ -1,4 +1,4 @@
-import type { RuntimeDiagnosticsResult } from "@morty-build/client/protocol";
+import type { ComputerDiagnosticsResult } from "@morty-build/client/protocol";
 import type { ChatDiagnostics } from "./model-catalog.ts";
 import type { ServerNetworkOperations } from "./network-diagnostics.ts";
 
@@ -37,7 +37,7 @@ export interface DaemonDiagnosticsSource extends ServerNetworkOperations {
     readonly harness: string | null;
     readonly sessionId: string | null;
     readonly context?: () => ChatDiagnostics;
-    readonly read: (signal: AbortSignal) => Promise<RuntimeDiagnosticsResult>;
+    readonly read: (signal: AbortSignal) => Promise<ComputerDiagnosticsResult>;
 }
 // Never store arbitrary error messages: they may contain prompts, paths or credentials.
 export function recordBrowserError(operation: string, cause?: unknown): void {

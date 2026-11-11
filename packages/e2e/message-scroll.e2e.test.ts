@@ -8,10 +8,10 @@ for (const viewport of [
         test.use({ contextOptions: { viewport, reducedMotion: "reduce" } });
 
         test("Given a long reply, When I scroll and jump to the latest message, Then the reply remains readable above the composer", async ({
-            runtime,
+            computer,
         }, testInfo) => {
-            const { page } = runtime;
-            await runtime.openPairedChat();
+            const { page } = computer;
+            await computer.openPairedChat();
             const prompt = [
                 "Reply beginning",
                 ...Array.from({ length: 60 }, (_, index) => `Paragraph ${index + 1}: Read the complete conversation.`),

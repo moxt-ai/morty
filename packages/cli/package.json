@@ -46,7 +46,7 @@
         "start": "node dist/cli.js",
         "typecheck": "tsc --project tsconfig.json && tsc --project tests/tsconfig.json",
         "pretest:controlled": "pnpm build && pnpm pack:test",
-        "test:controlled": "vitest run tests/sessions tests/runtime",
+        "test:controlled": "vitest run tests/sessions tests/computer",
         "pretest:manual": "pnpm pretest:controlled",
         "test:manual": "vitest run tests/manual",
         "pretest:agents": "pnpm build && pnpm pack:test",

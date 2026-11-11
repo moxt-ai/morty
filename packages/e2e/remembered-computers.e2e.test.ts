@@ -50,12 +50,12 @@ for (const viewport of [
     { name: "mobile", width: 390, height: 844 },
 ]) {
     test(`Given two computers on ${viewport.name}, When I return and open the other computer in a tab, Then each computer keeps its conversation and the current computer is visible`, async ({
-        runtime,
+        computer,
     }, testInfo) => {
-        const { page } = runtime;
+        const { page } = computer;
         const mobile = viewport.name === "mobile";
         await page.setViewportSize(viewport);
-        await runtime.openPairedChat();
+        await computer.openPairedChat();
         await page.getByRole("textbox", { name: "Message" }).fill("Computer A release checklist");
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
@@ -63,7 +63,7 @@ for (const viewport of [
         );
         const firstAddress = page.url();
 
-        await runtime.openPairedChat("Office MacBook");
+        await computer.openPairedChat("Office MacBook");
         await page.getByRole("textbox", { name: "Message" }).fill("Computer B release checklist");
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
@@ -76,7 +76,7 @@ for (const viewport of [
         );
         const computers = await openComputers(page, mobile, "Office MacBook");
         await expect(computers.current).toContainText("Office MacBook");
-        const firstComputer = computers.other("Browser test Runtime");
+        const firstComputer = computers.other("Browser test Computer");
         await expect(firstComputer).toContainText("Online");
         await expect(computers.connect).toBeVisible();
         await page.screenshot({
@@ -97,14 +97,14 @@ for (const viewport of [
         await expect(otherTab.getByRole("article", { name: "Agent response" })).toContainText(
             "Computer A release checklist",
         );
-        await expectCurrentComputer(otherTab, mobile, "Browser test Runtime");
+        await expectCurrentComputer(otherTab, mobile, "Browser test Computer");
         await computers.close();
         await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
             "Computer B release checklist",
         );
         await page.getByRole("textbox", { name: "Message" }).fill("Unsent work on B");
-        await runtime.restartRuntime();
-        await expectComputerOnline(otherTab, mobile, "Browser test Runtime");
+        await computer.restartComputer();
+        await expectComputerOnline(otherTab, mobile, "Browser test Computer");
         // Using a tab makes its computer the last one used; return to computer B before reopening Chat.
         await page.getByRole("textbox", { name: "Message" }).click();
         await page.goto(new URL("/chat", secondAddress).href);

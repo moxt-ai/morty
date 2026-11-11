@@ -260,7 +260,7 @@ export class AgentSession implements AgentSessionRestore {
         getObserver: () => SessionObserver,
         execution: SessionExecutionRecord,
         store: SessionStore,
-        initialize: (runtime: AgentSession) => Promise<void>,
+        initialize: (sessionProcess: AgentSession) => Promise<void>,
         metrics: OperationMetrics,
         adapter: Adapter,
     ): Promise<AgentSession> {
@@ -269,7 +269,7 @@ export class AgentSession implements AgentSessionRestore {
                 "executable-validation",
                 async () => await validateAgentRuntime(options.agent, options.signal),
             );
-            const runtime = metrics.measureSync(
+            const sessionProcess = metrics.measureSync(
                 "process-spawn",
                 () =>
                     new AgentSession(
@@ -285,14 +285,14 @@ export class AgentSession implements AgentSessionRestore {
                     ),
             );
             try {
-                await initialize(runtime);
-                return runtime;
+                await initialize(sessionProcess);
+                return sessionProcess;
             } catch (error) {
                 try {
-                    await runtime.closeProcess();
+                    await sessionProcess.closeProcess();
                 } finally {
-                    if (address.kind === "awaiting-native" && runtime.#nativeIdentity.kind === "bound") {
-                        store.remove(runtime.target);
+                    if (address.kind === "awaiting-native" && sessionProcess.#nativeIdentity.kind === "bound") {
+                        store.remove(sessionProcess.target);
                     }
                 }
                 options.signal.throwIfAborted();
@@ -327,9 +327,9 @@ export class AgentSession implements AgentSessionRestore {
             getObserver,
             execution,
             store,
-            async (runtime) => {
-                runtime.#capabilities = capabilities;
-                await runtime.initialize(options.signal, recovery, options.origin);
+            async (sessionProcess) => {
+                sessionProcess.#capabilities = capabilities;
+                await sessionProcess.initialize(options.signal, recovery, options.origin);
             },
             metrics,
             adapter,
@@ -348,15 +348,15 @@ export class AgentSession implements AgentSessionRestore {
             getObserver,
             execution,
             store,
-            async (runtime) => {
-                const opened = await runtime.#writeNativeHistory(
-                    async () => await runtime.createSession(options.signal),
+            async (sessionProcess) => {
+                const opened = await sessionProcess.#writeNativeHistory(
+                    async () => await sessionProcess.createSession(options.signal),
                 );
-                runtime.selectNativeSession(opened.sessionId);
-                runtime.setNativeHistoryOwnership({ kind: "fresh-session" });
-                runtime.applySessionOpened(opened);
+                sessionProcess.selectNativeSession(opened.sessionId);
+                sessionProcess.setNativeHistoryOwnership({ kind: "fresh-session" });
+                sessionProcess.applySessionOpened(opened);
                 options.signal.throwIfAborted();
-                runtime.writeStoredSession(new Date().toISOString());
+                sessionProcess.writeStoredSession(new Date().toISOString());
             },
             metrics,
             options.adapter,
@@ -377,11 +377,11 @@ export class AgentSession implements AgentSessionRestore {
             getObserver,
             execution,
             store,
-            async (runtime) => {
-                runtime.#capabilities = capabilities;
+            async (sessionProcess) => {
+                sessionProcess.#capabilities = capabilities;
                 const source = store.read({ harness: options.agent.harness, sessionId: origin.sessionId });
-                const opened = await runtime.#writeNativeHistory(
-                    async () => await runtime.forkSession(origin.sessionId, options.signal),
+                const opened = await sessionProcess.#writeNativeHistory(
+                    async () => await sessionProcess.forkSession(origin.sessionId, options.signal),
                 );
                 if (opened.sessionId === origin.sessionId) {
                     throw new AcpExecutionError(
@@ -390,16 +390,16 @@ export class AgentSession implements AgentSessionRestore {
                         "invalid_native_session_response",
                     );
                 }
-                runtime.selectNativeSession(opened.sessionId);
-                runtime.applySessionOpened(opened);
-                runtime.setSessionTitle(origin.title);
-                runtime.setPrompted(true);
-                runtime.setRestored(true);
+                sessionProcess.selectNativeSession(opened.sessionId);
+                sessionProcess.applySessionOpened(opened);
+                sessionProcess.setSessionTitle(origin.title);
+                sessionProcess.setPrompted(true);
+                sessionProcess.setRestored(true);
                 if (source instanceof FoundStoredSession) {
-                    await runtime.restoreStoredConfigurations(source.session, options.signal, "fork");
+                    await sessionProcess.restoreStoredConfigurations(source.session, options.signal, "fork");
                 }
                 options.signal.throwIfAborted();
-                runtime.writeStoredSession(new Date().toISOString());
+                sessionProcess.writeStoredSession(new Date().toISOString());
             },
             metrics,
             options.adapter,
@@ -719,7 +719,7 @@ export class AgentSession implements AgentSessionRestore {
         }
     };
 
-    // The revision check and Agent mutation share one queue with the settings the Runtime applies itself.
+    // The revision check and Agent mutation share one queue with the settings the Computer applies itself.
     // A lost response may have committed: reread after a conflict, never replay an edit blindly.
     readonly configure = async (options: SessionConfigureOptions): Promise<SessionConfigurationSnapshot> =>
         this.#configurationChanges.run(async (signal) => {
@@ -733,7 +733,7 @@ export class AgentSession implements AgentSessionRestore {
             return await this.#change(options, signal);
         }, options.signal);
 
-    /** Applies a setting the Runtime owns, whatever the configuration's current revision. */
+    /** Applies a setting the Computer owns, whatever the configuration's current revision. */
     readonly applyConfiguration = async (change: SessionConfigurationChange): Promise<SessionConfigurationSnapshot> =>
         this.#configurationChanges.run(async (signal) => await this.#change(change, signal), change.signal);
 

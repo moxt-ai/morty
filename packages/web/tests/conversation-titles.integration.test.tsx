@@ -37,7 +37,7 @@ test("Given an open session renamed by another client, When its directory refres
     );
     const sessionId = new URL(window.location.href).searchParams.get("sessionId");
     if (app.daemon === null || sessionId === null || app.executionNetwork === null) {
-        throw new Error("Expected an open Session on the connected Runtime");
+        throw new Error("Expected an open Session on the connected Computer");
     }
     // The list read can arrive before a live title event. Keep the real event in transit until after the assertions.
     const releaseEvents = app.executionNetwork.holdSessionEvents();
@@ -66,7 +66,7 @@ test("Given a selected session renamed elsewhere, When the user selects it again
     );
     const sessionId = new URL(window.location.href).searchParams.get("sessionId");
     if (app.daemon === null || sessionId === null || app.executionNetwork === null) {
-        throw new Error("Expected an open Session on the connected Runtime");
+        throw new Error("Expected an open Session on the connected Computer");
     }
     const releaseEvents = app.executionNetwork.holdSessionEvents();
     onTestFinished(releaseEvents);
@@ -86,7 +86,7 @@ test("Given a conversation this page created, When another client renames it, Th
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
+        throw new Error("Expected a connected controlled Agent Computer");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -180,7 +180,7 @@ test("Given a saved title differs from the native session listing, When reopenin
     await reopened.waitForView(() => getByRole(renamedDialog, "heading", { name: "My renamed session" }));
     const sessionId = new URL(window.location.href).searchParams.get("sessionId");
     if (app.daemon === null || sessionId === null) {
-        throw new Error("Expected an open Session on the connected Runtime");
+        throw new Error("Expected an open Session on the connected Computer");
     }
     await app.daemon.renameSession(sessionId, "Renamed while the dialog is open");
     await reopened.waitForView(() => getByRole(renamedDialog, "button", { name: "Renamed while the dialog is open" }));
@@ -285,7 +285,7 @@ test("Given an open session on a phone, When the user renames it from the header
         await app.user.clear(secondInput);
         await app.user.type(secondInput, "Renamed on a phone");
         await app.user.click(getByRole(second, "button", { name: "Save title" }));
-        // The editor closes once the Runtime acknowledges the rename. Its live title event may reach the header first.
+        // The editor closes once the Computer acknowledges the rename. Its live title event may reach the header first.
         await app.waitForView(() =>
             expect(queryByRole(document.body, "dialog", { name: "Rename conversation" })).toBeNull(),
         );

@@ -21,18 +21,18 @@ export class ComputerChat {
     readonly #storage: DurableObjectStorage;
     readonly #owns: (id: string) => boolean;
     readonly #endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>;
-    readonly #runtime: (computerId: string) => ComputerBackendService;
+    readonly #computer: (computerId: string) => ComputerBackendService;
     /** Commits access changes with their connection checks inside the owning object. */
     constructor(
         storage: DurableObjectStorage,
         owns: (id: string) => boolean,
         endAccess: NonNullable<CloudBindings["CHAT_END_ACCESS"]>,
-        runtime: (computerId: string) => ComputerBackendService,
+        computer: (computerId: string) => ComputerBackendService,
     ) {
         this.#storage = storage;
         this.#owns = owns;
         this.#endAccess = endAccess;
-        this.#runtime = runtime;
+        this.#computer = computer;
     }
 
     /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
@@ -73,7 +73,7 @@ export class ComputerChat {
         if (!this.#owns(validatedComputerId) || bound !== validatedComputerId) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await createComputerApplication(this.#runtime(validatedComputerId)).fetch(
+        return await createComputerApplication(this.#computer(validatedComputerId)).fetch(
             request,
             await this.#bindings(validatedComputerId, env, request.signal),
         );
@@ -83,7 +83,7 @@ export class ComputerChat {
         const input: unknown = await request.json();
         const parsed = v.parse(computerBootstrap, input);
         await this.#bindComputer(parsed.computer.computerId);
-        return await createComputerApplication(this.#runtime(parsed.computer.computerId)).fetch(
+        return await createComputerApplication(this.#computer(parsed.computer.computerId)).fetch(
             new Request(request.url, {
                 body: JSON.stringify(parsed),
                 headers: { "content-type": "application/json" },

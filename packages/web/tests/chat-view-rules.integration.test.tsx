@@ -6,7 +6,7 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
-test("Given an Agent identifier containing a colon, When its conversation opens, Then configuration shows the Runtime's Agent label", {
+test("Given an Agent identifier containing a colon, When its conversation opens, Then configuration shows the Computer's Agent label", {
     timeout: 60_000,
 }, async () => {
     const app = await createTestApp({ agents: [{ harness: "team:codex", label: "Team Codex" }], connectAgent: true });

@@ -13,7 +13,7 @@ import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { NativeSessionInfo } from "../../acp/protocol/native-session.ts";
 import { sessionIdSchema } from "../../acp/protocol/native-session.ts";
 import type { ResolveAgent, SessionCreationOptions } from "../api/session-api.ts";
-import { RuntimeOperations } from "../manager/operation-drain.ts";
+import { ComputerOperations } from "../manager/operation-drain.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
 import type { SessionCreations } from "../record/session-creations.ts";
 import type { StoredSession } from "../record/session-store.ts";
@@ -32,7 +32,7 @@ interface AuthorizedNativeSession {
     readonly directoryLabel: string;
 }
 
-/** What an execution read of a Session this Runtime holds reports; a Session it does not hold is refused. */
+/** What an execution read of a Session this Computer holds reports; a Session it does not hold is refused. */
 export type ActiveTurnRead = Pick<
     Extract<NativeSessionResult, { readonly action: "active-turn" }>,
     "turn" | "queued" | "command" | "lastTurn" | "interactionState" | "executionPosition"
@@ -69,7 +69,7 @@ function forkIntent(command: Extract<NativeSessionCommand, { readonly action: "f
 }
 
 export class NativeSessionService {
-    readonly #operations = new RuntimeOperations();
+    readonly #operations = new ComputerOperations();
     readonly #cursors = new Map<string, ListedCursor>();
     readonly #resolveAgent: ResolveAgent;
     readonly #directories: WorkspaceDirectoryService;

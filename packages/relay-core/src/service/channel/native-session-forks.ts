@@ -3,7 +3,7 @@ import { sameNativeSession } from "@morty-build/client/native-session";
 import { decodeNativeSessionRequest, type NativeSessionResult } from "@morty-build/client/protocol";
 import type { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
-import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
+import type { SessionComputerOperations } from "../../gateway/session-computer-operations.ts";
 
 async function waitForFork<T>(completion: Promise<T>, signal: AbortSignal): Promise<T> {
     signal.throwIfAborted();
@@ -15,10 +15,10 @@ async function waitForFork<T>(completion: Promise<T>, signal: AbortSignal): Prom
 }
 
 /**
- * Forwards a Fork to the Runtime under its operation identity. The Runtime keeps the Fork's receipt under that identity,
+ * Forwards a Fork to the Computer under its operation identity. The Computer keeps the Fork's receipt under that identity,
  * so a retry after an ambiguous failure answers with the original Fork, and reusing it with other inputs is refused.
- * The Relay keeps no receipt; it only joins concurrent requests for one operation into one Runtime request, since the
- * Runtime refuses a second request under an identity it is still answering.
+ * The Relay keeps no receipt; it only joins concurrent requests for one operation into one Computer request, since the
+ * Computer refuses a second request under an identity it is still answering.
  */
 export class NativeSessionForks {
     readonly #waitUntil: (operation: Promise<void>) => void;
@@ -38,7 +38,7 @@ export class NativeSessionForks {
         scope: ComputerScope,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
-        request: SessionRuntimeOperations["requestComputerScopeControl"],
+        request: SessionComputerOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
@@ -79,7 +79,7 @@ export class NativeSessionForks {
                 ) {
                     throw new PairingDirectoryError(
                         "invalid_native_session_response",
-                        "The Runtime returned an invalid Fork",
+                        "The Computer returned an invalid Fork",
                     );
                 }
                 return result;

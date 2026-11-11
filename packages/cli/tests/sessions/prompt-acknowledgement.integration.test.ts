@@ -76,7 +76,7 @@ test("Given a running prompt, When clients append messages and steer a turn that
                 append(peer, running, "hold after first delta");
                 await next(peer, seen, lifecycle("prompt.started", running));
 
-                // Two clients send without knowing a turn runs. The Runtime queues both, in arrival order, and names
+                // Two clients send without knowing a turn runs. The Computer queues both, in arrival order, and names
                 // each in the queue change that acknowledges it.
                 const first = randomUUID();
                 const second = randomUUID();

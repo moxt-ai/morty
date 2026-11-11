@@ -245,8 +245,8 @@ async function compare(configPath: string, output: string, duration: number, con
         context.shutdownSignal.throwIfAborted();
         if (prepared[0]?.computerId === prepared[1]?.computerId) {
             throw new RelayProbeError(
-                "probe_runtime_reused",
-                "The Relay returned the same Runtime for distinct pairings",
+                "probe_computer_reused",
+                "The Relay returned the same Computer for distinct pairings",
             );
         }
         context.shutdownSignal.removeEventListener("abort", abortPreparation);
@@ -330,7 +330,7 @@ export function registerDiagnoseCommand(program: Command, context: CliContext): 
         .command("diagnose")
         .description("collect isolated network diagnostics")
         .command("relay")
-        .description("compare fresh direct and proxied Runtime channels over the same observation window")
+        .description("compare fresh direct and proxied Computer channels over the same observation window")
         .requiredOption(
             "--config <path>",
             "private JSON with relayOrigin and distinct direct/proxy computerId and pairingCode",

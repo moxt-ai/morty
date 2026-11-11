@@ -9,7 +9,7 @@ export class ComputerScope {
     }
 }
 
-function sessionRuntimeErrorStatus(code: string): number {
+function sessionComputerErrorStatus(code: string): number {
     if (code === "session_not_found") {
         return 404;
     }
@@ -18,7 +18,7 @@ function sessionRuntimeErrorStatus(code: string): number {
         code === SESSION_CLOSED_ERROR_CODE ||
         code === "session_conflict" ||
         code === "idempotency_conflict" ||
-        // An operation the Runtime started but cannot tell the end of: repeating it cannot answer differently.
+        // An operation the Computer started but cannot tell the end of: repeating it cannot answer differently.
         code === "session_creation_outcome_unknown" ||
         code === "command_result_expired" ||
         code === "turn_already_started" ||
@@ -38,21 +38,21 @@ function sessionRuntimeErrorStatus(code: string): number {
     return 503;
 }
 
-interface SessionRuntimeErrorOptions extends ErrorOptions {
-    readonly runtimeTimings?: NonNullable<SessionOperationFailedEvent["runtimeTimings"]> | undefined;
+interface SessionComputerErrorOptions extends ErrorOptions {
+    readonly computerTimings?: NonNullable<SessionOperationFailedEvent["computerTimings"]> | undefined;
 }
 
-export class SessionRuntimeError extends Error implements HttpError {
+export class SessionComputerError extends Error implements HttpError {
     readonly code: string;
     readonly httpStatus: number;
-    readonly runtimeTimings: NonNullable<SessionOperationFailedEvent["runtimeTimings"]>;
+    readonly computerTimings: NonNullable<SessionOperationFailedEvent["computerTimings"]>;
 
-    constructor(code: string, message: string, options: SessionRuntimeErrorOptions = {}) {
+    constructor(code: string, message: string, options: SessionComputerErrorOptions = {}) {
         super(message, options);
         this.code = code;
-        this.httpStatus = sessionRuntimeErrorStatus(code);
-        this.name = "SessionRuntimeError";
-        this.runtimeTimings = options.runtimeTimings ?? [];
+        this.httpStatus = sessionComputerErrorStatus(code);
+        this.name = "SessionComputerError";
+        this.computerTimings = options.computerTimings ?? [];
     }
 
     readonly toHttpJson: HttpError["toHttpJson"] = () => ({
@@ -62,7 +62,7 @@ export class SessionRuntimeError extends Error implements HttpError {
 }
 
 /**
- * The Runtime answered a control command with its own `session.operation.failed`: it finished handling that command
+ * The Computer answered a control command with its own `session.operation.failed`: it finished handling that command
  * without a result. Unlike a lost connection, timeout or invalid reply, nothing about the command is still in flight.
  */
-export class RuntimeOperationFailedError extends SessionRuntimeError {}
+export class ComputerOperationFailedError extends SessionComputerError {}

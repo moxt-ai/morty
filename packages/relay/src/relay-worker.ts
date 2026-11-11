@@ -11,7 +11,7 @@ import {
 } from "@morty-build/client/protocol";
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
 import {
-    CloudflareChannelRuntime,
+    CloudflareChannelComputer,
     ComputerScope,
     createMortyApplication,
     createWorkerContext,
@@ -30,7 +30,7 @@ import {
     turnSteerRequest,
     turnSubmissionRequest,
     validateIdentifier,
-    type WorkerRuntimeGateways,
+    type WorkerComputerGateways,
 } from "@morty-build/relay-core";
 import { type Context, type Handler, Hono } from "hono";
 import * as v from "valibot";
@@ -46,7 +46,7 @@ import {
     routeComputerDurableObject,
 } from "./gateway/computer-durable-object-routing.ts";
 import { ComputerDurableObjectStores } from "./gateway/computer-durable-object-store.ts";
-import { routeRuntimeSessionRequest } from "./gateway/runtime-session-routing.ts";
+import { routeComputerSessionRequest } from "./gateway/computer-session-routing.ts";
 import { createProjectApplication } from "./http/project-routes.ts";
 import { authorizeSessionContentUpload } from "./http/session-content-upload.ts";
 import { ComputerManagementStorageDirectory } from "./infra/computer-management-storage-directory.ts";
@@ -71,13 +71,13 @@ export interface RelayRelayBindings extends ComputerWorkerRoutingBindings {
 
 export interface ComputerRelayRelayBindings extends RelayRelayBindings, ComputerDurableObjectExecutionBindings {}
 
-export interface RuntimeExecutionBindings extends RelayRelayBindings {
-    readonly MORTY_RUNTIME_EXECUTION: {
+export interface ComputerExecutionBindings extends RelayRelayBindings {
+    readonly MORTY_COMPUTER_EXECUTION: {
         readonly computerId: string;
         readonly operations: LocalSessionOperations;
     };
 }
-type RelayApplicationBindings = RelayRelayBindings | ComputerRelayRelayBindings | RuntimeExecutionBindings;
+type RelayApplicationBindings = RelayRelayBindings | ComputerRelayRelayBindings | ComputerExecutionBindings;
 
 export interface ConfiguredRelayRelayBindings extends RelayRelayBindings, RelayAuthenticationEnvironment {
     readonly APP_ORIGIN?: string;
@@ -85,10 +85,10 @@ export interface ConfiguredRelayRelayBindings extends RelayRelayBindings, RelayA
 
 // A request a Session credential authorizes is routed to its ComputerRelay before any Session route runs.
 function sessionOperations(context: { readonly env: RelayApplicationBindings }) {
-    if (!("MORTY_RUNTIME_EXECUTION" in context.env)) {
+    if (!("MORTY_COMPUTER_EXECUTION" in context.env)) {
         throw new Error("Session operations run only in the ComputerRelay");
     }
-    return context.env.MORTY_RUNTIME_EXECUTION.operations;
+    return context.env.MORTY_COMPUTER_EXECUTION.operations;
 }
 
 function nativeTarget(request: { readonly param: (name: string) => string | undefined }): NativeSessionTarget {
@@ -189,7 +189,7 @@ export function createRelayAccessServices(environment: RelayApplicationBindings)
 
 export function createRelayApplication(
     authentication: RelayAuthenticationConfiguration,
-    gateways: (environment: RelayApplicationBindings) => WorkerRuntimeGateways,
+    gateways: (environment: RelayApplicationBindings) => WorkerComputerGateways,
 ): Hono<{ Bindings: RelayApplicationBindings }> {
     const projectHandler: Handler<DispatchEnvironment> = (context) =>
         scopedProjectApplication.fetch(context.req.raw, {
@@ -604,19 +604,19 @@ export function createRelayApplication(
     const versionedRoutes = new Hono<DispatchEnvironment>()
         .route("/computers/:computerId", projectRoutes)
         .all("/pairings/*", projectHandler)
-        .all("/runtimes/connect", projectHandler)
+        .all("/computers/connect", projectHandler)
         .all("/*", projectHandler);
 
     const application = new Hono<DispatchEnvironment>()
         .use("*", errorMiddleware)
         .use("*", requestTimeoutMiddleware<DispatchEnvironment>(RELAY_REQUEST_TIMEOUT_MILLISECONDS))
         .use("*", async (context, next) => {
-            const runtimeRoute = await routeRuntimeSessionRequest(context.req.raw, context.env);
-            if (runtimeRoute !== null) {
-                return runtimeRoute;
+            const computerRoute = await routeComputerSessionRequest(context.req.raw, context.env);
+            if (computerRoute !== null) {
+                return computerRoute;
             }
             const routed =
-                "MORTY_RUNTIME_EXECUTION" in context.env
+                "MORTY_COMPUTER_EXECUTION" in context.env
                     ? null
                     : await routeComputerDurableObject(context.req.raw, context.env, authentication.allowedOrigins);
             if (routed !== null) {
@@ -681,14 +681,14 @@ function instrumentRelayDatabases(environment: RelayRelayBindings, metrics: Requ
     };
 }
 
-export function createRelayGateways(environment: RelayApplicationBindings): WorkerRuntimeGateways {
+export function createRelayGateways(environment: RelayApplicationBindings): WorkerComputerGateways {
     return {
-        channel: new CloudflareChannelRuntime(
+        channel: new CloudflareChannelComputer(
             environment.COMPUTER_RELAY,
             "MORTY_COMPUTER_STORE" in environment ? environment.MORTY_LOCAL_CHANNEL : undefined,
         ),
-        ...("MORTY_RUNTIME_EXECUTION" in environment
-            ? { runtimeOperations: environment.MORTY_RUNTIME_EXECUTION.operations }
+        ...("MORTY_COMPUTER_EXECUTION" in environment
+            ? { computerOperations: environment.MORTY_COMPUTER_EXECUTION.operations }
             : {}),
     };
 }

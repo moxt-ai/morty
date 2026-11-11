@@ -158,7 +158,7 @@ async function closedSession(peer: RealDaemonPeer, title: string): Promise<RealD
     return sessionTarget;
 }
 
-test("Given a client closes a Session, When the Runtime stops its Agent process, Then the Runtime announces the closed Session and why before it answers the close request", async () => {
+test("Given a client closes a Session, When the Computer stops its Agent process, Then the Computer announces the closed Session and why before it answers the close request", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
@@ -194,7 +194,7 @@ test("Given a client closes a Session, When the Runtime stops its Agent process,
     });
 });
 
-test("Given a closed Session, When a client loads more history, Then the Runtime reports session_closed and starts no Agent process", async () => {
+test("Given a closed Session, When a client loads more history, Then the Computer reports session_closed and starts no Agent process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await closedSession(peer, "Plan the release");
@@ -219,7 +219,7 @@ test("Given a closed Session, When a client loads more history, Then the Runtime
     });
 });
 
-test("Given a closed Session, When a client sends a prompt, Then the Runtime reports session_closed and starts no Agent process", async () => {
+test("Given a closed Session, When a client sends a prompt, Then the Computer reports session_closed and starts no Agent process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await closedSession(peer, "Plan the release");
@@ -235,7 +235,7 @@ test("Given a closed Session, When a client sends a prompt, Then the Runtime rep
     });
 });
 
-test("Given a closed Session, When a client renames it, Then the Runtime reports session_closed", async () => {
+test("Given a closed Session, When a client renames it, Then the Computer reports session_closed", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await closedSession(peer, "Plan the release");
@@ -257,7 +257,7 @@ test("Given a closed Session, When a client renames it, Then the Runtime reports
     });
 });
 
-test("Given a closed Session, When a client reads its settings, Then the Runtime reports session_closed and starts no Agent process", async () => {
+test("Given a closed Session, When a client reads its settings, Then the Computer reports session_closed and starts no Agent process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await closedSession(peer, "Plan the release");
@@ -274,7 +274,7 @@ test("Given a closed Session, When a client reads its settings, Then the Runtime
     });
 });
 
-test("Given a closed Session, When a client answers a permission request or an elicitation, Then the Runtime reports session_closed for each", async () => {
+test("Given a closed Session, When a client answers a permission request or an elicitation, Then the Computer reports session_closed for each", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await closedSession(peer, "Plan the release");
@@ -313,7 +313,7 @@ test("Given a closed Session, When a client answers a permission request or an e
     });
 });
 
-test("Given a Session whose Agent process is still stopping, When a client sends a prompt, Then the Runtime reports session_closed without waiting for the process", async () => {
+test("Given a Session whose Agent process is still stopping, When a client sends a prompt, Then the Computer reports session_closed without waiting for the process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
@@ -334,7 +334,7 @@ test("Given a Session whose Agent process is still stopping, When a client sends
     });
 });
 
-test("Given a closed Session, When a client prepares it again, Then the Runtime resumes the Agent session and the next prompt runs", async () => {
+test("Given a closed Session, When a client prepares it again, Then the Computer resumes the Agent session and the next prompt runs", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await closedSession(peer, "Plan the release");

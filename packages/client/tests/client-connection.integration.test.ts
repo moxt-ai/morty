@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import type { Duplex } from "node:stream";
-import { encodeRuntimeStatusEvent, RUNTIME_STATUS_KIND } from "@morty-build/client/protocol";
+import { COMPUTER_STATUS_KIND, encodeComputerStatusEvent } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listen, port as readPort, sendText as writeServerTextFrame } from "../../relay-test-support/src/websocket.ts";
 import { connectMortyClient, type MortyClient } from "../src/client.ts";
@@ -66,10 +66,10 @@ describe("browser relay connection", () => {
             connections.push(socket);
             writeServerTextFrame(
                 socket,
-                encodeRuntimeStatusEvent({
-                    kind: RUNTIME_STATUS_KIND,
+                encodeComputerStatusEvent({
+                    kind: COMPUTER_STATUS_KIND,
                     online: true,
-                    computerId: "runtime-1",
+                    computerId: "computer-1",
                 }),
             );
         });

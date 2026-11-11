@@ -1,28 +1,28 @@
 import type {
+    ComputerAccessContext,
     ProjectAccessContext,
     ProjectPermission,
-    RuntimeAccessContext,
 } from "../../entity/authentication/project-authentication.ts";
 import type {
     AgentDescriptor,
     ChannelDescriptor,
     ClaimedPairing,
-    CreatedRuntimePairing,
+    CreatedComputerPairing,
     PairingStatus,
-    RevokedProjectRuntime,
+    RevokedProjectComputer,
     VerifiedChannelAccess,
 } from "../../entity/pairing/pairing.ts";
 export interface PairingOperations {
     /**
      * Rotates a daemon credential to the successor the daemon saved. A reused credential has already ended the
-     * Runtime's access when this returns; the caller closes its connections.
+     * Computer's access when this returns; the caller closes its connections.
      */
-    readonly rotateRuntimeCredential: (
+    readonly rotateComputerCredential: (
         token: string,
         successor: string,
         signal: AbortSignal,
     ) => Promise<
-        { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
+        { readonly kind: "rotated" | "reused"; readonly access: ComputerAccessContext } | { readonly kind: "revoked" }
     >;
     readonly authorizePairedHost: (computerId: string, signal: AbortSignal) => Promise<VerifiedChannelAccess>;
     readonly authorizeProject: (
@@ -38,22 +38,22 @@ export interface PairingOperations {
     // v1: reserve capacity atomically. The same Project/key/credential replays
     // the original identity, secrets, and deadline, including after expiration
     // or revocation. A failed response may follow a commit; retry the same key.
-    readonly createProjectRuntimePairing: (
+    readonly createProjectComputerPairing: (
         computerId: string,
         pairingKey: string,
         idempotencyKey: string,
         signal: AbortSignal,
-    ) => Promise<CreatedRuntimePairing>;
-    readonly listProjectRuntimes: (computerId: string, signal: AbortSignal) => Promise<readonly ChannelDescriptor[]>;
-    /** Whether the Project's Runtime was revoked; false for one the Project never had. */
-    readonly isProjectRuntimeRevoked: (computerId: string, signal: AbortSignal) => Promise<boolean>;
+    ) => Promise<CreatedComputerPairing>;
+    readonly listProjectComputers: (computerId: string, signal: AbortSignal) => Promise<readonly ChannelDescriptor[]>;
+    /** Whether the Project's Computer was revoked; false for one the Project never had. */
+    readonly isProjectComputerRevoked: (computerId: string, signal: AbortSignal) => Promise<boolean>;
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that
-    // order. Passing the deadline never expires an already registered Runtime.
-    readonly readProjectRuntimePairing: (computerId: string, signal: AbortSignal) => Promise<PairingStatus>;
+    // order. Passing the deadline never expires an already registered Computer.
+    readonly readProjectComputerPairing: (computerId: string, signal: AbortSignal) => Promise<PairingStatus>;
     // v1: one unrevoked, unexpired request can be consumed by one daemon. The
     // registration, credential, and audit commit together. Concurrent/repeated
     // claims fail; a lost successful response cannot replay the daemon secret.
-    readonly redeemRuntimePairing: (
+    readonly redeemComputerPairing: (
         computerId: string,
         pairingCode: string,
         machineName: string,
@@ -64,7 +64,7 @@ export interface PairingOperations {
     // Revoke identity and channel credentials atomically, preserving the first
     // revocation timestamp. Retrying after a lost response or disconnect failure
     // is safe; an unclaimed identity can also be cancelled through this command.
-    readonly revokeProjectRuntime: (computerId: string, signal: AbortSignal) => Promise<RevokedProjectRuntime>;
+    readonly revokeProjectComputer: (computerId: string, signal: AbortSignal) => Promise<RevokedProjectComputer>;
     /**
      * Records the daemon's Agent catalog. The daemon presents its credential with the successor it saved, if any:
      * while it saves a rotation its connection just made, the Relay already holds the successor as current.

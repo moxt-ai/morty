@@ -1,5 +1,5 @@
 import { createRelayApplication, RelayAuthenticationConfiguration, type RelayRelayBindings } from "@morty-build/relay";
-import type { WorkerRuntimeGateways } from "@morty-build/relay-core";
+import type { WorkerComputerGateways } from "@morty-build/relay-core";
 import { type Env, Hono } from "hono";
 
 export type { RelayRelayBindings };
@@ -21,7 +21,7 @@ export function createTestMortyRelayApp(
     options: RelayAuthenticationConfiguration & {
         readonly bindings?: RelayRelayBindings;
     },
-    gateways: (environment: RelayRelayBindings) => WorkerRuntimeGateways,
+    gateways: (environment: RelayRelayBindings) => WorkerComputerGateways,
 ): Hono<{ Bindings: RelayRelayBindings }> {
     const application = createRelayApplication(new RelayAuthenticationConfiguration(options.allowedOrigins), gateways);
     return options.bindings === undefined ? application : new TestApplication(application, options.bindings);

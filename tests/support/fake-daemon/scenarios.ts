@@ -1,5 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
-import type { HarnessOutput, HarnessReplyPlan } from "@morty-build/runtime-test-support/fake-daemon";
+import type { HarnessOutput, HarnessReplyPlan } from "@morty-build/computer-test-support/fake-daemon";
 import { interactiveHtml } from "./html-preview.ts";
 
 const FILE_EXPLORER_SOURCE = [
@@ -111,7 +111,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 output: [
                     {
                         kind: "text",
-                        text: "```mermaid\nflowchart LR\n    A[Browser<br/>Morty chat UI] --> B[Morty<br/>manager / runtime hub]\n    B --> C[Pi<br/>coding agent harness]\n    C --> D[DeepSeek<br/>model backend]\n    D --> C\n    C --> B\n    B --> A\n",
+                        text: "```mermaid\nflowchart LR\n    A[Browser<br/>Morty chat UI] --> B[Morty<br/>manager / computer hub]\n    B --> C[Pi<br/>coding agent harness]\n    C --> D[DeepSeek<br/>model backend]\n    D --> C\n    C --> B\n    B --> A\n",
                     },
                 ],
             };

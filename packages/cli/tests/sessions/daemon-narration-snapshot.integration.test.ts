@@ -19,11 +19,11 @@ import {
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
-import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
+import { runComputer } from "../../src/engine/computer/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
+import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -138,7 +138,7 @@ describe("daemon narration delivery", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -160,18 +160,18 @@ describe("daemon narration delivery", () => {
                 ),
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
-        const config = createRuntimeConfig(
+        const config = createComputerConfig(
             {
                 computerId: "channel_beta",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("e".repeat(43)),
+                credentials: memoryComputerCredentials("e".repeat(43)),
             },
             [agent],
-            new RuntimeLocalContext(stateDirectory, process.env),
+            new ComputerLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const runtime = runRuntime(config, cancellation.signal);
+        const computer = runComputer(config, cancellation.signal);
 
         try {
             const socket = await socketReady.promise;
@@ -242,7 +242,7 @@ describe("daemon narration delivery", () => {
             expect(narration.split("step-63")).toHaveLength(2);
         } finally {
             cancellation.abort();
-            await runtime;
+            await computer;
             for (const socket of relaySockets) {
                 socket.destroy();
             }

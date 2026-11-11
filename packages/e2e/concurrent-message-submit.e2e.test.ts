@@ -1,11 +1,11 @@
 import { expect, test } from "./infra/test.ts";
 
 test("Given two devices share an idle conversation, When both send a draft, Then both messages run without losing text or attachments", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
+    const { page } = computer;
     await page.setViewportSize({ width: 1440, height: 900 });
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("Open a shared conversation");
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.getByRole("article", { name: "Agent response" })).toContainText("Open a shared conversation");
@@ -33,7 +33,7 @@ test("Given two devices share an idle conversation, When both send a draft, Then
                 await participant.page.getByRole("button", { name: "Send message" }).click();
             }),
         );
-        // The Runtime runs whichever message arrives first and queues the other behind it.
+        // The Computer runs whichever message arrives first and queues the other behind it.
         const queue = page.getByLabel("Queued messages", { exact: true });
         await expect(queue).toBeVisible();
         for (const participant of participants) {

@@ -6,10 +6,10 @@ const tallImage = imagePreviewPng(1600, 2400);
 const smallImage = imagePreviewPng(16, 16);
 
 test("Given a tool image is open, When the agent finishes and its tools collapse, Then the image stays visible until the user closes it", async ({
-    runtime,
+    computer,
 }) => {
-    const { page } = runtime;
-    await runtime.openPairedChat();
+    const { page } = computer;
+    await computer.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("hold image tool");
     await page.getByRole("button", { name: "Send message" }).click();
     // The agent's work sits behind its step summary until the user expands it.
@@ -19,7 +19,7 @@ test("Given a tool image is open, When the agent finishes and its tools collapse
     await page.getByRole("button", { name: "View image: Image" }).click();
     const viewer = page.getByRole("dialog", { name: "Image viewer" });
     await expect(viewer.getByRole("button", { name: "Zoom in" })).toBeEnabled();
-    await runtime.continueReply("hold image tool", {
+    await computer.continueReply("hold image tool", {
         outcome: "complete",
         output: [{ kind: "text", text: "The generated image is ready." }],
     });
@@ -32,10 +32,10 @@ test("Given a tool image is open, When the agent finishes and its tools collapse
 });
 
 test("Given draft screenshots, When the user zooms, pans, switches and saves, Then the viewer preserves the draft and returns focus", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
-    await runtime.openPairedChat();
+    const { page } = computer;
+    await computer.openPairedChat();
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("Compare these screenshots");
     await page.getByLabel("Choose attachments").setInputFiles([
@@ -116,11 +116,11 @@ test("Given draft screenshots, When the user zooms, pans, switches and saves, Th
 });
 
 test("Given a streaming local image gallery, When its source changes on disk, Then the open viewer saves the original bytes and file preview shares zoom controls", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
-    await runtime.openPairedChat();
-    await runtime.writeFiles(
+    const { page } = computer;
+    await computer.openPairedChat();
+    await computer.writeFiles(
         new Map([["/workspace/generated-picture.png", { content: tallImage, mediaType: "image/png" }]]),
     );
     await page.getByRole("textbox", { name: "Message" }).fill("show image gallery");
@@ -131,10 +131,10 @@ test("Given a streaming local image gallery, When its source changes on disk, Th
     const viewer = page.getByRole("dialog", { name: "Image viewer" });
     await expect(viewer.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const messages = page.getByRole("log", { name: "Messages" });
-    await runtime.writeFiles(
+    await computer.writeFiles(
         new Map([["/workspace/generated-picture.png", { content: smallImage, mediaType: "image/png" }]]),
     );
-    await runtime.continueReply("show image gallery", {
+    await computer.continueReply("show image gallery", {
         outcome: "complete",
         output: [
             {

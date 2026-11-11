@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { encodeSessionCloseNoticeEvent } from "@morty-build/client/protocol";
 import { expect, it } from "vitest";
-import { registerRuntimeFixture } from "./registered-runtime.ts";
+import { registerComputerFixture } from "./registered-computer.ts";
 
 /** Messages a socket received, in order. Waiting fails once the Relay closes the socket. */
 class Inbox {
@@ -41,19 +41,19 @@ class Inbox {
     };
 }
 
-interface RuntimeConnection {
+interface ComputerConnection {
     readonly inbox: Inbox;
     readonly socket: WebSocket;
 }
 
-async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<RuntimeConnection>) => Promise<void>) {
+async function withComputerRelay(scenario: (connect: (path: string) => Promise<ComputerConnection>) => Promise<void>) {
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(computerId);
+    await registerComputerFixture(computerId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
-    const connect = async (path: string): Promise<RuntimeConnection> => {
+    const connect = async (path: string): Promise<ComputerConnection> => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
-        const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
+        const response = await relay.fetch(`https://computer-relay.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
             },
@@ -61,7 +61,7 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
         expect(response.status).toBe(101);
         const socket = response.webSocket;
         if (socket === null) {
-            throw new Error("Expected an upgraded Runtime connection");
+            throw new Error("Expected an upgraded Computer connection");
         }
         const inbox = new Inbox(socket);
         sockets.push(socket);
@@ -77,15 +77,15 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
     }
 }
 
-it("Given hosts watching every Session and a single Session, When the Runtime reports a Session closed, Then the Relay delivers the notice to the hosts watching that Session", async () => {
-    await withRuntimeRelay(async (connect) => {
+it("Given hosts watching every Session and a single Session, When the Computer reports a Session closed, Then the Relay delivers the notice to the hosts watching that Session", async () => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const everySession = await connect("host");
-        expect(await everySession.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await everySession.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
         const sessionSeven = await connect("host?harness=claude&sessionId=session-7");
-        expect(await sessionSeven.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await sessionSeven.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
         const sessionEight = await connect("host?harness=claude&sessionId=session-8");
-        expect(await sessionEight.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await sessionEight.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
 
         for (const sessionId of ["session-7", "session-8"]) {
             daemon.socket.send(
@@ -121,21 +121,21 @@ it("Given hosts watching every Session and a single Session, When the Runtime re
     });
 });
 
-it("Given a host filtered to a native pair, When the Runtime disconnects, Then the host still learns that its Machine is offline", async () => {
-    await withRuntimeRelay(async (connect) => {
+it("Given a host filtered to a native pair, When the Computer disconnects, Then the host still learns that its Machine is offline", async () => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host?harness=claude&sessionId=session-7");
-        expect(await host.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
         daemon.socket.close(1000, "Machine stopped");
-        expect(await host.inbox.next()).toMatchObject({ kind: "runtime.status", online: false });
+        expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: false });
     });
 });
 
-it("Given an unknown Runtime notice with a Session route, When the Runtime sends it, Then the Relay forwards it and keeps the connection open", async () => {
-    await withRuntimeRelay(async (connect) => {
+it("Given an unknown Computer notice with a Session route, When the Computer sends it, Then the Relay forwards it and keeps the connection open", async () => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host");
-        expect(await host.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
 
         daemon.socket.send(
             JSON.stringify({

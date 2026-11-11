@@ -6,9 +6,9 @@ import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.
 import type { LocalSessionOperations } from "../service/channel/local-session-operations.ts";
 import { createRelayDependencies } from "./create-relay-dependencies.ts";
 
-export interface WorkerRuntimeGateways {
+export interface WorkerComputerGateways {
     readonly channel: ChannelGateway;
-    readonly runtimeOperations?: LocalSessionOperations;
+    readonly computerOperations?: LocalSessionOperations;
 }
 
 export function createWorkerContext(options: {
@@ -18,7 +18,7 @@ export function createWorkerContext(options: {
     readonly identityStores: readonly ProjectStore[];
     readonly projects: ProjectStorageDirectory;
     readonly apiPrefix: string;
-    readonly gateways: WorkerRuntimeGateways;
+    readonly gateways: WorkerComputerGateways;
 }) {
     return createRelayDependencies({
         authentication: { projects: options.authorization },
@@ -30,9 +30,9 @@ export function createWorkerContext(options: {
         logger: console,
         gateways: {
             channelGateway: options.gateways.channel,
-            ...(options.gateways.runtimeOperations === undefined
+            ...(options.gateways.computerOperations === undefined
                 ? {}
-                : { runtimeOperations: options.gateways.runtimeOperations }),
+                : { computerOperations: options.gateways.computerOperations }),
             nowEpochMilliseconds: () => Date.now(),
         },
     });

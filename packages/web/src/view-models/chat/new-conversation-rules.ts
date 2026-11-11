@@ -8,7 +8,7 @@ import { composerHasMessage } from "./session-operation-rules.ts";
 export interface NewConversationFacts {
     /** The network and the Machine are available, as the connection header reports. */
     readonly connectionAvailable: boolean;
-    /** Entry, pairing and the Runtime's Agents let this page start a Session. */
+    /** Entry, pairing and the Computer's Agents let this page start a Session. */
     readonly startable: boolean;
     /** The page shows the New Session draft rather than another conversation. */
     readonly draftSelected: boolean;

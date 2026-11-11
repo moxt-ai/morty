@@ -6,7 +6,7 @@ import { registerReleaseCommand } from "./release.ts";
 import { registerStartCommand } from "./start.ts";
 import { registerUpgradeCommand } from "./upgrade.ts";
 
-export function registerInternalRuntimeHandlers(program: Command, context: CliContext): void {
+export function registerInternalComputerHandlers(program: Command, context: CliContext): void {
     program.command("__daemon", { hidden: true }).action(async () => {
         await runDaemon(context.version, context.shutdownSignal);
     });

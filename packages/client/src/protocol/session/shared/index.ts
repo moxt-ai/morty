@@ -20,7 +20,7 @@ export const sessionStatusSchema = z.discriminatedUnion("kind", [
         .object({
             kind: z.literal("idle"),
             /**
-             * Present when the Session's most recent started command failed, while the Runtime retains its receipt, so
+             * Present when the Session's most recent started command failed, while the Computer retains its receipt, so
              * a client that did not watch it can still show the Session failed until another command starts. It
              * carries what the execution's `lastTurn` reports for that failure.
              */

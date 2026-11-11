@@ -10,9 +10,9 @@ import {
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeAgentSettingsDiscoveredEvent,
+    decodeComputerDiagnosticsResult,
     decodeNativeSessionEvents,
     decodeNativeSessionResult,
-    decodeRuntimeDiagnosticsResult,
     decodeSessionAccessCredential,
     decodeSessionReadyEvent,
     decodeWorkspaceEntriesEvent,
@@ -60,7 +60,7 @@ const managedSessionStatusSchema = v.variant("kind", [
     v.pipe(
         v.object({
             kind: v.literal("idle"),
-            /** Present when the Runtime reports that the Session's last turn failed. */
+            /** Present when the Computer reports that the Session's last turn failed. */
             failedTurn: v.optional(
                 v.pipe(v.object({ code: v.string(), commandId: identifier, message: v.string() }), v.readonly()),
             ),
@@ -69,14 +69,14 @@ const managedSessionStatusSchema = v.variant("kind", [
     ),
     v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
 ]);
-/** A Session the computer's Runtime holds, as the Runtime describes it. */
+/** A Session the Computer holds, as it describes it. */
 const managedSessionSchema = v.pipe(
     v.object({
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
         directoryLabel: v.string(),
         directory: v.string(),
-        /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
+        /** Whether the Computer has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
         target: nativeSessionTargetSchema,
         status: managedSessionStatusSchema,
@@ -84,7 +84,7 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
-const chatRuntimeSchema = v.object({
+const chatComputerSchema = v.object({
     computerId: identifier,
     machineName: v.string(),
     online: v.boolean(),
@@ -95,12 +95,12 @@ const chatRuntimeSchema = v.object({
         }),
     ),
 });
-export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
-const runtimeConfigurationSchema = v.object({ runtime: chatRuntimeSchema });
+export type ChatComputer = v.InferOutput<typeof chatComputerSchema>;
+const computerConfigurationSchema = v.object({ computer: chatComputerSchema });
 const networkDiagnosticSchema = v.strictObject({
-    runtimeLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    computerLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
-export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
+export type BotComputerConfiguration = v.InferOutput<typeof computerConfigurationSchema>;
 export type ChatAgentSelection = {
     readonly computerId: Identifier;
     readonly machineName: string;
@@ -108,20 +108,20 @@ export type ChatAgentSelection = {
     readonly label: string;
 };
 /**
- * Whether the Runtime can take a new conversation now. The setup notice and the draft's settings both follow this one
+ * Whether the Computer can take a new conversation now. The setup notice and the draft's settings both follow this one
  * rule, so they never disagree about why a draft cannot start.
  */
-export function runtimeAgentAvailability(runtime: ChatRuntime): "no-agent" | "offline" | "available" {
-    if (runtime.agents.length === 0) {
+export function computerAgentAvailability(computer: ChatComputer): "no-agent" | "offline" | "available" {
+    if (computer.agents.length === 0) {
         return "no-agent";
     }
-    return runtime.online ? "available" : "offline";
+    return computer.online ? "available" : "offline";
 }
-export function connectedChatRuntimeAgents(runtime: ChatRuntime): readonly ChatAgentSelection[] {
-    return runtime.online
-        ? runtime.agents.map((agent) => ({
-              computerId: runtime.computerId,
-              machineName: runtime.machineName,
+export function connectedChatComputerAgents(computer: ChatComputer): readonly ChatAgentSelection[] {
+    return computer.online
+        ? computer.agents.map((agent) => ({
+              computerId: computer.computerId,
+              machineName: computer.machineName,
               ...agent,
           }))
         : [];
@@ -277,7 +277,7 @@ export class BotChatApi {
     readonly #credentialRejected: (() => void) | undefined;
     readonly #sessionTransport = new BrowserSessionTransport();
     readonly #waitForChange: ApiTransport["waitForChange"];
-    readonly readRuntimePairing: ManagementApi["readRuntimePairing"];
+    readonly readComputerPairing: ManagementApi["readComputerPairing"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -300,7 +300,7 @@ export class BotChatApi {
         this.#credentialRejected = options.credentialRejected;
         this.#waitForChange = options.waitForChange;
         const management = new ManagementApi(options);
-        this.readRuntimePairing = management.readRuntimePairing;
+        this.readComputerPairing = management.readComputerPairing;
     }
     readonly resetSessionConnections = (): void => {
         this.#sessionTransport.reset();
@@ -311,7 +311,7 @@ export class BotChatApi {
     readonly access = async (parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
         v.parse(accessSchema, await this.#request("access", v.parse(nativeSessionTargetSchema, target), parent));
     readonly daemonDiagnostics = async (signal: AbortSignal) =>
-        decodeRuntimeDiagnosticsResult(JSON.stringify(await this.#request("daemon-diagnostics", undefined, signal)));
+        decodeComputerDiagnosticsResult(JSON.stringify(await this.#request("daemon-diagnostics", undefined, signal)));
     readonly networkDiagnostic = async (signal: AbortSignal) =>
         v.parse(networkDiagnosticSchema, await this.#request("network-diagnostic", undefined, signal));
     readonly createConversation = async (
@@ -359,7 +359,7 @@ export class BotChatApi {
             v.object({ sessions: v.array(managedSessionSchema) }),
             await this.#request("managed-sessions", {}, signal),
         ).sessions;
-    /** Resolves once the Runtime no longer holds the Session; otherwise rejects with the Runtime's failure. */
+    /** Resolves once the Computer no longer holds the Session; otherwise rejects with the Computer's failure. */
     readonly archiveManagedSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> => {
         v.parse(
             v.object({ target: nativeSessionTargetSchema }),
@@ -422,8 +422,8 @@ export class BotChatApi {
         };
         return settings;
     };
-    readonly runtimeConfiguration = async (parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
-        v.parse(runtimeConfigurationSchema, await this.#request("workspace", undefined, parent));
+    readonly computerConfiguration = async (parent: AbortSignal): Promise<BotComputerConfiguration> =>
+        v.parse(computerConfigurationSchema, await this.#request("workspace", undefined, parent));
     readonly directory = async (directory: string, signal: AbortSignal) =>
         decodeWorkspaceEntriesEvent(JSON.stringify(await this.#request("workspace/directory", { directory }, signal)));
     /** Resolves once the watched resource differs from the snapshot this client last read, or from its first sample. */
@@ -443,12 +443,12 @@ export class BotChatApi {
             onReady,
         );
     };
-    /** Resolves once the Machine's Runtime pairing differs from the pairing this client last read. */
-    readonly waitForRuntimePairingChange = async (parent: AbortSignal): Promise<void> =>
+    /** Resolves once the Computer's pairing differs from the pairing this client last read. */
+    readonly waitForComputerPairingChange = async (parent: AbortSignal): Promise<void> =>
         await this.#waitForResourceChange(machineUrl(this.#origin, this.#computerId), "GET", parent);
-    readonly waitForRuntimeConfigurationChange = async (
+    readonly waitForComputerConfigurationChange = async (
         parent: AbortSignal,
-        onReady?: (configuration: BotRuntimeConfiguration) => void,
+        onReady?: (configuration: BotComputerConfiguration) => void,
     ): Promise<void> =>
         await this.#waitForResourceChange(
             new URL(`/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/workspace`, this.#origin),
@@ -458,7 +458,7 @@ export class BotChatApi {
                 ? undefined
                 : (snapshot) => {
                       const value = this.#readResponse(snapshot, parent);
-                      onReady(v.parse(runtimeConfigurationSchema, value));
+                      onReady(v.parse(computerConfigurationSchema, value));
                   },
         );
     readonly forkNativeSession = async (
@@ -482,7 +482,7 @@ export class BotChatApi {
             result.target.harness !== input.harness ||
             result.target.sessionId === input.sessionId
         ) {
-            throw new CloudApiError("INVALID_SESSION", "The Runtime returned an invalid fork.");
+            throw new CloudApiError("INVALID_SESSION", "The Computer returned an invalid fork.");
         }
         return result;
     };

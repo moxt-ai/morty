@@ -27,7 +27,7 @@ export const SESSION_CLOSED_KIND = "session.closed";
 export const SESSION_CLOSE_NOTICE_KIND = "session.close.notice";
 export const SESSION_ARCHIVE_KIND = "session.archive";
 export const SESSION_ARCHIVED_KIND = "session.archived";
-/** Failure code of an operation that needs a Session the Runtime has closed and nobody has reopened. */
+/** Failure code of an operation that needs a Session the Computer has closed and nobody has reopened. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
 export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
 export const SESSION_COMMANDS_UPDATED_KIND = "session.commands.updated";
@@ -125,9 +125,9 @@ const sessionCloseCommandSchema = z
 export type SessionCloseCommand = z.infer<typeof sessionCloseCommandSchema>;
 
 /**
- * Removes a Session from the Sessions this Runtime holds, which are Morty's directory of Sessions on the computer. The
- * Runtime closes the Session if it is open, then forgets its record; the Agent's own history of the Session stays, so
- * opening it from the Agent's sessions brings it back. Archiving a Session the Runtime does not hold succeeds: the
+ * Removes a Session from the Sessions this Computer holds, which are Morty's directory of Sessions on the computer. The
+ * Computer closes the Session if it is open, then forgets its record; the Agent's own history of the Session stays, so
+ * opening it from the Agent's sessions brings it back. Archiving a Session the Computer does not hold succeeds: the
  * Session is absent afterwards, as asked, so a retry after a lost answer succeeds too.
  */
 const sessionArchiveCommandSchema = z
@@ -140,11 +140,11 @@ const sessionArchiveCommandSchema = z
 
 export type SessionArchiveCommand = z.infer<typeof sessionArchiveCommandSchema>;
 
-/** Opens an existing Session with the Agent and directory the Runtime holds it with. */
+/** Opens an existing Session with the Agent and directory the Computer holds it with. */
 const sessionPrepareCommandSchema = z
     .object({
         /**
-         * The complete settings a new Session starts with. The Runtime applies them in dependency order as part of
+         * The complete settings a new Session starts with. The Computer applies them in dependency order as part of
          * creating the Session: it answers only once every selection holds, and otherwise creates nothing.
          */
         configurations: sessionConfigurationSelectionsSchema.optional(),
@@ -208,7 +208,7 @@ export const decodeSessionCreationReadCommand = (encoded: string): SessionCreati
 export const encodeSessionCreationReadCommand = (message: SessionCreationReadCommand): string =>
     encode(message, sessionCreationReadCommandSchema);
 
-const runtimeTimingsSchema = z
+const computerTimingsSchema = z
     .array(
         z
             .object({
@@ -234,7 +234,7 @@ export const sessionReadyEventSchema = z
         kind: z.literal(SESSION_READY_KIND),
         requestId: IDENTIFIER,
         restored: z.boolean(),
-        runtimeTimings: runtimeTimingsSchema.optional(),
+        computerTimings: computerTimingsSchema.optional(),
         target: nativeSessionTargetSchema,
     })
     .readonly();
@@ -263,7 +263,7 @@ const sessionClosedEventSchema = z
 
 export type SessionClosedEvent = z.infer<typeof sessionClosedEventSchema>;
 
-/** Answers `session.archive` once the Runtime no longer holds the Session. */
+/** Answers `session.archive` once the Computer no longer holds the Session. */
 const sessionArchivedEventSchema = z
     .object({
         kind: z.literal(SESSION_ARCHIVED_KIND),
@@ -275,10 +275,10 @@ const sessionArchivedEventSchema = z
 export type SessionArchivedEvent = z.infer<typeof sessionArchivedEventSchema>;
 
 /**
- * Tells every observer that the Runtime closed a Session. Unlike `session.closed`, which answers one
+ * Tells every observer that the Computer closed a Session. Unlike `session.closed`, which answers one
  * `session.close` request, a notice is not tied to a request, so it also reaches clients that did not ask.
  * `reason` is a sentence a client can show its user as is, such as "This Session was closed on request.".
- * Show it as plain text and don't branch on it: its wording can change between Runtime versions.
+ * Show it as plain text and don't branch on it: its wording can change between Computer versions.
  */
 const sessionCloseNoticeEventSchema = z
     .object({
@@ -318,7 +318,7 @@ const sessionOperationFailedEventSchema = z
         kind: z.literal(SESSION_OPERATION_FAILED_KIND),
         message: z.string().min(1).max(500),
         requestId: IDENTIFIER,
-        runtimeTimings: runtimeTimingsSchema.optional(),
+        computerTimings: computerTimingsSchema.optional(),
         target: nativeSessionTargetSchema.optional(),
     })
     .readonly();

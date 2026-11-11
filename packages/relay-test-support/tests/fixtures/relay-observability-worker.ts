@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
 
-import { ComputerRelay as RelayRuntimeRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
+import { ComputerRelay as RelayComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
 import type { ConfiguredRelayRelayBindings } from "../../../relay/src/relay-worker.ts";
 import { errorMiddleware, rethrowHonoError } from "../../../relay-core/src/http/middleware/error-middleware.ts";
 import relay from "../../src/relay-worker-entry.ts";
@@ -19,7 +19,7 @@ function failure(kind: string): unknown {
         remote: true,
         code: "ERR_OVERLOADED",
     });
-    const error = new Error("Runtime relay request failed", { cause });
+    const error = new Error("Computer relay request failed", { cause });
     if (kind === "circular") {
         error.cause = error;
     }
@@ -46,7 +46,7 @@ function failure(kind: string): unknown {
 }
 
 // The exported Cloudflare callback is the relay fault-injection boundary.
-export class ComputerRelay extends RelayRuntimeRelay {
+export class ComputerRelay extends RelayComputerRelay {
     override async webSocketClose(socket: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
         await super.webSocketClose(socket, code, reason, wasClean);
         console.debug({ event: "test_websocket_close_completed", closeCode: code });
@@ -54,10 +54,10 @@ export class ComputerRelay extends RelayRuntimeRelay {
 
     override async fetch(request: Request): Promise<Response> {
         if (
-            request.headers.get("x-test-runtime-failure") === "1" &&
+            request.headers.get("x-test-computer-failure") === "1" &&
             new URL(request.url).pathname.endsWith("/daemon")
         ) {
-            throw Object.assign(new Error("Runtime DO overloaded"), { overloaded: true });
+            throw Object.assign(new Error("Computer DO overloaded"), { overloaded: true });
         }
         if (new URL(request.url).pathname.endsWith("/inject-websocket-error")) {
             const socket = this.ctx.getWebSockets("daemon")[0];

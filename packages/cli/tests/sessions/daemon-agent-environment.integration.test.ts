@@ -15,11 +15,11 @@ import {
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
-import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
+import { runComputer } from "../../src/engine/computer/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
+import { createControlledComputerConfig } from "../support/controlled-computer-config.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const recorderPath = fileURLToPath(new URL("./fixtures/acp-environment-recorder.ts", import.meta.url));
@@ -61,7 +61,7 @@ function nextMessageOfKind(socket: Duplex, kind: string): Promise<void> {
     });
 }
 
-/** Starts a daemon whose Runtime keeps its data in an installation directory, launches its Agent, and reads what the Agent inherited. */
+/** Starts a daemon whose Computer keeps its data in an installation directory, launches its Agent, and reads what the Agent inherited. */
 async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Promise<unknown> {
     const directory = await mkdtemp(join(tmpdir(), "morty-agent-environment-"));
     const installationData = join(
@@ -93,7 +93,7 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
         socket.write(
             `HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
         );
-        sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+        sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
         socketReady.resolve(socket);
     });
     await listen(relay);
@@ -118,19 +118,19 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
             MORTY_TEST_ENVIRONMENT_RECORD: record,
         },
     );
-    const config = createControlledRuntimeConfig(
+    const config = createControlledComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_environment",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        // As the worker does: the Runtime's local data is this installation's directory.
-        new RuntimeLocalContext(installationData, daemonEnvironment),
+        // As the worker does: the Computer's local data is this installation's directory.
+        new ComputerLocalContext(installationData, daemonEnvironment),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await socketReady.promise;
         const discovered = nextMessageOfKind(socket, AGENT_SETTINGS_DISCOVERED_KIND);
@@ -151,12 +151,12 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
             socket.destroy();
         }
         relay.close();
-        await runtime;
+        await computer;
         await rm(directory, { force: true, recursive: true });
     }
 }
 
-test("Given a daemon started with a custom state root, When it launches an Agent, Then the Agent inherits that root rather than the Runtime's installation data", {
+test("Given a daemon started with a custom state root, When it launches an Agent, Then the Agent inherits that root rather than the Computer's installation data", {
     timeout: 60_000,
 }, async () => {
     const root = join(tmpdir(), "morty-custom-root");

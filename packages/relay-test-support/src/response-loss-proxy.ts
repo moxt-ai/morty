@@ -1,6 +1,6 @@
 import { createServer, request } from "node:http";
 import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
-import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
+import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
 
@@ -108,8 +108,8 @@ export async function createResponseLossProxy(upstream: string) {
     let reconnectsBlocked = false;
     const submissions: string[] = [];
     webSockets.on("connection", (client, incoming) => {
-        const runtime = new URL(incoming.url ?? "/", upstream).pathname.endsWith("/runtimes/connect");
-        if (reconnectsBlocked && !runtime) {
+        const computer = new URL(incoming.url ?? "/", upstream).pathname.endsWith("/computers/connect");
+        if (reconnectsBlocked && !computer) {
             client.terminate();
             return;
         }
@@ -120,18 +120,22 @@ export async function createResponseLossProxy(upstream: string) {
             ...(incoming.headers.origin === undefined ? {} : { origin: incoming.headers.origin }),
             // Keep the browser's authority and Origin together across this transparent proxy.
             headers: {
-                ...(incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === undefined
+                ...(incoming.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER] === undefined
                     ? {}
                     : {
-                          [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER],
+                          [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]:
+                              incoming.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER],
                       }),
                 ...(incoming.headers.host === undefined ? {} : { host: incoming.headers.host }),
                 ...(incoming.headers.authorization === undefined
                     ? {}
                     : { authorization: incoming.headers.authorization }),
-                ...(incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === undefined
+                ...(incoming.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER] === undefined
                     ? {}
-                    : { [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] }),
+                    : {
+                          [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]:
+                              incoming.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER],
+                      }),
             },
         });
         sockets.add(remote);
@@ -295,7 +299,7 @@ export async function createResponseLossProxy(upstream: string) {
             }
         },
         /** Loses a pairing response after the real service commits it. */
-        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/pairing(?:\?|$)/u),
+        interruptNextComputerPairing: () => loseNextResponseWithBody(/\/management\/pairing(?:\?|$)/u),
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
         /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
         dropNextSessionCreation: () => {

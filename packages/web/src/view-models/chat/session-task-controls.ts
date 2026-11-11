@@ -24,7 +24,7 @@ export interface SessionTaskControlsStore {
     /** The command the user last asked to stop; it applies while that command's turn runs. */
     readonly stopRequest: { readonly commandId: string } | null;
     readonly dismissFailure: () => void;
-    /** Asks the Runtime to stop `running`, the turn the Session's execution state holds running. */
+    /** Asks the Computer to stop `running`, the turn the Session's execution state holds running. */
     readonly stop: (running: RunningTurn | null, signal: AbortSignal) => Promise<void>;
 }
 

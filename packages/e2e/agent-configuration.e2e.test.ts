@@ -1,13 +1,13 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ runtimeAgent: { harness: "configuration-test", name: "Settings Agent" } });
+test.use({ computerAgent: { harness: "configuration-test", name: "Settings Agent" } });
 
 test("Given desktop configuration, When the user opens settings and selects a model, Then the panel fits its content and restores focus", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
+    const { page } = computer;
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     const trigger = page.getByRole("button", { name: "Configure agent" });
     await trigger.click();
     const panel = page.getByRole("dialog", { name: "Agent configuration" });
@@ -57,10 +57,10 @@ test.describe("touch configuration", () => {
     test.use({ contextOptions: { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } } });
 
     test("Given a phone, When the user rotates and selects settings, Then the sheet and its controls remain inside the viewport", async ({
-        runtime,
+        computer,
     }, testInfo) => {
-        const { page } = runtime;
-        await runtime.openPairedChat();
+        const { page } = computer;
+        await computer.openPairedChat();
         const trigger = page.getByRole("button", { name: "Configure agent" });
         await trigger.click();
         const panel = page.getByRole("dialog", { name: "Agent configuration" });

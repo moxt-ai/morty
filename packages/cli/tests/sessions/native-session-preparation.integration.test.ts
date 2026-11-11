@@ -8,7 +8,7 @@ import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
-import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
+import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
 import { fixture } from "./native-session-fixture.ts";
@@ -50,7 +50,7 @@ describe("native session preparation", () => {
         }
     });
 
-    it("Given preparation is still loading, When the Runtime closes, Then preparation cannot return a live conversation", async () => {
+    it("Given preparation is still loading, When the Computer closes, Then preparation cannot return a live conversation", async () => {
         const f = await fixture("Claude Code", "load-only");
         const owner = new AbortController();
         try {

@@ -12,17 +12,17 @@ import type { DurableObjectContext } from "../../di/create-durable-object-depend
 import type { ComputerScope as Scope } from "../../entity/do/session.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
-import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
+import type { SessionComputerOperations } from "../../gateway/session-computer-operations.ts";
 import {
-    requestRuntimeAgentSettings,
-    requestRuntimeContentWrite,
-    requestRuntimeControl,
-    requestRuntimeFile,
-    requestRuntimeWorkspace,
-} from "../pairing/runtime-control-request.ts";
+    requestComputerAgentSettings,
+    requestComputerContentWrite,
+    requestComputerControl,
+    requestComputerFile,
+    requestComputerWorkspace,
+} from "../pairing/computer-control-request.ts";
 import type { NativeSessionForks } from "./native-session-forks.ts";
 
-export interface LocalSessionOperations extends SessionRuntimeOperations {
+export interface LocalSessionOperations extends SessionComputerOperations {
     readonly forkNativeSession: (
         scope: Scope,
         operationId: string,
@@ -55,19 +55,19 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
     const checkTarget = (requestedComputer: string) => {
         const latest = cx.services.connections.latest();
         if (requestedComputer !== computerId || latest?.computerId !== computerId) {
-            throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
+            throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
         }
         const daemon = cx.gateways.peers.sockets().find(({ identity }) => identity.role === "daemon");
         if (daemon !== undefined && daemon.identity.computerId !== computerId) {
-            throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
+            throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
         }
     };
     const connect = async (requestId: string, target: NativeSessionTarget | undefined, signal: AbortSignal) => {
         signal.throwIfAborted();
-        await cx.services.runtime.expireSilentDaemons();
+        await cx.services.computer.expireSilentDaemons();
         return cx.gateways.requests.open(requestId, target, async (socket, message) => {
             if (!signal.aborted) {
-                await cx.services.runtime.receiveOperation(new ComputerScope(computerId), socket, message, signal);
+                await cx.services.computer.receiveOperation(new ComputerScope(computerId), socket, message, signal);
                 return;
             }
             // The caller has left, but native query cancellation must still reach the daemon.
@@ -84,7 +84,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
                 15_000,
             );
             try {
-                await cx.services.runtime.receiveOperation(
+                await cx.services.computer.receiveOperation(
                     new ComputerScope(computerId),
                     socket,
                     message,
@@ -95,7 +95,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
             }
         });
     };
-    const requestComputerScopeControl: SessionRuntimeOperations["requestComputerScopeControl"] = async (
+    const requestComputerScopeControl: SessionComputerOperations["requestComputerScopeControl"] = async (
         scope,
         command,
         signal,
@@ -103,7 +103,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         checkTarget(scope.computerId);
         const target = "target" in command ? command.target : undefined;
         const socket = await connect(requestReplyAddress(command), target, signal);
-        return await requestRuntimeControl(socket, command, signal);
+        return await requestComputerControl(socket, command, signal);
     };
     return {
         forkNativeSession: async (scope, operationId, input, signal) => {
@@ -112,11 +112,11 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         },
         requestWorkspace: async (scope, command, signal) => {
             checkTarget(scope.computerId);
-            return await requestRuntimeWorkspace(await connect(command.requestId, undefined, signal), command, signal);
+            return await requestComputerWorkspace(await connect(command.requestId, undefined, signal), command, signal);
         },
         requestAgentSettings: async (scope, command, signal) => {
             checkTarget(scope.computerId);
-            return await requestRuntimeAgentSettings(
+            return await requestComputerAgentSettings(
                 await connect(command.requestId, undefined, signal),
                 command,
                 signal,
@@ -125,10 +125,10 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
         openPublicSessionEvents: async (scope, sessionTarget, credential, signal) => {
             checkTarget(scope.computerId);
             signal.throwIfAborted();
-            await cx.services.runtime.expireSilentDaemons();
+            await cx.services.computer.expireSilentDaemons();
             checkTarget(scope.computerId);
-            if (!cx.services.runtime.isOnline(computerId)) {
-                throw new PairingDirectoryError("runtime_offline", "The Runtime is offline");
+            if (!cx.services.computer.isOnline(computerId)) {
+                throw new PairingDirectoryError("computer_offline", "The Computer is offline");
             }
             return cx.gateways.peers.accept({
                 role: "viewer",
@@ -146,7 +146,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
             checkTarget(scope.computerId);
             const socket = await connect(command.requestId, command.target, signal);
             try {
-                const stream = await requestRuntimeFile(socket, command, signal);
+                const stream = await requestComputerFile(socket, command, signal);
                 cx.utilities.waitUntil(stream.finished);
                 return stream.response;
             } catch (cause) {
@@ -158,7 +158,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
             checkTarget(scope.computerId);
             const socket = await connect(command.requestId, command.target, signal);
             try {
-                return await requestRuntimeContentWrite(socket, command, body, signal);
+                return await requestComputerContentWrite(socket, command, body, signal);
             } catch (cause) {
                 socket.close(1000, "Content upload ended");
                 throw cause;

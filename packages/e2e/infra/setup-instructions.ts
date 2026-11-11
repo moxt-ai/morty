@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runSetup, type SetupHost, type SetupRuntime } from "../../cli/src/setup/setup.ts";
+import { runSetup, type SetupComputer, type SetupHost } from "../../cli/src/setup/setup.ts";
 import { object, text } from "./chat-api.ts";
 
 export async function followSetupInstructions(options: {
@@ -10,7 +10,7 @@ export async function followSetupInstructions(options: {
     readonly state: string;
     readonly harness: string;
     readonly instructionUrl: string;
-    readonly runtime: SetupRuntime;
+    readonly computer: SetupComputer;
     /** The user explicitly approved replacing this Project and revoking its shared access. */
     readonly replaceProject?: string;
     /** The calling agent's shell environment, where its harness exposes the current session. */
@@ -39,7 +39,7 @@ export async function followSetupInstructions(options: {
             state: options.state,
             agentEnvironment: options.agentEnvironment,
             emit: (event) => events.push(event),
-            runtime: options.runtime,
+            computer: options.computer,
             signal: options.signal,
         },
     );

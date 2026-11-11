@@ -20,7 +20,7 @@ export interface SessionOperationFacts {
 
 /**
  * Whether the Session takes a message now: it is connected and its settings are not changing. Whether the message runs
- * now or waits behind earlier work is the Runtime's admission, which never refuses a message.
+ * now or waits behind earlier work is the Computer's admission, which never refuses a message.
  */
 function sessionAccepts(facts: Pick<SessionOperationFacts, "connection" | "configuring">): boolean {
     return facts.connection === "ready" && !facts.configuring;
@@ -52,7 +52,7 @@ function userCanSubmit(facts: SessionOperationFacts): boolean {
     return userCanReachSession(facts) && canSubmit(facts);
 }
 
-/** Sending the composer's message, which the Runtime runs or queues. One message is in delivery at a time. */
+/** Sending the composer's message, which the Computer runs or queues. One message is in delivery at a time. */
 export function canSend(facts: SessionOperationFacts): boolean {
     return facts.delivery === "idle" && userCanSubmit(facts);
 }
@@ -63,7 +63,7 @@ export function canRetryFailedMessage(facts: SessionOperationFacts): boolean {
 }
 
 /**
- * Retrying a message whose delivery is unknown sends its request again under the same identity, so the Runtime runs it
+ * Retrying a message whose delivery is unknown sends its request again under the same identity, so the Computer runs it
  * at most once. That unresolved delivery is the one this retry settles.
  */
 export function canRetryUnknownDelivery(facts: SessionOperationFacts): boolean {

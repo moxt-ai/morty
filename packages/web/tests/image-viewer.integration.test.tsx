@@ -89,7 +89,7 @@ test("Given a streaming reply with images, When the user opens its gallery and o
     const viewer = getByRole(document.body, "dialog", { name: "Image viewer" });
     expect(viewer.textContent).toContain("1 of 2");
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.daemon.continueReply("show image gallery", {
         outcome: "complete",
@@ -115,7 +115,7 @@ test("Given an unavailable local image, When the file becomes available and the 
     await sendPrompt(app, composer, "show missing image");
     const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Retry image" }));
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.daemon.writeFiles(new Map([["/workspace/recovered.png", { content: png, mediaType: "image/png" }]]));
     await app.user.click(retry);
@@ -155,7 +155,7 @@ test("Given an image in a streaming reply, When the reply completes between poin
     const app = await createTestApp({ connectAgent: true });
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await sendPrompt(app, composer, "show image gallery");
     const trigger = await app.waitForView(() =>
@@ -176,7 +176,7 @@ test("Given a tool image is open while the agent works, When the user collapses 
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold image tool");
     await expandProcessSections(app);

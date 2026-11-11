@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { BotChatApi, ChatRuntime } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatComputer } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer, SharingTerms } from "../../services/identity/anonymous-identity-api.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { createIdentitySharingStore, type IdentitySharingStore } from "./identity-sharing-store.ts";
@@ -34,8 +34,8 @@ interface SidebarDialogsState {
     readonly openNativeSessionDetail: () => void;
     /** The phone sheet returns from the detail to the session list. */
     readonly backToNativeSessionList: () => void;
-    /** The Runtime configuration the page follows changed; an open Open Session dialog follows it. */
-    readonly runtimeChanged: () => void;
+    /** The Computer configuration the page follows changed; an open Open Session dialog follows it. */
+    readonly computerChanged: () => void;
     readonly openSharing: () => void;
     readonly closeSharing: () => void;
 }
@@ -54,13 +54,13 @@ export function createSidebarDialogs(options: {
     readonly clock: Clock;
     readonly signal: () => AbortSignal;
     readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">;
-    /** The Runtime the page follows. */
-    readonly runtime: () => ChatRuntime | null;
+    /** The Computer the page follows. */
+    readonly computer: () => ChatComputer | null;
     readonly createTransfer: (terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly onOpenSession: (session: OpenMortySession) => void;
     readonly onOpenedSession: () => void;
 }): SidebarDialogs {
-    const { clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;
+    const { clock, requests, computer, createTransfer, onOpenSession, onOpenedSession } = options;
     return createStore<SidebarDialogsState>()((set, get) => ({
         mobileNavOpen: false,
         mobileSessionsOpen: false,
@@ -91,12 +91,12 @@ export function createSidebarDialogs(options: {
             const retained = get().retainedNativeDialog;
             if (retained !== null) {
                 set({ nativeDialog: retained, retainedNativeDialog: null, nativeDialogStep: "list" });
-                // Refresh the listing for the Runtime the page follows now; the
+                // Refresh the listing for the Computer the page follows now; the
                 // previewed entry stays selected when the refresh still lists it.
                 retained.getState().start();
                 return;
             }
-            const store = createNativeSessionStore(requests, runtime, (session) => {
+            const store = createNativeSessionStore(requests, computer, (session) => {
                 onOpenSession(session);
                 get().discardNativeDialog();
                 onOpenedSession();
@@ -119,8 +119,8 @@ export function createSidebarDialogs(options: {
         },
         openNativeSessionDetail: () => set({ nativeDialogStep: "detail" }),
         backToNativeSessionList: () => set({ nativeDialogStep: "list" }),
-        runtimeChanged: () => {
-            get().nativeDialog?.getState().runtimeChanged();
+        computerChanged: () => {
+            get().nativeDialog?.getState().computerChanged();
         },
         openSharing: () => {
             if (get().sharing !== null) {

@@ -16,7 +16,7 @@ for (const interruption of ["before-acceptance", "after-acceptance"] as const) {
         const app = await createTestApp({ environment, connectAgent: true, clock });
         const { network, daemon } = app;
         if (network === null || daemon === null) {
-            throw new Error("Expected the controllable network and real Runtime");
+            throw new Error("Expected the controllable network and real Computer");
         }
         await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
         await app.queryElementByTestId(dataTestId.sessionStatus);

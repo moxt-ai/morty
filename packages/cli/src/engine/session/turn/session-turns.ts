@@ -5,21 +5,21 @@ import type {
     SessionLiveEvent,
     SessionPromptCommand,
 } from "@morty-build/client/protocol";
-import type { ActiveRuntimeTurn, PromptDispatch, RecordedSessionEvent } from "./active-turn.ts";
+import type { ActiveComputerTurn, PromptDispatch, RecordedSessionEvent } from "./active-turn.ts";
+import { ComputerTurnActivity } from "./computer-turn-activity.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
-import { RuntimeTurnActivity } from "./runtime-turn-activity.ts";
 import { type SessionExecutes, SessionExecutionState } from "./session-execution.ts";
 
 type QueuedTurnSnapshot = Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"];
 
-/** Runtime-owned index over per-session execution state; owns no session state itself. */
+/** Computer-owned index over per-session execution state; owns no session state itself. */
 export class SessionTurns {
     readonly #bySessionTarget = new NativeSessionMap<SessionExecutionState>();
     readonly #operations: ExecutionReceipts;
     readonly #executes: SessionExecutes;
-    readonly #activity: RuntimeTurnActivity;
+    readonly #activity: ComputerTurnActivity;
 
-    constructor(operations: ExecutionReceipts, executes: SessionExecutes, activity = new RuntimeTurnActivity()) {
+    constructor(operations: ExecutionReceipts, executes: SessionExecutes, activity = new ComputerTurnActivity()) {
         this.#operations = operations;
         this.#executes = executes;
         this.#activity = activity;
@@ -36,16 +36,16 @@ export class SessionTurns {
         return session;
     };
 
-    readonly get = (commandId: string, sessionTarget: NativeSessionTarget): ActiveRuntimeTurn | undefined =>
+    readonly get = (commandId: string, sessionTarget: NativeSessionTarget): ActiveComputerTurn | undefined =>
         this.#bySessionTarget.get(sessionTarget)?.get(commandId);
 
-    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
+    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveComputerTurn => {
         const turn = this.session(command.target).start(command, attemptId, onQueued);
         this.#activity.start(turn);
         return turn;
     };
 
-    readonly finish = (turn: ActiveRuntimeTurn): void => {
+    readonly finish = (turn: ActiveComputerTurn): void => {
         this.#bySessionTarget.get(turn.command.target)?.finish(turn);
         this.sweep();
         this.#activity.finish(turn);
@@ -69,7 +69,7 @@ export class SessionTurns {
     /** The Session's running turn and the commands waiting behind it, as one synchronous read. */
     readonly executionSnapshot = (
         sessionTarget: NativeSessionTarget,
-    ): { readonly turn: ReturnType<ActiveRuntimeTurn["snapshot"]>; readonly queued: QueuedTurnSnapshot } => {
+    ): { readonly turn: ReturnType<ActiveComputerTurn["snapshot"]>; readonly queued: QueuedTurnSnapshot } => {
         const current = this.#bySessionTarget.get(sessionTarget)?.turns() ?? [];
         const turn = current.map((candidate) => candidate.snapshot()).find((snapshot) => snapshot !== null) ?? null;
         const queued = current
@@ -86,7 +86,7 @@ export class SessionTurns {
         return { turn, queued };
     };
 
-    readonly admitAndWait = async (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<PromptDispatch> =>
+    readonly admitAndWait = async (turn: ActiveComputerTurn, waitSignal: AbortSignal): Promise<PromptDispatch> =>
         this.session(turn.command.target).admitAndWait(turn, waitSignal);
 
     /** Discards empty session states so the index does not grow unboundedly. */

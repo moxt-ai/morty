@@ -191,7 +191,7 @@ export function createBotChatRoutes() {
             }),
         )
         .post("/workspace", authenticatedSession, authorizedChat(), async (context) => {
-            return privateJson(await context.env.services.chat.runtimeConfiguration(context.get("chatScope")));
+            return privateJson(await context.env.services.chat.computerConfiguration(context.get("chatScope")));
         })
         .post("/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.daemonDiagnostics(context.get("chatScope")));
@@ -199,8 +199,8 @@ export function createBotChatRoutes() {
         .post("/network-diagnostic", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.networkDiagnostic(context.get("chatScope")));
         })
-        .post("/setup/runtimes", authenticatedSession, authorizedChat(), async (context) => {
-            return privateJson(await context.env.services.chat.setupRuntimes(context.get("chatScope")));
+        .post("/setup/computers", authenticatedSession, authorizedChat(), async (context) => {
+            return privateJson(await context.env.services.chat.setupComputers(context.get("chatScope")));
         })
         .post(
             "/workspace/directory",

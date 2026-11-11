@@ -30,7 +30,7 @@ import {
 import { isModelOption } from "../settings/configuration-dependencies.ts";
 import { ActiveExecutions } from "../turn/active-executions.ts";
 import type { SettledTurn } from "../turn/execution-receipts.ts";
-import { RuntimeOperations, waitForSharedOperation } from "./operation-drain.ts";
+import { ComputerOperations, waitForSharedOperation } from "./operation-drain.ts";
 import {
     type ClosedSessionHandling,
     type ImmediateSessionOperation,
@@ -64,11 +64,11 @@ import {
 import type { SessionEventPage } from "../history/session-event-store.ts";
 
 export class SessionManager {
-    readonly #operations = new RuntimeOperations();
+    readonly #operations = new ComputerOperations();
     readonly #processes: AgentProcessPool;
     readonly #executionProcesses = new RetainedAgentProcesses<AgentSession, NativeSessionTarget>(
         {
-            touch: (runtime) => this.#processes.touch(runtime),
+            touch: (sessionProcess) => this.#processes.touch(sessionProcess),
             changed: () => this.#processes.notifyChanged(),
         },
         nativeSessionKey,
@@ -130,11 +130,11 @@ export class SessionManager {
         target: NativeSessionTarget,
         event: SessionEventPayload,
     ): Promise<boolean> => {
-        const runtime = this.#executionProcesses.get(target);
-        if (runtime === undefined) {
+        const sessionProcess = this.#executionProcesses.get(target);
+        if (sessionProcess === undefined) {
             return false;
         }
-        return await runtime.recordControlEvent(event);
+        return await sessionProcess.recordControlEvent(event);
     };
 
     readonly setObserver = (observer: SessionObserver): void => {
@@ -188,8 +188,9 @@ export class SessionManager {
                 this.#executions.isBusy(target) ||
                 this.#executionProcesses.isBusy(target) ||
                 this.#lifecycles.managesNativeSession(target),
-            retire: (runtime) => this.#retireSessionProcess(target, runtime, () => runtime.close()),
-            retireIdle: (runtime) => this.#stopSessionProcess(target, runtime),
+            retire: (sessionProcess) =>
+                this.#retireSessionProcess(target, sessionProcess, () => sessionProcess.close()),
+            retireIdle: (sessionProcess) => this.#stopSessionProcess(target, sessionProcess),
         };
     }
 
@@ -199,20 +200,20 @@ export class SessionManager {
      */
     async #retireSessionProcess(
         target: NativeSessionTarget,
-        runtime: AgentSession,
+        sessionProcess: AgentSession,
         close: () => Promise<void>,
     ): Promise<void> {
-        this.#executionProcesses.detach(target, runtime);
-        await this.#processes.retire(runtime, close);
+        this.#executionProcesses.detach(target, sessionProcess);
+        await this.#processes.retire(sessionProcess, close);
     }
 
     /**
      * Releases a closed or idle Session's process while keeping its title, settings and native
      * identity available for the next preparation. This does not mark the Session closed.
      */
-    async #stopSessionProcess(target: NativeSessionTarget, runtime: AgentSession): Promise<void> {
-        this.#executionProcesses.detach(target, runtime);
-        const retirement = this.#processes.retire(runtime, () => runtime.close());
+    async #stopSessionProcess(target: NativeSessionTarget, sessionProcess: AgentSession): Promise<void> {
+        this.#executionProcesses.detach(target, sessionProcess);
+        const retirement = this.#processes.retire(sessionProcess, () => sessionProcess.close());
         this.#sessionRetirements.set(target, retirement);
         try {
             await retirement;
@@ -246,13 +247,13 @@ export class SessionManager {
             options.origin !== undefined || stored instanceof FoundStoredSession
                 ? await options.adapter.getCapabilities(nativeSessionQuery(options))
                 : unsupportedSessionCapabilities();
-        const runtime = await this.#processes.startRetained(
+        const sessionProcess = await this.#processes.startRetained(
             options.signal,
             () => start(capabilities),
             this.#retention(options.target),
         );
-        this.#executionProcesses.retain(options.target, runtime);
-        return runtime;
+        this.#executionProcesses.retain(options.target, sessionProcess);
+        return sessionProcess;
     }
 
     async #startPreparation(
@@ -284,7 +285,7 @@ export class SessionManager {
         const recovery: SessionRecovery = options.recovery ?? { kind: "interactive-only" };
         return await this.#executionProcesses.prepare(options.target, async () => {
             await this.#retireSessionProcess(options.target, existing, async () => await existing.close());
-            const runtime = await this.#startRetainedSessionProcess(
+            const sessionProcess = await this.#startRetainedSessionProcess(
                 options,
                 async (capabilities) =>
                     await AgentSession.start(
@@ -301,9 +302,9 @@ export class SessionManager {
             try {
                 await replaySessionConfigurations(
                     desiredConfigOptions.map(storedSessionConfiguration),
-                    () => runtime.prepared().configOptions,
+                    () => sessionProcess.prepared().configOptions,
                     async (desired) => {
-                        await runtime.applyConfiguration({
+                        await sessionProcess.applyConfiguration({
                             ...options,
                             booleanValue: desired.type === "boolean" && desired.booleanValue,
                             configId: desired.configId,
@@ -315,10 +316,14 @@ export class SessionManager {
                     options.signal,
                 );
             } catch (error) {
-                await this.#retireSessionProcess(options.target, runtime, async () => await runtime.close());
+                await this.#retireSessionProcess(
+                    options.target,
+                    sessionProcess,
+                    async () => await sessionProcess.close(),
+                );
                 throw error;
             }
-            return runtime;
+            return sessionProcess;
         });
     }
 
@@ -383,34 +388,34 @@ export class SessionManager {
                 );
                 const pending = this.#executionProcesses.pending(options.target);
                 if (pending !== undefined) {
-                    const runtime = await metrics.measure(
+                    const sessionProcess = await metrics.measure(
                         "session-preparation-wait",
                         async () => await waitForSharedOperation(pending, options.signal),
                     );
-                    if (runtime.runsIn(options.cwd)) {
-                        this.#executionProcesses.touch(options.target, runtime);
+                    if (sessionProcess.runsIn(options.cwd)) {
+                        this.#executionProcesses.touch(options.target, sessionProcess);
                         if (recovery.kind === "history-required") {
                             await metrics.measure(
                                 "session-load",
-                                async () => await runtime.ensureHistoryLoaded(options.signal),
+                                async () => await sessionProcess.ensureHistoryLoaded(options.signal),
                             );
                         }
-                        return runtime.prepared();
+                        return sessionProcess.prepared();
                     }
                     return await this.#prepareSession(options, recovery, closed, metrics);
                 }
                 const existing = this.#executionProcesses.get(options.target);
                 if (existing !== undefined) {
                     if (existing.runsIn(options.cwd)) {
-                        const runtime = await this.#currentSessionProcess(existing, options, recovery);
-                        this.#executionProcesses.touch(options.target, runtime);
+                        const sessionProcess = await this.#currentSessionProcess(existing, options, recovery);
+                        this.#executionProcesses.touch(options.target, sessionProcess);
                         if (recovery.kind === "history-required") {
                             await metrics.measure(
                                 "session-load",
-                                async () => await runtime.ensureHistoryLoaded(options.signal),
+                                async () => await sessionProcess.ensureHistoryLoaded(options.signal),
                             );
                         }
-                        return runtime.prepared();
+                        return sessionProcess.prepared();
                     }
                     throw new AcpExecutionError(
                         "The native Session's workspace cannot change",
@@ -418,8 +423,8 @@ export class SessionManager {
                         "session_identity_mismatch",
                     );
                 }
-                const runtime = await this.#startPreparation(options, recovery, metrics);
-                return runtime.prepared();
+                const sessionProcess = await this.#startPreparation(options, recovery, metrics);
+                return sessionProcess.prepared();
             }),
         );
     }
@@ -465,10 +470,10 @@ export class SessionManager {
         });
 
     async #discardCreatedSession(target: NativeSessionTarget): Promise<void> {
-        const runtime = this.#executionProcesses.get(target);
+        const sessionProcess = this.#executionProcesses.get(target);
         try {
-            if (runtime !== undefined) {
-                await this.#retireSessionProcess(target, runtime, async () => await runtime.close());
+            if (sessionProcess !== undefined) {
+                await this.#retireSessionProcess(target, sessionProcess, async () => await sessionProcess.close());
             }
         } finally {
             this.#store.remove(target);
@@ -498,9 +503,9 @@ export class SessionManager {
                         new MemorySessionStore(),
                         unmeasuredOperationMetrics,
                     ),
-                async (runtime) => {
-                    const prepared = runtime.prepared();
-                    const discoveredModelEffort = runtime.agentSettingsModelEffort();
+                async (sessionProcess) => {
+                    const prepared = sessionProcess.prepared();
+                    const discoveredModelEffort = sessionProcess.agentSettingsModelEffort();
                     const model = options.model;
                     const modelOption = prepared.configOptions.find(isModelOption);
                     // A Session cannot switch a model select with a single value, and the
@@ -513,12 +518,12 @@ export class SessionManager {
                         model === undefined || modelIsFixed
                             ? prepared.configOptions
                             : (
-                                  await runtime.applyConfiguration({
+                                  await sessionProcess.applyConfiguration({
                                       ...options,
                                       booleanValue: false,
                                       configId: modelOption?.id ?? "model",
                                       requestId: "agent-settings-model",
-                                      target: runtime.target,
+                                      target: sessionProcess.target,
                                       value: model,
                                       valueType: "select",
                                   })
@@ -532,7 +537,7 @@ export class SessionManager {
                             : { kind: "complete", value: discoveredModelEffort },
                     );
                 },
-                async (runtime) => await runtime.close(),
+                async (sessionProcess) => await sessionProcess.close(),
             );
         });
 
@@ -556,12 +561,16 @@ export class SessionManager {
                 );
             }
             return await this.#executionProcesses.use(options.target, async () => {
-                const runtime = await this.#startPreparation(options, { kind: "interactive-only" }, metrics);
+                const sessionProcess = await this.#startPreparation(options, { kind: "interactive-only" }, metrics);
                 try {
-                    return runtime.prepared();
+                    return sessionProcess.prepared();
                 } finally {
                     try {
-                        await this.#retireSessionProcess(options.target, runtime, async () => await runtime.close());
+                        await this.#retireSessionProcess(
+                            options.target,
+                            sessionProcess,
+                            async () => await sessionProcess.close(),
+                        );
                     } finally {
                         this.#store.remove(options.target);
                     }
@@ -590,9 +599,9 @@ export class SessionManager {
                 );
             }
             if (existing.usesEnvironment(options.agent.environment)) {
-                const runtime = await this.#currentSessionProcess(existing, options, recovery);
-                this.#executionProcesses.touch(options.target, runtime);
-                return runtime.prepared();
+                const sessionProcess = await this.#currentSessionProcess(existing, options, recovery);
+                this.#executionProcesses.touch(options.target, sessionProcess);
+                return sessionProcess.prepared();
             }
             if (this.#executions.isBusy(options.target)) {
                 throw new AcpExecutionError(
@@ -608,19 +617,19 @@ export class SessionManager {
     readonly configureSession = async (options: SessionConfigureOptions): Promise<SessionConfigurationSnapshot> =>
         this.#operations.run(options, async (options) => {
             return await this.#executionProcesses.use(options.target, async () => {
-                const runtime = await this.ensureSession(options);
-                return await runtime.configure(options);
+                const sessionProcess = await this.ensureSession(options);
+                return await sessionProcess.configure(options);
             });
         });
 
-    /** Applies a setting the Runtime owns, such as one a prompt or a preparation requested. */
+    /** Applies a setting the Computer owns, such as one a prompt or a preparation requested. */
     readonly applySessionConfiguration = async (
         change: SessionConfigurationChange,
     ): Promise<SessionConfigurationSnapshot> =>
         this.#operations.run(change, async (change) => {
             return await this.#executionProcesses.use(change.target, async () => {
-                const runtime = await this.ensureSession(change);
-                return await runtime.applyConfiguration(change);
+                const sessionProcess = await this.ensureSession(change);
+                return await sessionProcess.applyConfiguration(change);
             });
         });
 
@@ -639,11 +648,11 @@ export class SessionManager {
                 } else {
                     await this.#currentSessionProcess(existing, options, { kind: "interactive-only" });
                 }
-                const runtime = this.#executionProcesses.get(options.target);
-                if (runtime === undefined) {
+                const sessionProcess = this.#executionProcesses.get(options.target);
+                if (sessionProcess === undefined) {
                     throw new AcpExecutionError("ACP session did not start");
                 }
-                return await runtime.renameSession(title, options.signal);
+                return await sessionProcess.renameSession(title, options.signal);
             }),
         );
 
@@ -659,16 +668,16 @@ export class SessionManager {
     ): Promise<void> =>
         this.#executions.cancel(target, commandId, () =>
             this.#operations.run({ signal }, async ({ signal }) => {
-                const runtime = this.#executionProcesses.get(target);
-                if (runtime !== undefined) {
-                    const outcome = await runtime.cancel(signal);
+                const sessionProcess = this.#executionProcesses.get(target);
+                if (sessionProcess !== undefined) {
+                    const outcome = await sessionProcess.cancel(signal);
                     switch (outcome) {
                         case "retained":
                             break;
                         case "closed":
                             // Preserve the native conversation and effective settings for
                             // the next prompt, but never reuse a cancelled endpoint.
-                            await this.#stopSessionProcess(target, runtime);
+                            await this.#stopSessionProcess(target, sessionProcess);
                             break;
                         default: {
                             const unreachable: never = outcome;
@@ -700,8 +709,8 @@ export class SessionManager {
             if (!this.acceptsSteering(options.target, options.targetCommandId)) {
                 throw new AcpExecutionError("The target turn is no longer active", {}, "steering_target_unavailable");
             }
-            const runtime = this.#executionProcesses.get(options.target);
-            if (runtime === undefined || !runtime.runsIn(options.cwd)) {
+            const sessionProcess = this.#executionProcesses.get(options.target);
+            if (sessionProcess === undefined || !sessionProcess.runsIn(options.cwd)) {
                 throw new AcpExecutionError(
                     "The target turn execution context is unavailable",
                     {},
@@ -718,7 +727,7 @@ export class SessionManager {
             );
             deadline.unref();
             try {
-                return await runtime.steer({
+                return await sessionProcess.steer({
                     ...options,
                     signal: AbortSignal.any([options.signal, deadlineController.signal]),
                 });
@@ -744,20 +753,20 @@ export class SessionManager {
             // prompt before this call.
             const cancelled = (): boolean => this.#executions.cancellationRequested(options.target, options.commandId);
             try {
-                const runtime = await this.ensureSession({ ...options, signal: preparation });
+                const sessionProcess = await this.ensureSession({ ...options, signal: preparation });
                 // An import, fork, or history read may have begun while the Agent process was readied.
                 this.#admitNow(options.target, { kind: "native-exclusive" });
                 if (cancelled()) {
                     return { stopReason: "cancelled" };
                 }
                 try {
-                    await runtime.preparePrompt(preparation);
+                    await sessionProcess.preparePrompt(preparation);
                     // Nothing awaits between this check and the Agent receiving the prompt.
                     if (cancelled()) {
                         return { stopReason: "cancelled" };
                     }
                     this.#executions.start(options.target, options.commandId);
-                    const result = await runtime.prompt({
+                    const result = await sessionProcess.prompt({
                         ...options,
                         cancellationRequested: cancelled,
                     });
@@ -772,12 +781,12 @@ export class SessionManager {
                     this.#executions.settle(options.target, options.commandId);
                 }
             } catch (error) {
-                const failedRuntime = this.#executionProcesses.get(options.target);
-                if (failedRuntime !== undefined) {
+                const failedSessionProcess = this.#executionProcesses.get(options.target);
+                if (failedSessionProcess !== undefined) {
                     await this.#retireSessionProcess(
                         options.target,
-                        failedRuntime,
-                        async () => await failedRuntime.close(),
+                        failedSessionProcess,
+                        async () => await failedSessionProcess.close(),
                     );
                 }
                 if (cancelled()) {
@@ -802,29 +811,29 @@ export class SessionManager {
 
     readonly respondPermission = async (options: PermissionResponseOptions): Promise<void> => {
         this.#admitNow(options.target, { kind: "use" });
-        const runtime = this.#executionProcesses.get(options.target);
-        if (runtime === undefined) {
+        const sessionProcess = this.#executionProcesses.get(options.target);
+        if (sessionProcess === undefined) {
             throw new AcpExecutionError("The permission request session is unavailable", {}, "session_not_found");
         }
-        await runtime.respondPermission(options);
+        await sessionProcess.respondPermission(options);
     };
 
     readonly respondElicitation = async (options: ElicitationResponseOptions): Promise<void> => {
         this.#admitNow(options.target, { kind: "use" });
-        const runtime = this.#executionProcesses.get(options.target);
-        if (runtime === undefined) {
+        const sessionProcess = this.#executionProcesses.get(options.target);
+        if (sessionProcess === undefined) {
             throw new AcpExecutionError("The elicitation request session is unavailable", {}, "session_not_found");
         }
-        await runtime.respondElicitation(options);
+        await sessionProcess.respondElicitation(options);
     };
 
     readonly closeSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> =>
         this.#operations.run({ target, signal }, async (options) => await this.#endSession(options, "close"));
 
     /**
-     * Removes the Session from the Sessions this Runtime holds: it closes like `closeSession`, and once its process has
-     * stopped the Runtime forgets its record and cached events, so it leaves the Session list and nothing reopens it.
-     * The Agent's own history stays; importing the native session holds it again. A Session this Runtime does not hold
+     * Removes the Session from the Sessions this Computer holds: it closes like `closeSession`, and once its process has
+     * stopped the Computer forgets its record and cached events, so it leaves the Session list and nothing reopens it.
+     * The Agent's own history stays; importing the native session holds it again. A Session this Computer does not hold
      * is already archived.
      */
     readonly archiveSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> =>
@@ -838,7 +847,7 @@ export class SessionManager {
         const closing = await this.#admit(options.target, { kind: "end" }, options.signal, (): boolean => {
             const closedReason = this.#lifecycles.closedReason(options.target);
             if (closedReason === undefined && !this.#isKnownSession(options.target)) {
-                // A Session this Runtime neither holds nor runs has nothing to close.
+                // A Session this Computer neither holds nor runs has nothing to close.
                 return false;
             }
             const reason =
@@ -870,9 +879,10 @@ export class SessionManager {
                     await retiring;
                 }
                 const pending = this.#executionProcesses.pending(options.target);
-                const runtime = pending === undefined ? this.#executionProcesses.get(options.target) : await pending;
-                if (runtime !== undefined) {
-                    await this.#stopSessionProcess(options.target, runtime);
+                const sessionProcess =
+                    pending === undefined ? this.#executionProcesses.get(options.target) : await pending;
+                if (sessionProcess !== undefined) {
+                    await this.#stopSessionProcess(options.target, sessionProcess);
                 }
             }
             if (ending === "archive") {
@@ -906,8 +916,12 @@ export class SessionManager {
             const sessions = [...this.#executionProcesses.entries()];
             await Promise.all([
                 ...sessions.map(
-                    async ([target, runtime]) =>
-                        await this.#retireSessionProcess(target, runtime, async () => await runtime.close()),
+                    async ([target, sessionProcess]) =>
+                        await this.#retireSessionProcess(
+                            target,
+                            sessionProcess,
+                            async () => await sessionProcess.close(),
+                        ),
                 ),
                 ...this.#lifecycles.closings(),
             ]);
@@ -920,7 +934,7 @@ export class SessionManager {
             return stored instanceof FoundStoredSession ? [stored.session] : [];
         });
 
-    /** The Session this Runtime holds for `target`, which a command naming only the target uses; none is refused. */
+    /** The Session this Computer holds for `target`, which a command naming only the target uses; none is refused. */
     readonly heldSession = (target: NativeSessionTarget): StoredSession => {
         const stored = this.#store.read(target);
         if (!(stored instanceof FoundStoredSession)) {
@@ -947,17 +961,17 @@ export class SessionManager {
     };
 
     /**
-     * The Sessions this Runtime holds, most recently updated first: Morty's directory of Sessions on this computer. A
+     * The Sessions this Computer holds, most recently updated first: Morty's directory of Sessions on this computer. A
      * Session not yet prompted is listed too, so a conversation whose first prompt has not arrived is not lost.
      */
     readonly listSessions = (limit: number) => this.#store.list().slice(0, limit);
 
-    /** The actionable requests of the Session this Runtime holds for `target`; a target it does not hold is refused. */
+    /** The actionable requests of the Session this Computer holds for `target`; a target it does not hold is refused. */
     readonly interactionSnapshot = (target: NativeSessionTarget): SessionInteractionSnapshot => {
         const session = this.heldSession(target);
-        const runtime = this.#executionProcesses.get(session.target);
-        if (runtime !== undefined) {
-            return runtime.interactionSnapshot();
+        const sessionProcess = this.#executionProcesses.get(session.target);
+        if (sessionProcess !== undefined) {
+            return sessionProcess.interactionSnapshot();
         }
         // No live Agent owns an actionable request after its session process has gone away.
         const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(session.target);
@@ -969,7 +983,7 @@ export class SessionManager {
 
     readonly createNativeSession = async (options: SessionCreationOptions): Promise<NativeSessionTarget> =>
         this.#operations.run(options, async (options) => {
-            const runtime = await this.#processes.startUnretained(
+            const sessionProcess = await this.#processes.startUnretained(
                 options.signal,
                 async () =>
                     await AgentSession.create(
@@ -982,7 +996,7 @@ export class SessionManager {
             );
             let retained = false;
             try {
-                const target = runtime.target;
+                const target = sessionProcess.target;
                 if (!isIdentifier(target.sessionId) || this.#executionProcesses.get(target) !== undefined) {
                     throw new AcpExecutionError(
                         "The Agent returned an invalid new Session ID",
@@ -990,13 +1004,13 @@ export class SessionManager {
                         "invalid_native_session_response",
                     );
                 }
-                this.#executionProcesses.retain(target, runtime);
-                this.#processes.retain(runtime, this.#retention(target));
+                this.#executionProcesses.retain(target, sessionProcess);
+                this.#processes.retain(sessionProcess, this.#retention(target));
                 retained = true;
                 return target;
             } finally {
                 if (!retained) {
-                    await this.#processes.retire(runtime, () => runtime.closeProcess());
+                    await this.#processes.retire(sessionProcess, () => sessionProcess.closeProcess());
                 }
             }
         });
@@ -1013,13 +1027,13 @@ export class SessionManager {
                         "session_identity_mismatch",
                     );
                 }
-                const runtime = await this.#currentSessionProcess(
+                const sessionProcess = await this.#currentSessionProcess(
                     existing,
                     options,
                     options.recovery ?? { kind: "interactive-only" },
                 );
-                this.#executionProcesses.touch(options.target, runtime);
-                return runtime;
+                this.#executionProcesses.touch(options.target, sessionProcess);
+                return sessionProcess;
             }
             await this.#prepareSession(options, options.recovery ?? { kind: "interactive-only" }, "reopen");
             const started = this.#executionProcesses.get(options.target);
@@ -1055,8 +1069,8 @@ export class SessionManager {
     ): Promise<SessionEventPage> =>
         this.#operations.run(options, async (options) => {
             return await this.#executionProcesses.use(options.target, async () => {
-                const runtime = await this.ensureSession(options);
-                return await runtime.loadHistoryEvents(eventLimit, cursor, options.signal);
+                const sessionProcess = await this.ensureSession(options);
+                return await sessionProcess.loadHistoryEvents(eventLimit, cursor, options.signal);
             });
         });
 
@@ -1089,13 +1103,13 @@ export class SessionManager {
             const held = this.#isHeld(source);
             if (origin.kind === "import" && held) {
                 return await this.#executionProcesses.use(source, async () => {
-                    // A running turn does not prevent importing a Session the Runtime already tracks: another device
+                    // A running turn does not prevent importing a Session the Computer already tracks: another device
                     // joins the same Session and sees the turn's progress.
                     const target = await this.#nativeTargetOptions(options, source, resolveAgent);
-                    const runtime = await this.ensureSession(target);
+                    const sessionProcess = await this.ensureSession(target);
                     // A fork or history read may have begun while the Session was readied.
                     this.#admitNow(source, { kind: "native-exclusive" });
-                    return { prepared: runtime.prepared(), target: source };
+                    return { prepared: sessionProcess.prepared(), target: source };
                 });
             }
             // A fork or a first import reads the native session, which a running turn may still be writing.
@@ -1110,14 +1124,14 @@ export class SessionManager {
             try {
                 if (origin.kind === "import") {
                     const preparation = await this.#nativeTargetOptions(options, source, resolveAgent);
-                    const runtime = await this.#startPreparation(
+                    const sessionProcess = await this.#startPreparation(
                         { ...preparation, origin },
                         { kind: "interactive-only" },
                     );
-                    return { target: source, prepared: runtime.prepared() };
+                    return { target: source, prepared: sessionProcess.prepared() };
                 }
                 const capabilities = await options.adapter.getCapabilities(nativeSessionQuery(options));
-                const runtime = await this.#processes.startUnretained(
+                const sessionProcess = await this.#processes.startUnretained(
                     options.signal,
                     async () =>
                         await AgentSession.fork(
@@ -1132,7 +1146,7 @@ export class SessionManager {
                 );
                 let retained = false;
                 try {
-                    const target = runtime.target;
+                    const target = sessionProcess.target;
                     if (this.#executionProcesses.get(target) !== undefined) {
                         throw new AcpExecutionError(
                             "The harness returned an existing fork",
@@ -1140,13 +1154,13 @@ export class SessionManager {
                             "invalid_native_session_response",
                         );
                     }
-                    this.#executionProcesses.retain(target, runtime);
-                    this.#processes.retain(runtime, this.#retention(target));
+                    this.#executionProcesses.retain(target, sessionProcess);
+                    this.#processes.retain(sessionProcess, this.#retention(target));
                     retained = true;
-                    return { target, prepared: runtime.prepared() };
+                    return { target, prepared: sessionProcess.prepared() };
                 } finally {
                     if (!retained) {
-                        await this.#processes.retire(runtime, () => runtime.closeProcess());
+                        await this.#processes.retire(sessionProcess, () => sessionProcess.closeProcess());
                     }
                 }
             } finally {

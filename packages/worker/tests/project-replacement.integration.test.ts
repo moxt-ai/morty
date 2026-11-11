@@ -71,7 +71,7 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
         environment,
     );
     expect(machineResponse.status).toBe(200);
-    expect(await machineResponse.json()).toEqual({ runtimePairing: "unpaired" });
+    expect(await machineResponse.json()).toEqual({ computerPairing: "unpaired" });
 });
 
 test("Given a revoked successor local credential, When the previous Machine retries replacement, Then it cannot reactivate that credential", async () => {

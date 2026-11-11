@@ -15,7 +15,7 @@ test("Given a running message whose admission response was lost, When Chat recon
     const app = await createTestApp({ environment, connectAgent: true, clock });
     const network = app.network;
     if (network === null || app.daemon === null) {
-        throw new Error("Expected the response-loss network and connected Runtime");
+        throw new Error("Expected the response-loss network and connected Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
     await app.waitForView(() => {
@@ -119,7 +119,7 @@ for (const message of ["first", "subsequent"] as const) {
     });
 }
 
-test("Given a message on its way to the Runtime, When Chat remounts, Then it is delivered once and its reply arrives without asking to retry", {
+test("Given a message on its way to the Computer, When Chat remounts, Then it is delivered once and its reply arrives without asking to retry", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -175,7 +175,7 @@ test("Given a message the network has not delivered yet, When I switch to anothe
     const network = app.network;
     const daemon = app.daemon;
     if (network === null || daemon === null) {
-        throw new Error("Expected the controllable network and connected Runtime");
+        throw new Error("Expected the controllable network and connected Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
     await app.waitForView(() => {

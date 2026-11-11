@@ -99,7 +99,7 @@ export class ControlledSessionEndpoint implements InProcessAcpEndpoint {
 }
 
 /**
- * A controlled in-process Agent. Every Agent process the Runtime starts for it takes the next
+ * A controlled in-process Agent. Every Agent process the Computer starts for it takes the next
  * endpoint index, so a scenario can tell which process served each request.
  */
 export class ControlledSessionAgent {

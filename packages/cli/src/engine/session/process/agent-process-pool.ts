@@ -100,7 +100,7 @@ export class AgentProcessPool {
         await Promise.all([...this.#slots].map(async ([id, slot]) => await this.#retireIdle(id, slot)));
     };
 
-    /** Stop scheduling before Runtime shutdown and drain teardowns already in flight. */
+    /** Stop scheduling before Computer shutdown and drain teardowns already in flight. */
     readonly stopIdleReclamation = async (): Promise<void> => {
         this.#stopping = true;
         for (const id of this.#idleTimeouts.keys()) {

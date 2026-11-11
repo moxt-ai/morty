@@ -6,7 +6,7 @@ import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
-test("Given two clients of the current Runtime, When one changes the model and the other sends, Then the Session keeps the explicit choice", {
+test("Given two clients of the current Computer, When one changes the model and the other sends, Then the Session keeps the explicit choice", {
     timeout: 60_000,
 }, async () => {
     const first = await createTestApp({

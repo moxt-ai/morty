@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+    decodeComputerDiagnosticsResult,
     decodeMessageKind,
-    decodeRuntimeDiagnosticsResult,
     decodeSessionOperationFailedEvent,
     encodeSessionCreateCommand,
 } from "@morty-build/client/protocol";
@@ -19,7 +19,7 @@ function executableSource(source: string): string {
     return `#!${process.execPath}\n${source}`;
 }
 
-test("Given an ACP Agent repeatedly fails Runtime initialization, When a conversation is created, Then the public failure has a correlated local diagnostic with the sanitized cause chain", async () => {
+test("Given an ACP Agent repeatedly fails Computer initialization, When a conversation is created, Then the public failure has a correlated local diagnostic with the sanitized cause chain", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-prepare-diagnostics-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
@@ -49,8 +49,8 @@ if (process.argv.includes("--version")) {
         await withRealDaemon(
             new ControlledAcpAgentSpecification(),
             {
-                MORTY_FAKE_ACP_ALWAYS_FAIL_RUNTIME_INITIALIZATION: "1",
-                MORTY_FAKE_ACP_FAIL_RUNTIME_INITIALIZATION: "Controlled ACP",
+                MORTY_FAKE_ACP_ALWAYS_FAIL_COMPUTER_INITIALIZATION: "1",
+                MORTY_FAKE_ACP_FAIL_COMPUTER_INITIALIZATION: "Controlled ACP",
                 PATH: executableDirectory,
             },
             async (peer) => {
@@ -87,13 +87,13 @@ if (process.argv.includes("--version")) {
                 expect(diagnostics).toContain(`"cause2Name":"RequestError"`);
                 expect(diagnostics).toContain(`"cause2Message":"Internal error"`);
                 expect(diagnostics).toContain(`"cause2Code":"-32603"`);
-                peer.send(JSON.stringify({ kind: "runtime.diagnostics.read", requestId: "bug-report-diagnostics" }));
+                peer.send(JSON.stringify({ kind: "computer.diagnostics.read", requestId: "bug-report-diagnostics" }));
                 for (;;) {
                     const message = await peer.nextMessage();
-                    if (decodeMessageKind(message) !== "runtime.diagnostics.result") {
+                    if (decodeMessageKind(message) !== "computer.diagnostics.result") {
                         continue;
                     }
-                    const exported = decodeRuntimeDiagnosticsResult(message);
+                    const exported = decodeComputerDiagnosticsResult(message);
                     expect(exported.requestId).toBe("bug-report-diagnostics");
                     expect(exported.entries).toContainEqual(
                         expect.objectContaining({ event: "session_create_failed", requestId, cause2Code: "-32603" }),

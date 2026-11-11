@@ -1,5 +1,5 @@
-/** Owns in-flight Runtime requests until they release their Agent resources. */
-export class RuntimeOperations {
+/** Owns in-flight Computer requests until they release their Agent resources. */
+export class ComputerOperations {
     readonly #shutdown = new AbortController();
     readonly #pending = new Set<Promise<unknown>>();
     #closing: Promise<void> | null = null;

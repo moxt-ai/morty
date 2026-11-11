@@ -47,11 +47,11 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
-import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
+import { runComputer } from "../../src/engine/computer/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
+import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
 
 class Messages {
     readonly #buffered: string[] = [];
@@ -127,22 +127,22 @@ test("Given a newly created native Session, When its first Turn resolves interac
             MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent"),
         },
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "interaction",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -208,7 +208,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
             action: "active-turn",
             turn: { interaction: permission },
         });
-        // The turn is dated by the Runtime's start, not by whoever reads it.
+        // The turn is dated by the Computer's start, not by whoever reads it.
         const startedAt = running.action === "active-turn" ? Date.parse(running.turn?.startedAt ?? "") : Number.NaN;
         expect(startedAt).toBeGreaterThanOrEqual(submittedAt);
         expect(startedAt).toBeLessThanOrEqual(Date.now());
@@ -292,7 +292,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
         await messages.nextKind("prompt.completed");
     } finally {
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }
@@ -330,22 +330,22 @@ test("Given an Agent announced a tool call with its input, When it requests perm
                 options,
             ),
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "announced-permission",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -398,7 +398,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         });
     } finally {
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }
@@ -436,22 +436,22 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
                 options,
             ),
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "null-input-permission",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -504,7 +504,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         });
     } finally {
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }
@@ -542,22 +542,22 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
                 options,
             ),
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "orphan-update-permission",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -610,7 +610,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         });
     } finally {
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }
@@ -620,7 +620,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     }
 }, 30_000);
 
-test("Given a real daemon prepared a Session, When Relay queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
+test("Given a real daemon prepared a Session, When Relay queries its metadata, Then the daemon returns it without closing the Computer", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-query-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
@@ -648,22 +648,22 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
                 options,
             ),
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "session-query",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "codex",
@@ -698,7 +698,7 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
         });
     } finally {
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }
@@ -735,21 +735,21 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
             ),
         { MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent") },
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "session-restore",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const startDaemon = async () => {
         const connected = Promise.withResolvers<WebSocket>();
         websocketServer.once("connection", (socket) => connected.resolve(socket));
         const cancellation = new AbortController();
-        const completion = runRuntime(config, cancellation.signal);
+        const completion = runComputer(config, cancellation.signal);
         return { cancellation, completion, socket: await connected.promise };
     };
     try {
@@ -757,7 +757,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
         const initial = await startDaemon();
         try {
             const messages = new Messages(initial.socket);
-            initial.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+            initial.socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
             initial.socket.send(
                 encodeSessionCreateCommand({
                     harness: "codex",
@@ -788,7 +788,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
         const restored = await startDaemon();
         try {
             const messages = new Messages(restored.socket);
-            restored.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+            restored.socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
             restored.socket.send(
                 encodeSessionQueryCommand({
                     kind: "session.query",
@@ -827,8 +827,8 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
                 },
                 requestId: "restore_request",
             });
-            expect(restoredEvent.ready.runtimeTimings?.map((timing) => timing.name)).toContain("session-load");
-            expect(restoredEvent.ready.runtimeTimings?.map((timing) => timing.name)).not.toContain("session-resume");
+            expect(restoredEvent.ready.computerTimings?.map((timing) => timing.name)).toContain("session-load");
+            expect(restoredEvent.ready.computerTimings?.map((timing) => timing.name)).not.toContain("session-resume");
 
             restored.socket.send(
                 encodeSessionHistoryPageLoad({
@@ -889,22 +889,22 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
             MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent"),
         },
     );
-    const config = createRuntimeConfig(
+    const config = createComputerConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "queued-identity",
             defaultWorkspace: workspace,
             relayUrl,
         },
         [agent],
-        new RuntimeLocalContext(stateDirectory, process.env),
+        new ComputerLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const runtime = runRuntime(config, cancellation.signal);
+    const computer = runComputer(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 kind: "session.create",
@@ -948,7 +948,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
                 target: sessionTarget,
             }),
         );
-        // A client reads the queue once the Runtime has answered that the prompt waits in it.
+        // A client reads the queue once the Computer has answered that the prompt waits in it.
         for (;;) {
             const accepted = decodeSessionPromptAcceptedEvent(await messages.nextKind(SESSION_PROMPT_ACCEPTED_KIND));
             if (accepted.requestId === "own_queued_turn") {
@@ -978,7 +978,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
         }
     } finally {
         cancellation.abort();
-        await runtime;
+        await computer;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }

@@ -5,13 +5,13 @@ import {
     type SessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { ActiveRuntimeTurn, type PromptDispatch, type RecordedSessionEvent } from "./active-turn.ts";
+import { ActiveComputerTurn, type PromptDispatch, type RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
 
 /** Whether the Session began executing the command and still holds it, as its execution authority answers. */
 export type SessionExecutes = (sessionTarget: NativeSessionTarget, commandId: string) => boolean;
 
-const waitForTurnCompletion = (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<void> => {
+const waitForTurnCompletion = (turn: ActiveComputerTurn, waitSignal: AbortSignal): Promise<void> => {
     waitSignal.throwIfAborted();
     return new Promise<void>((resolve, reject) => {
         let settled = false;
@@ -44,7 +44,7 @@ const waitForTurnCompletion = (turn: ActiveRuntimeTurn, waitSignal: AbortSignal)
  */
 export class SessionExecutionState {
     readonly #sessionTarget: NativeSessionTarget;
-    readonly #turnsByCommandId = new Map<string, ActiveRuntimeTurn>();
+    readonly #turnsByCommandId = new Map<string, ActiveComputerTurn>();
     readonly #operations: ExecutionReceipts;
     readonly #executes: SessionExecutes;
 
@@ -60,8 +60,8 @@ export class SessionExecutionState {
      * Places the prompt in arrival order. An appended prompt behind an earlier turn that owns an execution enters the
      * queue as it arrives, so the queue and its announcements follow arrival order whatever its preparation awaits.
      */
-    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
-        const turn = new ActiveRuntimeTurn(
+    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveComputerTurn => {
+        const turn = new ActiveComputerTurn(
             command,
             attemptId,
             () => this.#operations.hasStarted(command.commandId, this.#sessionTarget),
@@ -77,12 +77,12 @@ export class SessionExecutionState {
     };
 
     /** The earliest turn that owns an execution: a promoted prompt steers instead and holds no place. */
-    readonly #head = (): ActiveRuntimeTurn | undefined =>
+    readonly #head = (): ActiveComputerTurn | undefined =>
         [...this.#turnsByCommandId.values()].find((candidate) => !candidate.isSteering());
 
-    readonly get = (commandId: string): ActiveRuntimeTurn | undefined => this.#turnsByCommandId.get(commandId);
+    readonly get = (commandId: string): ActiveComputerTurn | undefined => this.#turnsByCommandId.get(commandId);
 
-    readonly finish = (turn: ActiveRuntimeTurn): void => {
+    readonly finish = (turn: ActiveComputerTurn): void => {
         this.#turnsByCommandId.delete(turn.command.commandId);
         turn.finish();
     };
@@ -104,12 +104,12 @@ export class SessionExecutionState {
         return event;
     };
 
-    readonly turns = (): readonly ActiveRuntimeTurn[] => [...this.#turnsByCommandId.values()];
+    readonly turns = (): readonly ActiveComputerTurn[] => [...this.#turnsByCommandId.values()];
 
     readonly close = async (): Promise<void> => {
         const turns = [...this.#turnsByCommandId.values()];
         for (const turn of turns) {
-            turn.abortRuntime();
+            turn.abortComputer();
         }
         await Promise.all(turns.map((turn) => turn.completion));
     };
@@ -119,7 +119,7 @@ export class SessionExecutionState {
      * when no earlier turn owns an execution, and otherwise waits in the queue it entered on arrival until every earlier
      * one ended or the user promotes it to steer the turn it waits behind. Admission never refuses an appended prompt.
      */
-    readonly admitAndWait = async (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<PromptDispatch> => {
+    readonly admitAndWait = async (turn: ActiveComputerTurn, waitSignal: AbortSignal): Promise<PromptDispatch> => {
         const command = turn.command;
         waitSignal.throwIfAborted();
         if (command.disposition === SessionPromptDisposition.Steer) {

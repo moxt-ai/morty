@@ -444,7 +444,7 @@ test("Given real Pi asks a question before a daemon disconnect, When the daemon 
             }
             if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {
                 expect(event.payload.commandId).toBe(interruptedCommandId);
-                expect(event.payload.code).toBe("runtime_restarted");
+                expect(event.payload.code).toBe("computer_restarted");
                 interrupted = true;
             }
             if (

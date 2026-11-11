@@ -83,11 +83,11 @@ type BotChatHomeProps = {
         BotChatApi,
         | "access"
         | "archiveManagedSession"
-        | "runtimeConfiguration"
+        | "computerConfiguration"
         | "directory"
-        | "readRuntimePairing"
-        | "waitForRuntimePairingChange"
-        | "waitForRuntimeConfigurationChange"
+        | "readComputerPairing"
+        | "waitForComputerPairingChange"
+        | "waitForComputerConfigurationChange"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -267,7 +267,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 <DevicesDialog
                     accessExpiry={workspace.accessExpiry}
                     devices={workspace.linkedDevices}
-                    computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
+                    computerName={model.computerConfiguration?.computer?.machineName ?? ""}
                     signal={workspace.operationsSignal}
                     store={workspace.deviceAccess}
                 />
@@ -415,7 +415,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                     <SessionWelcomeMock />
                                 </div>
                             </FollowLatestScrollArea>
-                            {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
+                            {model.computerConfiguration !== null && model.selection.kind === "draft" && (
                                 <BotChatComposer
                                     attachmentModel={attachmentModel}
                                     focusScope={workspace}

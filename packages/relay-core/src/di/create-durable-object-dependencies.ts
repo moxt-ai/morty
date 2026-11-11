@@ -1,27 +1,27 @@
 import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../entity/authentication/project-authentication.ts";
 import { ComputerScope } from "../entity/do/session.ts";
 import type { ProjectCredentialAuthority } from "../gateway/project-access-authorizer.ts";
-import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
+import { createComputerRoutes } from "../http/do/computer-routes.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStoreResolver } from "../infra/project-store.ts";
 import type { SessionStatusNotifications } from "../infra/session-status-notifications.ts";
 import { ChannelActor } from "../service/channel/channel-actor.ts";
 import { ChannelCredentialService } from "../service/channel/channel-credential-service.ts";
-import { LocalRuntimeRequests } from "../service/channel/local-runtime-requests.ts";
+import { ComputerConnectionService } from "../service/channel/computer-connection-service.ts";
+import { type ComputerCredentials, type ComputerPeers, ComputerService } from "../service/channel/computer-service.ts";
+import { LocalComputerRequests } from "../service/channel/local-computer-requests.ts";
 import { NativeSessionForks } from "../service/channel/native-session-forks.ts";
-import { RuntimeConnectionService } from "../service/channel/runtime-connection-service.ts";
-import { type RuntimeCredentials, type RuntimePeers, RuntimeService } from "../service/channel/runtime-service.ts";
-import { RuntimeConnectionStorage } from "../storage/runtime-connection-storage.ts";
+import { ComputerConnectionStorage } from "../storage/computer-connection-storage.ts";
 
-function createRuntimeRelayDependencies(cx: {
+function createComputerRelayDependencies(cx: {
     readonly database: DoSqlDatabase;
     readonly storages: {
         readonly projectStores: ProjectStoreResolver;
         readonly projectDirectory: ProjectStorageDirectory;
     };
     readonly gateways: {
-        readonly peers: RuntimePeers;
+        readonly peers: ComputerPeers;
         readonly projectCredentials: ProjectCredentialAuthority;
         readonly notifications?: SessionStatusNotifications;
     };
@@ -41,7 +41,7 @@ function createRuntimeRelayDependencies(cx: {
         }
         return new ChannelCredentialService(cx.storages.projectStores.resolve(project.storagePlacement));
     };
-    const credentials: RuntimeCredentials = {
+    const credentials: ComputerCredentials = {
         authorizeHostMessage: async (identity, permission, signal) => {
             const service = await credentialService(new ComputerScope(identity.computerId), signal);
             if (service === null) {
@@ -77,7 +77,7 @@ function createRuntimeRelayDependencies(cx: {
     };
     const services = {
         credentials,
-        connections: new RuntimeConnectionService(new RuntimeConnectionStorage(cx.database)),
+        connections: new ComputerConnectionService(new ComputerConnectionStorage(cx.database)),
         channel: (scope: ComputerScope) =>
             new ChannelActor({
                 config: { computerId: scope.computerId },
@@ -91,7 +91,7 @@ function createRuntimeRelayDependencies(cx: {
         services: {
             credentials,
             connections: services.connections,
-            runtime: new RuntimeService({
+            computer: new ComputerService({
                 services,
                 gateways: cx.gateways,
                 utilities: cx.utilities,
@@ -112,7 +112,7 @@ export function createDurableObjectDependencies(cx: {
         readonly projectDirectory: ProjectStorageDirectory;
     };
     readonly gateways: {
-        readonly peers: RuntimePeers;
+        readonly peers: ComputerPeers;
         readonly projectCredentials: ProjectCredentialAuthority;
         readonly notifications?: SessionStatusNotifications;
     };
@@ -120,9 +120,9 @@ export function createDurableObjectDependencies(cx: {
         readonly waitUntil: (operation: Promise<void>) => void;
     };
 }) {
-    const requests = new LocalRuntimeRequests();
+    const requests = new LocalComputerRequests();
     const source = cx.gateways.peers;
-    const peers: RuntimePeers = {
+    const peers: ComputerPeers = {
         accept: source.accept,
         sockets: source.sockets,
         daemonConnections: source.daemonConnections,
@@ -133,7 +133,7 @@ export function createDurableObjectDependencies(cx: {
         historyRecipients: () => [...source.historyRecipients(), ...requests.routes().map(({ socket }) => socket)],
         operations: () => [...source.operations(), ...requests.routes()],
     };
-    const runtime = createRuntimeRelayDependencies({
+    const computer = createComputerRelayDependencies({
         database: cx.doDatabase,
         gateways: {
             peers,
@@ -149,11 +149,11 @@ export function createDurableObjectDependencies(cx: {
         storages: cx.storages,
         utilities: cx.utilities,
         services: {
-            ...runtime.services,
+            ...computer.services,
             nativeForks: new NativeSessionForks(cx.utilities.waitUntil),
         },
         applications: {
-            runtime: createRuntimeRoutes(runtime.services.runtime),
+            computer: createComputerRoutes(computer.services.computer),
         },
     };
 }

@@ -1,10 +1,10 @@
 import { expect, test } from "./infra/test.ts";
 
 test("Given generated Agent reply content, When it is running, Then Working has at least a 12px gap after the content", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
-    await runtime.openPairedChat();
+    const { page } = computer;
+    await computer.openPairedChat();
 
     await page.getByRole("textbox", { name: "Message" }).fill("interleaved compaction hold");
     await page.getByRole("button", { name: "Send message" }).click();

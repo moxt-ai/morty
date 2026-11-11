@@ -1,9 +1,9 @@
 import { prepareTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
 import * as v from "valibot";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
-import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../../../tests/support/fake-daemon/runtime.ts";
+import { connectControlledAgentComputer, createMortyFakeDaemon } from "../../../tests/support/fake-daemon/computer.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
-import { memoryRuntimeCredentials } from "../../cli/tests/support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../../cli/tests/support/computer-credentials.ts";
 
 let createBindings: Awaited<ReturnType<typeof prepareTestMortyRelayBindings>>;
 beforeAll(async () => {
@@ -12,7 +12,7 @@ beforeAll(async () => {
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-10T00:00:00Z") }));
 afterEach(() => vi.useRealTimers());
 
-test("Given one Morty Worker without service credentials or Relay buckets, When an owner pairs and opens a Session, Then Runtime discovery and signed browser access work while retired backend endpoints are absent", async () => {
+test("Given one Morty Worker, When an owner pairs their Computer and opens a Session, Then Computer credentials, discovery and signed browser access work while retired backend endpoints are absent", async () => {
     await using bindings = await createBindings();
     await bindings.configure({ APP_ORIGIN: bindings.origin });
     const signal = AbortSignal.timeout(45_000);
@@ -48,19 +48,32 @@ test("Given one Morty Worker without service credentials or Relay buckets, When 
         agents: harness.catalog,
     });
     expect(redeemed.status).toBe(200);
-    const claim = v.parse(v.object({ runtimeCredential: v.string() }), await redeemed.json());
-    await using _runtime = await connectControlledAgentRuntime({
+    const claim = v.parse(v.object({ computerCredential: v.string() }), await redeemed.json());
+    await using _computer = await connectControlledAgentComputer({
         behavior,
         signal,
         connection: {
             computerId: owner.computerId,
             origin: bindings.origin,
-            credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+            credentials: memoryComputerCredentials(claim.computerCredential),
         },
     });
     const chat = `/chat/computers/${owner.computerId}`;
     const setup = await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" });
     expect(setup.status, await setup.clone().text()).toBe(202);
+    const workspace = await request(`${chat}/workspace`, owner.token, {});
+    expect(workspace.status).toBe(200);
+    expect(await workspace.json()).toEqual({
+        computer: expect.objectContaining({ computerId: owner.computerId, online: true }),
+    });
+    const computers = await request(`${chat}/setup/computers`, owner.token, {});
+    expect(computers.status).toBe(200);
+    expect(await computers.json()).toEqual({
+        computers: [expect.objectContaining({ computerId: owner.computerId, online: true })],
+    });
+    const machine = await request(`/computers/${owner.computerId}/management/machine`, owner.token);
+    expect(machine.status).toBe(200);
+    expect(await machine.json()).toEqual({ computerPairing: "paired" });
     const opened = await request(`${chat}/access`, owner.token, {
         harness: "codex",
         conversationKey: "single-worker-session",

@@ -11,7 +11,7 @@ export type ConversationStatusStoreApi = ReturnType<typeof createConversationSta
 
 export type ConversationListStatus = ReportedStatus | { readonly kind: "unread" };
 
-/** A Session's work as one account reported it: the Runtime's listing, or a pane that followed the Session. */
+/** A Session's work as one account reported it: the Computer's listing, or a pane that followed the Session. */
 type ReportedStatus =
     | { readonly kind: "idle" }
     | { readonly commandId: string; readonly kind: "working" }
@@ -26,7 +26,7 @@ interface SessionObservation {
     readonly observedAt: number;
 }
 
-/** The Runtime owns the last turn's outcome, including the absence of failure after a later successful turn. */
+/** The Computer owns the last turn's outcome, including the absence of failure after a later successful turn. */
 function listedStatus(status: ManagedChatSession["status"]): ReportedStatus {
     if (status.kind === "working") {
         return status;
@@ -68,7 +68,7 @@ function shown(observation: SessionObservation): ConversationListStatus {
 
 /**
  * What the sidebar shows for a Session. The open Session shows its pane's account once the pane has one, so a
- * submission the Runtime never saw shows too. Every other Session shows what the page last learned of it.
+ * submission the Computer never saw shows too. Every other Session shows what the page last learned of it.
  */
 export function conversationListStatus(
     session: Pick<ManagedChatSession, "target" | "status">,

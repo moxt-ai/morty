@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { satisfies } from "semver";
 import packageMetadata from "../../package.json" with { type: "json" };
 
-// Morty never passes another product's Runtime credentials or configuration to child processes.
+// Morty never passes another product's Computer credentials or configuration to child processes.
 for (const key of Object.keys(process.env)) {
     if (key.toUpperCase().startsWith("MOBIUS_")) {
         delete process.env[key];

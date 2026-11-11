@@ -26,9 +26,9 @@ export class ProjectPermission {
     static readonly InteractionRespond = ProjectPermission.named("interaction:respond");
     static readonly ProjectEventsRead = ProjectPermission.named("project:event:read");
     static readonly ProjectRead = ProjectPermission.named("project:read");
-    static readonly RuntimePair = ProjectPermission.named("runtime:pair");
-    static readonly RuntimeRead = ProjectPermission.named("runtime:read");
-    static readonly RuntimeRevoke = ProjectPermission.named("runtime:revoke");
+    static readonly ComputerPair = ProjectPermission.named("computer:pair");
+    static readonly ComputerRead = ProjectPermission.named("computer:read");
+    static readonly ComputerRevoke = ProjectPermission.named("computer:revoke");
     static readonly SessionDelete = ProjectPermission.named("session:delete");
     static readonly SessionRead = ProjectPermission.named("session:read");
     static readonly SessionWrite = ProjectPermission.named("session:write");
@@ -43,12 +43,12 @@ export class ProjectPermission {
 }
 
 /**
- * What a project credential must grant to open a Runtime host connection and to keep using it. The connection
- * receives the Runtime's status and every Session's traffic, so it needs to read both. Each command the connection
+ * What a project credential must grant to open a Computer host connection and to keep using it. The connection
+ * receives the Computer's status and every Session's traffic, so it needs to read both. Each command the connection
  * sends additionally needs that command's own permission.
  */
 export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.freeze([
-    ProjectPermission.RuntimeRead,
+    ProjectPermission.ComputerRead,
     ProjectPermission.SessionRead,
 ]);
 
@@ -151,7 +151,7 @@ function projectAuthenticationErrorStatus(code: string): number {
     }
 }
 
-export class RuntimeAccessContext extends VerifiedChannelAccess {
+export class ComputerAccessContext extends VerifiedChannelAccess {
     readonly scope: ComputerScope;
 
     constructor(scope: ComputerScope) {

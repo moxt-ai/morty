@@ -1,8 +1,8 @@
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { activeGeneration } from "./runtime-generation.ts";
+import { activeGeneration } from "./computer-generation.ts";
 
-/** Which pairing generation of a Runtime is active in the Project's own storage. */
+/** Which pairing generation of a Computer is active in the Project's own storage. */
 export class ChannelCredentialStorage {
     readonly #database: SqlDatabase;
 

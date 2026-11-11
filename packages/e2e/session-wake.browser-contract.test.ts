@@ -3,9 +3,9 @@ import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 test("Given a conversation recovering after suspension, when its history read times out, then it recovers automatically without cancelling or repeating the task", async ({
-    runtime,
+    computer,
 }, testInfo) => {
-    const { page } = runtime;
+    const { page } = computer;
     const historyHeld = Promise.withResolvers<() => void>();
     let holdHistory = false;
     const connections = new Set<WebSocketRoute>();
@@ -64,7 +64,7 @@ test("Given a conversation recovering after suspension, when its history read ti
     };
     await page.clock.install({ time: new Date("2026-10-28T08:00:00Z") });
     await page.clock.pauseAt(new Date("2026-10-28T08:01:00Z"));
-    await runtime.openPairedChat();
+    await computer.openPairedChat();
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("hold after first delta");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -74,7 +74,7 @@ test("Given a conversation recovering after suspension, when its history read ti
     holdHistory = true;
     await Promise.all([...connections].map((socket) => socket.close({ code: 1001 })));
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
-    await runtime.continueReply("hold after first delta", {
+    await computer.continueReply("hold after first delta", {
         outcome: "complete",
         output: [{ kind: "text", text: "Finished while the browser was suspended." }],
     });

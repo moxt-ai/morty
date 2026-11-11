@@ -24,16 +24,16 @@ import {
 } from "@morty-build/client/protocol";
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
+import { ComputerAgentDependencies } from "../../src/engine/agent/computer-agents.ts";
 import { discoverLocalAgentInventory } from "../../src/engine/agent/discovery/discover-local-agents.ts";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
-import { publishAgentCatalog } from "../../src/engine/runtime/catalog/publish-agent-catalog.ts";
-import { createCatalogAgentResolver } from "../../src/engine/runtime/catalog/resolve-catalog-agent.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
-import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { publishAgentCatalog } from "../../src/engine/computer/catalog/publish-agent-catalog.ts";
+import { createCatalogAgentResolver } from "../../src/engine/computer/catalog/resolve-catalog-agent.ts";
+import { ComputerLocalContext, createComputerConfig } from "../../src/engine/computer/config.ts";
+import { runComputer } from "../../src/engine/computer/run.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -293,7 +293,7 @@ test.for([
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -315,17 +315,17 @@ test.for([
             await rm(stateDirectory, { force: true, recursive: true });
             throw new Error(`Controlled agent was not discovered: ${JSON.stringify(inventory.unavailable)}`);
         }
-        const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
+        const config: ReturnType<typeof createComputerConfig> = createComputerConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
             },
             harness === "codex"
-                ? new RuntimeAgentDependencies(inventory.readyAgents())
-                : new RuntimeAgentDependencies(inventory.readyAgents(), acpAdapters),
-            new RuntimeLocalContext(stateDirectory, environment),
+                ? new ComputerAgentDependencies(inventory.readyAgents())
+                : new ComputerAgentDependencies(inventory.readyAgents(), acpAdapters),
+            new ComputerLocalContext(stateDirectory, environment),
             null,
             createCatalogAgentResolver(
                 (refreshSignal) =>
@@ -341,7 +341,7 @@ test.for([
             ),
         );
         const cancellation = new AbortController();
-        const runtime = runRuntime(config, cancellation.signal);
+        const computer = runComputer(config, cancellation.signal);
 
         try {
             const frames = new ClientFrames(await socketReady.promise);
@@ -474,7 +474,7 @@ test.for([
                 socket.destroy();
             }
             relay.close();
-            await runtime.catch(() => {});
+            await computer.catch(() => {});
             await rm(stateDirectory, { force: true, recursive: true });
             vi.useRealTimers();
         }
