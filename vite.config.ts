@@ -73,7 +73,6 @@ export default defineConfig({
         alias: [{ find: "@", replacement: fileURLToPath(new URL("./packages/web/src", import.meta.url)) }],
     },
     server: {
-        allowedHosts: [".trycloudflare.com"],
         host: "localhost",
         port: 5173,
         strictPort: true,
