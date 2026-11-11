@@ -443,9 +443,6 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:../client
-      '@morty-build/relay':
-        specifier: workspace:*
-        version: link:../relay
       '@morty-build/relay-core':
         specifier: workspace:*
         version: link:../relay-core
@@ -586,6 +583,9 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:../client
+      '@morty-build/relay':
+        specifier: workspace:*
+        version: link:../relay
       '@morty-build/relay-core':
         specifier: workspace:*
         version: link:../relay-core

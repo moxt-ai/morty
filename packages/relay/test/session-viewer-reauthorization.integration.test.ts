@@ -4,12 +4,9 @@ import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { afterAll, expect, it } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
+import { createHostedRelayAccess } from "../../worker/src/composition/relay-services.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
-import {
-    createRelayAccessServices,
-    createRelayGateways,
-    RelayAuthenticationConfiguration,
-} from "../src/relay-worker.ts";
+import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 
@@ -55,7 +52,7 @@ class Inbox {
 }
 
 async function openSessionView(_slug: string) {
-    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const owner = await createOwner();
     const { computerId } = owner;
     const sessionId = "viewer-check-session";
@@ -131,7 +128,7 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
         const identities = new IdentityStorage(
             new DurableObjectDatabase(state.storage),
             computerId,
-            await createRelayAccessServices(env).control.readComputerOwner(computerId, signal),
+            await createHostedRelayAccess(env).control.readComputerOwner(computerId, signal),
         );
         const credential = await identities.findCredential(owner.token, Date.now(), signal);
         if (credential === null) {

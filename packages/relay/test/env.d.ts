@@ -1,7 +1,7 @@
 import type { D1Migration } from "cloudflare:test";
-import type { RelayRelayBindings } from "../src/relay-worker.ts";
+import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
 
-interface RelayTestBindings extends RelayRelayBindings {
+interface RelayTestBindings extends RelayBindings {
     readonly MORTY_ALLOWED_ORIGINS: string;
     readonly ANONYMOUS_CREATION_LIMITER: RateLimit;
     readonly TEST_RELAY_MIGRATIONS: D1Migration[];

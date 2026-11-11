@@ -1,16 +1,20 @@
-export { createMortyApplication } from "./app.ts";
 export { createDurableObjectContext } from "./di/create-durable-object-context.ts";
-export type { RelayContext } from "./di/create-relay-dependencies.ts";
-export { createWorkerContext, type WorkerRuntimeGateways } from "./di/create-worker-context.ts";
+export {
+    createRelayDependencies,
+    type RelayContext,
+    type RelayInfrastructure,
+} from "./di/create-relay-dependencies.ts";
 export { RelaySockets } from "./durable-objects/relay-sockets.ts";
 export * from "./entity/authentication/project-authentication.ts";
+export type {
+    ProjectAccessAuthorizer,
+    ProjectCredentialAuthority,
+} from "./entity/authentication/project-authorization.ts";
 export { ComputerScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { isHttpError, toHttpError } from "./entity/http-error.ts";
 export { createRandomToken, hashSecret, PairingDirectoryError, validateIdentifier } from "./entity/pairing/pairing.ts";
-export { CloudflareChannelRuntime } from "./gateway/cloudflare-channel-runtime.ts";
-export type { ProjectAccessAuthorizer, ProjectCredentialAuthority } from "./gateway/project-access-authorizer.ts";
 export { runtimeConnectionDurableObjectMigrations } from "./generated/runtime-connection-do-migrations.ts";
-export { errorMiddleware, rethrowHonoError } from "./http/middleware/error-middleware.ts";
+export { errorMiddleware, relayErrorHandler, rethrowHonoError } from "./http/middleware/error-middleware.ts";
 export { requestTimeoutMiddleware } from "./http/middleware/request-timeout-middleware.ts";
 export {
     decodeSessionRequest,
@@ -20,6 +24,7 @@ export {
     turnSteerRequest,
     turnSubmissionRequest,
 } from "./http/pairing/session-requests.ts";
+export { createRelayProtocolRoutes } from "./http/relay-protocol-routes.ts";
 export { acceptWebSocketHttpTransport, WebSocketUploadBudget } from "./http/transport/websocket-http-transport.ts";
 export { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "./infra/durable-object-sql-database.ts";
 export type { MachineAccountDirectory } from "./infra/machine-account-directory.ts";

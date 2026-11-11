@@ -1,6 +1,6 @@
 import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../entity/authentication/project-authentication.ts";
+import type { ProjectCredentialAuthority } from "../entity/authentication/project-authorization.ts";
 import { ComputerScope } from "../entity/do/session.ts";
-import type { ProjectCredentialAuthority } from "../gateway/project-access-authorizer.ts";
 import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";

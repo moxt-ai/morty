@@ -1,11 +1,11 @@
-import { ComputerRelay as ProductionComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
-import type { ConfiguredRelayRelayBindings } from "../../../relay/src/relay-worker.ts";
 import { requestTestRuntimeControl } from "../../../relay-test-support/src/backend-fixture.ts";
+import type { ConfiguredRelayBindings } from "../../src/composition/relay-bindings.ts";
+import { ComputerRelay as ProductionComputerRelay } from "../../src/do/computer-relay.ts";
 import chat from "../../src/index.ts";
 
 // The public Worker reaches the production ComputerRelay namespace.
 export default {
-    fetch: async (request: Request, env: ConfiguredRelayRelayBindings) => {
+    fetch: async (request: Request, env: ConfiguredRelayBindings) => {
         const url = new URL(request.url);
         const target = url.pathname.match(
             /^\/__test\/computers\/([^/]+)\/harnesses\/([^/]+)\/sessions\/([^/]+)\/close$/u,

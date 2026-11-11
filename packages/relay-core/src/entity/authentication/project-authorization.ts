@@ -1,5 +1,5 @@
 import type { SessionAccessGrant } from "@morty-build/client/protocol";
-import type { ProjectAccessContext, ProjectPermission } from "../entity/authentication/project-authentication.ts";
+import type { ProjectAccessContext, ProjectPermission } from "./project-authentication.ts";
 
 /** Internal authorization of an already selected computer at the execution boundary. */
 export interface ProjectAccessAuthorizer {

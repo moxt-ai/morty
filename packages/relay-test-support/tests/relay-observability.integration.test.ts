@@ -236,7 +236,9 @@ it("identifies the failing Runtime Durable Object through the public pairing and
         },
     });
     expect(response.status).toBe(500);
-    await response.text();
+    expect(await response.json()).toEqual({
+        error: { code: "internal_error", message: "The request could not be completed" },
+    });
     await expect
         .poll(() => logs.slice(start).find((log) => log["event"] === "runtime_relay_request_failed"))
         .toBeDefined();
@@ -251,6 +253,20 @@ it("identifies the failing Runtime Durable Object through the public pairing and
         }),
     );
 });
+
+it.each([
+    { method: "GET", path: "/v1/computers/prj_ap_01_abcdefghijklmnopqrstuvwx/transport" },
+    { method: "POST", path: "/v1/pairings/prj_ap_01_abcdefghijklmnopqrstuvwx/redeem" },
+    { method: "PUT", path: "/channels/prj_ap_01_abcdefghijklmnopqrstuvwx/catalog" },
+])(
+    "Given an overloaded computer, When $method $path enters the production Worker, Then the relay error contract is preserved",
+    async ({ method, path }) => {
+        const response = await api(path, { method, headers: { "x-test-project-failure": "1" } }, 500);
+        expect(response).toEqual({
+            error: { code: "internal_error", message: "The request could not be completed" },
+        });
+    },
+);
 
 // @no-uc: Technical regression; Project routing failures must identify the target DO and retain overload details.
 it("identifies a Project Relay overload through the public HTTP API", async () => {
