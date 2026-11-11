@@ -177,10 +177,5 @@ export class ComputerDurableObjectStores implements ComputerManagementStores {
         return store;
     };
 
-    readonly resolve: ComputerManagementStores["resolve"] = (placement) => {
-        if (!placement.hasShard) {
-            throw new PairingDirectoryError("directory_unavailable", "Project storage is unavailable");
-        }
-        return this.forProject(placement.shard.d1ShardId);
-    };
+    readonly resolve: ComputerManagementStores["resolve"] = (computerId) => this.forProject(computerId);
 }

@@ -6,7 +6,6 @@ import {
 import {
     AuditActor,
     ComputerScope,
-    PerpetualProjectAccessLifetime,
     ProjectAccessContext,
     ProjectAuthenticationError,
     type ProjectCredentialAuthority,
@@ -40,8 +39,6 @@ export class BackendProjectAccess implements ProjectCredentialAuthority {
             new ComputerScope(project.computer_id),
             permissions,
             new AuditActor(RelayAuditActorKind.Application, project.user_id),
-            Date.now(),
-            new PerpetualProjectAccessLifetime(),
         );
     };
 

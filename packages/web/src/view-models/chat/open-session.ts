@@ -1,5 +1,9 @@
-import type { NativeSessionEntry, NativeSessionResult, SessionReadyEvent } from "@morty-build/client/channel";
-import type { NativeSessionTarget } from "@morty-build/client/protocol";
+import type {
+    NativeSessionEntry,
+    NativeSessionResult,
+    NativeSessionTarget,
+    SessionReadyEvent,
+} from "@morty-build/client/protocol";
 import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenMortySession {

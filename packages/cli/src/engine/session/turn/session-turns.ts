@@ -7,7 +7,6 @@ import type {
 } from "@morty-build/client/protocol";
 import type { ActiveRuntimeTurn, PromptDispatch, RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
-import { RuntimeTurnActivity } from "./runtime-turn-activity.ts";
 import { type SessionExecutes, SessionExecutionState } from "./session-execution.ts";
 
 type QueuedTurnSnapshot = Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"];
@@ -17,15 +16,11 @@ export class SessionTurns {
     readonly #bySessionTarget = new NativeSessionMap<SessionExecutionState>();
     readonly #operations: ExecutionReceipts;
     readonly #executes: SessionExecutes;
-    readonly #activity: RuntimeTurnActivity;
 
-    constructor(operations: ExecutionReceipts, executes: SessionExecutes, activity = new RuntimeTurnActivity()) {
+    constructor(operations: ExecutionReceipts, executes: SessionExecutes) {
         this.#operations = operations;
         this.#executes = executes;
-        this.#activity = activity;
     }
-
-    readonly acceptsPrompts = (): boolean => this.#activity.acceptsPrompts();
 
     readonly session = (sessionTarget: NativeSessionTarget): SessionExecutionState => {
         let session = this.#bySessionTarget.get(sessionTarget);
@@ -40,15 +35,12 @@ export class SessionTurns {
         this.#bySessionTarget.get(sessionTarget)?.get(commandId);
 
     readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
-        const turn = this.session(command.target).start(command, attemptId, onQueued);
-        this.#activity.start(turn);
-        return turn;
+        return this.session(command.target).start(command, attemptId, onQueued);
     };
 
     readonly finish = (turn: ActiveRuntimeTurn): void => {
         this.#bySessionTarget.get(turn.command.target)?.finish(turn);
         this.sweep();
-        this.#activity.finish(turn);
     };
 
     readonly recordEvent = (event: RecordedSessionEvent): RecordedSessionEvent =>

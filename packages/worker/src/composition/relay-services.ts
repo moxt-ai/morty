@@ -1,4 +1,3 @@
-import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { createRelayAccessServices, type RelayAccessServices } from "@morty-build/relay/services";
 import {
     createRelayDependencies,
@@ -41,7 +40,6 @@ export function composeRelayContext(access: RelayAccessServices, ports: RelayInf
         stores: access.stores,
         identityStores: access.identityStores,
         projects: access.projects,
-        config: { apiPrefix: MORTY_API_PREFIX },
         logger: console,
         gateways: ports,
     });

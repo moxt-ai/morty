@@ -48,10 +48,6 @@ export interface StoredAccessWriter {
     readonly forgetRejected: (scope: IdentityScope, token: string) => boolean;
 }
 
-export async function saveAccess(scope: IdentityScope, token: string, signal: AbortSignal): Promise<void> {
-    await withStoredAccessLock(signal, async (access) => access.save(scope, token));
-}
-
 /**
  * Runs a change to the access this browser stores while no other tab of the browser changes it: opening a link reads
  * the access it replaces and saves the new one, and ending access reads the access it ends.

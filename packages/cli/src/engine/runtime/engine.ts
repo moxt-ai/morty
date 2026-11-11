@@ -17,7 +17,7 @@ export interface MortyRuntimeEngineParams {
     readonly maxAcpProcesses?: number;
 }
 
-export type EngineLoopConnection =
+type EngineLoopConnection =
     | { readonly kind: "saved"; readonly pairingGeneration: string }
     | { readonly kind: "provided"; readonly connection: MortyRuntimeConnection };
 
@@ -127,8 +127,6 @@ export class MortyRuntimeEngine {
 }
 
 export type { ConnectionManager } from "./connection/connection-manager.ts";
-export type { RuntimeConnectionInput, VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
-export type { RuntimeCredentialRotation, RuntimeCredentials } from "./connection/runtime-credentials.ts";
+export type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+
 export type { MortyRuntimePairingOptions } from "./pairing.ts";
-export { RuntimeRelayRevokedError } from "./relay/runtime-revocation.ts";
-export type { MortyRuntimeConnection } from "./runtime-loop.ts";

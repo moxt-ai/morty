@@ -1,15 +1,14 @@
 import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatAgentDiagnostics } from "../../src/cli/handler/agents/logic/agent-diagnostics.ts";
 import {
     CodexAgentSpecification,
     discoverLocalAgentInventory,
     PiAgentSpecification,
-    resolveAgentExecutable,
 } from "../../src/engine/agent/discovery/discover-local-agents.ts";
+import { resolveAgentExecutables } from "../../src/engine/agent/discovery/executable-discovery.ts";
 
 function executableSource(source: string): string {
     return `#!${process.execPath}\n${source}`;
@@ -93,15 +92,15 @@ if (process.argv.includes("--version")) {
             const specification = new CodexAgentSpecification();
 
             await expect(
-                resolveAgentExecutable(specification, {
+                resolveAgentExecutables(specification, {
                     dataDirectory: workspace,
                     defaultWorkspace: workspace,
                     environment: { PATH: workspace },
                     signal: new AbortController().signal,
-                }),
+                }).then((executables) => executables[0] ?? null),
             ).resolves.toMatchObject({ path: await realpath(codexPath) });
             await expect(
-                resolveAgentExecutable(specification, {
+                resolveAgentExecutables(specification, {
                     dataDirectory: workspace,
                     defaultWorkspace: workspace,
                     environment: {
@@ -109,7 +108,7 @@ if (process.argv.includes("--version")) {
                         PATH: workspace,
                     },
                     signal: new AbortController().signal,
-                }),
+                }).then((executables) => executables[0] ?? null),
             ).resolves.toMatchObject({ path: await realpath(codexPath) });
         } finally {
             await rm(workspace, { force: true, recursive: true });

@@ -8,7 +8,6 @@ import type {
     RuntimeDirectoryRow,
     RuntimePairingRow,
 } from "../entity/pairing/pairing-records.ts";
-import type { ProjectStoragePlacement } from "./project-storage-directory.ts";
 
 export interface RequestRuntimePairing {
     readonly computerId: string;
@@ -99,5 +98,5 @@ export interface ProjectStore {
 }
 
 export interface ProjectStoreResolver {
-    readonly resolve: (placement: ProjectStoragePlacement) => ProjectStore;
+    readonly resolve: (computerId: string) => ProjectStore;
 }

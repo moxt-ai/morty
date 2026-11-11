@@ -259,12 +259,6 @@ class BrowserSessionTransport implements MortyHttpTransport, MortyLiveEventTrans
             throw cause;
         }
     };
-
-    readonly reset = (): void => {
-        const previous = this.#webSocket;
-        this.#webSocket = new WsTransport();
-        previous.close();
-    };
     readonly close = (): void => this.#webSocket.close();
 }
 
@@ -302,9 +296,6 @@ export class BotChatApi {
         const management = new ManagementApi(options);
         this.readRuntimePairing = management.readRuntimePairing;
     }
-    readonly resetSessionConnections = (): void => {
-        this.#sessionTransport.reset();
-    };
     readonly close = (): void => {
         this.#sessionTransport.close();
     };

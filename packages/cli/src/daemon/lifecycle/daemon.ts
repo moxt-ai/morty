@@ -4,7 +4,6 @@ import { prepareRuntimeConnection } from "../../engine/runtime/pairing.ts";
 import { RuntimeRelayRevokedError } from "../../engine/runtime/relay/runtime-revocation.ts";
 import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
 import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
-import { RuntimeTurnActivity } from "../../engine/session/turn/runtime-turn-activity.ts";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
 import { logDirectory, WORKER_LIFECYCLE_LOG_FILENAME } from "../../engine/storage/logs/log-files.ts";
@@ -106,7 +105,6 @@ async function runDaemonRuntime(
     try {
         const installation = control;
         rejectionGuard.bindStateDirectory(control.stateDirectory);
-        const turnActivity = new RuntimeTurnActivity();
         const agentProcesses = new RuntimeAgentProcesses();
         let active:
             | {
@@ -144,7 +142,6 @@ async function runDaemonRuntime(
                     // so every Runtime can include them in bug reports.
                     const loop = new RuntimeLoop(async () => config, {
                         processLogsDirectory: control.stateDirectory,
-                        turnActivity,
                         agentProcesses,
                     });
                     const completion = loop.run(AbortSignal.any([combined, controller.signal])).then(

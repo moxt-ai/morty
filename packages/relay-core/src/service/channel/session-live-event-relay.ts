@@ -1,17 +1,12 @@
 import { NativeSessionMap } from "@morty-build/client/native-session";
 import { encodeSessionWireEnvelope, type SessionWireEnvelope } from "@morty-build/client/protocol";
-import type { SessionStatusNotifications } from "../../infra/session-status-notifications.ts";
 import type { ChannelPeers } from "./channel-actor.ts";
 
 export class SessionLiveEventRelay {
-    readonly #computerId: string;
     readonly #peers: ChannelPeers;
-    readonly #notifications: SessionStatusNotifications | undefined;
 
-    constructor(computerId: string, peers: ChannelPeers, notifications?: SessionStatusNotifications) {
-        this.#computerId = computerId;
+    constructor(peers: ChannelPeers) {
         this.#peers = peers;
-        this.#notifications = notifications;
     }
 
     readonly receive = (envelope: SessionWireEnvelope): void => {
@@ -59,15 +54,6 @@ export class SessionLiveEventRelay {
             } catch {
                 viewer.socket.close(1013, "Session subscription backpressure");
             }
-        }
-        // Status notifications observe live events, including when no browsers are watching. A restated outcome is not
-        // a new fact, so it is never notified again.
-        const events = envelope.events.filter((event) => event.mortyMetadata?.restated !== true);
-        if (events.length > 0) {
-            this.#notifications?.publish(
-                { computerId: this.#computerId },
-                events.length === envelope.events.length ? envelope : { ...envelope, events },
-            );
         }
     };
 }

@@ -14,7 +14,8 @@
             "entry": ["*.e2e.test.ts", "release-acceptance.mjs"]
         },
         "packages/web": {
-            "entry": ["src/main.tsx", "tests/**/*.integration.test.tsx", "src/components/ui/*.tsx"]
+            "entry": ["src/main.tsx", "tests/**/*.integration.test.tsx"],
+            "includeEntryExports": true
         },
         "packages/worker": {
             "entry": ["src/index.ts", "src/schema/*/index.ts"]
@@ -25,10 +26,12 @@
                 "src/engine/acp/harness/claude/upstream/src/lib.ts",
                 "src/engine/acp/harness/pi/upstream/acp/agent.ts"
             ],
-            "ignoreDependencies": ["drizzle-kit"]
+            "ignoreDependencies": ["drizzle-kit"],
+            "includeEntryExports": true
         },
         "packages/client": {
-            "entry": ["tests/*-types.contract.ts"]
+            "entry": ["tests/*-types.contract.ts"],
+            "includeEntryExports": true
         },
         "packages/relay": {
             "entry": ["src/schema/**/*.ts"],
@@ -39,6 +42,12 @@
         },
         "packages/relay-test-support": {
             "entry": ["src/worker-entry.ts"]
+        },
+        "packages/local-state": {
+            "includeEntryExports": true
+        },
+        "packages/runtime-test-support": {
+            "includeEntryExports": true
         }
     },
     "ignoreBinaries": ["openssl"],

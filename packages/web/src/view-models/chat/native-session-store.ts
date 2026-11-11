@@ -1,4 +1,4 @@
-import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/channel";
+import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatRuntime, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";

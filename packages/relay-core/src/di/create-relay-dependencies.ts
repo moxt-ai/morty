@@ -1,4 +1,3 @@
-import { parseMortyApiPrefix } from "@morty-build/client/protocol";
 import type { ProjectAccessAuthorizer } from "../entity/authentication/project-authorization.ts";
 import type { ChannelGateway } from "../gateway/channel-gateway.ts";
 import type { MachineAccountDirectory } from "../infra/machine-account-directory.ts";
@@ -26,7 +25,6 @@ export interface RelayInfrastructure extends PairingInfrastructure {
         readonly runtimeOperations?: LocalSessionOperations;
         readonly nowEpochMilliseconds: () => number;
     };
-    readonly config: { readonly apiPrefix: string };
     readonly logger: {
         readonly error: Console["error"];
         readonly info: Console["info"];
@@ -39,7 +37,7 @@ function createPairings(cx: PairingInfrastructure) {
     return new PairingDirectoryService({
         gateways: { machineAccounts: cx.machineAccounts },
         storages: {
-            forProject: (project) => cx.stores.resolve(project.storagePlacement),
+            forProject: (project) => cx.stores.resolve(project.computerId),
             projectDirectory: cx.projects,
         },
         services: { identities, projectAuthentication: cx.authentication.projects },
@@ -48,7 +46,6 @@ function createPairings(cx: PairingInfrastructure) {
 
 function createHttpContext(infrastructure: RelayInfrastructure, pairings: PairingDirectoryService) {
     const cx = {
-        config: { apiPrefix: parseMortyApiPrefix(infrastructure.config.apiPrefix) },
         logger: infrastructure.logger,
         services: { pairings },
         gateways: {

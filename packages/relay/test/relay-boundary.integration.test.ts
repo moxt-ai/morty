@@ -23,7 +23,6 @@ import {
     encodeSessionHistoryPageLoaded,
     encodeSessionInfoUpdatedEvent,
     encodeSessionOperationFailedEvent,
-    encodeSessionPreviewHistoryPageLoaded,
     encodeSessionPromptAcceptedEvent,
     encodeSessionPromptCommand,
     encodeSessionRenamedEvent,
@@ -790,83 +789,6 @@ describe.sequential("Relay Session-only boundary", () => {
             await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
             // A delayed result after the caller has finished must not disconnect the Runtime.
             daemon.send(historyPage);
-            const previewHistoryResponse = worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?directory=root&eventLimit=50`,
-                    { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
-                ),
-                environment,
-            );
-            const previewHistoryLoad = decodeServiceToDaemonMessage(await daemonMessages.next());
-            if (previewHistoryLoad.kind !== "session.preview-history.page.load") {
-                throw new Error("Expected a native Session preview history request");
-            }
-
-            const previewHistoryPage = encodeSessionPreviewHistoryPageLoaded({
-                events: {
-                    events: {
-                        sessionGenerationId: "native-session-generation-1",
-                        events: [rawEvent],
-                        nextCursor: null,
-                        tailCursor: rawEvent.eventId,
-                        throughPosition: "1",
-                        truncated: false,
-                        version: 2,
-                    },
-                    queuedPromptRequests: [],
-                },
-                kind: "session.preview-history.page.loaded",
-                requestId: previewHistoryLoad.requestId,
-                target: nativeTarget(sessionId),
-            });
-            daemon.send(previewHistoryPage);
-            expect(await responseJson(await previewHistoryResponse, 200)).toEqual({
-                events: {
-                    sessionGenerationId: "native-session-generation-1",
-                    events: [historicalEvent],
-                    nextCursor: null,
-                    tailCursor: rawEvent.eventId,
-                    throughPosition: "1",
-                    truncated: false,
-                    version: 2,
-                },
-                queuedPromptRequests: [],
-            });
-            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            // A delayed result after the caller has finished must not disconnect the Runtime.
-            daemon.send(previewHistoryPage);
-            const failedPreviewHistoryResponse = worker.fetch(
-                new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/${sessionId}/native-events-preview?directory=root&eventLimit=50`,
-                    { headers: { authorization: `Bearer ${text(browserAccess, "credential")}` } },
-                ),
-                environment,
-            );
-            const failedPreviewHistoryLoad = decodeServiceToDaemonMessage(await daemonMessages.next());
-            if (failedPreviewHistoryLoad.kind !== "session.preview-history.page.load") {
-                throw new Error("Expected a native Session preview history request");
-            }
-            daemon.send(
-                encodeSessionOperationFailedEvent({
-                    code: "native_history_unavailable",
-                    kind: "session.operation.failed",
-                    message: "The Codex thread is not loaded",
-                    requestId: failedPreviewHistoryLoad.requestId,
-                    target: nativeTarget(sessionId),
-                }),
-            );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
-                code: "native_history_unavailable",
-                kind: "session.operation.failed",
-                message: "The Codex thread is not loaded",
-                requestId: failedPreviewHistoryLoad.requestId,
-            });
-            expect(await responseJson(await failedPreviewHistoryResponse, 503)).toEqual({
-                error: {
-                    code: "native_history_unavailable",
-                    message: "The Codex thread is not loaded",
-                },
-            });
             // A Runtime that closed the Session refuses to load its history. The refusal is a typed conflict, so a
             // client can offer to reopen the Session instead of retrying the load.
             const closedHistoryResponse = worker.fetch(
