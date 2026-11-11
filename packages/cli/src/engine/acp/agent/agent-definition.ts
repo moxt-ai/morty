@@ -1,12 +1,6 @@
 import type { SessionCapabilities } from "@morty-build/client/protocol";
 import type { ExecutableIdentity } from "../../util/process/executable.ts";
 import { readExecutableIdentity } from "../../util/process/local-executable.ts";
-import { AcpExecutionError } from "../acp-error.ts";
-import type {
-    AgentConnection,
-    AgentConnectionFactory,
-    AgentConnectionOptions,
-} from "../connection/agent-connection.ts";
 import { unsupportedSessionCapabilities } from "../protocol/session-capabilities.ts";
 
 /** A verified local Agent. Its adapter owns how connections are established. */
@@ -20,13 +14,11 @@ export class AcpAgentDefinition {
     readonly harness: string;
     readonly label: string;
     readonly runtimeExecutables: readonly ExecutableIdentity[];
-    readonly #connectionFactory: AgentConnectionFactory | null;
 
     constructor(
         harness: string,
         label: string,
         command: string,
-        createConnection: AgentConnectionFactory | null,
         environment: Readonly<Record<string, string>> = {},
         agentVersion = "",
         agentIdentity: ExecutableIdentity = readExecutableIdentity(command),
@@ -43,22 +35,13 @@ export class AcpAgentDefinition {
         this.harness = harness;
         this.label = label;
         this.runtimeExecutables = Object.freeze([...new Set([agentIdentity, ...runtimeExecutables])]);
-        this.#connectionFactory = createConnection;
     }
-
-    readonly createConnection = (options: AgentConnectionOptions): AgentConnection => {
-        if (this.#connectionFactory === null) {
-            throw new AcpExecutionError("This Agent uses its native harness", {}, "acp_connection_unsupported");
-        }
-        return this.#connectionFactory({ ...options, command: this.command, environment: this.environment });
-    };
 
     readonly withEnvironment = (environment: Readonly<Record<string, string>>): AcpAgentDefinition =>
         new AcpAgentDefinition(
             this.harness,
             this.label,
             this.command,
-            this.#connectionFactory,
             environment,
             this.agentVersion,
             this.agentIdentity,

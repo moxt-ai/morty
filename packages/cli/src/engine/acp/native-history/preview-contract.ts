@@ -1,13 +1,10 @@
 import type {
     AgentModelEffort,
-    NativeSessionTarget,
     PromptMetadata,
     PromptUsage,
     SessionCapabilities,
     SessionConfigOption,
     SessionEvent,
-    SessionEventPayload,
-    SessionLiveEvent,
 } from "@morty-build/client/protocol";
 import type { AgentProcessPool } from "../../session/process/agent-process-pool.ts";
 import type { NativeSessionSubscriber } from "../adapter/native-session-event.ts";
@@ -16,7 +13,6 @@ import type { PromptContent } from "../client/prompt-content.ts";
 import type { AcpContentExternalizer, ExternalizeSessionUpdate } from "../content/content-externalizer.ts";
 import type { NativeSessionInfo, NativeSessionPage } from "../protocol/native-session.ts";
 import type { SessionConfigurationSelection } from "../protocol/session-configuration.ts";
-import type { ProjectedToolCall } from "../tool-call-projection.ts";
 
 /** One page of a saved native session's events. */
 export interface SessionEventPage {
@@ -25,27 +21,6 @@ export interface SessionEventPage {
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
     readonly truncated: boolean;
-}
-
-/** What the session's event store offers an adapter materializing projected history. */
-export interface SessionEventStore {
-    readonly append: (sessionTarget: NativeSessionTarget, event: SessionEventPayload) => SessionLiveEvent;
-    readonly close: () => void;
-    /**
-     * The projected tool call announced with this identifier in its current
-     * merged form, or `undefined` when no such announcement is recorded.
-     */
-    readonly getToolCall: (sessionTarget: NativeSessionTarget, toolCallId: string) => ProjectedToolCall | undefined;
-    /** Records projected events without publishing them live. */
-    readonly materialize: (
-        sessionTarget: NativeSessionTarget,
-        sessionGenerationId: string,
-        events: readonly SessionEventPayload[],
-    ) => void;
-    /** Reads one page of recorded events. */
-    readonly page: (sessionTarget: NativeSessionTarget, eventLimit: number, cursor: string | null) => SessionEventPage;
-    readonly remove: (sessionTarget: NativeSessionTarget) => void;
-    readonly reset: (sessionTarget: NativeSessionTarget) => void;
 }
 
 /** What a caller wants to preview from a saved native session. */

@@ -6,7 +6,6 @@ export interface DurationMetric {
 export interface OperationMetrics {
     readonly measure: <T>(name: string, operation: () => Promise<T>) => Promise<T>;
     readonly measureSync: <T>(name: string, operation: () => T) => T;
-    readonly snapshot: () => readonly DurationMetric[];
 }
 
 export class AccumulatingOperationMetrics implements OperationMetrics {
@@ -46,5 +45,4 @@ export class AccumulatingOperationMetrics implements OperationMetrics {
 export const unmeasuredOperationMetrics: OperationMetrics = Object.freeze({
     measure: async <T>(_name: string, operation: () => Promise<T>): Promise<T> => await operation(),
     measureSync: <T>(_name: string, operation: () => T): T => operation(),
-    snapshot: (): readonly DurationMetric[] => Object.freeze([]),
 });

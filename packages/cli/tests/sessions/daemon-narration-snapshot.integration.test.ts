@@ -18,10 +18,10 @@ import {
 } from "@morty-build/client/protocol";
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -144,10 +144,7 @@ describe("daemon narration delivery", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_beta/daemon`);
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -158,6 +155,9 @@ describe("daemon narration delivery", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
         const config = createRuntimeConfig(

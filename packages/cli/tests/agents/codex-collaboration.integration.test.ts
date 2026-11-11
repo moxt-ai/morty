@@ -91,7 +91,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/real-codex-collaboration/daemon`,
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, null, codex.environment);
+    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, codex.environment);
     const config = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),

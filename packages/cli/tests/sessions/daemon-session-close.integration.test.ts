@@ -23,7 +23,7 @@ import {
 import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { expect, test, vi } from "vitest";
 import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycle.ts";
-import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
+import type { AgentConnectionFactory } from "../support/agents/agent-connection.ts";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
 import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";

@@ -11,7 +11,6 @@ import {
 import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
 import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
-import type { AcpClientHandler } from "../../../src/engine/acp/connection/create-client.ts";
 import { normalizeAcpCapabilities } from "../../../src/engine/acp/protocol/session-capabilities.ts";
 import { AgentProbeError } from "../../../src/engine/agent/discovery/agent-probe-error.ts";
 import {
@@ -19,6 +18,9 @@ import {
     filterEnvironment,
 } from "../../../src/engine/agent/discovery/agent-readiness.ts";
 import { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
+import type { AcpClientHandler } from "../acp/create-client.ts";
+import type { AgentConnectionFactory } from "./agent-connection.ts";
+import { connectControlledAgent, registerControlledConnection } from "./controlled-agent-definition.ts";
 
 class DiscoveryAcpHandler implements AcpClientHandler {
     readonly onElicitation = (
@@ -61,12 +63,10 @@ async function probeAcpReadiness(
         abort();
     }
     try {
-        const runtime = agent
-            .withEnvironment({ ...filterEnvironment(environment), ...agent.environment })
-            .createConnection({
-                cwd: defaultWorkspace,
-                client: new DiscoveryAcpHandler(),
-            });
+        const runtime = connectControlledAgent(
+            agent.withEnvironment({ ...filterEnvironment(environment), ...agent.environment }),
+            { cwd: defaultWorkspace, client: new DiscoveryAcpHandler() },
+        );
         try {
             return await runtime.race(
                 (async () => {
@@ -117,6 +117,10 @@ async function probeAcpReadiness(
 }
 
 export abstract class ControlledReadinessSpecification extends LocalAgentSpecification {
-    readonly probeReadiness = (params: AgentReadinessProbeParams): Promise<SessionCapabilities> =>
-        probeAcpReadiness(this, params.agent, params.environment, params.defaultWorkspace, params.signal);
+    abstract readonly createConnection: AgentConnectionFactory;
+
+    readonly probeReadiness = (params: AgentReadinessProbeParams): Promise<SessionCapabilities> => {
+        registerControlledConnection(params.agent, this.createConnection);
+        return probeAcpReadiness(this, params.agent, params.environment, params.defaultWorkspace, params.signal);
+    };
 }

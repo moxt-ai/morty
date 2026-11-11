@@ -7,9 +7,7 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
 import type { AgentTermination } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
-import type { AgentConnection, AgentConnectionOptions } from "../../../src/engine/acp/connection/agent-connection.ts";
 import { raceAgentOperation } from "../../../src/engine/acp/connection/agent-operation.ts";
-import { createAcpClient } from "../../../src/engine/acp/connection/create-client.ts";
 import type { IdentifiedSessionNotification } from "../../../src/engine/acp/connection/session-notification.ts";
 import {
     captureProcessTree,
@@ -18,7 +16,9 @@ import {
     spawnProcess,
     stopProcessTree,
 } from "../../../src/engine/util/process/executable.ts";
+import { createAcpClient } from "../acp/create-client.ts";
 import { createWritableAcpStream, readableAcpStream } from "./acp-stream.ts";
+import type { AgentConnection, AgentConnectionOptions } from "./agent-connection.ts";
 
 interface ControlledAcpLaunch {
     readonly harness: string;
@@ -129,7 +129,6 @@ export class ControlledAcpConnection implements AgentConnection {
     }
 
     readonly initialize = async (signal: AbortSignal): Promise<void> => signal.throwIfAborted();
-    readonly agentSettingsModelEffort = () => null;
 
     readonly closeProcess = (): Promise<void> => {
         this.#closePromise ??= (async () => {

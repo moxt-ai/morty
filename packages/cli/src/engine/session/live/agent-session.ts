@@ -50,7 +50,7 @@ import type { SessionEventPage } from "../history/session-event-store.ts";
 import { HistoryReplayCapture } from "../history/session-history.ts";
 import { SessionInteractions } from "../interaction/session-interactions.ts";
 import { waitForSharedOperation } from "../manager/operation-drain.ts";
-import { FoundStoredSession, MissingStoredSession, type SessionStore, StoredSession } from "../record/session-store.ts";
+import { type SessionStore, StoredSession } from "../record/session-store.ts";
 import type { SettledTurn } from "../turn/execution-receipts.ts";
 import { configurationRevision } from "./configuration-revision.ts";
 import { SessionConfigurations } from "./session-configurations.ts";
@@ -361,8 +361,8 @@ export class AgentSession {
                 runtime.#adoptNativeSession(opened.sessionId);
                 runtime.#applySessionOpened(opened);
                 runtime.#sessionTitle = origin.title;
-                if (source instanceof FoundStoredSession) {
-                    await runtime.#restoreStoredConfigurations(source.session, options.signal, "fork");
+                if (source !== undefined) {
+                    await runtime.#restoreStoredConfigurations(source, options.signal, "fork");
                 }
                 options.signal.throwIfAborted();
                 runtime.writeStoredSession(new Date().toISOString());
@@ -579,7 +579,7 @@ export class AgentSession {
     ): Promise<void> => {
         const conversation = this.#metrics.measureSync("session-state-read", () =>
             restoredConversation(
-                origin === undefined ? this.#store.read(this.target) : new MissingStoredSession(),
+                origin === undefined ? this.#store.read(this.target) : undefined,
                 this.target,
                 this.#cwd,
                 origin,
@@ -1013,7 +1013,7 @@ export class AgentSession {
         switch (identity.kind) {
             case "awaiting": {
                 const target = { harness: this.#harness, sessionId };
-                if (!isIdentifier(sessionId) || !(this.#store.read(target) instanceof MissingStoredSession)) {
+                if (!isIdentifier(sessionId) || this.#store.read(target) !== undefined) {
                     throw new AcpExecutionError(
                         "The Agent returned an invalid new Session ID",
                         {},

@@ -7,7 +7,7 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import type { AgentTermination } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
-import type { AgentConnectionFactory } from "../../../src/engine/acp/connection/agent-connection.ts";
+import type { AgentConnectionFactory } from "./agent-connection.ts";
 
 export interface AgentOperation {
     readonly endpoint: number;

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
+import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { MemorySessionStore, SqliteSessionStore } from "../../src/engine/session/record/session-store.ts";
@@ -11,6 +11,7 @@ import { openAcpSessionDatabase } from "../../src/engine/storage/sqlite/local-da
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { fakeAgentPath } from "./acp-feature-fixture.ts";
@@ -20,10 +21,7 @@ async function controlledAgent(
     additionalArguments: readonly string[] = [],
 ): Promise<{ agent: AcpAgentDefinition; stateDirectory: string }> {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-config-reads-"));
-    const agent = new AcpAgentDefinition(
-        harness,
-        "Controlled ACP",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -34,6 +32,9 @@ async function controlledAgent(
                 },
                 options,
             ),
+        harness,
+        "Controlled ACP",
+        process.execPath,
         {
             MORTY_FAKE_ACP_STATE_DIRECTORY: stateDirectory,
         },

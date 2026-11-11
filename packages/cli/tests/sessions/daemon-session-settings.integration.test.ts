@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     AGENT_SETTINGS_DISCOVER_KIND,
@@ -27,10 +26,10 @@ import {
 } from "@morty-build/client/protocol";
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -267,10 +266,7 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -281,6 +277,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
         const config = createRuntimeConfig(
@@ -369,10 +368,7 @@ describe("daemon session configuration boundary", () => {
         // The Agent withholds reasoning effort for its default model, so a
         // session that never switches models must still learn that model's
         // capability instead of offering no effort control at all.
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -383,6 +379,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
@@ -480,10 +479,7 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -494,6 +490,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
@@ -595,10 +594,7 @@ describe("daemon session configuration boundary", () => {
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
         // A Pi user with one configured non-reasoning model: the model cannot be
         // switched and no effort is offered, so discovery must still succeed.
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -615,6 +611,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
@@ -705,10 +704,7 @@ describe("daemon session configuration boundary", () => {
         await listen(relay);
 
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -719,6 +715,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
@@ -814,10 +813,7 @@ describe("daemon session configuration boundary", () => {
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/channel_alpha/daemon`);
         // The Agent reveals reasoning effort only for test-large, so the settings
         // snapshot that names it cannot match a Session parked on test-small.
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -833,6 +829,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
         const config = createRuntimeConfig(
@@ -942,10 +941,7 @@ describe("daemon session configuration boundary", () => {
         // This Agent exposes reasoning effort for every model, so the live Session holds the
         // effort the running Turn configured and a steering Turn naming another one drifts
         // from it instead of naming a setting the Session does not expose at all.
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -956,6 +952,9 @@ describe("daemon session configuration boundary", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
         const config = createRuntimeConfig(

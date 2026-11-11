@@ -24,11 +24,11 @@ import {
 } from "@morty-build/client/protocol";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { type RuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { fakeAgentHarness } from "../support/agent-harness.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -379,15 +379,15 @@ await import(${JSON.stringify(agentPeer)});
     );
     const external = fakeAgentHarness({ harness: "codex", label: "Controlled ACP" }, harnessState);
     const createAgent = (harness: string) =>
-        new AcpAgentDefinition(
-            harness,
-            external.label,
-            process.execPath,
+        createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     { harness, adapterPath: process.execPath, arguments: [launcher], environment: options.environment },
                     options,
                 ),
+            harness,
+            external.label,
+            process.execPath,
             external.environment,
             external.agentVersion,
             undefined,

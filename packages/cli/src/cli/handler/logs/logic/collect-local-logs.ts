@@ -22,13 +22,12 @@ export interface CollectedLocalLogs {
 }
 
 /**
- * Read the bounded local diagnostic logs of every installation under the state
- * root. Works with the daemon stopped: a report about a daemon that will not
- * start, or a worker that died silently, has to be collectable from disk alone.
+ * Read bounded diagnostics from this state root's private machine directory.
+ * Works with the daemon stopped: a report about a daemon that will not start,
+ * or a worker that died silently, has to be collectable from disk alone.
  *
- * Covers both log owners: the Computer's own `daemon.log` under the version-scoped
- * CLI installation, and the manager-written worker lifecycle and unhandled
- * rejection logs under the control installation.
+ * Includes the Computer's `daemon.log` and the manager-written worker lifecycle
+ * and unhandled rejection logs in that same directory.
  *
  * This is a read-only forensic path, so it never repairs anything: permissions
  * are checked without `chmod`, and anything that cannot be read is reported as

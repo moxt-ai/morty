@@ -28,7 +28,6 @@ import {
 } from "@morty-build/client/protocol";
 import { listen, port as readPort, sendText as writeServerTextFrame } from "@morty-build/relay-test-support/websocket";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { ComputerRelayRevokedError } from "../../src/engine/runtime/relay/computer-revocation.ts";
@@ -37,6 +36,7 @@ import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { type ScheduledTask, systemTimer, type Timer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -972,10 +972,7 @@ describe("daemon relay connection liveness", () => {
             },
             new RuntimeAgentDependencies(
                 [
-                    new AcpAgentDefinition(
-                        "codex",
-                        "Codex",
-                        process.execPath,
+                    createControlledAgent(
                         (options) =>
                             new ControlledAcpConnection(
                                 {
@@ -986,6 +983,9 @@ describe("daemon relay connection liveness", () => {
                                 },
                                 options,
                             ),
+                        "codex",
+                        "Codex",
+                        process.execPath,
                     ),
                 ],
                 acpAdapters,

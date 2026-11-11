@@ -10,7 +10,6 @@ import { LocalAgentSpecification } from "../agent-specification.ts";
 export class CodexAgentSpecification extends LocalAgentSpecification {
     override readonly versionProbeTimeoutMilliseconds = 10_000;
     readonly agentExecutable = "codex";
-    readonly createConnection = null;
     readonly harness = "codex";
     readonly label = "Codex";
     override readonly minimumSupportedAgentVersion = "0.153.0";

@@ -17,10 +17,10 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycle.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -69,50 +69,55 @@ test("Given a completed foreground turn, When its Agent requests background perm
     let requestPermission: () => Promise<acp.RequestPermissionResponse> = async () => {
         throw new Error("The Agent has not completed a foreground prompt");
     };
-    const agent = new AcpAgentDefinition("claude", "Controlled background Agent", process.execPath, (options) => {
-        const terminated = Promise.withResolvers<AgentTermination>();
-        let connection: acp.AgentConnection | null = null;
-        const app = acp
-            .agent({ name: "background-interaction" })
-            .onConnect((value) => {
-                connection = value;
-            })
-            .onRequest(acp.methods.agent.initialize, () => ({
-                agentCapabilities: { loadSession: false, sessionCapabilities: { close: {}, resume: {} } },
-                authMethods: [],
-                protocolVersion: acp.PROTOCOL_VERSION,
-            }))
-            .onRequest(acp.methods.agent.session.new, () => ({ sessionId: crypto.randomUUID() }))
-            .onRequest(acp.methods.agent.session.resume, () => ({}))
-            .onRequest(acp.methods.agent.session.close, () => ({}))
-            .onRequest(acp.methods.agent.session.prompt, (context) => {
-                requestPermission = () =>
-                    context.client.request(acp.methods.client.session.requestPermission, {
-                        sessionId: context.params.sessionId,
-                        options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" }],
-                        toolCall: {
-                            toolCallId: "background-tool",
-                            kind: "execute",
-                            title: "Background verification",
-                            status: "pending",
-                            rawInput: { command: "echo verified" },
-                        },
-                    });
-                return { stopReason: "end_turn" };
-            });
-        return new ControlledEndpointConnection(
-            {
-                app: () => app,
-                initialize: async (signal) => signal.throwIfAborted(),
-                terminated: terminated.promise,
-                close: async () => {
-                    connection?.close();
-                    terminated.resolve({ kind: "closed" });
+    const agent = createControlledAgent(
+        (options) => {
+            const terminated = Promise.withResolvers<AgentTermination>();
+            let connection: acp.AgentConnection | null = null;
+            const app = acp
+                .agent({ name: "background-interaction" })
+                .onConnect((value) => {
+                    connection = value;
+                })
+                .onRequest(acp.methods.agent.initialize, () => ({
+                    agentCapabilities: { loadSession: false, sessionCapabilities: { close: {}, resume: {} } },
+                    authMethods: [],
+                    protocolVersion: acp.PROTOCOL_VERSION,
+                }))
+                .onRequest(acp.methods.agent.session.new, () => ({ sessionId: crypto.randomUUID() }))
+                .onRequest(acp.methods.agent.session.resume, () => ({}))
+                .onRequest(acp.methods.agent.session.close, () => ({}))
+                .onRequest(acp.methods.agent.session.prompt, (context) => {
+                    requestPermission = () =>
+                        context.client.request(acp.methods.client.session.requestPermission, {
+                            sessionId: context.params.sessionId,
+                            options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" }],
+                            toolCall: {
+                                toolCallId: "background-tool",
+                                kind: "execute",
+                                title: "Background verification",
+                                status: "pending",
+                                rawInput: { command: "echo verified" },
+                            },
+                        });
+                    return { stopReason: "end_turn" };
+                });
+            return new ControlledEndpointConnection(
+                {
+                    app: () => app,
+                    initialize: async (signal) => signal.throwIfAborted(),
+                    terminated: terminated.promise,
+                    close: async () => {
+                        connection?.close();
+                        terminated.resolve({ kind: "closed" });
+                    },
                 },
-            },
-            options.client,
-        );
-    });
+                options.client,
+            );
+        },
+        "claude",
+        "Controlled background Agent",
+        process.execPath,
+    );
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/background/daemon`);
     const config = createControlledRuntimeConfig(
