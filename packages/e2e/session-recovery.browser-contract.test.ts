@@ -172,6 +172,7 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     await expect(composer).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Keep this draft across a healthy resume.");
+    expect(connections).toBe(before);
     // Complete a user-visible round trip before advancing the transport's virtual deadline.
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
@@ -180,7 +181,8 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
-    expect(connections).toBe(before);
+    // The new submission owns one delivery connection; foreground recovery adds none.
+    expect(connections).toBe(before + 1);
 });
 
 test("Given an interrupted browser connection, when a task completes before foreground recovery, then the interruption stays neutral and its result is restored", async ({
@@ -474,9 +476,11 @@ test("Given an active turn on mobile, when the browser goes offline and the user
 }) => {
     const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    await runtime.openPairedChat();
-    await conversationLoaded(page);
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
+    await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("wait for steering");
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.getByRole("status", { name: "Agent is working" })).toBeVisible();
@@ -491,6 +495,7 @@ test("Given an active turn on mobile, when the browser goes offline and the user
     await page.context().setOffline(false);
     await page.clock.runFor(5000);
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     await composer.press("Enter");
     await expect(page.getByTestId(dataTestId.queuedMessage)).toContainText("Keep this follow-up");
 });

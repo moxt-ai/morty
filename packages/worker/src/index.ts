@@ -1,8 +1,8 @@
-import { fetchPublicApplication } from "./application.ts";
-import { logger } from "./composition/application-context.ts";
-import { withSetupFunnelEvents } from "./composition/setup-funnel.ts";
-import type { CloudBindings } from "./infra/cloud-bindings.ts";
-import { withInstructionDocumentCache } from "./middleware/instruction-document-cache.ts";
+import type { CloudBindings } from "./contracts/cloud-bindings.ts";
+import { logger } from "./infra/logger.ts";
+import { fetchPublicApplication } from "./worker/application.ts";
+import { withSetupFunnelEvents } from "./worker/composition/setup-funnel.ts";
+import { withInstructionDocumentCache } from "./worker/middleware/instruction-document-cache.ts";
 
 const fetch = withSetupFunnelEvents(withInstructionDocumentCache(fetchPublicApplication), logger);
 
@@ -10,4 +10,4 @@ export default {
     fetch,
 } satisfies ExportedHandler<CloudBindings, unknown>;
 
-export { ComputerRelay } from "../../relay/src/durable-object/computer-relay.ts";
+export { ComputerRelay } from "./computer-relay/computer-relay.ts";

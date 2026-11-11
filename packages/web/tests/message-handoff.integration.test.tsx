@@ -151,10 +151,11 @@ test("Given an existing Session and a held submission, When I send a message and
     await app.waitForView(() => getByRole(document.body, "button", { name: "Send message" }));
     const composer = app.elementByTestId(dataTestId.messageComposer);
     network.holdNextTurn();
+    const arriving = network.nextSubmission(AbortSignal.timeout(15_000));
     await sendPrompt(app, composer, "Original held message");
     expect(composer).toHaveProperty("value", "");
     expect(composer).toHaveProperty("disabled", false);
-    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("Original held message"));
+    expect(await arriving).toContain("Original held message");
     const submissions = network.submissions.length;
     await app.user.paste("Next text stays mine");
     await app.user.upload(

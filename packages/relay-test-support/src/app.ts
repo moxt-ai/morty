@@ -1,8 +1,8 @@
-import { rethrowHonoError } from "@morty-build/relay";
 import { Hono } from "hono";
-import type { RelayAuthenticationConfiguration } from "../../relay/src/components/management/entity/computer-management.ts";
-import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
+import type { RelayAuthenticationConfiguration } from "../../worker/src/contracts/relay/computer-management.ts";
+import type { RelayBindings } from "../../worker/src/contracts/relay-bindings.ts";
 import application from "../../worker/src/index.ts";
+import { rethrowHonoError } from "../../worker/src/middleware/error-middleware.ts";
 
 /** All protocol tests enter the single production application with real Cloudflare bindings. */
 export function createTestMortyRelayApp(options: RelayAuthenticationConfiguration): Hono<{ Bindings: RelayBindings }> {

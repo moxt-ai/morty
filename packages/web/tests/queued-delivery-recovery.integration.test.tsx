@@ -19,7 +19,7 @@ for (const interruption of ["before-acceptance", "after-acceptance"] as const) {
             throw new Error("Expected the controllable network and real Computer");
         }
         await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
-        await app.queryElementByTestId(dataTestId.sessionStatus);
+        await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
         await app.user.upload(
             getByLabelText(document.body, "Choose attachments"),
             new File(["Keep this queued attachment"], "pending.json", { type: "text/plain" }),

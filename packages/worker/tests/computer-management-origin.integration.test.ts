@@ -1,7 +1,7 @@
 import { createResponseLossProxy } from "@morty-build/relay-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect, test } from "vitest";
-import worker from "../src/application.ts";
+import worker from "../src/worker/application.ts";
 import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
 test("Given a computer owner, When the owner opens management, Then they can pair a Computer for their account", async () => {

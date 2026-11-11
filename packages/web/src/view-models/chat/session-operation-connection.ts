@@ -1,4 +1,4 @@
-import type { MortyClient } from "@morty-build/client";
+import { type MortyClient, MortyConnectionError } from "@morty-build/client";
 import { connectionReadiness, type SessionConnection } from "./session-connection.ts";
 
 /**
@@ -24,9 +24,11 @@ export interface SessionConnectionFollower {
 /**
  * How the Session's operations reach the Computer, whichever pane follows the Session. An operation waits while no
  * following pane's connection is ready, so switching panes delays an operation instead of ending it. A request already
- * sent keeps the client it started with: closing a client ends only its live subscriptions.
+ * sent keeps the client it started with until the operation settles, even after its pane stops following it.
  */
 export interface SessionOperationConnection {
+    /** Ends viewing immediately and closes the transport once any operations using it settle. */
+    readonly release: (client: MortyClient) => void;
     /** Starts following the Session through `pane`, replacing any pane that followed it before. */
     readonly follow: (pane: SessionFollowingPane) => SessionConnectionFollower;
     /** The ready client, waiting until one is ready; rejects when the connection cannot carry operations. */
@@ -42,6 +44,10 @@ export interface SessionOperationConnection {
 }
 
 export function createSessionOperationConnection(): SessionOperationConnection {
+    type ClientUse =
+        | { readonly kind: "in-use"; readonly operations: number }
+        | { readonly kind: "retiring"; readonly operations: number };
+    const clients = new Map<MortyClient, ClientUse>();
     let following: SessionFollowingPane | null = null;
     const waiters = new Set<() => void>();
     const readyClient = async (
@@ -81,6 +87,15 @@ export function createSessionOperationConnection(): SessionOperationConnection {
         }
     };
     return {
+        release: (client) => {
+            client.events.close();
+            const use = clients.get(client);
+            if (use === undefined) {
+                client.close();
+            } else {
+                clients.set(client, { kind: "retiring", operations: use.operations });
+            }
+        },
         follow: (pane) => {
             following = pane;
             wakeAll();
@@ -100,6 +115,11 @@ export function createSessionOperationConnection(): SessionOperationConnection {
         ready: async (signal) => (await readyClient(signal)).client,
         send: async (request, signal) => {
             const { client, pane } = await readyClient(signal);
+            const use = clients.get(client);
+            if (use?.kind === "retiring") {
+                throw new MortyConnectionError("The Session connection is being released");
+            }
+            clients.set(client, { kind: "in-use", operations: (use?.operations ?? 0) + 1 });
             try {
                 return await request(client, signal);
             } catch (cause) {
@@ -107,6 +127,18 @@ export function createSessionOperationConnection(): SessionOperationConnection {
                     pane.failedThrough(client, cause);
                 }
                 throw cause;
+            } finally {
+                const current = clients.get(client);
+                if (current !== undefined) {
+                    if (current.operations === 1) {
+                        clients.delete(client);
+                        if (current.kind === "retiring") {
+                            client.close();
+                        }
+                    } else {
+                        clients.set(client, { ...current, operations: current.operations - 1 });
+                    }
+                }
             }
         },
     };

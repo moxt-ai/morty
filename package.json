@@ -39,7 +39,7 @@
         "db:codegen": "node scripts/generate-sql-modules.ts",
         "build:cli": "pnpm --filter @morty-build/cli build",
         "test:runtime": "pnpm --filter @morty-build/cli test:controlled",
-        "test:relay": "pnpm --filter @morty-build/relay test:integration",
+        "test:relay": "pnpm db:codegen && pnpm --filter @morty-build/worker test:relay",
         "check:architecture": "node scripts/check-architecture.ts",
         "test:client": "vitest run packages/client/tests",
         "test:relay-support": "vitest run packages/relay-test-support/tests"

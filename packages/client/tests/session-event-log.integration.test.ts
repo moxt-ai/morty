@@ -1,7 +1,8 @@
 import { once } from "node:events";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer } from "node:http";
 import type { SessionEvent } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it } from "vitest";
+import { WebSocketServer } from "ws";
 import { MortyClient, MortyPageRequest } from "../src/index.ts";
 
 const recordedAt = "2026-10-07T00:00:00.000Z";
@@ -31,30 +32,47 @@ describe("Session Event Log V2 SDK", () => {
         servers.length = 0;
     });
 
-    it("Given a V2 event page, When a consumer lists events, Then raw pages cross the production HTTP boundary unchanged", async () => {
+    it("Given a V2 event page, When a consumer lists events with the default SDK, Then raw pages cross the WebSocket boundary unchanged", async () => {
         const sourceEvent = event("source-session", "source-event-1");
         const received: Array<{ readonly method: string; readonly path: string }> = [];
-        const server = createServer((request: IncomingMessage, response: ServerResponse) => {
-            const path = request.url ?? "";
-            received.push({ method: request.method ?? "", path });
-            if (path.includes("/events-v2")) {
-                response.setHeader("content-type", "application/json");
-                response.end(
+        const server = createServer();
+        const peer = new WebSocketServer({ server });
+        peer.on("connection", (socket) => {
+            socket.on("message", (data) => {
+                const request: unknown = JSON.parse(data.toString());
+                if (
+                    typeof request !== "object" ||
+                    request === null ||
+                    !("kind" in request) ||
+                    request.kind !== "http.request" ||
+                    !("path" in request) ||
+                    typeof request.path !== "string" ||
+                    !("method" in request) ||
+                    typeof request.method !== "string" ||
+                    !("requestId" in request)
+                ) {
+                    throw new Error("Expected a Session operation");
+                }
+                const path = request.path;
+                received.push({ method: request.method, path });
+                socket.send(
                     JSON.stringify({
-                        sessionGenerationId: "session-generation-1",
-                        events: [sourceEvent],
-                        nextCursor: null,
-                        tailCursor: sourceEvent.eventId,
-                        throughPosition: "1",
-                        truncated: false,
-                        version: 2,
+                        kind: "http.response",
+                        requestId: request.requestId,
+                        status: 200,
+                        headers: [],
+                        body: JSON.stringify({
+                            sessionGenerationId: "session-generation-1",
+                            events: [sourceEvent],
+                            nextCursor: null,
+                            tailCursor: sourceEvent.eventId,
+                            throughPosition: "1",
+                            truncated: false,
+                            version: 2,
+                        }),
                     }),
                 );
-            } else {
-                response.setHeader("content-type", "application/json");
-                response.statusCode = 404;
-                response.end(JSON.stringify({ error: { code: "not_found", message: "Not found" } }));
-            }
+            });
         });
         servers.push(server);
         server.listen(0, "127.0.0.1");
@@ -87,6 +105,10 @@ describe("Session Event Log V2 SDK", () => {
             });
         } finally {
             client.close();
+            for (const socket of peer.clients) {
+                socket.terminate();
+            }
+            await new Promise<void>((resolve, reject) => peer.close((error) => (error ? reject(error) : resolve())));
         }
 
         expect(received).toEqual([

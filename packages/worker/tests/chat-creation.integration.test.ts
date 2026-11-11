@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
-import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
+import { afterEach, test as baseTest, beforeEach, expect, onTestFinished, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
-import worker, { fetchPublicApplication } from "../src/application.ts";
+import worker, { fetchPublicApplication } from "../src/worker/application.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const targetSchema = v.object({ harness: v.string(), sessionId: v.string() });
@@ -810,6 +810,7 @@ test("Given a chat opened with a Session credential, When the computer's owner r
         computerId: access.computerId,
         credentialProvider: { credential: async () => access.credential },
     });
+    onTestFinished(() => client.close());
     const readHistory = () =>
         client.events.list(access.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
@@ -872,12 +873,14 @@ test("Given two browsers joined through links, When one disconnects the other br
         v.object({ endpoint: v.string(), computerId: v.string(), target: targetSchema, credential: v.string() }),
         await opened.json(),
     );
+    const client = new MortyClient({
+        endpoint: window.endpoint,
+        computerId: window.computerId,
+        credentialProvider: { credential: async () => window.credential },
+    });
+    onTestFinished(() => client.close());
     const readHistory = () =>
-        new MortyClient({
-            endpoint: window.endpoint,
-            computerId: window.computerId,
-            credentialProvider: { credential: async () => window.credential },
-        }).events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
+        client.events.list(window.target, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
     const ended = await asBrowser(owner, `computers/${fixture.computerId}/identity/v1/other-browser-access`, "DELETE");

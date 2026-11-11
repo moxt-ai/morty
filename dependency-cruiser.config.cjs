@@ -5,19 +5,17 @@ module.exports = {
             severity: "error",
             from: {
                 path: [
-                    "^packages/worker/src/(schema|storage|entity|infra)/",
-                    "^packages/worker/src/components/[^/]+/(schema|storage|entity|infra)/",
-                    "^packages/relay/src/(schema|storage|entity|infra)/",
-                    "^packages/relay/src/components/[^/]+/(schema|storage|entity|infra)/",
+                    "^packages/worker/src/(?:(?:worker|computer-relay)/)?(schema|storage|entity|infra)/",
+                    "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/(schema|storage|entity|infra)/",
+                    "^packages/worker/src/directory/storage/",
                 ],
             },
             to: {
                 reachable: true,
                 path: [
-                    "^packages/worker/src/(service|http|composition|gateway|do)/",
-                    "^packages/worker/src/components/[^/]+/(service|http|composition|gateway|do)/",
-                    "^packages/relay/src/(service|http|composition|gateway|durable-object|middleware)/",
-                    "^packages/relay/src/components/[^/]+/(service|http|composition|gateway)/",
+                    "^packages/worker/src/(?:(?:worker|computer-relay)/)?(service|http|composition|gateway|do)/",
+                    "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/(service|http|composition|gateway|do)/",
+                    "^packages/worker/src/directory/service/",
                 ],
             },
         },
@@ -27,17 +25,37 @@ module.exports = {
             comment:
                 "Routes translate requests and call services; persistence belongs to storage behind a service (http -> service -> storage).",
             from: {
-                path: ["^packages/(worker|relay)/src/components/[^/]+/http/", "^packages/(worker|relay)/src/http/"],
+                path: [
+                    "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/http/",
+                    "^packages/worker/src/(?:worker|computer-relay)/http/",
+                ],
             },
             to: {
                 path: [
-                    "^packages/worker/src/storage/",
-                    "^packages/worker/src/components/[^/]+/storage/",
-                    "^packages/relay/src/storage/",
-                    "^packages/relay/src/components/[^/]+/storage/",
+                    "^packages/worker/src/(?:worker|computer-relay)/storage/",
+                    "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/storage/",
+                    "^packages/worker/src/directory/storage/",
                 ],
                 dependencyTypesNot: ["type-only"],
             },
+        },
+        {
+            name: "worker-does-not-import-computer-relay",
+            severity: "error",
+            from: { path: "^packages/worker/src/worker/" },
+            to: { path: "^packages/worker/src/computer-relay/" },
+        },
+        {
+            name: "computer-relay-does-not-import-worker-implementation",
+            severity: "error",
+            from: { path: "^packages/worker/src/computer-relay/" },
+            to: { path: "^packages/worker/src/worker/" },
+        },
+        {
+            name: "shared-boundaries-do-not-import-service-implementations",
+            severity: "error",
+            from: { path: "^packages/worker/src/(contracts|gateway)/" },
+            to: { path: "^packages/worker/src/(worker|computer-relay)/" },
         },
         {
             name: "browser-does-not-import-worker-implementation",

@@ -55,7 +55,7 @@ def main():
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_ALLOWED_ORIGINS': json.dumps([spec['morty_origin']])}
-    morty['d1_databases'] = [{'binding': 'RELAY_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
+    morty['d1_databases'] = [{'binding': 'RELAY_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/worker/migrations/d1')}]
     morty['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_RELEASE_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
@@ -102,7 +102,7 @@ def main():
     portable.update(no_bundle=True, find_additional_modules=True)
     portable['d1_databases'][0]['migrations_dir'] = '../d1-migrations'
     write(morty_dir / 'wrangler.json', portable)
-    shutil.copytree(ROOT / 'packages/relay/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
+    shutil.copytree(ROOT / 'packages/worker/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
     assert portable['account_id'] == ACCOUNT and portable['name'] == spec['morty'] and not portable.get('routes')
     configs = {'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
     # Artifact files contain public configuration and compiled code only; secrets are supplied at deploy time.

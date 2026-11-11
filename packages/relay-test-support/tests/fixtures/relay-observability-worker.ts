@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
-import { errorMiddleware, rethrowHonoError } from "../../../relay/src/middleware/error-middleware.ts";
-import type { ConfiguredRelayBindings } from "../../../worker/src/composition/relay-bindings.ts";
-import { ComputerRelay as RelayComputerRelay } from "../../../worker/src/do/computer-relay.ts";
+import { ComputerRelay as RelayComputerRelay } from "../../../worker/src/computer-relay/computer-relay.ts";
+import type { ConfiguredRelayBindings } from "../../../worker/src/contracts/relay-bindings.ts";
+import { errorMiddleware, rethrowHonoError } from "../../../worker/src/middleware/error-middleware.ts";
 import relay from "../../src/worker-entry.ts";
 
 function failure(kind: string): unknown {
@@ -54,7 +54,7 @@ export class ComputerRelay extends RelayComputerRelay {
     override async fetch(request: Request): Promise<Response> {
         if (
             request.headers.get("x-test-computer-failure") === "1" &&
-            new URL(request.url).pathname.endsWith("/daemon")
+            new URL(request.url).pathname === "/morty/api/v1/computers/connect"
         ) {
             throw Object.assign(new Error("Computer DO overloaded"), { overloaded: true });
         }
@@ -70,23 +70,19 @@ export class ComputerRelay extends RelayComputerRelay {
     }
 }
 
-function projectOverload(): Error {
-    return Object.assign(new Error("Project DO overloaded"), { overloaded: true });
+function computerOverload(): Error {
+    return Object.assign(new Error("Computer DO overloaded"), { overloaded: true });
 }
 
-export class UnavailableProject extends DurableObject {
+export class UnavailableComputer extends DurableObject {
     override fetch(): Response {
-        throw projectOverload();
-    }
-
-    recordAudit(): never {
-        throw projectOverload();
+        throw computerOverload();
     }
 }
 
 interface TestBindings extends ConfiguredRelayBindings {
     // Stands in for COMPUTER_RELAY: every request and operation sent to it fails.
-    readonly UNAVAILABLE_PROJECT: DurableObjectNamespace<ComputerRelay>;
+    readonly UNAVAILABLE_COMPUTER: DurableObjectNamespace;
 }
 
 const application = new Hono<{ Bindings: TestBindings }>()
@@ -104,8 +100,8 @@ export default {
         if (new URL(request.url).pathname.startsWith("/morty/")) {
             return relay.fetch(
                 request,
-                request.headers.has("x-test-project-failure")
-                    ? { ...environment, COMPUTER_RELAY: environment.UNAVAILABLE_PROJECT }
+                request.headers.has("x-test-routing-failure")
+                    ? { ...environment, COMPUTER_RELAY: environment.UNAVAILABLE_COMPUTER }
                     : environment,
             );
         }

@@ -1,12 +1,5 @@
 import type { ForkMortyNativeSessionRequest, NativeSessionRequest } from "@morty-build/client";
-import {
-    HttpTransport,
-    MortyClient,
-    type MortyHttpTransport,
-    type MortyLiveEventTransport,
-    type MortyTransportSessionEvent,
-    WsTransport,
-} from "@morty-build/client";
+import { MortyClient } from "@morty-build/client";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeAgentSettingsDiscoveredEvent,
@@ -189,79 +182,6 @@ function sessionEndpoint(value: string): string {
     return endpoint.origin;
 }
 
-class BrowserSessionTransport implements MortyHttpTransport, MortyLiveEventTransport {
-    readonly #http = new HttpTransport();
-    #webSocket = new WsTransport();
-
-    readonly #fetch = async (request: Request): Promise<Response> =>
-        await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
-        request.headers.get("accept") === "application/octet-stream"
-            ? this.#http
-            : this.#webSocket
-        ).fetch(request);
-
-    readonly fetch = async (request: Request): Promise<Response> => {
-        const started = performance.now();
-        const operation = new URL(request.url).pathname.split("/").slice(-1)[0] ?? "request";
-        try {
-            const response = await this.#fetch(request);
-            recordBrowserDiagnostic({
-                at: new Date().toISOString(),
-                component: "relay",
-                operation,
-                requestId: response.headers.get("x-request-id") ?? "",
-                elapsedMs: Math.round(performance.now() - started),
-                outcome: String(response.status),
-            });
-            return response;
-        } catch (cause) {
-            recordBrowserDiagnostic({
-                at: new Date().toISOString(),
-                component: "relay",
-                operation,
-                requestId: "",
-                elapsedMs: Math.round(performance.now() - started),
-                outcome: request.signal.aborted ? "cancelled" : "error",
-            });
-            throw cause;
-        }
-    };
-
-    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MortyTransportSessionEvent>> => {
-        recordBrowserDiagnostic({
-            at: new Date().toISOString(),
-            component: "relay",
-            operation: "live-events",
-            outcome: "connecting",
-            requestId: "",
-            elapsedMs: 0,
-        });
-        try {
-            const stream = await this.#webSocket.openSessionLiveEvents(request);
-            recordBrowserDiagnostic({
-                at: new Date().toISOString(),
-                component: "relay",
-                operation: "live-events",
-                outcome: "connected",
-                requestId: "",
-                elapsedMs: 0,
-            });
-            return stream;
-        } catch (cause) {
-            recordBrowserDiagnostic({
-                at: new Date().toISOString(),
-                component: "relay",
-                operation: "live-events",
-                outcome: request.signal.aborted ? "cancelled" : "error",
-                requestId: "",
-                elapsedMs: 0,
-            });
-            throw cause;
-        }
-    };
-    readonly close = (): void => this.#webSocket.close();
-}
-
 export class BotChatApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
@@ -269,7 +189,7 @@ export class BotChatApi {
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #credentialRejected: (() => void) | undefined;
-    readonly #sessionTransport = new BrowserSessionTransport();
+    readonly #sessionClients = new Set<MortyClient>();
     readonly #waitForChange: ApiTransport["waitForChange"];
     readonly readComputerPairing: ManagementApi["readComputerPairing"];
     constructor(options: {
@@ -297,7 +217,10 @@ export class BotChatApi {
         this.readComputerPairing = management.readComputerPairing;
     }
     readonly close = (): void => {
-        this.#sessionTransport.close();
+        for (const client of this.#sessionClients) {
+            client.close();
+        }
+        this.#sessionClients.clear();
     };
     readonly access = async (parent: AbortSignal, target: NativeSessionTarget): Promise<ChatAccess> =>
         v.parse(accessSchema, await this.#request("access", v.parse(nativeSessionTargetSchema, target), parent));
@@ -556,12 +479,23 @@ export class BotChatApi {
         if (!sameNativeSession(access.target, target)) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
-        return new MortyClient({
+        const client = new MortyClient({
             endpoint,
             computerId,
             operationTimeoutMilliseconds: 120000,
             maxStreamReconnectAttempts: 0,
-            transport: this.#sessionTransport,
+            onClose: () => {
+                this.#sessionClients.delete(client);
+            },
+            observeResponse: ({ status }) =>
+                recordBrowserDiagnostic({
+                    at: new Date().toISOString(),
+                    component: "relay",
+                    operation: "session-request",
+                    requestId: "",
+                    elapsedMs: 0,
+                    outcome: String(status),
+                }),
             credentialProvider: {
                 credential: async (parent) => {
                     if (Date.parse(access.expiresAt) - Date.now() < 30000) {
@@ -578,6 +512,8 @@ export class BotChatApi {
                 },
             },
         });
+        this.#sessionClients.add(client);
+        return client;
     };
     readonly #request = async (operation: string, body: unknown, parent: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([

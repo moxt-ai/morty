@@ -183,10 +183,17 @@ export class WsTransport implements MortyHttpTransport {
         if (this.#state.kind === "closed") {
             throw new MortyConnectionError("The Morty WebSocket transport is closed");
         }
-        if (computerRequestTarget(request) === null) {
+        const requestUrl = new URL(request.url);
+        const computerPrefix = `${MORTY_API_PREFIX}/v1/computers/`;
+        const fileDownload =
+            request.method === "GET" &&
+            requestUrl.pathname.startsWith(computerPrefix) &&
+            /^[^/]+\/harnesses\/[^/]+\/sessions\/[^/]+\/files\/content$/u.test(
+                requestUrl.pathname.slice(computerPrefix.length),
+            );
+        if (fileDownload || computerRequestTarget(request) === null) {
             return await this.#http.fetch(request);
         }
-        const requestUrl = new URL(request.url);
         const socket = await this.#socket(request);
         request.signal.throwIfAborted();
         request.signal.throwIfAborted();
