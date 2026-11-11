@@ -126,8 +126,8 @@ repository's required failing Given-When-Then acceptance scenario at the first
 supported boundary. The user may explicitly ask for manual verification only;
 in that case exercise the behavior with a scratch script outside the repository
 and delete it afterward. Preserve typed error codes and sanitized messages at
-every boundary, and keep new daemon-side failures wired into
-`DaemonDiagnosticLog` so they remain diagnosable locally.
+every boundary, and record new daemon-side failures through the bounded local
+diagnostic log so they remain diagnosable after a restart.
 
 Run only relevant tests, then `pnpm lint` and `pnpm typecheck` in the Morty
 workspace. Use `pnpm ci:check` only to diagnose combined CI validation. Do not

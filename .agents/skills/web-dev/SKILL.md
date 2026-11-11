@@ -1,19 +1,19 @@
 ---
 name: web-dev
-description: Serve the Morty SPA from this checkout with hot reload while the deployed Worker answers its Chat API and WebSocket bridge, then sign in with a continue link the user provides. Use when a designer wants to iterate on the browser UI against real data, or to diagnose this setup failing with WEBSOCKET_ORIGIN_FORBIDDEN, slow or resetting bridged connections, or "Morty is temporarily unavailable" on reload.
+description: Serve the Morty SPA from this checkout with hot reload while the deployed Worker answers its Chat API and event streams, then sign in with a continue link the user provides. Use when a designer wants to iterate on the browser UI against real data, or to diagnose slow or failing proxied API requests and event streams.
 ---
 
 # Local Web Development Against the Deployed Worker
 
 Serve the browser app from this checkout so edits under `packages/web/src`
-hot-reload, while every `/morty/api` request and the `/morty/ws` bridge are
-answered by the **deployed Worker**. The designer sees their paired computer,
+hot-reload, while `/morty/api` requests and event streams are answered by the
+**deployed Worker**. The designer sees their paired computer,
 sessions, and connected Runtime while iterating on markup, styling, and
 interaction.
 
 What is local: the SPA modules and their edits, served by Vite. What is
 remote: the deployed Worker origin (default `https://morty.build`), which owns
-identity, sessions, and the WebSocket bridge. Nothing here deploys or mutates
+identity, computer access, and Session requests. Nothing here deploys or mutates
 the deployed Worker's configuration.
 
 Use `chat-local-full-dev` when the Morty Worker must run locally,
@@ -25,7 +25,7 @@ skill needs no `.dev.vars`, no local Worker, and no cloud deployment credential.
 | Requirement | Detail |
 | --- | --- |
 | Checkout | This repository with `package.json`, `vite.config.ts`, and `vite.web-dev.config.ts` at its root; locked dependencies installed. |
-| Toolchain | The pinned Node.js (>= 24) and pnpm from `package.json` `engines`. |
+| Toolchain | The Node.js version in `.nvmrc` and pnpm version pinned in `package.json`. |
 | Deployed origin | The Worker origin to proxy to. Default `https://morty.build`; when the user names another, set it via `WEB_DEV_ORIGIN`. |
 | Continue URL | A `https://<deployed>/continue#code=…` link from the user for sign-in. The code is a one-time secret: never print, log, or commit it. |
 
@@ -36,9 +36,9 @@ native session and requires its Runtime to be online.
 
 ## Proxy configuration
 
-The SPA sends every API call and the bridge WebSocket to its own origin, and the
-deployed Worker rejects foreign origins, so the dev-server proxy must forward
-both and rewrite the `Origin` header. The repository ships this proxy as
+The SPA sends API requests and event streams to its own origin. The dev-server
+proxy forwards `/morty/api` to the deployed Worker and rewrites the `Origin`
+header. The repository ships this proxy as
 `vite.web-dev.config.ts`, committed next to `vite.config.ts` — use it as-is and
 do not write a per-session config under `.wrangler/` or anywhere else.
 
@@ -50,17 +50,10 @@ editing the file — never substitute an origin the user did not name:
 WEB_DEV_ORIGIN=<deployed-origin> NODE_OPTIONS=--use-env-proxy pnpm exec vite --config vite.web-dev.config.ts
 ```
 
-Why each non-obvious part of the committed config exists, from verified
-failures:
-
-- `headers: { origin: deployed }` — without it the bridge upgrade fails and the
-  page shows "The Chat WebSocket bridge could not connect"
-  (`WEBSOCKET_ORIGIN_FORBIDDEN`).
-- `agent: globalAgent` — the bundled `http-proxy` forces `agent: false` when
-  unset, which **bypasses** the environment proxy and dials the origin
-  directly. On networks where direct egress is slow or reset, WebSocket
-  upgrades then take 4-30 s or die, the session load misses its 15 s deadline,
-  and the page shows "Morty is temporarily unavailable".
+Keep the committed proxy configuration: origin rewriting preserves same-origin
+request checks, and its HTTP agent honors the environment proxy when Node's
+proxy support is enabled. A direct connection may fail on networks that require
+an explicit proxy.
 
 ## Start the dev server
 
@@ -81,7 +74,7 @@ and check; the port changes on every start.
 
 ```sh
 curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/
-curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/morty/api
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:<port>/morty/api/health
 ```
 
 Expect `200` for the SPA and `200` from the proxied deployed Worker. The second
@@ -115,8 +108,7 @@ user's real data.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| "The Chat WebSocket bridge could not connect" / `WEBSOCKET_ORIGIN_FORBIDDEN` | The proxy forwarded the browser's `Origin: http://localhost:<port>` to the deployed Worker | Confirm `headers: { origin: deployed }` on both proxy entries of the committed config |
-| Bridge opens but takes many seconds, then "Morty is temporarily unavailable" | Direct (non-proxy) egress to the origin is slow or reset; the session load missed its 15 s deadline | Start with `NODE_OPTIONS=--use-env-proxy` so the config's `agent: globalAgent` routes through the environment proxy |
+| Proxied requests are slow or fail | Direct egress to the origin may be slow or reset | Compare the local health endpoint with the deployed one; use Node's environment-proxy support when the network requires it |
 | Repeated connection failures during development mounts | Application lifetime may be coupled to React mount cleanup | Keep StrictMode enabled; inspect application ownership and ensure mount replay does not close shared transports |
 | `503`/`502` from `/morty/api` through the proxy | Wrong `target` origin, or the deployed Worker is down | Verify the origin with `curl` directly, then check `WEB_DEV_ORIGIN` and the config's `target` |
 | Continue page rejects the code | The one-time code was already redeemed, or it expired | Ask the user for a fresh continue link |
