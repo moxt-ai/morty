@@ -105,7 +105,7 @@ export async function createChatWorkerEnvironment(
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the Relay, the way another Morty client of this Computer would. */
+                /** Closes a Session through the real daemon protocol while the browser observes its production lifecycle events. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     const response = await cloud.dispatchFetch(
                         `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
