@@ -1,4 +1,3 @@
-import type { SessionInfoUpdatedEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import { AcpSessionTable } from "../../storage/session/acp-session-table.ts";
 import { CommandLedgerTable } from "../../storage/session/command-ledger-table.ts";
 import { LiveEventPositionTable } from "../../storage/session/live-event-position-table.ts";
@@ -22,39 +21,6 @@ import { ExecutionReceipts } from "../turn/execution-receipts.ts";
 import { SessionTurns } from "../turn/session-turns.ts";
 import { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import type { ResolveAgent, SessionEventSink } from "./session-api.ts";
-import { NullSessionObserver } from "./session-api.ts";
-
-/** Records live session events through the projection and publishes info updates through the sink. */
-class SessionLayerObserver extends NullSessionObserver {
-    readonly #backgroundActivity: () => void;
-    readonly #publishInfo: (event: SessionInfoUpdatedEvent) => void;
-    readonly #record: (event: SessionLiveEvent) => void;
-
-    constructor(
-        record: (event: SessionLiveEvent) => void,
-        publishInfo: (event: SessionInfoUpdatedEvent) => void,
-        backgroundActivity: () => void = () => {},
-    ) {
-        super();
-        this.#backgroundActivity = backgroundActivity;
-        this.#publishInfo = publishInfo;
-        this.#record = record;
-    }
-
-    override readonly onBackgroundActivity = (): void => {
-        this.#backgroundActivity();
-    };
-
-    override readonly onSessionEvent = (event: SessionLiveEvent): Promise<void> => {
-        this.#record(event);
-        return Promise.resolve();
-    };
-
-    override readonly onInfo = (event: SessionInfoUpdatedEvent): Promise<void> => {
-        this.#publishInfo(event);
-        return Promise.resolve();
-    };
-}
 
 /** What the session layer needs to wire itself: the runtime's identity, its agent source, and its sink. */
 export interface SessionLayerOptions {
@@ -91,14 +57,18 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     const sessionCreations = new SessionCreations(new SessionCreationTable(sessionDatabase));
     const directories = new WorkspaceDirectoryService(defaultWorkspace);
     const manager = new SessionManager({
-        observer: new SessionLayerObserver(
-            (event) => {
+        observer: {
+            onBackgroundActivity: options.processes.notifyChanged,
+            onSessionEvent: (event) => {
                 operations.record(event);
                 eventProjection.record(event);
+                return Promise.resolve();
             },
-            sink.publishInfo,
-            options.processes.notifyChanged,
-        ),
+            onInfo: (event) => {
+                sink.publishInfo(event);
+                return Promise.resolve();
+            },
+        },
         store: sessionStore,
         processes: options.processes,
         onSessionStatusChanged: sink.publishStatus,

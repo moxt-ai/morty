@@ -17,7 +17,6 @@ export function createRelayDependencies(infrastructure: {
     readonly identityStores: readonly ComputerRelayStore[];
     readonly gateways: {
         readonly computerRelayGateway: CloudflareComputerRelay;
-        readonly nowEpochMilliseconds: () => number;
     };
 }) {
     const identities = new ComputerIdentityService(

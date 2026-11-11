@@ -21,7 +21,7 @@ import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMortySession } from "./open-session.ts";
 import { uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
-import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
+import type { SessionActivityState } from "./session-activity-machine.ts";
 import type { SessionComposerStore } from "./session-composer-store.ts";
 import {
     connectionFailure,
@@ -258,11 +258,6 @@ export function sessionPanePresentation(
     const stopping = facts.stopping;
     const composerInputDisabled =
         model.connection.kind === "closed" || facts.configuring || facts.waitingForInput || stopping;
-    const activeCommandId = workingCommandId(activity);
-    const activeMessageId =
-        activeCommandId !== null
-            ? (timeline.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
-            : null;
     const unknownDelivery = delivery.state.kind === "delivery-unknown" ? journalMessage(delivery.state.journal) : null;
     const deliveryUnknownCommandId = unknownDelivery?.commandId ?? null;
     const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
@@ -287,8 +282,6 @@ export function sessionPanePresentation(
     return {
         activity,
         authenticationFailure,
-        activeMessageId,
-        activeCommandId,
         composerInputDisabled,
         settingsDisabled: !canChangeSettings(facts),
         settingsNotice: controlRunning ? "New settings may not affect this response." : null,
@@ -324,7 +317,6 @@ export function sessionPanePresentation(
                   stopFailure(tasks, running) ??
                   queueFailure(queue, execution.queued) ??
                   ""),
-        controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: timeline.hasOlderHistory,
         historyLoading: olderHistory.kind === "loading",

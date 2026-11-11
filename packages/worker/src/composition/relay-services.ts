@@ -24,7 +24,6 @@ export function createHostedRelayAccess(bindings: RelayBindings, execution: Comp
 export function createRelayPorts(bindings: RelayBindings, execution: ComputerExecution | null = null) {
     return {
         computerRelayGateway: new CloudflareComputerRelay(bindings.COMPUTER_RELAY, execution?.relay),
-        nowEpochMilliseconds: () => Date.now(),
     };
 }
 

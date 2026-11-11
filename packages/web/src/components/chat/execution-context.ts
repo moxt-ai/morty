@@ -7,7 +7,6 @@ export interface ExecutionContext {
     readonly machine: string;
     readonly agent: string;
     readonly directory: string | null;
-    readonly directoryName: string;
     readonly directoryPlaceholder: string;
     readonly computerStatus:
         | "Online"

@@ -121,16 +121,6 @@ export class PairingDirectoryService {
         return { computerId: runtime.computerId };
     };
 
-    readonly authorizePairing = async (
-        computerId: string,
-        permission: ProjectPermission,
-        signal: AbortSignal,
-    ): Promise<VerifiedComputerAccess> => {
-        const access = await this.authorizeProject(computerId, permission, signal);
-        const storage = await this.projectStorage(access.scope, signal);
-        return await this.readActivePairing(storage, computerId, signal);
-    };
-
     private readonly readActivePairing = async (
         storage: ComputerRelayStore,
         computerId: string,

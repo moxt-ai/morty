@@ -311,7 +311,6 @@ export class ClaudeAdapter implements Adapter {
             }
             throw new AcpExecutionError("The Agent could not rename the Session", { cause }, "session_rename_failed");
         }
-        return { nativeRenameApplied: true };
     };
     readonly configureSession: Adapter["configureSession"] = async (
         params,
