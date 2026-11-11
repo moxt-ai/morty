@@ -21,7 +21,7 @@
             "entry": [
                 "src/index.ts",
                 "src/schema/**/*.ts",
-                "src/computer-relay/schema/*/index.ts",
+                "src/computer-relay/schema/**/*.ts",
                 "tests/relay/**/*.integration.test.ts"
             ]
         },
