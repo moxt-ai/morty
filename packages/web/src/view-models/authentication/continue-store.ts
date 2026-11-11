@@ -95,7 +95,7 @@ function initialState(): ContinueState {
 /** A same-origin destination that carries the redeemed identity in its query string. */
 function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): URL {
     const url = new URL(path, window.location.origin);
-    url.searchParams.set("identity", encodeIdentityScope({ computerId: identity.computerId, userId: identity.userId }));
+    url.searchParams.set("identity", encodeIdentityScope({ computerId: identity.computerId }));
     return url;
 }
 
@@ -141,8 +141,8 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 origin: window.location.origin,
                 computerId: identity.computerId,
                 // The access this browser holds: another tab may have replaced the one this link issued.
-                getToken: async () => storedToken(identity.userId) ?? identity.token,
-                replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
+                getToken: async () => storedToken(identity.computerId) ?? identity.computerToken,
+                replacedToken: (rejected, signal) => replacedToken(identity.computerId, rejected, signal),
                 waitForChange: async () => {
                     throw new Error("Computer updates are unavailable while continuing this session.");
                 },

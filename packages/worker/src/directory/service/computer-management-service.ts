@@ -1,7 +1,7 @@
 import type { ProjectLocationHint, SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
 import { decodeComputerPlacement, encodeRelayComputerId } from "../../contracts/computer-id.ts";
 import { ComputerManagementError, hasControlCharacters } from "../../contracts/relay/computer-management.ts";
-import { createRandomToken, PairingDirectoryError, validateIdentifier } from "../../contracts/relay/pairing.ts";
+import { PairingDirectoryError, validateIdentifier } from "../../contracts/relay/pairing.ts";
 import type { ProjectRow } from "../../contracts/relay/relay-records.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { BackendProjectAccess } from "./backend-project-access.ts";
@@ -12,6 +12,17 @@ function displayName(value: string): string {
         throw new ComputerManagementError("invalid_request", "The display name is invalid", 400);
     }
     return normalized;
+}
+
+/** A fixed creation reference recovers its computer; a new reference always allocates another one. */
+async function accountComputerId(key: string, locationHint: ProjectLocationHint): Promise<string> {
+    const digest = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["morty-computer-v1", key]))),
+    );
+    const localId = btoa(String.fromCharCode(...digest.subarray(0, 18)))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_");
+    return encodeRelayComputerId({ locationHint }, localId);
 }
 function projectResource(row: ProjectRow): object {
     return {
@@ -34,7 +45,6 @@ export class ComputerManagementService {
     }
 
     readonly provisionComputerAccount = async (
-        userId: string,
         requestedDisplayName: string,
         idempotencyKey: string,
         requestedClientReference: string,
@@ -47,55 +57,45 @@ export class ComputerManagementService {
             "client_reference",
         );
         const normalizedDisplayName = displayName(requestedDisplayName);
-        const sameRequest = (project: ProjectRow): boolean =>
-            project.display_name === normalizedDisplayName && project.client_reference === clientReference;
-        const user = validateIdentifier(userId, "user_id");
-        const existing = await this.storage.readProjectByIdempotencyKey(user, normalizedIdempotencyKey, signal);
-        if (existing !== null) {
-            if (!sameRequest(existing)) {
-                throw new ComputerManagementError("idempotency_conflict", "The key was used with another request", 409);
-            }
-            await this.#recordAccountCreation(existing, signal);
-            return projectResource(existing);
-        }
-        const placement = { locationHint };
+        const computerId = await accountComputerId(normalizedIdempotencyKey, locationHint);
         signal.throwIfAborted();
+        const sameRequest = (project: ProjectRow): boolean =>
+            project.computer_id === computerId &&
+            project.location_hint === locationHint &&
+            project.idempotency_key === normalizedIdempotencyKey &&
+            project.display_name === normalizedDisplayName &&
+            project.client_reference === clientReference;
         const now = Date.now();
         const project: ProjectRow = {
-            user_id: user,
             client_reference: clientReference,
             created_at: now,
             deleted_at: null,
             display_name: normalizedDisplayName,
             idempotency_key: normalizedIdempotencyKey,
             lifecycle: "active",
-            location_hint: placement.locationHint,
-            computer_id: encodeRelayComputerId(placement, createRandomToken(18)),
+            location_hint: locationHint,
+            computer_id: computerId,
             updated_at: now,
         };
-        if (!(await this.storage.registerComputerAccount(project, signal))) {
-            const duplicate = await this.storage.readProjectByIdempotencyKey(user, normalizedIdempotencyKey, signal);
-            if (duplicate !== null && sameRequest(duplicate)) {
-                await this.#recordAccountCreation(duplicate, signal);
-                return projectResource(duplicate);
-            }
+        const persisted = await this.storage.createComputerAccount(project, signal);
+        if (!sameRequest(persisted)) {
             throw new ComputerManagementError(
                 "idempotency_conflict",
                 "The computer account reference is already in use",
                 409,
             );
         }
-        await this.#recordAccountCreation(project, signal);
-        return projectResource(project);
+        await this.#recordAccountCreation(persisted, signal);
+        return projectResource(persisted);
     };
 
     readonly #recordAccountCreation = async (project: ProjectRow, signal: AbortSignal): Promise<void> =>
         await this.storage.recordAudit(
             {
                 action: "project.created",
-                actorId: project.user_id,
-                actorKind: "application",
-                actorRef: project.user_id,
+                actorId: project.computer_id,
+                actorKind: "computer",
+                actorRef: project.computer_id,
                 auditId: `pae_created_${project.computer_id}`,
                 detailsJson: "{}",
                 outcome: "succeeded",
@@ -124,15 +124,6 @@ export class ComputerManagementService {
             holder,
             signal,
         );
-    /** The active computer's owner, read from the authoritative directory. */
-    readonly readComputerOwner = async (computerId: string, signal: AbortSignal): Promise<string | null> => {
-        const account = await this.storage.readActiveComputerScope(
-            validateIdentifier(computerId, "computer_id"),
-            signal,
-        );
-        return account?.user_id ?? null;
-    };
-
     readonly isActive = async (computerId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
         if (decodeComputerPlacement(computerId) === null) {

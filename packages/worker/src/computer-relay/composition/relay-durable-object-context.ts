@@ -1,3 +1,4 @@
+import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { BackendProjectAccess } from "../../directory/service/backend-project-access.ts";
 import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
 import { ComputerManagementStorage } from "../../directory/storage/computer-management-storage.ts";
@@ -6,22 +7,18 @@ import { CloudflareRelayPeers } from "../components/runtime/gateway/cloudflare-r
 import { createRuntimeContext } from "../components/runtime/runtime-context.ts";
 import type { DurableObjectDatabase } from "../infra/durable-object-database.ts";
 
-export interface RelayDurableObjectEnvironment {
-    readonly RELAY_DIRECTORY_DATABASE: D1Database;
-}
-
 export function createRelayDurableObjectContext(
     state: DurableObjectState,
-    environment: RelayDurableObjectEnvironment,
     storage: {
         readonly database: DurableObjectDatabase;
+        readonly accounts: ComputerAccounts;
         readonly storeFor: (computerId: string) => ComputerManagementStore;
     },
 ) {
     const stores = {
         forProject: storage.storeFor,
     };
-    const controlStorage = new ComputerManagementStorage(environment.RELAY_DIRECTORY_DATABASE, stores);
+    const controlStorage = new ComputerManagementStorage(storage.accounts, stores);
     const computerAccounts = new ComputerManagementService(controlStorage);
     return createRuntimeContext({
         storages: {

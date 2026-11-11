@@ -375,9 +375,6 @@ importers:
 
   packages/relay-test-support:
     dependencies:
-      '@cloudflare/vitest-plugin':
-        specifier: ^1.4.9
-        version: 1.4.9(@cloudflare/workers-types@5.20261028.1)(@types/node@24.19.2)(bufferutil@4.1.0)(utf-8-validate@6.0.6)(vitest@4.1.12)
       '@cloudflare/workers-types':
         specifier: ^5.20261028.1
         version: 5.20261028.1

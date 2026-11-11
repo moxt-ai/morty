@@ -814,7 +814,7 @@ test("Given a chat opened with a Session credential, When the computer's owner r
     await readHistory();
 
     const revoked = await fixture.request("identity/revoke-all-access", {
-        successor: `morty_anon_v1_${"A".repeat(43)}`,
+        successor: `morty_computer_v1_${"A".repeat(43)}`,
     });
     expect(revoked.status).toBe(200);
     expect(await revoked.json()).toEqual({ status: "access_revoked" });
@@ -847,7 +847,8 @@ test("Given two browsers joined through links, When one disconnects the other br
             }),
             cloud.environment(),
         );
-    const join = async () => v.parse(v.object({ token: v.string() }), await (await redeem(await share())).json()).token;
+    const join = async () =>
+        v.parse(v.object({ computerToken: v.string() }), await (await redeem(await share())).json()).computerToken;
     const owner = await join();
     const other = await join();
     const unused = await share();

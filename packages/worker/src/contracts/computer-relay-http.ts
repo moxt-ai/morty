@@ -5,6 +5,7 @@ import type { RelayAuditRecord } from "./relay/relay-records.ts";
 
 export const COMPUTER_INTERNAL_PREFIX = "/__computer/computers";
 export type ComputerInternalResource =
+    | "account"
     | "active-generation"
     | "access-check"
     | "audit-events"

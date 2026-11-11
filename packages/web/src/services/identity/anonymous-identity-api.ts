@@ -20,12 +20,11 @@ import {
 const tokenSchema = v.pipe(
     v.string(),
     v.regex(
-        /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
 const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
-const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
-const identityFields = { token: tokenSchema, userId: userIdSchema, computerId: computerIdSchema };
+const identityFields = { computerToken: tokenSchema, computerId: computerIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
 /**
  * The Project a well-formed transfer code names, or null when the code cannot
@@ -41,7 +40,7 @@ export function transferCodeProject(code: string): string | null {
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = browserAccessEntry.key;
 
 const anonymousSessionSchema = v.pipe(
-    v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
+    v.object({ authentication: v.object({ kind: v.literal("anonymous") }), computerId: computerIdSchema }),
     v.readonly(),
 );
 const accessTermSchema = v.object({ accessExpiresAt: v.nullable(v.pipe(v.string(), v.isoTimestamp())) });
@@ -160,11 +159,11 @@ export class AnonymousIdentityApi {
     readonly checkScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AccessCheck> => {
         for (;;) {
             signal.throwIfAborted();
-            const token = storedToken(scope.userId);
+            const token = storedToken(scope.computerId);
             if (token === null) {
                 return { kind: "gone" };
             }
-            const checked = await this.#checkAccess({ ...scope, token }, signal);
+            const checked = await this.#checkAccess({ ...scope, computerToken: token }, signal);
             if (checked.kind === "open") {
                 return checked;
             }
@@ -173,7 +172,7 @@ export class AnonymousIdentityApi {
             if (
                 await withStoredAccessLock(
                     signal,
-                    async (access) => access.forgetRejected(scope, token) || storedToken(scope.userId) === null,
+                    async (access) => access.forgetRejected(scope, token) || storedToken(scope.computerId) === null,
                 )
             ) {
                 return checked;
@@ -188,7 +187,7 @@ export class AnonymousIdentityApi {
         if (session === "revoked") {
             return { kind: "revoked" };
         }
-        if (session?.userId !== identity.userId) {
+        if (session?.computerId !== identity.computerId) {
             return { kind: "gone" };
         }
         const management = new ManagementApi({
@@ -197,7 +196,7 @@ export class AnonymousIdentityApi {
             computerId: identity.computerId,
             getToken: async (requestSignal) => {
                 requestSignal.throwIfAborted();
-                return identity.token;
+                return identity.computerToken;
             },
         });
         try {
@@ -246,7 +245,7 @@ export class AnonymousIdentityApi {
         );
 
     /**
-     * Opens a link in this browser. A browser keeps one access per user: the access it already holds for the link's
+     * Opens a link in this browser. A browser keeps one access per Computer: the access it already holds for the link's
      * Project is replaced by the new one, which also takes over the links it came from.
      */
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> =>
@@ -364,8 +363,8 @@ export class AnonymousIdentityApi {
     };
 
     readonly #saveIdentity = (identity: AnonymousIdentity, access: StoredAccessWriter) => {
-        const scope = { computerId: identity.computerId, userId: identity.userId };
-        access.save(scope, identity.token);
+        const scope = { computerId: identity.computerId };
+        access.save(scope, identity.computerToken);
         writeIdentityScope(scope);
     };
 
@@ -381,7 +380,7 @@ export class AnonymousIdentityApi {
                     {
                         method: "GET",
                         headers: {
-                            authorization: `Bearer ${identity.token}`,
+                            authorization: `Bearer ${identity.computerToken}`,
                         },
                     },
                     requestSignal,

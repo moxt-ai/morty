@@ -47,18 +47,17 @@ export async function createTestRuntime(
 
         const openChat = async () => {
             const identity = object(
-                await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+                await jsonRequest(stack.chatOrigin, "/morty/api/computers", {
                     body: { creationKey: anonymousCreationKey() },
                     signal: journey.signal,
                 }),
                 "anonymous identity",
             );
-            const token = text(identity["token"], "anonymous token");
+            const token = text(identity["computerToken"], "Computer token");
             const computerId = text(identity["computerId"], "computerId");
-            const userId = text(identity["userId"], "userId");
 
             const url = new URL(stack.chatOrigin);
-            url.searchParams.set("identity", encodeIdentityScope({ computerId, userId }));
+            url.searchParams.set("identity", encodeIdentityScope({ computerId }));
             await page.addInitScript(
                 ({ key, scope, token }) => {
                     if (window === window.top) {
@@ -67,11 +66,11 @@ export async function createTestRuntime(
                         window.localStorage.setItem(
                             key,
                             JSON.stringify({
-                                credentials: { ...stored.credentials, [scope.userId]: token },
+                                credentials: { ...stored.credentials, [scope.computerId]: token },
                                 computers: [
                                     ...stored.computers.filter(
-                                        (computer: { scope: { userId: string } }) =>
-                                            computer.scope.userId !== scope.userId,
+                                        (computer: { scope: { computerId: string } }) =>
+                                            computer.scope.computerId !== scope.computerId,
                                     ),
                                     { scope },
                                 ],
@@ -79,10 +78,10 @@ export async function createTestRuntime(
                         );
                     }
                 },
-                { key: ANONYMOUS_CREDENTIAL_KEY_NAME, scope: { computerId, userId }, token },
+                { key: ANONYMOUS_CREDENTIAL_KEY_NAME, scope: { computerId }, token },
             );
             await page.goto(url.href);
-            const user = await chat.useBrowserIdentity({ computerId, token });
+            const user = await chat.useBrowserIdentity({ computerId, computerToken: token });
             return { computerId: user.computerId };
         };
 
@@ -143,7 +142,7 @@ export async function createTestRuntime(
             connectUnrelatedRuntime: async () => {
                 const unrelated = new ChatApi(stack.chatOrigin, journey.signal);
                 await unrelated.useBrowserIdentity(
-                    await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+                    await jsonRequest(stack.chatOrigin, "/morty/api/computers", {
                         body: { creationKey: anonymousCreationKey() },
                         signal: journey.signal,
                     }),

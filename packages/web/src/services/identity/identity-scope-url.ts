@@ -1,48 +1,33 @@
 import * as v from "valibot";
 
 /**
- * The anonymous identity scope a Morty page carries in its URL query string
- * (`identity=<computerId>~<userId>`). The scope names the user and
- * computer the page serves; the matching access token lives in local
+ * The Computer scope a Morty page carries in its URL query string
+ * (`identity=<computerId>`). The matching access token lives in local
  * storage. Every component is schema-validated before use; anything that does
  * not decode is treated as absent.
  */
 
 const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
-const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 
 export const identityScopeSchema = v.pipe(
     v.object({
         computerId: computerIdSchema,
-        userId: userIdSchema,
     }),
     v.readonly(),
 );
 
 export type IdentityScope = v.InferOutput<typeof identityScopeSchema>;
 
-const scopeSchema = v.tuple([computerIdSchema, userIdSchema]);
-
-/** Serializes a scope into its URL query value, validating it first; components cannot contain `~`. */
-export function encodeIdentityScope(scope: { readonly computerId: string; readonly userId: string }): string {
+/** Serializes a Computer scope into its URL query value, validating it first. */
+export function encodeIdentityScope(scope: IdentityScope): string {
     const parsed = v.parse(identityScopeSchema, scope);
-    return [parsed.computerId, parsed.userId].map((part) => encodeURIComponent(part)).join("~");
+    return parsed.computerId;
 }
 
 /** Parses a query value back into a scope, or null when it cannot represent one. */
 function decodeIdentityScope(value: string): IdentityScope | null {
-    const parts = value.split("~");
-    if (parts.length !== 2) {
-        return null;
-    }
-    let decoded: readonly unknown[];
-    try {
-        decoded = parts.map((part) => decodeURIComponent(part));
-    } catch {
-        return null;
-    }
-    const parsed = v.safeParse(scopeSchema, decoded);
-    return parsed.success ? { computerId: parsed.output[0], userId: parsed.output[1] } : null;
+    const parsed = v.safeParse(computerIdSchema, value);
+    return parsed.success ? { computerId: parsed.output } : null;
 }
 
 export function hasIdentityScope(): boolean {

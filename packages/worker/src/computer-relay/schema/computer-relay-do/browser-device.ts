@@ -9,7 +9,7 @@ export const browserDevice = sqliteTable(
     "browser_device",
     {
         id: text("id").primaryKey().notNull(),
-        userId: text("user_id").notNull(),
+        retainedOwnerReference: text("user_id"),
         joinedAt: integer("joined_at").notNull(),
         /** How the browser described itself when it joined, so its owner can recognize it; null when it did not. */
         label: text("label"),
@@ -24,5 +24,5 @@ export const browserDevice = sqliteTable(
         /** When the device's access was ended; null while it was not. Ended access never resumes. */
         endedAt: integer("ended_at"),
     },
-    (table) => [index("browser_device_user_idx").on(table.userId)],
+    (table) => [index("browser_device_user_idx").on(table.retainedOwnerReference)],
 );

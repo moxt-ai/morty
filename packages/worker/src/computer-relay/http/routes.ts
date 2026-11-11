@@ -32,6 +32,17 @@ export function createComputerHttpRoutes(ctx: ComputerRouteContext) {
     const filePath = `${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content`;
     return new Hono<ComputerRouteHttpEnvironment>()
         .use(`${COMPUTER_INTERNAL_PREFIX}/*`, bodyLimit({ maxSize: 3 * 1_024 * 1_024 }))
+        .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/account`, async (context) =>
+            context.json(await context.var.computerInternal.readAccount(context.req.raw.signal)),
+        )
+        .post(`${COMPUTER_INTERNAL_PREFIX}/:computerId/account`, async (context) =>
+            context.json(
+                await context.var.computerInternal.createAccount(
+                    await readJsonBody(context.req.raw),
+                    context.req.raw.signal,
+                ),
+            ),
+        )
         .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/active-generation`, async (context) =>
             context.json({
                 generation: await context.var.computerInternal.readActiveGeneration(context.req.raw.signal),

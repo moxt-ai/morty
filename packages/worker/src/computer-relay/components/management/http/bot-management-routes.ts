@@ -12,7 +12,10 @@ export function createBotManagementRoutes() {
             using deadline = new RequestDeadline(context.req.raw.signal, 45000);
             const signal = deadline.signal;
             return json(
-                await context.var.application.services.management.readComputer(context.get("session").userId, signal),
+                await context.var.application.services.management.readComputer(
+                    context.get("session").computerId,
+                    signal,
+                ),
             );
         },
     );

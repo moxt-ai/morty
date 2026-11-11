@@ -39,6 +39,7 @@ import {
 import { afterAll, afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
 import { requestTestComputerControl, revokeTestComputer } from "../../../relay-test-support/src/backend-fixture.ts";
+import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { DaemonWebSocketRoutes } from "../../src/computer-relay/components/runtime/daemon-websocket-routes.ts";
 import { createRuntimeContext } from "../../src/computer-relay/components/runtime/runtime-context.ts";
 import { SessionControl } from "../../src/computer-relay/components/runtime/service/session-control.ts";
@@ -126,7 +127,6 @@ class DaemonCredential {
 
 function bindings(): RelayBindings {
     return {
-        RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
@@ -1380,7 +1380,8 @@ it.each(["text", "binary"])(
             runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectDatabase(state.storage);
-                const context = createRelayDurableObjectContext(state, bindings(), {
+                const context = createRelayDurableObjectContext(state, {
+                    accounts: new DurableComputerAccount(state.storage),
                     database,
                     storeFor: (computerId) => computerManagementStore(computerId, state.storage),
                 });

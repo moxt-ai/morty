@@ -39,20 +39,6 @@ async function freePort(taken: ReadonlySet<number> = new Set()) {
     throw new Error("Could not allocate a local stack port");
 }
 
-async function migrate(
-    harness: E2EHarness,
-    configuration: string,
-    binding: string,
-    persistence: string,
-    cwd = repository,
-) {
-    await harness.run(
-        wranglerExecutable,
-        ["d1", "migrations", "apply", binding, "--local", "--persist-to", persistence, "--config", configuration],
-        { cwd },
-    );
-}
-
 // The local relay's Session signing secret; production supplies its own as a deployment secret.
 const sessionSigningSecret = "local-development-only-session-signing-secret";
 
@@ -82,15 +68,6 @@ export class LocalStack {
     async start() {
         const revision = (await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: repository })).stdout.trim();
         this.harness.record("mortyRevision", revision);
-        await this.harness.stage("migrate-morty", async () => {
-            await migrate(
-                this.harness,
-                chatConfiguration,
-                "RELAY_DIRECTORY_DATABASE",
-                this.directories.chat,
-                repository,
-            );
-        });
         const variables = {
             APP_ORIGIN: this.chatOrigin,
             MORTY_SESSION_SIGNING_SECRET: sessionSigningSecret,

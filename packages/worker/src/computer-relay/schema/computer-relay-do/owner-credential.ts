@@ -9,14 +9,14 @@ export const ownerCredential = sqliteTable(
     "owner_credential",
     {
         id: text("id").primaryKey().notNull(),
-        userId: text("user_id").notNull(),
+        retainedOwnerReference: text("user_id"),
         tokenHash: text("token_hash").notNull().unique(),
         kind: text("kind", { enum: ["local", "recovery"] }).notNull(),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
     },
     (table) => [
-        index("owner_credential_user_idx").on(table.userId, table.revokedAt),
+        index("owner_credential_user_idx").on(table.retainedOwnerReference, table.revokedAt),
         check("owner_credential_kind", sql`${table.kind} IN ('local', 'recovery')`),
     ],
 );

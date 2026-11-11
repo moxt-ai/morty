@@ -1,19 +1,18 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
-export const anonymousToken = v.pipe(
+export const computerToken = v.pipe(
     v.string(),
     v.regex(
-        /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
 
 /** The computer's own credential, the only kind its holder may choose: a successor it saved before requesting it. */
-export const localCredentialToken = v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u));
+export const localCredentialToken = v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u));
 
 export type Credential = {
     readonly credentialId: string;
-    readonly userId: string;
 } & (
     | { readonly kind: "local" | "recovery" }
     | {

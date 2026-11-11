@@ -30,7 +30,7 @@ export async function createChatWorkerEnvironment(
         await cloud.changeAppOrigin(origin);
     }
     const createApplication = async () => {
-        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
+        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/computers`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -40,14 +40,14 @@ export async function createChatWorkerEnvironment(
         if (identityResponse.status !== 201) {
             throw new Error(`Could not create an anonymous Morty identity: ${identityResponse.status}`);
         }
-        const identity = v.parse(
+        const issued = v.parse(
             v.object({
-                token: v.string(),
-                userId: v.string(),
+                computerToken: v.string(),
                 computerId: v.string(),
             }),
             await identityResponse.json(),
         );
+        const identity = { computerId: issued.computerId, token: issued.computerToken };
         const request = async (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             await cloud.dispatchFetch(`${origin}/morty/api/${path}`, {
                 method,
@@ -223,7 +223,6 @@ export async function createChatWorkerEnvironment(
             },
             origin,
             transport,
-            userId: identity.userId,
             close: () => transport.dispose(),
         };
     };

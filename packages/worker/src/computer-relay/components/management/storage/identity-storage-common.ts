@@ -1,8 +1,7 @@
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 
 export interface AnonymousIdentity {
-    readonly token: string;
-    readonly userId: string;
+    readonly computerToken: string;
     readonly computerId: string;
 }
 

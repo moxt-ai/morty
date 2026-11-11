@@ -55,7 +55,6 @@ def main():
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_ALLOWED_ORIGINS': json.dumps([spec['morty_origin']])}
-    morty['d1_databases'] = [{'binding': 'RELAY_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/worker/migrations/d1')}]
     morty['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_RELEASE_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
@@ -97,12 +96,10 @@ def main():
     })
     morty_dir = release / spec['morty'].replace('-', '_')
     built = read(morty_dir / 'wrangler.json')
-    allowed = ['name', 'main', 'account_id', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'd1_databases', 'r2_buckets', 'vars', 'assets', 'observability', 'ratelimits', 'workers_dev', 'preview_urls', 'secrets', 'placement', 'limits', 'rules', 'triggers']
+    allowed = ['name', 'main', 'account_id', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'r2_buckets', 'vars', 'assets', 'observability', 'ratelimits', 'workers_dev', 'preview_urls', 'secrets', 'placement', 'limits', 'rules', 'triggers']
     portable = {key: built[key] for key in allowed if key in built}
     portable.update(no_bundle=True, find_additional_modules=True)
-    portable['d1_databases'][0]['migrations_dir'] = '../d1-migrations'
     write(morty_dir / 'wrangler.json', portable)
-    shutil.copytree(ROOT / 'packages/worker/migrations/d1', release / 'd1-migrations', dirs_exist_ok=True)
     assert portable['account_id'] == ACCOUNT and portable['name'] == spec['morty'] and not portable.get('routes')
     configs = {'morty': morty_dir.relative_to(release).as_posix() + '/wrangler.json'}
     # Artifact files contain public configuration and compiled code only; secrets are supplied at deploy time.
@@ -112,7 +109,7 @@ def main():
         if cli_release['revision'] != env['MORTY_RELEASE_REVISION'] or cli_release['version'] != read(ROOT / 'packages/cli/package.json')['version']:
             raise ValueError('Cloud and CLI release identities differ')
     files = {p.relative_to(release).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(release.rglob('*')) if p.is_file() and p.name != 'release.json'}
-    write(release / 'release.json', {'format': 'morty-cloud-release-v3', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'activation': {'architecture': 'single-worker', 'authorization': 'maintainer-requested consolidation without backward compatibility', 'recovery': 'fresh installation and pairing; retired namespaces are archived outside the live deployment; restore only consolidated releases'}, 'files': files})
+    write(release / 'release.json', {'format': 'morty-cloud-release-v3', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_RELEASE_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'activation': {'architecture': 'single-worker-per-computer-durable-objects', 'authorization': 'maintainer-requested D1 removal using existing ComputerRelay objects and replacement creation endpoints under the pre-launch reset', 'contracts': 'POST /computers creates a new pair; POST /computers/:computerId/identity/link authenticates a known pair; /identity/anonymous-users is retired; activate cloud and CLI as one release', 'recovery': 'fresh installation and pairing; retained D1 records remain untouched; computer ID format and idFromName(computerId) naming are unchanged; creation without a known computerId always allocates a new computer'}, 'files': files})
     print(json.dumps({'release': str(release), 'environment': environment, 'files': len(files)}))
 
 

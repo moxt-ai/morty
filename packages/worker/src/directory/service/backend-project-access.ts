@@ -17,7 +17,7 @@ export class BackendProjectAccess {
         }
         return new ProjectAccessContext(new ComputerScope(project.computer_id), {
             kind: "application",
-            actorId: project.user_id,
+            actorId: project.computer_id,
         });
     };
 

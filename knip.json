@@ -18,12 +18,7 @@
             "includeEntryExports": true
         },
         "packages/worker": {
-            "entry": [
-                "src/index.ts",
-                "src/schema/**/*.ts",
-                "src/computer-relay/schema/**/*.ts",
-                "tests/relay/**/*.integration.test.ts"
-            ]
+            "entry": ["src/index.ts", "src/computer-relay/schema/**/*.ts", "tests/relay/**/*.integration.test.ts"]
         },
         "packages/cli": {
             "entry": [

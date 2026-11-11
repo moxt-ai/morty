@@ -15,7 +15,6 @@ const relayOrigin = "https://relay.test";
 
 function bindings(): RelayBindings {
     return {
-        RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };

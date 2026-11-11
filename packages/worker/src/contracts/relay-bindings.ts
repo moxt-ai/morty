@@ -1,11 +1,10 @@
 import * as v from "valibot";
 import type { CloudBindings } from "./cloud-bindings.ts";
-import { d1DatabaseBindingSchema, durableObjectNamespaceBindingSchema } from "./cloud-bindings.ts";
+import { durableObjectNamespaceBindingSchema } from "./cloud-bindings.ts";
 import { ComputerManagementError } from "./computer-management.ts";
 
 export interface RelayBindings {
     readonly COMPUTER_RELAY: DurableObjectNamespace;
-    readonly RELAY_DIRECTORY_DATABASE: D1Database;
     readonly MORTY_SESSION_SIGNING_SECRET: string;
 }
 
@@ -16,7 +15,6 @@ export interface ConfiguredRelayBindings extends RelayBindings {
 
 const bindings = v.object({
     COMPUTER_RELAY: durableObjectNamespaceBindingSchema(),
-    RELAY_DIRECTORY_DATABASE: d1DatabaseBindingSchema,
     MORTY_SESSION_SIGNING_SECRET: v.string(),
     MORTY_ALLOWED_ORIGINS: v.string(),
 });

@@ -183,24 +183,24 @@ export const recentCwdEntry = (computerId: string) =>
     });
 
 // ---------------------------------------------------------------------------
-// Anonymous identity tokens
+// Computer access tokens
 // ---------------------------------------------------------------------------
 
-const anonymousTokenSchema = v.pipe(
+const computerTokenSchema = v.pipe(
     v.string(),
     v.regex(
-        /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
 
-/** How many computers this browser remembers. Each needs its user's token, so the tokens share this limit. */
+/** How many computers and their access tokens this browser remembers. */
 export const MAX_REMEMBERED_COMPUTERS = 10;
 
-const credentialUserIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
+const credentialComputerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
 
 /** Access membership and credentials commit together; presentation never writes this entry. */
 export const browserAccessEntry = jsonLocalStorageEntry({
-    key: "morty:browser-access:v1",
+    key: "morty:browser-access:v2",
     schema: v.pipe(
         v.object({
             credentials: v.record(v.string(), v.unknown()),
@@ -211,8 +211,8 @@ export const browserAccessEntry = jsonLocalStorageEntry({
 });
 
 /** A stored token this version can use, or null. */
-export function readableCredential(userId: string, token: unknown): string | null {
-    return v.is(credentialUserIdSchema, userId) && v.is(anonymousTokenSchema, token) ? token : null;
+export function readableCredential(computerId: string, token: unknown): string | null {
+    return v.is(credentialComputerIdSchema, computerId) && v.is(computerTokenSchema, token) ? token : null;
 }
 
 const computerDestinationSchema = v.pipe(
@@ -243,9 +243,9 @@ export type RememberedComputer = v.InferOutput<typeof computerPreferenceSchema> 
 };
 
 /** Preferences have no authority to add, replace or remove access. Each computer writes only its own preferences. */
-export const computerPreferenceEntry = (scope: { readonly computerId: string; readonly userId: string }) =>
+export const computerPreferenceEntry = (scope: { readonly computerId: string }) =>
     jsonLocalStorageEntry({
-        key: scopedKey("morty:computer-preference:v1:", scope.computerId, scope.userId),
+        key: scopedKey("morty:computer-preference:v2:", scope.computerId),
         schema: computerPreferenceSchema,
     });
 

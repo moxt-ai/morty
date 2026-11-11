@@ -25,7 +25,7 @@ export function createComputerManagementRoutes() {
             using deadline = new RequestDeadline(context.req.raw.signal, 15000);
             return json({
                 computer: await context.var.application.services.management.readProject(
-                    session.userId,
+                    session.computerId,
                     deadline.signal,
                 ),
             });
@@ -57,7 +57,7 @@ export function createComputerManagementRoutes() {
             };
             context.var.application.logger.info({ ...audit, stage: "requested" }, "Project replacement requested");
             try {
-                const project = await management.replaceProject(local.credential.userId, signal);
+                const project = await management.replaceProject(context.var.application.identity.computerId, signal);
                 // Repeating the same saved local identity reuses its successor credential, even if bootstrap
                 // committed only part of its data. An explicitly revoked successor credential is never reissued.
                 const response = await new ComputerRelayGateway(
@@ -67,7 +67,6 @@ export function createComputerManagementRoutes() {
                     new Request("https://computer.internal/__computer/bootstrap", {
                         body: JSON.stringify({
                             computer: project,
-                            userId: local.credential.userId,
                             origin: {
                                 kind: "replacement",
                                 previousComputerId: audit.previousComputerId,

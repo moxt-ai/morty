@@ -8,7 +8,6 @@ import {
 import { afterAll, afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
-import { readComputerOwner } from "../../src/computer-relay/composition/account-provisioning.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/computer-management.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
@@ -151,7 +150,7 @@ it("Given a live Session view, When the owner revokes browser access, Then the l
         new Request(`${origin}/computers/${computerId}/identity/revoke-all-access`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
-            body: JSON.stringify({ successor: `morty_anon_v1_${"B".repeat(43)}` }),
+            body: JSON.stringify({ successor: `morty_computer_v1_${"B".repeat(43)}` }),
         }),
     );
     expect(revoked.status).toBe(200);
@@ -173,18 +172,14 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
     // The revocation commits, but its push never reaches the view (or reached it before the view opened).
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
         const signal = AbortSignal.timeout(10_000);
-        const identities = new IdentityStorage(
-            new DurableObjectDatabase(state.storage),
-            computerId,
-            await readComputerOwner(env, computerId, signal),
-        );
+        const identities = new IdentityStorage(new DurableObjectDatabase(state.storage), computerId);
         const credential = await identities.findCredential(owner.token, Date.now(), signal);
         if (credential === null) {
             throw new Error("Expected the owner credential");
         }
         expect(
             await identities.revokeCredential(
-                { kind: "local", credentialId: credential.credentialId, userId: credential.userId },
+                { kind: "local", credentialId: credential.credentialId },
                 Date.now(),
                 signal,
             ),

@@ -87,7 +87,7 @@ def main():
         raise ValueError('Deployment escaped the independent target')
     if 'MORTY_SESSION_SIGNING_SECRET' not in morty.get('secrets', {}).get('required', []) or 'MORTY_SESSION_SIGNING_SECRET' in morty.get('vars', {}):
         raise ValueError('Release must use a dedicated Session signing secret; rebuild older archives before restoring')
-    assert morty['d1_databases'][0]['database_id'] == expected['d1_id']
+    assert not morty.get('d1_databases')
     assert not morty.get('services')
     assert morty['durable_objects']['bindings'] == [{'name': 'COMPUTER_RELAY', 'class_name': 'ComputerRelay'}]
     assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
@@ -132,7 +132,7 @@ def main():
     env = dict(os.environ, WRANGLER_SEND_METRICS='false')
     for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
         env.pop(key, None)
-    # Check lifecycle history before uploading assets, applying D1 migrations,
+    # Check lifecycle history before uploading assets
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
     service = '/workers/services/' + expected['morty']
@@ -142,8 +142,6 @@ def main():
     secrets = {'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}
     if len(secrets['MORTY_SESSION_SIGNING_SECRET']) < 32:
         raise ValueError('The Session credential signing secret must be at least 32 characters')
-    # Check the single Worker directory before activation.
-    cloud('/d1/database/' + expected['d1_id'])
     if args.preflight_only:
         print(json.dumps({'preflightPassed': True, 'revision': manifest['revision'], 'deploymentAttempted': False}))
         return
@@ -166,7 +164,6 @@ def main():
             upload.write_text(json.dumps(entries))
             # Assets are content-addressed and immutable, so uploading one again writes the same bytes.
             upload_objects(WRANGLER + ['r2', 'bulk', 'put', expected['buckets']['web_assets'], '--filename', str(upload), '--content-type', types[extension], '--cache-control', 'public, max-age=31536000, immutable', '--concurrency', '10', '--remote', '--force', '--config', str(config_file)], env)
-        run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(config_file)], env)
         # From the Worker activation on, a failed check restores the deployment that served before this release.
         try:
             secret_file = temporary / 'morty.secrets.json'

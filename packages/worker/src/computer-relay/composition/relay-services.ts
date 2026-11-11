@@ -1,3 +1,4 @@
+import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { ComputerManagementError } from "../../contracts/computer-management.ts";
 import type { RelayBindings } from "../../contracts/relay-bindings.ts";
 import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
@@ -17,6 +18,7 @@ export function createComputerRelayServices(
     computerId: string,
     store: ComputerManagementStore,
     runtime: ComputerService,
+    accounts: ComputerAccounts,
 ) {
     const forComputer = (id: string) => {
         if (id !== computerId) {
@@ -24,7 +26,7 @@ export function createComputerRelayServices(
         }
         return store;
     };
-    const storage = new ComputerManagementStorage(bindings.RELAY_DIRECTORY_DATABASE, { forProject: forComputer });
+    const storage = new ComputerManagementStorage(accounts, { forProject: forComputer });
     const control = new ComputerManagementService(storage);
     const sessionAccess = new SessionAccessService(
         control,

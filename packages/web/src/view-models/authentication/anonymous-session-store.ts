@@ -110,7 +110,7 @@ export const createAnonymousSessionStore = (
             }
             // Access this browser no longer holds was forgotten by the check that found out it ended, which explains
             // it, or by another tab, which reports it here; not finding it here is no verdict of its own.
-            if (storedToken(state.identity.userId) === null) {
+            if (storedToken(state.identity.computerId) === null) {
                 return null;
             }
             const check = await api.checkScope(state.identity, signal);
@@ -132,7 +132,7 @@ export const createAnonymousSessionStore = (
                 if (state.kind !== "active") {
                     throw new Error("Anonymous identity is unavailable.");
                 }
-                if (readIdentityScope()?.userId !== state.identity.userId) {
+                if (readIdentityScope()?.computerId !== state.identity.computerId) {
                     throw new Error("Anonymous identity changed.");
                 }
                 if ((await currentAccess(signal)) === null) {
@@ -154,7 +154,7 @@ export const createAnonymousSessionStore = (
             },
             storedAccessRemoved: () => {
                 const state = get().state;
-                if (state.kind !== "active" || storedToken(state.identity.userId) !== null) {
+                if (state.kind !== "active" || storedToken(state.identity.computerId) !== null) {
                     return;
                 }
                 onIdentityChanged(null);
@@ -182,7 +182,7 @@ export const createAnonymousSessionStore = (
                     }
                     if (hasIdentityScope()) {
                         const scope = readIdentityScope();
-                        if (scope !== null && storedToken(scope.userId) === null) {
+                        if (scope !== null && storedToken(scope.computerId) === null) {
                             set({ state: { kind: "unpaired" } });
                             return;
                         }

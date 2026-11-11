@@ -33,8 +33,7 @@ const setupModule = v.custom<SetupModule>(
         typeof value === "object" && value !== null && "runSetup" in value && typeof value.runSetup === "function",
 );
 const identitySchema = v.object({
-    token: v.string(),
-    userId: v.string(),
+    computerToken: v.string(),
     computerId: v.string(),
 });
 
@@ -44,7 +43,7 @@ class CreationBudget {
     readonly limit = async () => ({ success: this.remaining-- > 0 });
 }
 
-test("Given setup and a lost creation response, When setup retries across temporary failures, Then it finishes with the original identity, Project and Computer", {
+test("Given setup and a lost creation response without a known computer, When setup retries across temporary failures, Then it saves a new computer pair and subsequently reuses that pair", {
     timeout: 60_000,
 }, async () => {
     const setup = v.parse(setupModule, await import("../../cli/src/setup/setup.ts"));
@@ -65,6 +64,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
     let available = true;
     let loseResponse = true;
     let original: v.InferOutput<typeof identitySchema> | undefined;
+    let completedIdentity: v.InferOutput<typeof identitySchema> | undefined;
     const creationKeys: string[] = [];
     const failures: unknown[] = [];
     let origin = "";
@@ -88,7 +88,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
                 ...(body.length === 0 ? {} : { body }),
                 signal: AbortSignal.timeout(30_000),
             });
-            const creation = new URL(request.url).pathname === "/morty/api/identity/anonymous-users";
+            const creation = new URL(request.url).pathname === "/morty/api/computers";
             if (creation) {
                 creationKeys.push(
                     v.parse(v.object({ creationKey: v.string() }), JSON.parse(body.toString())).creationKey,
@@ -104,6 +104,9 @@ test("Given setup and a lost creation response, When setup retries across tempor
                 loseResponse = false;
                 outgoing.destroy();
                 return;
+            }
+            if (creation && response.status === 201) {
+                completedIdentity = v.parse(identitySchema, JSON.parse(Buffer.from(bytes).toString()));
             }
             outgoing.writeHead(response.status, Object.fromEntries(response.headers));
             outgoing.end(Buffer.from(bytes));
@@ -216,20 +219,24 @@ test("Given setup and a lost creation response, When setup retries across tempor
         budget.remaining = 1;
         const completed = await run();
         expect(completed.code, JSON.stringify(completed.events)).toBe(0);
-        const identity = v.parse(identitySchema, original);
+        const identity = v.parse(identitySchema, completedIdentity);
+        expect(identity.computerId).not.toBe(v.parse(identitySchema, original).computerId);
         expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace, computerId: identity.computerId });
         expect(await configuration()).toMatchObject({
             kind: "ready",
-            user_token: identity.token,
-            user_id: identity.userId,
+            computer_token: identity.computerToken,
             computer_id: identity.computerId,
         });
         expect(new Set(creationKeys)).toEqual(new Set([pending["creation_key"]]));
         const session = await fetch(`${origin}/morty/api/computers/${identity.computerId}/session`, {
-            headers: { authorization: `Bearer ${identity.token}` },
+            headers: { authorization: `Bearer ${identity.computerToken}` },
         });
         expect(session.status).toBe(200);
-        expect(await session.json()).toMatchObject({ userId: identity.userId });
+        expect(await session.json()).toMatchObject({ computerId: identity.computerId });
+        const creationCount = creationKeys.length;
+        expect((await run()).code).toBe(0);
+        expect(creationKeys).toHaveLength(creationCount);
+        expect(await configuration()).toMatchObject({ computer_id: identity.computerId });
         expect(failures).toEqual([]);
     }
 });

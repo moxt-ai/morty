@@ -24,43 +24,138 @@ afterAll(async () => {
 /** Declares its length as HTTP clients do, so the request keeps Cloudflare's location metadata. */
 function creationRequest(headers: Readonly<Record<string, string>> = {}): Request {
     const body = JSON.stringify({ creationKey: anonymousCreationKey() });
-    return new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+    return new Request(`${APP_ORIGIN}/morty/api/computers`, {
         method: "POST",
         headers: { ...headers, "content-type": "application/json", "content-length": String(body.length) },
         body,
     });
 }
 
-test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Project and Computer", async () => {
-    const environment = fixture.environment();
+test("Given no D1 binding, When a user creates Computers and later links saved Computer credentials after a Worker restart, Then each creation is new and the saved credentials still open their Computer", async () => {
+    let environment = fixture.environment();
     const creationKey = anonymousCreationKey();
-    const create = async () => {
+    class RegionalRequest extends Request {
+        override readonly cf: { readonly continent: string; readonly country: string };
+        constructor(request: Request, continent: string, country: string) {
+            super(request);
+            this.cf = { continent, country };
+        }
+    }
+    const create = async (continent: string, country: string) => {
+        const body = JSON.stringify({ creationKey });
         const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ creationKey }),
-            }),
+            new RegionalRequest(
+                new Request(`${APP_ORIGIN}/morty/api/computers`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json", "content-length": String(body.length) },
+                    body,
+                }),
+                continent,
+                country,
+            ),
             environment,
         );
         expect(response.status).toBe(201);
         return v.parse(
             v.object({
-                token: v.string(),
-                userId: v.string(),
+                computerToken: v.string(),
                 computerId: v.string(),
             }),
             await response.json(),
         );
     };
 
-    const lost = await create();
-    const retried = await create();
+    const [first, second, third] = await Promise.all([create("AS", "CN"), create("NA", "US"), create("AS", "SG")]);
+    expect(new Set([first.computerId, second.computerId, third.computerId]).size).toBe(3);
+    expect(first.computerId).toMatch(/^prj_an_01_/u);
+    expect(second.computerId).toMatch(/^prj_wn_01_/u);
+    expect(third.computerId).toMatch(/^prj_as_01_/u);
+    await fixture.reload();
+    environment = fixture.environment();
+    for (const identity of [first, second, third]) {
+        const link = () =>
+            worker.fetch(
+                new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/link`, {
+                    method: "POST",
+                    headers: { authorization: `Bearer ${identity.computerToken}`, "content-type": "application/json" },
+                    body: JSON.stringify({ computerId: identity.computerId }),
+                }),
+                environment,
+            );
+        for (const response of [await link(), await link()]) {
+            expect(response.status).toBe(200);
+            expect(await response.json()).toEqual({ computerId: identity.computerId });
+        }
+        expect(
+            (await worker.fetch(accountRequest(identity.computerToken, identity.computerId), environment)).status,
+        ).toBe(200);
+    }
+    const wrongComputerCredential = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${first.computerId}/identity/link`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${second.computerToken}`, "content-type": "application/json" },
+            body: JSON.stringify({ computerId: first.computerId }),
+        }),
+        environment,
+    );
+    expect(wrongComputerCredential.status).toBe(401);
+    const namespace = environment.COMPUTER_RELAY;
+    const stored = await namespace
+        .get(namespace.idFromName(first.computerId))
+        .fetch(new Request("https://computer.internal/stored-state"));
+    expect(await stored.json()).toMatchObject({ keys: expect.arrayContaining(["computer-account", "computer-id"]) });
+});
 
-    expect(retried).toEqual(lost);
-    const session = await worker.fetch(accountRequest(retried.token, retried.computerId), environment);
-    expect(session.status).toBe(200);
-    expect(await session.json()).toMatchObject({ userId: lost.userId });
+test("Given saved Computer credentials, When linking omits proof or supplies another Computer, Then access is denied without changing the valid credentials", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const other = await fixture.createAnonymousUser();
+    const link = (computerId: string, token?: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/link`, {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+                },
+                body: JSON.stringify({ computerId }),
+            }),
+            fixture.environment(),
+        );
+    expect((await link(owner.computerId)).status).toBe(401);
+    expect((await link(owner.computerId, other.token)).status).toBe(401);
+    expect((await link(other.computerId, owner.token)).status).toBe(403);
+    expect((await link(owner.computerId, owner.token)).status).toBe(200);
+    const revoke = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/v1/local-credential`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        fixture.environment(),
+    );
+    expect(revoke.status).toBe(204);
+    const revoked = await link(owner.computerId, owner.token);
+    expect(revoked.status).toBe(401);
+    expect(await revoked.json()).toMatchObject({ error: { code: "UNAUTHENTICATED", reason: "ACCESS_REVOKED" } });
+});
+
+test("Given the computer creation API, When a client calls the retired anonymous-user endpoint, Then it is not found", async () => {
+    const response = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ creationKey: anonymousCreationKey() }),
+        }),
+        fixture.environment(),
+    );
+    expect(response.status).toBe(404);
+});
+
+test("Given a computer account, When a caller changes only its placement prefix, Then the alias is not found and the original identity remains usable", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const alias = `${owner.computerId.startsWith("prj_wn_") ? "prj_ap_01_" : "prj_wn_01_"}${owner.computerId.slice(10)}`;
+    const response = await worker.fetch(accountRequest(owner.token, alias), fixture.environment());
+    expect(response.status).toBe(404);
+    expect((await worker.fetch(accountRequest(owner.token, owner.computerId), fixture.environment())).status).toBe(200);
 });
 
 test("Given a device that opened a link and opens the next one, When the reply is lost and the browser repeats the redemption with the same key, Then it gets the same access back and stays one device", async () => {
@@ -89,7 +184,7 @@ test("Given a device that opened a link and opens the next one, When the reply i
         );
     const token = async (response: Response) => {
         expect(response.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken;
     };
     const held = await token(await redeem(await share(), anonymousCreationKey()));
 
@@ -135,7 +230,7 @@ test("Given a device that shared links before and after renewing its credential,
         );
     const tokenOf = async (response: Response) => {
         expect(response.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken;
     };
     const original = await tokenOf(await redeem(await share(owner.token)));
     const listed = v.parse(
@@ -244,10 +339,10 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
             environment,
         );
         expect(created.status).toBe(201);
-        const identity = v.parse(v.object({ token: v.string(), computerId: v.string() }), await created.json());
+        const identity = v.parse(v.object({ computerToken: v.string(), computerId: v.string() }), await created.json());
         const projectRequest = () =>
             new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
-                headers: { authorization: `Bearer ${identity.token}` },
+                headers: { authorization: `Bearer ${identity.computerToken}` },
             });
         const response = await worker.fetch(projectRequest(), environment);
         expect(response.status).toBe(200);
@@ -272,7 +367,10 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
             this.cf = { continent };
         }
     }
-    const identitySchema = v.object({ userId: v.string(), computerId: v.string(), token: v.string() });
+    const identitySchema = v.pipe(
+        v.object({ computerId: v.string(), computerToken: v.string() }),
+        v.transform(({ computerId, computerToken }) => ({ computerId, token: computerToken })),
+    );
     const asian = await worker.fetch(new RegionalRequest("AS"), environment);
     const american = await worker.fetch(new RegionalRequest("NA"), environment);
     expect(asian.status).toBe(201);
@@ -293,7 +391,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
         }
         const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
         expect(session.status).toBe(200);
-        expect(await session.json()).toMatchObject({ userId: identity.userId });
+        expect(await session.json()).toMatchObject({ computerId: identity.computerId });
         expect((await worker.fetch(accountRequest(identity.token, other.computerId), environment)).status).toBe(401);
         const transfer = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/transfers`, {
@@ -317,7 +415,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
             );
         const redeemed = await redeem();
         expect(redeemed.status).toBe(200);
-        expect(await redeemed.json()).toMatchObject({ userId: identity.userId, computerId: identity.computerId });
+        expect(await redeemed.json()).toMatchObject({ computerId: identity.computerId });
         // A link adds one device.
         expect((await redeem()).status).toBe(410);
     }
@@ -330,7 +428,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
         authentication: { kind: "anonymous" },
-        userId: identity.userId,
+        computerId: identity.computerId,
         accessExpiresAt: null,
     });
     const served = await worker.fetch(
@@ -352,7 +450,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         await projectResponse.json(),
     );
     expect(identity.computerId).toBe(computer.computerId);
-    expect(identity.token).toMatch(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
+    expect(identity.token).toMatch(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u);
     // A Project that was never created is not found, whichever credential asks for it.
     expect(
         (await worker.fetch(accountRequest(identity.token, `prj_wn_01_${"z".repeat(24)}`), fixture.environment()))
@@ -421,7 +519,7 @@ test("Given an anonymous user, When computer access is shared, Then the link add
 
     const opened = await redeem();
     expect(opened.status).toBe(200);
-    const device = v.parse(v.object({ token: v.string() }), await opened.json()).token;
+    const device = v.parse(v.object({ computerToken: v.string() }), await opened.json()).computerToken;
     const reused = await redeem();
     expect(reused.status).toBe(410);
     expect(await reused.json()).toMatchObject({
@@ -486,7 +584,6 @@ test("Given an anonymous user with a Computer, When a transfer link is redeemed,
     );
     expect(redeemed.status).toBe(200);
     expect(await redeemed.json()).toMatchObject({
-        userId: identity.userId,
         computerId: identity.computerId,
     });
 });
@@ -521,7 +618,7 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     const unauthenticated = await worker.fetch(accountRequest(), {});
     expect(unauthenticated.status).toBe(401);
     expect(await unauthenticated.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
-    for (const token of ["morty_anon_v1_invalid", "user_alice"]) {
+    for (const token of ["morty_computer_v1_invalid", "user_alice"]) {
         expect((await worker.fetch(accountRequest(token), fixture.baseConfiguration)).status).toBe(401);
     }
     const environment = fixture.environment();
@@ -530,7 +627,7 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
         authentication: { kind: "anonymous" },
-        userId: local.userId,
+        computerId: local.computerId,
         accessExpiresAt: null,
     });
 });
@@ -555,8 +652,8 @@ test("Given browser access the owner revoked, When the browser presents its cred
         }),
         environment,
     );
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
-    const successor = `morty_anon_v1_${"B".repeat(43)}`;
+    const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
+    const successor = `morty_computer_v1_${"B".repeat(43)}`;
     const revoked = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, {
             method: "POST",
@@ -573,7 +670,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
             }),
             environment,
         );
-    const unknownToken = `morty_anon_v1_${"A".repeat(43)}`;
+    const unknownToken = `morty_computer_v1_${"A".repeat(43)}`;
 
     // Released pages read the status and code, which stay as they were.
     for (const response of [
@@ -623,7 +720,7 @@ test("Given a browser that opened one link, When it opens another link for the s
     const opened = async (code: string, replaces?: string) => {
         const response = await redeem(code, replaces);
         expect(response.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken;
     };
     const firstLink = await share();
     const secondLink = await share();
@@ -679,7 +776,7 @@ test("Given a device with a month of access, When it opens a link that grants le
             environment,
         );
         expect(response.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken;
     };
     const term = async (token: string) =>
         v.parse(v.object({ accessExpiresAt: v.string() }), await (await request("/session", token)).json())
@@ -740,7 +837,7 @@ test("Given two tabs of one browser open new links at once, When the browser lat
         );
     const token = async (response: Response) => {
         expect(response.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken;
     };
     const links = [await share(), await share(), await share()];
     const held = await token(await redeem(v.parse(v.string(), links[0])));
@@ -784,7 +881,7 @@ test("Given browsers that joined through links shared by the computer and by ano
             environment,
         );
         expect(redeemed.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
     };
     const listed = async (token: string) => {
         // Through the public entry, as browsers without the WebSocket bridge and other clients reach it.
@@ -877,7 +974,7 @@ test("Given the owner chooses how long a shared device keeps access, When the li
     expect((await redeem(codeOf(first.url))).status).toBe(410);
     const opened = await redeem(codeOf(week.url));
     expect(opened.status).toBe(200);
-    const device = v.parse(v.object({ token: v.string() }), await opened.json()).token;
+    const device = v.parse(v.object({ computerToken: v.string() }), await opened.json()).computerToken;
     const session = v.parse(
         v.object({ accessExpiresAt: v.string() }),
         await (await request("/session", device)).json(),
@@ -938,10 +1035,10 @@ test("Given a committed sharing replacement whose reply was lost, When it is ret
     expect((await redeem(codeOf(recovered.url))).status).toBe(410);
     const opened = await redeem(codeOf(current.url));
     expect(opened.status).toBe(200);
-    const device = v.parse(v.object({ token: v.string() }), await opened.json());
+    const device = v.parse(v.object({ computerToken: v.string() }), await opened.json());
     const session = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/session`, {
-            headers: { authorization: `Bearer ${device.token}` },
+            headers: { authorization: `Bearer ${device.computerToken}` },
         }),
         environment,
     );
@@ -972,7 +1069,7 @@ test("Given two devices that joined through links, When one disconnects the othe
             }),
             environment,
         );
-        return v.parse(v.object({ token: v.string() }), await opened.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await opened.json()).computerToken;
     };
     const devices = async (token: string) =>
         v.parse(
@@ -1029,7 +1126,7 @@ test("Given a browser whose credential a later link replaced, When a stale tab o
             environment,
         );
         expect(opened.status).toBe(200);
-        return v.parse(v.object({ token: v.string() }), await opened.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await opened.json()).computerToken;
     };
     const devices = async (token: string) =>
         v.parse(
@@ -1094,9 +1191,9 @@ test("Given a browser that shared a link nobody opened yet, When it disconnects 
             environment,
         );
     const phone = v.parse(
-        v.object({ token: v.string() }),
+        v.object({ computerToken: v.string() }),
         await (await open(await share(owner.token), "iPhone · Safari")).json(),
-    ).token;
+    ).computerToken;
     const pending = await share(phone);
 
     const ended = await request("/identity/v1/other-browser-access", phone, { method: "DELETE" });

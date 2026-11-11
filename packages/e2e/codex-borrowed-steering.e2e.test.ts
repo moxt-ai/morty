@@ -73,17 +73,16 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         );
         await completed.promise;
 
-        const identity = await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
+        const identity = await jsonRequest(stack.chatOrigin, "/morty/api/computers", {
             body: { creationKey: anonymousCreationKey() },
             signal,
         });
-        const token = text(identity["token"], "token");
+        const token = text(identity["computerToken"], "Computer token");
         const computerId = text(identity["computerId"], "project ID");
-        const userId = text(identity["userId"], "user ID");
 
         const chat = new ChatApi(stack.chatOrigin, signal);
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.
-        await chat.useBrowserIdentity({ computerId, token });
+        await chat.useBrowserIdentity({ computerId, computerToken: token });
         const pairing = await chat.createPairing();
         const engine = new MortyRuntimeEngine({
             engineDataDir: join(harness.workDirectory, "computer"),
@@ -129,13 +128,13 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
             ({ key, scope, token }) => {
                 localStorage.setItem(
                     key,
-                    JSON.stringify({ credentials: { [scope.userId]: token }, computers: [{ scope }] }),
+                    JSON.stringify({ credentials: { [scope.computerId]: token }, computers: [{ scope }] }),
                 );
             },
-            { key: ANONYMOUS_CREDENTIAL_KEY_NAME, scope: { computerId, userId }, token },
+            { key: ANONYMOUS_CREDENTIAL_KEY_NAME, scope: { computerId }, token },
         );
         const url = new URL(stack.chatOrigin);
-        url.searchParams.set("identity", encodeIdentityScope({ computerId, userId }));
+        url.searchParams.set("identity", encodeIdentityScope({ computerId }));
         await page.goto(url.href);
         await page.getByRole("button", { name: "Open Session", exact: true }).click();
         const dialog = page.getByRole("dialog", { name: "Open Session" });
