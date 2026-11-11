@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { piProcessHost } from "../../../src/engine/acp/adapter/pi/process-host.ts";
 import { PiAcpAgent } from "../../../src/engine/acp/harness/pi/upstream/dist/acp/agent.js";
 import type { PiAcpClient } from "../../../src/engine/acp/harness/pi/upstream/dist/acp/client.js";
 
@@ -75,10 +76,29 @@ export class PiFixture implements AsyncDisposable {
         await writeFile(join(extensions, name), source, { mode: 0o600 });
     }
 
-    createClient(callbacks: PiAcpClient): PiAcpAgent {
+    createClient(callbacks: PiAcpClient, command = this.executable): PiAcpAgent {
         return new PiAcpAgent(callbacks, {
-            environment: { ...process.env, ...this.environment, PI_ACP_PI_COMMAND: this.executable },
+            processes: piProcessHost,
+            environment: { ...process.env, ...this.environment, PI_ACP_PI_COMMAND: command },
         });
+    }
+
+    /** A real shell launcher that retains Pi as a separate child with inherited RPC pipes. */
+    async createLauncher(): Promise<{
+        readonly command: string;
+        readonly pidFile: string;
+        readonly stoppedFile: string;
+    }> {
+        const command = join(this.#directory, "pi launcher");
+        const pidFile = join(this.#directory, "pi-child.pid");
+        const stoppedFile = join(this.#directory, "launcher-stopped");
+        const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+        await writeFile(
+            command,
+            `#!/bin/sh\ntrap ${quote(`printf stopped > ${quote(stoppedFile)}; exit 0`)} TERM\nexec 3<&0\n${quote(this.executable)} "$@" <&3 &\nchild=$!\nprintf '%s' "$child" > ${quote(pidFile)}\nwait "$child"\n`,
+            { mode: 0o700 },
+        );
+        return { command, pidFile, stoppedFile };
     }
 
     async seedSession(cwd: string, prompt: string, signal: AbortSignal): Promise<void> {

@@ -32,7 +32,7 @@ import {
     type StopReason,
 } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
-import { PiRpcProcess } from "../pi-rpc/process.js";
+import { type PiProcessHost, PiRpcProcess } from "../pi-rpc/process.js";
 import { getAuthMethods } from "./auth.js";
 import { maybeAuthRequiredError } from "./auth-required.js";
 import type { PiAcpClient } from "./client.js";
@@ -159,7 +159,8 @@ export class PiAcpAgent {
     private closing: Promise<void> | null = null;
     private readonly pendingSubmissions = new Map<string, Set<AbortController>>();
     private readonly conn: PiAcpClient;
-    private readonly sessions = new SessionManager(this.signal);
+    private readonly sessions: SessionManager;
+    private readonly processes: PiProcessHost;
     private readonly store: SessionStore;
     private readonly restoringSessions = new Map<string, Promise<PiAcpSession>>();
     private readonly environment: Readonly<NodeJS.ProcessEnv>;
@@ -182,8 +183,13 @@ export class PiAcpAgent {
     // Remember recent session cwd and use it as the default filter.
     private lastSessionCwd: string | null = null;
 
-    constructor(conn: PiAcpClient, config: { readonly environment: Readonly<NodeJS.ProcessEnv> }) {
+    constructor(
+        conn: PiAcpClient,
+        config: { readonly environment: Readonly<NodeJS.ProcessEnv>; readonly processes: PiProcessHost },
+    ) {
         this.conn = conn;
+        this.processes = config.processes;
+        this.sessions = new SessionManager(this.signal, this.processes);
         this.environment = config.environment;
         this.store = new SessionStore(getPiAcpSessionMapPath(this.environment));
     }
@@ -257,6 +263,7 @@ export class PiAcpAgent {
             let proc: PiRpcProcess;
             try {
                 proc = await PiRpcProcess.spawn({
+                    processes: this.processes,
                     cwd,
                     origin: { kind: "load", sessionPath: stored.sessionFile },
                     piCommand: this.environment.PI_ACP_PI_COMMAND,

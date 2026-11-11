@@ -1,4 +1,10 @@
-import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
+import {
+    type ChildProcess,
+    type ChildProcessWithoutNullStreams,
+    type SpawnOptions,
+    type SpawnOptionsWithoutStdio,
+    spawn,
+} from "node:child_process";
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -153,6 +159,12 @@ function appendBounded(chunks: Buffer[], chunk: Buffer, currentBytes: number, li
 const lifetimes = new WeakMap<ChildProcess, SpawnedProcess>();
 
 /** Spawns a child whose process tree `captureProcessTree` and `stopProcessTree` can identify. */
+export function spawnProcess(
+    command: string,
+    args: readonly string[],
+    options: SpawnOptionsWithoutStdio & { readonly stdio: "pipe" },
+): ChildProcessWithoutNullStreams;
+export function spawnProcess(command: string, args: readonly string[], options: SpawnOptions): ChildProcess;
 export function spawnProcess(command: string, args: readonly string[], options: SpawnOptions): ChildProcess {
     const spawnedAt = Date.now();
     const child = spawn(command, [...args], options);

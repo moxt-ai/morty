@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
     decodeMessageKind,
     decodeNativeSessionResult,
@@ -30,7 +31,7 @@ function piChildProcesses(): readonly number[] {
         .map(([pid]) => Number(pid));
 }
 
-test.each(["responsive", "stalled"])(
+test.each(["responsive", "stalled", "launcher-stalled"])(
     "Given a %s real Pi native Session, When the active prompt is cancelled with a follow-up queued, Then the queued prompt restores that Session and completes",
     async (state) => {
         const entered = Promise.withResolvers<void>();
@@ -45,9 +46,12 @@ test.each(["responsive", "stalled"])(
             },
         });
         await using agent = await PiFixture.create(provider);
+        const launcher = state === "launcher-stalled" ? await agent.createLauncher() : null;
+        const environment =
+            launcher === null ? agent.environment : { ...agent.environment, MORTY_PI_PATH: launcher.command };
         const stopped: number[] = [];
         try {
-            await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
+            await withRealDaemon(new PiAgentSpecification(), environment, async (peer) => {
                 const nativeId = peer.target;
                 const sendPrompt = (commandId: string): void =>
                     peer.send(
@@ -105,10 +109,15 @@ test.each(["responsive", "stalled"])(
                         resolve();
                     });
                 });
-                if (state === "stalled") {
-                    stopped.push(...piChildProcesses());
+                if (state !== "responsive") {
+                    stopped.push(
+                        ...(launcher === null
+                            ? piChildProcesses()
+                            : [Number(await readFile(launcher.pidFile, "utf8"))]),
+                    );
                     expect(stopped).toHaveLength(1);
                     for (const pid of stopped) {
+                        expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
                         process.kill(pid, "SIGSTOP");
                     }
                 }
@@ -138,7 +147,9 @@ test.each(["responsive", "stalled"])(
                 holdResponse = false;
                 release.resolve();
                 expect(await finish(queued, "end_turn")).toContain("NATIVE_RECOVERY_REPLY");
-                expect(piChildProcesses().filter((pid) => stopped.includes(pid))).toEqual([]);
+                for (const pid of stopped) {
+                    expect(() => process.kill(pid, 0)).toThrow();
+                }
             });
         } finally {
             release.resolve();
