@@ -3,12 +3,7 @@ import { waitForSharedOperation } from "../session/manager/operation-drain.ts";
 import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 import { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 import { type MortyComputerPairingOptions, pairComputerConnection, prepareComputerConnection } from "./pairing.ts";
-import {
-    type MortyComputerConnection,
-    prepareProvidedRuntime,
-    RuntimeLoop,
-    type RuntimeLoopOptions,
-} from "./runtime-loop.ts";
+import { RuntimeLoop, type RuntimeLoopOptions } from "./runtime-loop.ts";
 
 export interface MortyRuntimeEngineParams {
     readonly engineDataDir: string;
@@ -16,12 +11,8 @@ export interface MortyRuntimeEngineParams {
     readonly maxAcpProcesses?: number;
 }
 
-type EngineLoopConnection =
-    | { readonly kind: "saved"; readonly pairingGeneration: string }
-    | { readonly kind: "provided"; readonly connection: MortyComputerConnection };
-
 export interface RunLoopParams extends RuntimeLoopOptions {
-    readonly connection: EngineLoopConnection;
+    readonly pairingGeneration: string;
     readonly signal: AbortSignal;
 }
 
@@ -89,33 +80,17 @@ export class MortyRuntimeEngine {
             this.#agentLaunchEnvironment,
         );
 
-    readonly runLoop = async ({ connection, signal, ...options }: RunLoopParams): Promise<void> => {
+    readonly runLoop = async ({ pairingGeneration, signal, ...options }: RunLoopParams): Promise<void> => {
         const loop = new RuntimeLoop(async (preparationSignal) => {
             const installation = await this.#ensureInstallation(preparationSignal);
-            switch (connection.kind) {
-                case "saved": {
-                    const saved = await installation.readConnection(connection.pairingGeneration, preparationSignal);
-                    return await prepareComputerConnection(
-                        installation,
-                        saved,
-                        preparationSignal,
-                        this.#agentLaunchEnvironment,
-                        this.#maxAcpProcesses,
-                    );
-                }
-                case "provided":
-                    return await prepareProvidedRuntime({
-                        installation,
-                        connection: connection.connection,
-                        signal: preparationSignal,
-                        agentLaunchEnvironment: this.#agentLaunchEnvironment,
-                        maxAcpProcesses: this.#maxAcpProcesses,
-                    });
-                default: {
-                    const exhaustive: never = connection;
-                    return exhaustive;
-                }
-            }
+            const saved = await installation.readConnection(pairingGeneration, preparationSignal);
+            return await prepareComputerConnection(
+                installation,
+                saved,
+                preparationSignal,
+                this.#agentLaunchEnvironment,
+                this.#maxAcpProcesses,
+            );
         }, options);
         await loop.run(signal);
     };

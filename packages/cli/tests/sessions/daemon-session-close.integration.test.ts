@@ -82,7 +82,6 @@ class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
     readonly agentExecutable = "node";
     readonly harness = "controlled-close";
     readonly label = "Controlled Close";
-    override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
     readonly #closeGate = Promise.withResolvers<void>();
     readonly closeStarted = Promise.withResolvers<void>();

@@ -22,7 +22,6 @@ class ForkSettingsAgent extends ControlledAcpSpecification {
     readonly agentExecutable = "node";
     readonly harness = "controlled-acp";
     readonly label = "Controlled Fork settings";
-    override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
 
     constructor(fault: string) {

@@ -38,7 +38,6 @@ class FirstAgentSpecification extends ControlledAcpSpecification {
     readonly agentExecutable = "controlled-acp";
     readonly harness = "controlled-acp";
     readonly label = "Controlled ACP";
-    override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
 
     constructor() {
@@ -51,7 +50,6 @@ class LaterInstalledAgentSpecification extends ControlledAcpSpecification {
     readonly agentExecutable = "controlled-acp-later";
     readonly harness = "controlled-acp-later";
     readonly label = "Controlled ACP Later";
-    override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
 
     constructor() {

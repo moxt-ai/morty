@@ -36,8 +36,6 @@ function overrideVariable(harness: string): string | null {
             return "MORTY_CLAUDE_PATH";
         case "pi":
             return "MORTY_PI_PATH";
-        case "opencode":
-            return "MORTY_OPENCODE_PATH";
         default:
             return null;
     }

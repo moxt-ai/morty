@@ -146,7 +146,6 @@ class UpdatingSettingsAgent extends ControlledAcpSpecification {
     readonly agentExecutable = "node";
     readonly harness = "controlled-acp";
     readonly label = "Controlled session state";
-    override readonly maximumTestedAgentVersion = process.versions.node;
     override readonly minimumSupportedAgentVersion = process.versions.node;
 
     constructor(stage: "opening" | "configuration") {
