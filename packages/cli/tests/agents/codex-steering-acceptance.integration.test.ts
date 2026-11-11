@@ -1,26 +1,29 @@
-import { methods, PROTOCOL_VERSION, type SessionUpdate } from "@agentclientprotocol/sdk/unstable";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
-import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";
 import { CodexAcpAgent } from "../../src/engine/acp/harness/codex/agent.ts";
 import { ControlledCodexFixture } from "../support/agents/controlled-codex.ts";
 
-for (const terminal of ["cancelled", "completed", "failed"] as const) {
+for (const terminal of ["interrupted", "completed", "failed"] as const) {
     test(`Given Codex defers accepted steering, When its turn is ${terminal} and the endpoint is reused, Then new steering retains its own content despite late old-turn input`, async () => {
         await using fixture = await ControlledCodexFixture.create({
             holdTurn: true,
             skipSecondSteering: true,
             consumeSteeringAfterFirstTurn: true,
             latePreviousUser: true,
-            ...(terminal === "cancelled" ? {} : { endFirstTurnOnSteering: terminal }),
+            endFirstTurnOnSteering: terminal,
         });
         let started = Promise.withResolvers<void>();
         const updates: SessionUpdate[] = [];
         const consumed = Promise.withResolvers<void>();
         let userChunks = 0;
+        const rejectInteraction = async (): Promise<never> => {
+            throw new Error("Unexpected interaction");
+        };
         const endpoint = new CodexAcpAgent({
             command: fixture.environment["MORTY_CODEX_PATH"] ?? "",
             cwd: process.cwd(),
             environment: fixture.environment,
+            interactions: { onPermission: rejectInteraction, onElicitation: rejectInteraction },
             onSessionUpdate: async ({ update }) => {
                 updates.push(update);
                 if (
@@ -40,67 +43,41 @@ for (const terminal of ["cancelled", "completed", "failed"] as const) {
                 }
             },
         });
-        const rejectInteraction = async (): Promise<never> => {
-            throw new Error("Unexpected interaction");
-        };
-        const connection = createAcpClient({
-            onUpdate: async () => undefined,
-            onPermission: rejectInteraction,
-            onElicitation: rejectInteraction,
-            onElicitationComplete: async () => undefined,
-        }).connect(endpoint.app());
         const signal = AbortSignal.timeout(30_000);
         try {
             await endpoint.initialize(signal);
-            await connection.agent.request(
-                methods.agent.initialize,
-                { protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} },
-                { cancellationSignal: signal },
-            );
-            const session = await connection.agent.request(
-                methods.agent.session.new,
-                { cwd: process.cwd(), mcpServers: [] },
-                { cancellationSignal: signal },
-            );
-            const running = connection.agent.request(
-                methods.agent.session.prompt,
-                { sessionId: session.sessionId, prompt: [{ type: "text", text: "Hold the turn" }] },
-                { cancellationSignal: signal },
-            );
+            const session = await endpoint.newSession({ cwd: process.cwd() }, signal);
+            const running = endpoint.prompt({
+                sessionId: session.sessionId,
+                prompt: [{ type: "text", text: "Hold the turn" }],
+            });
             void running.catch(() => {});
             await started.promise;
-            const response = await connection.agent.request(
-                "_session/steering",
+            const response = await endpoint.steer(
                 { sessionId: session.sessionId, prompt: [{ type: "text", text: "Use the new requirement" }] },
-                { cancellationSignal: signal },
+                signal,
             );
             expect(response).toMatchObject({ outcome: "injected" });
             expect(userChunks).toBe(1);
-            if (terminal === "cancelled") {
-                await connection.agent.notify(methods.agent.session.cancel, { sessionId: session.sessionId });
-            }
             await running.catch(() => undefined);
             started = Promise.withResolvers<void>();
-            const reused = connection.agent.request(
-                methods.agent.session.prompt,
-                { sessionId: session.sessionId, prompt: [{ type: "text", text: "New turn" }] },
-                { cancellationSignal: signal },
-            );
+            const reused = endpoint.prompt({
+                sessionId: session.sessionId,
+                prompt: [{ type: "text", text: "New turn" }],
+            });
             void reused.catch(() => {});
             await started.promise;
             expect(
-                await connection.agent.request(
-                    "_session/steering",
+                await endpoint.steer(
                     {
                         sessionId: session.sessionId,
                         prompt: [{ type: "text", text: "Rejected by the native submission hook" }],
                     },
-                    { cancellationSignal: signal },
+                    signal,
                 ),
             ).toMatchObject({ outcome: "injected" });
             expect(
-                await connection.agent.request(
-                    "_session/steering",
+                await endpoint.steer(
                     {
                         sessionId: session.sessionId,
                         prompt: [
@@ -114,7 +91,7 @@ for (const terminal of ["cancelled", "completed", "failed"] as const) {
                             },
                         ],
                     },
-                    { cancellationSignal: signal },
+                    signal,
                 ),
             ).toMatchObject({ outcome: "injected" });
             await consumed.promise;
@@ -133,11 +110,10 @@ for (const terminal of ["cancelled", "completed", "failed"] as const) {
                         update.sessionUpdate === "user_message_chunk" && update.messageId === "controlled-user-2",
                 ),
             ).toMatchObject([{ content: { type: "text", text: "New turn" } }]);
-            await connection.agent.notify(methods.agent.session.cancel, { sessionId: session.sessionId });
-            await reused;
+            await endpoint.cancel({ sessionId: session.sessionId });
+            await reused.catch(() => undefined);
         } finally {
-            await endpoint.close();
-            connection.close();
+            await endpoint.dispose("force");
         }
     });
 }

@@ -15,6 +15,7 @@ import type {
     AdapterSessionOpenParams,
     AdapterSessionTarget,
 } from "../../native-history/preview-contract.ts";
+import { memoryHistoryPreviewSnapshot } from "../../native-history/preview-snapshots.ts";
 import { nativeSessionPageSchema, type SessionId, sessionIdSchema } from "../../protocol/native-session.ts";
 import { normalizeAcpCapabilities } from "../../protocol/session-capabilities.ts";
 import { sessionConfigProtocolForAgent } from "../../protocol/session-config-protocol.ts";
@@ -52,7 +53,7 @@ export class PiAdapter implements Adapter {
         this.#agent = agent;
         this.#runtime = piRuntime(agent);
         this.#dependencies = dependencies;
-        this.#previews = new HarnessHistoryPreviews(dependencies.processes);
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes, memoryHistoryPreviewSnapshot, Infinity);
     }
 
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
@@ -358,6 +359,7 @@ export class PiAdapter implements Adapter {
         };
         const runtime = this.#runtime;
         return await this.#previews.read({
+            identity: { kind: "fresh" },
             query: scoped,
             request,
             create: async (params, lifetime, signal) => {

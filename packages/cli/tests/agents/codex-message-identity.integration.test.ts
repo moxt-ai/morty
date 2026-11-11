@@ -2,10 +2,8 @@ import { addAbortListener } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { createAcpClient } from "../../src/engine/acp/connection/create-client.ts";
 import { CodexAcpAgent } from "../../src/engine/acp/harness/codex/agent.ts";
 import { CodexAppServerClient } from "../../src/engine/acp/harness/codex/app-server-client.ts";
 import {
@@ -26,35 +24,21 @@ test.each(["owned", "borrowed"])(
         const cwd = await mkdtemp(join(tmpdir(), "morty-codex-message-identity-"));
         const updates: CodexSessionUpdate[] = [];
         const seeded = Promise.withResolvers<void>();
+        const reject = async (): Promise<never> => {
+            throw new Error("The identity scenario must not request interaction");
+        };
         const endpoint = new CodexAcpAgent({
             command: codex.executable,
             cwd,
             environment: codex.environment,
+            interactions: { onPermission: reject, onElicitation: reject },
             onSessionUpdate: async ({ update }) => {
                 updates.push(update);
             },
         });
-        const connection = createAcpClient({
-            onUpdate: async () => undefined,
-            onPermission: async () => {
-                throw new Error("The message identity scenario must not request permission");
-            },
-            onElicitation: async () => {
-                throw new Error("The message identity scenario must not request input");
-            },
-            onElicitationComplete: async () => undefined,
-        }).connect(endpoint.app());
         const signal = AbortSignal.timeout(60_000);
         try {
             await endpoint.initialize(signal);
-            await connection.agent.request(
-                methods.agent.initialize,
-                {
-                    protocolVersion: PROTOCOL_VERSION,
-                    clientCapabilities: {},
-                },
-                { cancellationSignal: signal },
-            );
             const native = new CodexAppServerClient({
                 command: codex.executable,
                 cwd,
@@ -74,14 +58,7 @@ test.each(["owned", "borrowed"])(
                 await native.initialize(signal);
                 let sessionId: string;
                 if (ownership === "owned") {
-                    const created = await connection.agent.request(
-                        methods.agent.session.new,
-                        {
-                            cwd,
-                            mcpServers: [],
-                        },
-                        { cancellationSignal: signal },
-                    );
+                    const created = await endpoint.newSession({ cwd }, signal);
                     sessionId = created.sessionId;
                 } else {
                     const created = threadStartResponseSchema.parse(
@@ -100,11 +77,7 @@ test.each(["owned", "borrowed"])(
                         using _listener = addAbortListener(signal, () => seeded.reject(signal.reason));
                         await seeded.promise;
                     }
-                    const loaded = await connection.agent.request(
-                        methods.agent.session.load,
-                        { sessionId, cwd, mcpServers: [] },
-                        { cancellationSignal: signal },
-                    );
+                    const loaded = await endpoint.loadSession({ sessionId, cwd }, signal);
                     expect(loaded._meta).toMatchObject({ steering: { supported: false } });
                     updates.length = 0;
                 }
@@ -116,14 +89,10 @@ test.each(["owned", "borrowed"])(
                         text: "Keep the reply concise",
                     },
                 } satisfies import("@agentclientprotocol/sdk/unstable").ContentBlock;
-                const result = await connection.agent.request(
-                    methods.agent.session.prompt,
-                    {
-                        sessionId,
-                        prompt: [{ type: "text", text: "Reply with a short greeting, without tools" }, resource],
-                    },
-                    { cancellationSignal: signal },
-                );
+                const result = await endpoint.prompt({
+                    sessionId,
+                    prompt: [{ type: "text", text: "Reply with a short greeting, without tools" }, resource],
+                });
                 const live = updates.filter((update) => update.sessionUpdate === "agent_message_chunk");
                 const userMessages = updates.filter((update) => update.sessionUpdate === "user_message_chunk");
                 expect(userMessages).toHaveLength(2);
@@ -149,14 +118,12 @@ test.each(["owned", "borrowed"])(
                     expect(nativeIds).toContain(update.messageId);
                 }
                 updates.length = 0;
-                await connection.agent.request(
-                    methods.agent.session.load,
+                await endpoint.loadSession(
                     {
                         sessionId,
                         cwd,
-                        mcpServers: [],
                     },
-                    { cancellationSignal: signal },
+                    signal,
                 );
                 const history = updates.filter((update) => update.sessionUpdate === "agent_message_chunk");
                 expect(history.length).toBeGreaterThan(0);
@@ -170,8 +137,7 @@ test.each(["owned", "borrowed"])(
                 await stopProcessTree(native.child());
             }
         } finally {
-            await endpoint.close();
-            connection.close();
+            await endpoint.dispose("force");
             await rm(cwd, { recursive: true, force: true });
         }
     },

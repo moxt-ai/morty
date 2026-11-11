@@ -20,26 +20,22 @@ import {
     encodeSessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
+import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { expect, test, vi } from "vitest";
-import type {
-    AcpEndpointTermination,
-    InProcessAcpEndpoint,
-    InProcessAcpEndpointFactory,
-} from "../../src/engine/acp/agent/in-process-endpoint.ts";
+import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycle.ts";
 import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
 import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
-import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
-class ControlledCloseEndpoint implements InProcessAcpEndpoint {
+class ControlledCloseEndpoint implements ControlledAcpPeer {
     readonly #app: AgentApp;
     readonly #closeGate: Promise<void>;
     readonly #closeStarted: (() => void) | null;
     #connection: AgentConnection | null = null;
-    readonly #termination = Promise.withResolvers<AcpEndpointTermination>();
+    readonly #termination = Promise.withResolvers<AgentTermination>();
     readonly terminated = this.#termination.promise;
 
     constructor(closeGate: Promise<void>, closeStarted: (() => void) | null) {
@@ -75,10 +71,7 @@ class ControlledCloseEndpoint implements InProcessAcpEndpoint {
 
 class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
     readonly createConnection: AgentConnectionFactory = (options) =>
-        new ControlledEndpointConnection(
-            this.createEndpoint({ ...options, onSessionUpdate: options.client.onUpdate }),
-            options.client,
-        );
+        new ControlledEndpointConnection(this.createEndpoint(), options.client);
     readonly agentExecutable = "node";
     readonly harness = "controlled-close";
     readonly label = "Controlled Close";
@@ -86,7 +79,7 @@ class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
     readonly #closeGate = Promise.withResolvers<void>();
     readonly closeStarted = Promise.withResolvers<void>();
     #createdEndpoints = 0;
-    readonly createEndpoint: InProcessAcpEndpointFactory = () => {
+    readonly createEndpoint = (): ControlledAcpPeer => {
         const runtimeEndpoint = this.#createdEndpoints > 0;
         this.#createdEndpoints += 1;
         return new ControlledCloseEndpoint(

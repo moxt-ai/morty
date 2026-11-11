@@ -3,7 +3,7 @@ import type { ChildProcess } from "node:child_process";
 import { executableLaunch, platformSpawnOptions, spawnProcess } from "../../../util/process/executable.ts";
 
 import { AcpExecutionError } from "../../acp-error.ts";
-import { type AcpEndpointTermination, acpEndpointTerminationError } from "../../agent/in-process-endpoint.ts";
+import { type AgentTermination, agentTerminationError } from "../../agent/agent-lifecycle.ts";
 import { decodeAppServerMessage } from "./app-server-protocol.ts";
 
 const INITIALIZE_TIMEOUT_MILLISECONDS = 30_000;
@@ -48,9 +48,9 @@ export class CodexAppServerClient {
     readonly #child: ChildProcess;
     readonly #handlers: CodexAppServerHandlers;
     readonly #pending = new Map<number | string, PendingRequest>();
-    readonly #termination = Promise.withResolvers<AcpEndpointTermination>();
+    readonly #termination = Promise.withResolvers<AgentTermination>();
     readonly terminated = this.#termination.promise;
-    #lifecycle: { readonly kind: "open" } | { readonly kind: "terminated"; readonly result: AcpEndpointTermination } = {
+    #lifecycle: { readonly kind: "open" } | { readonly kind: "terminated"; readonly result: AgentTermination } = {
         kind: "open",
     };
     #nextRequestId = 1;
@@ -114,13 +114,13 @@ export class CodexAppServerClient {
         this.#terminate({ kind: "failed", error });
     };
 
-    readonly #terminate = (result: AcpEndpointTermination): void => {
+    readonly #terminate = (result: AgentTermination): void => {
         if (this.#lifecycle.kind === "terminated") {
             return;
         }
         this.#lifecycle = { kind: "terminated", result };
         this.#termination.resolve(result);
-        const error = acpEndpointTerminationError(result);
+        const error = agentTerminationError(result);
         for (const [id, pending] of this.#pending) {
             this.#pending.delete(id);
             pending.completion.reject(error);
@@ -129,7 +129,7 @@ export class CodexAppServerClient {
 
     readonly #requireOpen = (): void => {
         if (this.#lifecycle.kind === "terminated") {
-            throw acpEndpointTerminationError(this.#lifecycle.result);
+            throw agentTerminationError(this.#lifecycle.result);
         }
     };
 

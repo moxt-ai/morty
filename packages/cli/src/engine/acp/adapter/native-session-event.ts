@@ -13,7 +13,7 @@ import {
     type SessionConfigOption,
 } from "@morty-build/client/protocol";
 import { truncate } from "../../util/value-utils.ts";
-import type { BackgroundActivity, PromptDelegationStage } from "../agent/in-process-endpoint.ts";
+import type { BackgroundActivity, PromptDelegationStage } from "../agent/agent-lifecycle.ts";
 import { sessionConfigProtocolForAgent } from "../protocol/session-config-protocol.ts";
 
 export type NativeSessionInfoChange =

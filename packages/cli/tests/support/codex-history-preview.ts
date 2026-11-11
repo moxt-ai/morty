@@ -7,7 +7,7 @@ import { MemorySessionEventStore } from "../../src/engine/session/history/sessio
 import { AgentProcessPool } from "../../src/engine/session/process/agent-process-pool.ts";
 import { UnretainedExternalContentStore } from "./unretained-external-content-store.ts";
 
-function historyAdapter(agent: AcpAgentDefinition) {
+export function codexHistoryAdapter(agent: AcpAgentDefinition) {
     const processes = new AgentProcessPool();
     const content = new UnretainedExternalContentStore();
     const adapter = new CodexAdapter(agent, {
@@ -28,7 +28,7 @@ function historyAdapter(agent: AcpAgentDefinition) {
 
 /** Exercises the production preview boundary against a controlled app-server executable. */
 export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string, sessionId: string) {
-    const { adapter, processes } = historyAdapter(agent);
+    const { adapter, processes } = codexHistoryAdapter(agent);
     try {
         return await adapter.readSessionHistory({
             query: { agent, cwd, signal: AbortSignal.timeout(30_000) },
@@ -46,7 +46,7 @@ export async function previewCodexHistory(agent: AcpAgentDefinition, cwd: string
 
 /** Reads through the normal ACP session/load lifecycle for parity assertions. */
 export async function loadCodexHistory(agent: AcpAgentDefinition, cwd: string, sessionId: string) {
-    const { adapter, processes } = historyAdapter(agent);
+    const { adapter, processes } = codexHistoryAdapter(agent);
     const events = new MemorySessionEventStore();
     const sessionTarget = { harness: agent.harness, sessionId };
     try {
