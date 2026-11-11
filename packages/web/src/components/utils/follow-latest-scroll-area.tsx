@@ -11,9 +11,10 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/cloud-button.tsx";
 import { LoadingWave } from "../ui/loading-wave.tsx";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 import { useLoadMoreOnScroll } from "./load-more-trigger.tsx";
 
-type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> & {
+type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref" | "dir"> & {
     /** Callers that need the element pass their ref; omitted, the area owns it. */
     readonly container?: RefObject<HTMLDivElement | null>;
     /**
@@ -40,6 +41,9 @@ type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> 
         readonly working: boolean;
     };
     readonly showTopFade?: boolean;
+    /** Uses the product scrollbar while keeping this component's scroll ref on its viewport. */
+    readonly useProductScrollbar?: boolean;
+    readonly viewportClassName?: string;
     /** `from-<surface> to-<surface>/0` for the opaque surface behind this scroller. */
     readonly topFadeClassName?: string;
 };
@@ -56,8 +60,12 @@ export function FollowLatestScrollArea({
     jumpToLatest,
     showTopFade = false,
     topFadeClassName = "from-card to-card/0",
+    useProductScrollbar = false,
+    viewportClassName,
     className,
     onScroll,
+    role,
+    "aria-label": ariaLabel,
     ...props
 }: FollowLatestScrollAreaProps) {
     const owned = useRef<HTMLDivElement | null>(null);
@@ -146,32 +154,43 @@ export function FollowLatestScrollArea({
         };
     }, [syncScrollChrome, scrollArea.current]);
 
-    const area = (
-        <div
+    const handleScroll: NonNullable<typeof onScroll> = (event) => {
+        const element = event.currentTarget;
+        const top = element.scrollTop;
+        const distanceFromLatest = element.scrollHeight - top - element.clientHeight;
+        // Any upward move away from the bottom is the user leaving the latest content, even when the
+        // whole overflow fits inside the follow threshold; without this, a short conversation pins
+        // every user scroll back to the bottom. Programmatic pins and shrinking content land at the
+        // bottom (distance 0), so they keep following. Only the true bottom re-arms following; the
+        // jump control's wider threshold is only for deciding when to show its affordance.
+        if (top < lastTop.current && distanceFromLatest > 0) {
+            following.current = false;
+        } else if (isAtLatest(element)) {
+            following.current = true;
+        }
+        lastTop.current = top;
+        syncScrollChrome(element);
+        if (loadOlder !== undefined) {
+            pagination.checkScrollEdge(element, false);
+        }
+        onScroll?.(event);
+    };
+    const area = useProductScrollbar ? (
+        <ScrollArea
             {...props}
             className={className}
+            onViewportScroll={handleScroll}
+            viewportClassName={cn("h-full", viewportClassName)}
+            viewportLabel={ariaLabel}
+            viewportRef={scrollArea}
+            viewportRole={role}
+        />
+    ) : (
+        <div
+            {...{ ...props, role, "aria-label": ariaLabel }}
+            className={className}
+            onScroll={handleScroll}
             ref={scrollArea}
-            onScroll={(event) => {
-                const element = event.currentTarget;
-                const top = element.scrollTop;
-                const distanceFromLatest = element.scrollHeight - top - element.clientHeight;
-                // Any upward move away from the bottom is the user leaving the latest content, even when the
-                // whole overflow fits inside the follow threshold; without this, a short conversation pins
-                // every user scroll back to the bottom. Programmatic pins and shrinking content land at the
-                // bottom (distance 0), so they keep following. Only the true bottom re-arms following; the
-                // jump control's wider threshold is only for deciding when to show its affordance.
-                if (top < lastTop.current && distanceFromLatest > 0) {
-                    following.current = false;
-                } else if (isAtLatest(element)) {
-                    following.current = true;
-                }
-                lastTop.current = top;
-                syncScrollChrome(element);
-                if (loadOlder !== undefined) {
-                    pagination.checkScrollEdge(element, false);
-                }
-                onScroll?.(event);
-            }}
         />
     );
 

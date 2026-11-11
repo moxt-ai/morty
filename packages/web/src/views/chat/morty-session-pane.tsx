@@ -17,7 +17,8 @@ import {
     chatSessionInteractionColumnClassName,
     chatSessionMessageColumnClassName,
     chatSessionMessageItemClassName,
-    chatSessionMessageScrollClassName,
+    chatSessionMessageScrollAreaClassName,
+    chatSessionMessageViewportClassName,
     chatSessionPaneFillClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
@@ -685,10 +686,10 @@ export function MortySessionPaneLoading({ footer }: { readonly footer?: ReactNod
                             <WorkingDirectorySkeleton />
                         </header>
                         <ScrollArea
-                            aria-label="Messages"
-                            className={chatSessionMessageScrollClassName}
-                            role="log"
-                            viewportClassName="h-full max-h-[inherit]"
+                            className={chatSessionMessageScrollAreaClassName}
+                            viewportClassName={`h-full ${chatSessionMessageViewportClassName}`}
+                            viewportLabel="Messages"
+                            viewportRole="log"
                         >
                             <SessionMessageListSkeleton />
                         </ScrollArea>
@@ -966,7 +967,9 @@ function MortySessionPaneBody({
                             }}
                             showTopFade
                             aria-label="Messages"
-                            className={chatSessionMessageScrollClassName}
+                            className={chatSessionMessageScrollAreaClassName}
+                            useProductScrollbar
+                            viewportClassName={chatSessionMessageViewportClassName}
                             loadOlder={{
                                 hasMore: timeline.hasOlderHistory,
                                 loading: presentation.historyLoading,
