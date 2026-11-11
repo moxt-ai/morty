@@ -151,7 +151,7 @@ export class IdentityStorage {
     readonly #computerId: string | null;
     readonly #ownerUserId: string | null;
 
-    constructor(database: unknown, computerId: string | null = null, ownerUserId: string | null = null) {
+    constructor(database: unknown, computerId: string | null, ownerUserId: string | null) {
         this.#database = database;
         this.#computerId = computerId;
         this.#ownerUserId = ownerUserId;
