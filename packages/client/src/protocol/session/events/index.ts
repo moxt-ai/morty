@@ -175,23 +175,6 @@ const planEntrySchema = z
         status: z.enum(["pending", "in_progress", "completed"]),
     })
     .readonly();
-const planContentSchema = z.discriminatedUnion("type", [
-    z
-        .object({
-            entries: z.array(planEntrySchema).max(MAX_COLLECTION_SIZE).readonly(),
-            planId: shortString,
-            type: z.literal("items"),
-        })
-        .readonly(),
-    z.object({ planId: shortString, type: z.literal("file"), uri: boundedString }).readonly(),
-    z
-        .object({
-            content: boundedString,
-            planId: shortString,
-            type: z.literal("markdown"),
-        })
-        .readonly(),
-]);
 const commandSchema = z
     .object({
         description: boundedString,
@@ -287,8 +270,6 @@ const acpSessionUpdateSchema = z.discriminatedUnion("sessionUpdate", [
             sessionUpdate: z.literal("plan"),
         })
         .readonly(),
-    z.object({ plan: planContentSchema, sessionUpdate: z.literal("plan_update") }).readonly(),
-    z.object({ planId: shortString, sessionUpdate: z.literal("plan_removed") }).readonly(),
     z
         .object({
             availableCommands: z.array(commandSchema).max(MAX_COLLECTION_SIZE).readonly(),

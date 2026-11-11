@@ -99,8 +99,6 @@ export function nativeSessionEvent(update: SessionUpdate, value: unknown = updat
         case "tool_call":
         case "tool_call_update":
         case "plan":
-        case "plan_update":
-        case "plan_removed":
             return { kind: "content", payload };
         default:
             return { kind: "other", payload };

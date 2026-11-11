@@ -48,7 +48,6 @@ export async function initializeAgentConnection(
                 {
                     clientCapabilities: {
                         elicitation: { form: {}, url: {} },
-                        plan: {},
                         session: { compaction: {}, configOptions: { boolean: {} } },
                     },
                     clientInfo: { name: "morty", version: "0.0.3" },

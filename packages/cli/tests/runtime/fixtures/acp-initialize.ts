@@ -7,7 +7,7 @@ function failFirstRuntimeInitialization(clientCapabilities: unknown, selectedAge
     if (
         process.env["MORTY_FAKE_ACP_FAIL_RUNTIME_INITIALIZATION"] !== selectedAgentName ||
         !isRecord(clientCapabilities) ||
-        !Reflect.has(clientCapabilities, "plan")
+        !Reflect.has(clientCapabilities, "elicitation")
     ) {
         return;
     }

@@ -30,7 +30,6 @@ export const SESSION_ARCHIVED_KIND = "session.archived";
 /** Failure code of an operation that needs a Session the Computer has closed and nobody has reopened. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
 export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
-export const SESSION_COMMANDS_UPDATED_KIND = "session.commands.updated";
 export const SESSION_INFO_UPDATED_KIND = "session.info.updated";
 export const SESSION_OPERATION_FAILED_KIND = "session.operation.failed";
 export const SESSION_PROMPT_ACCEPTED_KIND = "session.prompt.accepted";
@@ -289,16 +288,6 @@ const sessionCloseNoticeEventSchema = z
     .readonly();
 
 export type SessionCloseNoticeEvent = z.infer<typeof sessionCloseNoticeEventSchema>;
-
-const sessionCommandsUpdatedEventSchema = z
-    .object({
-        commands: z.array(sessionCommandSchema).max(500).readonly(),
-        kind: z.literal(SESSION_COMMANDS_UPDATED_KIND),
-        target: nativeSessionTargetSchema,
-    })
-    .readonly();
-
-export type SessionCommandsUpdatedEvent = z.infer<typeof sessionCommandsUpdatedEventSchema>;
 
 const sessionInfoUpdatedEventSchema = z
     .object({
