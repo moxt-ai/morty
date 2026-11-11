@@ -55,10 +55,9 @@ const sessionConfigurations = v.pipe(
         "Session configuration identifiers must be unique.",
     ),
 );
-// A page loaded before drafts named their directory omits `workspaceRef`; its settings are the default directory's.
 const agentSettingsInput = v.strictObject({
     harness: relayIdentifier,
-    workspaceRef: v.optional(nativeDirectory),
+    workspaceRef: nativeDirectory,
 });
 const nativeSessionTargetInput = v.strictObject({ harness: relayIdentifier, sessionId: relayIdentifier });
 const accessInput = v.union([
@@ -226,10 +225,7 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof agentSettingsInput>(agentSettingsInput),
             async (context) =>
                 privateJson(
-                    await context.env.services.chat.agentSettings(context.get("chatScope"), {
-                        harness: context.req.valid("json").harness,
-                        workspaceRef: context.req.valid("json").workspaceRef ?? ".",
-                    }),
+                    await context.env.services.chat.agentSettings(context.get("chatScope"), context.req.valid("json")),
                 ),
         )
         .post(
