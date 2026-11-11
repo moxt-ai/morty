@@ -39,8 +39,7 @@ export class ComputerBackendService extends ComputerManagementBackendService {
         await this.operations.forkNativeSession(this.computerId, operationId, input, signal);
     readonly session = (target: NativeSessionTarget, signal: AbortSignal) =>
         new SessionControl(
-            async (command, permission) =>
-                await this.operations.requestOperationControl(this.computerId, command, permission, signal),
+            async (command) => await this.operations.requestControl(this.computerId, command, signal),
             target,
         );
 }

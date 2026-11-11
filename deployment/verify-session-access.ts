@@ -100,27 +100,16 @@ if (!timingSafeEqual(expected, Buffer.from(signature, "base64url"))) {
     throw new Error("The configured signing key was not used");
 }
 const sessionPath = `/morty/api/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
-await request(`${sessionPath}/live-event-subscription-target`, 200, access.credential);
-await request(
-    `${sessionPath}/live-event-subscription-target`,
-    401,
-    `${signed}.${Buffer.alloc(32).toString("base64url")}`,
-);
-for (const path of [
-    "/morty/api/dashboard/health",
-    "/morty/api/dashboard/v1/machine-accounts",
-    `/morty/api/v1/computers/${owner.computerId}/daemon/agents`,
-]) {
-    await request(path, 404);
-}
+await request(`${sessionPath}/configuration`, 200, access.credential);
+await request(`${sessionPath}/configuration`, 401, `${signed}.${Buffer.alloc(32).toString("base64url")}`);
 const successor = `morty_anon_v1_${randomBytes(32).toString("base64url")}`;
 await request(`/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.token, { successor });
-await request(`${sessionPath}/live-event-subscription-target`, 401, access.credential);
+await request(`${sessionPath}/configuration`, 401, access.credential);
 const renewed = v.parse(
     v.object({ credential: v.string() }),
     await request(`${chat}/session-access`, 200, successor, access.target),
 );
-await request(`${sessionPath}/live-event-subscription-target`, 200, renewed.credential);
+await request(`${sessionPath}/configuration`, 200, renewed.credential);
 await writeFile(
     values.evidence,
     `${JSON.stringify(
@@ -131,7 +120,6 @@ await writeFile(
             configuredSigningKeyVerified: true,
             runtimeVerificationStatus: 200,
             forgeryStatus: 401,
-            retiredEndpointsStatus: 404,
             endedHolderStatus: 401,
             successorHolderStatus: 200,
             agent: "controlled ACP harness; not vendor-Agent compatibility evidence",

@@ -21,14 +21,12 @@ export interface AgentDescriptor {
 export class CreatedComputerPairing {
     readonly expiresAt: string;
     readonly pairingCode: string;
-    readonly pollToken: string;
     readonly computerId: string;
 
-    constructor(expiresAt: string, pairingCode: string, pollToken: string, computerId: string) {
+    constructor(expiresAt: string, pairingCode: string, computerId: string) {
         this.computerId = computerId;
         this.expiresAt = expiresAt;
         this.pairingCode = pairingCode;
-        this.pollToken = pollToken;
     }
 }
 
@@ -41,11 +39,6 @@ export interface VerifiedComputerAccess {
     readonly computerId: string;
 }
 
-/**
- * A host connection opened with a project credential. The Relay stores no copy of that authority: the connection
- * names the credential, and every message it sends re-reads whether the credential still grants
- * `PROJECT_HOST_PERMISSIONS` and the message's own permission in the Project.
- */
 export class ComputerDescriptor {
     readonly agents: readonly AgentDescriptor[];
     readonly machineName: string;
@@ -90,19 +83,14 @@ export class PairingDirectoryError extends Error implements HttpError {
 function pairingDirectoryErrorStatus(code: string): number {
     switch (code) {
         case "pairing_not_found":
-        case "computer_not_found":
-        case "channel_not_found":
             return 404;
         case "unauthorized":
         case "computer_revoked":
             return 401;
         case "computer_access_denied":
-        case "workspace_required":
             return 403;
         case "computer_unavailable":
         case "idempotency_conflict":
-        case "session_configuration_conflict":
-        case "turn_already_started":
             return 409;
         case "pairing_timeout":
         case "directory_timeout":
@@ -110,20 +98,9 @@ function pairingDirectoryErrorStatus(code: string): number {
         case "computer_quota_exceeded":
             return 429;
         case "directory_unavailable":
-        case "computer_disconnect_failed":
             return 503;
         default:
             return 400;
-    }
-}
-
-export class RevokedProjectComputer {
-    readonly access: VerifiedComputerAccess;
-    readonly revokedAt: string;
-
-    constructor(access: VerifiedComputerAccess, revokedAt: string) {
-        this.access = access;
-        this.revokedAt = revokedAt;
     }
 }
 

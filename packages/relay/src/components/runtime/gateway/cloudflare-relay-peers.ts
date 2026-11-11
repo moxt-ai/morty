@@ -56,11 +56,6 @@ const attachmentSchema = v.union([
         pendingAgentSettingsDiscoveries: v.array(pendingAgentSettingsDiscoverySchema),
     }),
     v.object({
-        role: v.literal("relay"),
-        historyRequest: v.optional(historyRequestSchema),
-        computerId: v.string(),
-    }),
-    v.object({
         role: v.picklist(["daemon", "replaced-daemon"]),
         connectionEpoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
         computerId: v.string(),
@@ -154,7 +149,7 @@ export class CloudflareRelaySocket implements ComputerSocket {
         if (!this.permitsSessionHistory()) {
             throw new ProtocolMessageError("History replies require an internal connection");
         }
-        if (attachment.role === "host" || attachment.role === "relay") {
+        if (attachment.role === "host") {
             if (
                 attachment.historyRequest !== undefined &&
                 (attachment.historyRequest.kind !== kind || attachment.historyRequest.requestId !== requestId)
@@ -169,7 +164,7 @@ export class CloudflareRelaySocket implements ComputerSocket {
     readonly matchesHistoryRequest = (kind: HistoryRequestKind, requestId: string): boolean => {
         const attachment = v.parse(attachmentSchema, this.#socket.deserializeAttachment());
         return (
-            (attachment.role === "host" || attachment.role === "relay") &&
+            attachment.role === "host" &&
             attachment.historyRequest?.kind === kind &&
             attachment.historyRequest.requestId === requestId
         );
@@ -179,8 +174,8 @@ export class CloudflareRelaySocket implements ComputerSocket {
         socket instanceof CloudflareRelaySocket && socket.#socket === this.#socket;
     readonly permitsSessionHistory = (): boolean => {
         const identity = this.identity();
-        // Control hosts read Session history: the Relay's own connection and a project credential's connection.
-        return identity.role === "relay" || identity.role === "host";
+        // Control hosts read Session history.
+        return identity.role === "host";
     };
     readonly send = (message: string | ArrayBuffer): void => this.#socket.send(message);
     readonly trackAgentSettingsDiscovery = (requestId: string, harness: string): "tracked" | "duplicate" | "busy" => {

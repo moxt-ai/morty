@@ -28,7 +28,6 @@ export function createCloudRoutes(computer: ComputerBackendService) {
         .all("/computers/:computerId/*", (context) =>
             projectManagementApplication.fetch(context.req.raw, context.var.dependencies),
         )
-        .all("/chat", (context) => managementApplication.fetch(context.req.raw, context.var.dependencies))
         .route(
             "/chat",
             new Hono<CloudHttpEnvironment>().all("/*", (context) =>

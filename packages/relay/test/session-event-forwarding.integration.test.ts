@@ -171,7 +171,7 @@ it("Given future fields and routable events, When peers use the Relay, Then thei
         const daemon = await connect("daemon");
         const host = await connect("host");
         const selected = await connect("host?harness=claude&sessionId=session-1");
-        const sender = await connect("live-history");
+        const sender = await connect("host");
         await sender.inbox.next();
         await host.inbox.next();
         await selected.inbox.next();

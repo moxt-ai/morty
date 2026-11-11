@@ -5,6 +5,7 @@ import { DurableObjectDatabaseAdapter } from "@morty-build/relay";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
+import { revokeTestComputer } from "../../relay-test-support/src/backend-fixture.ts";
 import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
 import { hashPairingCredential } from "../src/components/management/entity/pairing.ts";
 import { ComputerDirectoryStorage } from "../src/components/management/storage/computer-directory-storage.ts";
@@ -14,7 +15,6 @@ const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
     expiresAt: v.string(),
     pairingCode: v.string(),
-    pollToken: v.string(),
     computerId: v.string(),
 });
 type Pairing = Readonly<v.InferOutput<typeof pairingSchema>>;
@@ -71,7 +71,7 @@ async function project(_name = "Runtime pairing") {
             }),
         revoke: async (_pairing: Pairing) => {
             try {
-                await backend.revokeComputer(AbortSignal.timeout(10000));
+                await revokeTestComputer(env, computerId, AbortSignal.timeout(10000));
                 return new Response(null, { status: 204 });
             } catch {
                 return new Response(null, { status: 500 });

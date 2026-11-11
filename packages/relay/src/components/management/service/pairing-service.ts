@@ -1,7 +1,6 @@
 import type { CloudflareComputerRelay } from "../../../../../worker/src/gateway/cloudflare-computer-relay.ts";
 import { ComputerSummary } from "../../runtime/service/computer.ts";
 import { PairingDirectoryError } from "../entity/pairing.ts";
-import { ProjectPermission } from "../entity/project-authentication.ts";
 import type { PairingDirectoryService } from "./pairing-directory-service.ts";
 
 export class PairingService {
@@ -24,10 +23,6 @@ export class PairingService {
         idempotencyKey: string,
         signal: AbortSignal,
     ) => this.#pairings.createProjectComputerPairing(computerId, pairingKey, idempotencyKey, signal);
-
-    readonly probeProject = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        await this.#pairings.authorizeProject(computerId, ProjectPermission.ComputerRead, signal);
-    };
 
     readonly listProjectComputers = async (computerId: string, signal: AbortSignal) => {
         const channels = await this.#pairings.listProjectComputers(computerId, signal);
@@ -76,18 +71,4 @@ export class PairingService {
 
     readonly authorizePairedHost = async (computerId: string, signal: AbortSignal) =>
         await this.#pairings.authorizePairedHost(computerId, signal);
-
-    readonly revokeProjectComputer = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        const revoked = await this.#pairings.revokeProjectComputer(computerId, signal);
-        try {
-            await this.#channels.disconnectComputer(revoked.access, signal);
-        } catch (cause) {
-            signal.throwIfAborted();
-            throw new PairingDirectoryError(
-                "computer_disconnect_failed",
-                "The Computer was revoked but its active connection could not be closed",
-                { cause },
-            );
-        }
-    };
 }

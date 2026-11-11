@@ -132,8 +132,6 @@ export class LocalComputerService {
             throw cause;
         }
     };
-    readonly revokeComputer = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(computerId, signal, (computer, signal) => computer.revokeComputer(signal), 15_000);
     readonly chatComputers = async (computerId: string, signal: AbortSignal) => {
         const computers = await this.#run(computerId, signal, (computer, signal) => computer.computers(signal), 15_000);
         return computers.map(({ computerId, machineName, online, agents }) => ({
@@ -155,8 +153,6 @@ export class LocalComputerService {
         );
     readonly measureComputerLatency = async (computerId: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) => computer.latency(signal), 15_000);
-    readonly openChatComputerHost = async (computerId: string, signal: AbortSignal) =>
-        await this.#run(computerId, signal, (computer, signal) => computer.openHost(signal), 20_000);
     readonly listChatDirectory = async (computerId: string, directory: string, signal: AbortSignal) =>
         await this.#run(computerId, signal, (computer, signal) =>
             computer.workspace(

@@ -3,7 +3,6 @@ import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
-import { createOwnerApi } from "../../../tests/support/owner-api.ts";
 import worker, { fetchPublicApplication } from "../src/application.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -819,75 +818,6 @@ test("Given a chat opened with a Session credential, When the machine's owner re
     expect(await revoked.json()).toEqual({ status: "access_revoked" });
 
     await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
-});
-
-test("Given a browser following its chats' statuses, When the machine's owner revokes all access, Then the status stream ends without sending later statuses", async ({
-    cloud,
-}) => {
-    await using fixture = await createChatFixture(cloud);
-    expect(
-        (
-            await fixture.request(`chat/setup`, {
-                computerId: fixture.runtime.computerId,
-                harness: "codex",
-            })
-        ).status,
-    ).toBe(202);
-    const shared = await fixture.request("identity/transfers", { operationId: crypto.randomUUID() });
-    const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
-    const redeemed = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code }),
-        }),
-        cloud.environment(),
-    );
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
-    const opened = await fixture.request(`chat/access`, {
-        harness: "codex",
-        configurations: [],
-        conversationKey: "followed-while-revoked",
-        workspaceRef: ".",
-    });
-    expect(opened.status).toBe(200);
-    const { target } = v.parse(v.object({ target: targetSchema }), await opened.json());
-    const stream = await cloud.dispatchFetch(
-        `${APP_ORIGIN}/morty/api/chat/computers/${fixture.computerId}/managed-session/status-events`,
-        {
-            method: "POST",
-            headers: { authorization: `Bearer ${browser}` },
-        },
-    );
-    const reader = stream.body?.getReader();
-    if (!reader) {
-        throw new Error("Missing status stream");
-    }
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain("managed-session.statuses.following");
-
-    const successor = `morty_anon_v1_${"C".repeat(43)}`;
-    expect((await fixture.request("identity/revoke-all-access", { successor })).status).toBe(200);
-    const owner = createOwnerApi({
-        origin: cloud.origin,
-        computerId: fixture.computerId,
-        credential: successor,
-        request: fetch,
-    });
-    try {
-        const client = await owner.sessionClient(target, AbortSignal.timeout(10000));
-        try {
-            await client.turns.submit(
-                target,
-                { content: "Reply after revoke", idempotencyKey: crypto.randomUUID(), attachments: [] },
-                AbortSignal.timeout(10000),
-            );
-        } finally {
-            client.close();
-        }
-    } finally {
-        owner.close();
-    }
-    expect((await reader.read()).done).toBe(true);
 });
 
 test("Given two browsers joined through links, When one disconnects the other browsers, Then only it and the machine keep access and the other's open chat window is refused", async ({

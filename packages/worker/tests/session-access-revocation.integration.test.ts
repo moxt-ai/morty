@@ -141,7 +141,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
         const readAccess = () =>
             cloud.relayRequest(
                 new Request(
-                    `${cloud.origin}/morty/api/v1/computers/${window.computerId}/harnesses/${window.target.harness}/sessions/${window.target.sessionId}/live-event-subscription-target`,
+                    `${cloud.origin}/morty/api/v1/computers/${window.computerId}/harnesses/${window.target.harness}/sessions/${window.target.sessionId}/configuration`,
                     { headers: { authorization: `Bearer ${window.credential}` }, signal: AbortSignal.timeout(15_000) },
                 ),
             );

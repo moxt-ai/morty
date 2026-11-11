@@ -60,16 +60,5 @@ export function createComputerRoutes(runtime: ComputerService) {
                     context.req.raw.signal,
                 ),
             );
-        })
-        .get("/live-history", webSocketUpgrade, async (context) =>
-            admitted(
-                await runtime.acceptHost(
-                    {
-                        role: "relay",
-                        computerId: context.var.scope.computerId,
-                    },
-                    context.req.raw.signal,
-                ),
-            ),
-        );
+        });
 }

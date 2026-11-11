@@ -1,22 +1,11 @@
 import { nativeSessionKey, sameNativeSession } from "@morty-build/client/native-session";
-import {
-    decodeComputerStatusEvent,
-    decodeMessageKind,
-    decodeSessionCloseNoticeEvent,
-    decodeSessionStatusChangedEvent,
-    type NativeSessionTarget,
-    SESSION_CLOSE_NOTICE_KIND,
-    type SessionAccessHolder,
-    type SessionCloseNoticeEvent,
-    type SessionStatusChangedEvent,
-} from "@morty-build/client/protocol";
+import type { NativeSessionTarget, SessionAccessHolder } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
 import { computerRevoked } from "../../management/entity/computer-pairing.ts";
 import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
 
-const STATUS_LIVENESS_MILLISECONDS = 120_000;
 const OPENED_SESSION_CREDENTIAL_SECONDS = 900;
 /** The most Sessions one Session list read returns: the Computer's own bound. */
 const LISTED_SESSION_LIMIT = 500;
@@ -35,26 +24,6 @@ function sessionCredentialLifetime(usualSeconds: number, accessExpiresAt: number
     const remainingSeconds = Math.floor((accessExpiresAt - Date.now()) / 1000);
     return Math.max(MINIMUM_SESSION_CREDENTIAL_SECONDS, Math.min(usualSeconds, remainingSeconds));
 }
-
-/**
- * Sent once the stream reaches the Computer. `sessions: "owned"` promises that `statuses` holds the current status of
- * each Session the Computer holds for the computer's owner and that the changes of every such Session follow, including
- * Sessions created later.
- */
-export const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
-
-/**
- * What the managed Session stream tells a client: it now follows the Sessions as they currently are, a Session's
- * activity changed, or the Computer closed a Session.
- */
-export type ManagedSessionEvent =
-    | {
-          readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
-          readonly sessions: "owned";
-          readonly statuses: readonly Omit<SessionStatusChangedEvent, "kind">[];
-      }
-    | SessionStatusChangedEvent
-    | SessionCloseNoticeEvent;
 
 export type ChatScope = {
     readonly userId: string;
@@ -260,121 +229,6 @@ export class ChatService {
                 updatedAt: session.updatedAt,
             })),
         };
-    };
-
-    /**
-     * Publishes the current status of each Session the Computer holds with the following notice, then their activity
-     * changes and close notices, until the stream ends. Sessions created or archived while the stream runs need no new
-     * stream.
-     */
-    readonly subscribeManagedSessionStatuses = async (
-        scope: ChatScope,
-        publish: (event: ManagedSessionEvent) => Promise<void>,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        await this.#requirePairedComputer(scope);
-        scope.signal.throwIfAborted();
-        const socket = await this.#relay.openChatComputerHost(scope.computerId, signal);
-        // The authorization deadline bounds opening the stream, not the reads made while it runs.
-        const following: ChatScope = { ...scope, signal };
-        await new Promise<void>((_resolve, reject) => {
-            let settled = false;
-            let liveness: ReturnType<typeof setTimeout>;
-            const finish = (cause: unknown): void => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                clearTimeout(liveness);
-                signal.removeEventListener("abort", aborted);
-                socket.removeEventListener("close", closed);
-                socket.removeEventListener("error", closed);
-                socket.removeEventListener("message", message);
-                socket.close(1000, "Session status subscription closed");
-                reject(cause);
-            };
-            // Events are published in the order they arrive, after the current statuses.
-            let published = Promise.resolve();
-            const inOrder = (step: () => Promise<void>): void => {
-                published = published.then(step);
-                published.catch((cause: unknown) => finish(signal.aborted ? signal.reason : cause));
-            };
-            const publishEvent = (event: SessionStatusChangedEvent | SessionCloseNoticeEvent): void =>
-                inOrder(async () => {
-                    if (!settled) {
-                        await publish(event);
-                    }
-                });
-            const refreshLiveness = (): void => {
-                clearTimeout(liveness);
-                liveness = setTimeout(
-                    () =>
-                        finish(new ComputerManagementError("RELAY_TIMEOUT", "Session status updates timed out.", 504)),
-                    STATUS_LIVENESS_MILLISECONDS,
-                );
-            };
-            const aborted = (): void => finish(signal.reason);
-            const closed = (): void =>
-                finish(new ComputerManagementError("COMPUTER_UNAVAILABLE", "The local Computer disconnected.", 503));
-            const message = (event: MessageEvent): void => {
-                try {
-                    if (typeof event.data !== "string") {
-                        throw new ComputerManagementError(
-                            "RELAY_INVALID_RESPONSE",
-                            "Morty returned an invalid Session status event.",
-                            502,
-                        );
-                    }
-                    refreshLiveness();
-                    const kind = decodeMessageKind(event.data);
-                    if (kind === "computer.status") {
-                        if (!decodeComputerStatusEvent(event.data).online) {
-                            closed();
-                        }
-                        return;
-                    }
-                    if (kind === SESSION_CLOSE_NOTICE_KIND) {
-                        publishEvent(decodeSessionCloseNoticeEvent(event.data));
-                        return;
-                    }
-                    if (kind === "session.status.changed") {
-                        publishEvent(decodeSessionStatusChangedEvent(event.data));
-                    }
-                } catch (cause) {
-                    finish(
-                        cause instanceof ComputerManagementError
-                            ? cause
-                            : new ComputerManagementError(
-                                  "RELAY_INVALID_RESPONSE",
-                                  "Morty returned an invalid Session status event.",
-                                  502,
-                                  { cause },
-                              ),
-                    );
-                }
-            };
-            refreshLiveness();
-            signal.addEventListener("abort", aborted, { once: true });
-            socket.addEventListener("close", closed, { once: true });
-            socket.addEventListener("error", closed, { once: true });
-            socket.addEventListener("message", message);
-            // The current statuses are read once the socket follows the Computer, so no change falls between the two. A
-            // change that arrives while they are read is published after them and wins.
-            inOrder(async () => {
-                const { sessions } = await this.managedSessions(following);
-                if (!settled) {
-                    await publish({
-                        kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
-                        sessions: "owned",
-                        statuses: sessions.map((session) => ({ target: session.target, status: session.status })),
-                    });
-                }
-            });
-            socket.accept();
-            if (signal.aborted) {
-                aborted();
-            }
-        });
     };
 
     /** The settings a new Session of this Agent starts with in the draft's directory. */
