@@ -11,9 +11,6 @@ import { projectLocationHint } from "../util/project-location.ts";
 
 const inputSchema = v.strictObject({
     creationKey: anonymousCreationKey,
-    locationHint: v.optional(
-        v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
-    ),
 });
 
 /** The public user ID never reveals its client-held creation key. */
@@ -40,12 +37,7 @@ export const anonymousUserRoutes = new Hono<{
     await admitAnonymousCreation(request, context.env);
     signal.throwIfAborted();
     const userId = await userIdFor(input.creationKey);
-    const project = await context.var.provisionAccount(
-        userId,
-        userId,
-        input.locationHint ?? projectLocationHint(request) ?? "apac",
-        signal,
-    );
+    const project = await context.var.provisionAccount(userId, userId, projectLocationHint(request) ?? "apac", signal);
     const response = await computerObject(context.env, project.computerId).fetch(
         new Request("https://computer.internal/__computer/bootstrap", {
             method: "POST",

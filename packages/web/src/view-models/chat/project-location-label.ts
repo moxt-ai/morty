@@ -1,56 +1,12 @@
-import type { DataRegion } from "../../services/identity/anonymous-identity-api.ts";
-
-function dataRegionFromComputerId(computerId: string): DataRegion {
-    const code = computerId.split("_", 3)[1];
-    switch (code) {
-        case "en":
-            return "enam";
-        case "sa":
-            return "sam";
-        case "we":
-            return "weur";
-        case "ee":
-            return "eeur";
-        case "an":
-            return "apac-ne";
-        case "as":
-            return "apac-se";
-        case "oc":
-            return "oc";
-        case "af":
-            return "afr";
-        case "me":
-            return "me";
-        case "wn":
-            return "wnam";
-        default:
-            return "apac";
-    }
-}
-
 export function projectLocationLabel(computerId: string): string {
-    switch (dataRegionFromComputerId(computerId)) {
-        case "wnam":
+    switch (computerId.split("_", 3)[1]) {
+        case "wn":
             return "Western North America";
-        case "enam":
-            return "Eastern North America";
-        case "sam":
-            return "South America";
-        case "weur":
-            return "Western Europe";
-        case "eeur":
-            return "Eastern Europe";
-        case "apac":
-            return "Asia Pacific";
-        case "apac-ne":
+        case "an":
             return "Northeast Asia";
-        case "apac-se":
+        case "as":
             return "Southeast Asia";
-        case "oc":
-            return "Oceania";
-        case "afr":
-            return "Africa";
-        case "me":
-            return "Middle East";
+        default:
+            return "Asia Pacific";
     }
 }
