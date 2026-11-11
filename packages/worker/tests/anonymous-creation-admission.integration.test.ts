@@ -21,7 +21,7 @@ afterAll(async () => {
 });
 
 function creation(headers: Readonly<Record<string, string>> = {}): Request {
-    return new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+    return new Request(`${APP_ORIGIN}/morty/api/computers`, {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
         body: JSON.stringify({ creationKey: anonymousCreationKey() }),

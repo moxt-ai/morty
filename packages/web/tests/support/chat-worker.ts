@@ -30,7 +30,7 @@ export async function createChatWorkerEnvironment(
         await cloud.changeAppOrigin(origin);
     }
     const createApplication = async () => {
-        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
+        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/computers`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({

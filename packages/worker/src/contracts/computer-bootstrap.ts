@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { computerManagementSchema, relayIdentifier } from "./computer-management.ts";
 
-/** A client-held secret that names one anonymous user creation, so retrying it resumes the same identity. */
+/** A client-held secret binding the created user's identity and its initial computer credential. */
 export const anonymousCreationKey = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
 
 /** The credential bootstrap issues, derived from its origin so a repeated bootstrap issues the same one. */

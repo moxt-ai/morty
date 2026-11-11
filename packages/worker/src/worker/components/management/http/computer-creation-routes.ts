@@ -25,10 +25,10 @@ async function userIdFor(key: string): Promise<string> {
     return `usr_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export const anonymousUserRoutes = new Hono<{
+export const computerCreationRoutes = new Hono<{
     readonly Bindings: CloudBindings;
     readonly Variables: { readonly provisionAccount: AccountProvisioner };
-}>().post("/identity/anonymous-users", async (context) => {
+}>().post("/computers", async (context) => {
     const request = context.req.raw;
     using deadline = new RequestDeadline(request.signal, 45_000);
     const signal = deadline.signal;
@@ -37,7 +37,12 @@ export const anonymousUserRoutes = new Hono<{
     await admitAnonymousCreation(request, context.env);
     signal.throwIfAborted();
     const userId = await userIdFor(input.creationKey);
-    const project = await context.var.provisionAccount(userId, userId, projectLocationHint(request) ?? "apac", signal);
+    const project = await context.var.provisionAccount(
+        userId,
+        crypto.randomUUID(),
+        projectLocationHint(request) ?? "apac",
+        signal,
+    );
     const response = await computerObject(context.env, project.computerId).fetch(
         new Request("https://computer.internal/__computer/bootstrap", {
             method: "POST",

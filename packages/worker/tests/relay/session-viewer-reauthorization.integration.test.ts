@@ -7,8 +7,8 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
+import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
-import { readComputerOwner } from "../../src/computer-relay/composition/account-provisioning.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/computer-management.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
@@ -176,7 +176,8 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
         const identities = new IdentityStorage(
             new DurableObjectDatabase(state.storage),
             computerId,
-            await readComputerOwner(env, computerId, signal),
+            (await new DurableComputerAccount(state.storage).readActiveComputerScope(computerId, signal))?.user_id ??
+                null,
         );
         const credential = await identities.findCredential(owner.token, Date.now(), signal);
         if (credential === null) {

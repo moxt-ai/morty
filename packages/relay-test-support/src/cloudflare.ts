@@ -1,12 +1,6 @@
 import { fileURLToPath, URL as NodeURL } from "node:url";
-import { readD1Migrations } from "@cloudflare/vitest-plugin";
-import type { D1Database } from "@cloudflare/workers-types";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-
-type TestRelayBindings = {
-    readonly RELAY_DIRECTORY_DATABASE: D1Database;
-};
 
 import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 
@@ -37,7 +31,6 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
         script,
         compatibilityDate: "2026-09-07",
         compatibilityFlags: ["nodejs_compat"],
-        d1Databases: ["RELAY_DIRECTORY_DATABASE"],
         ratelimits: {
             ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
         },
@@ -64,12 +57,6 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
     };
 }
 
-async function migrate(database: D1Database, directory: NodeURL) {
-    for (const migration of await readD1Migrations(fileURLToPath(directory))) {
-        await database.batch(migration.queries.map((query) => database.prepare(query)));
-    }
-}
-
 export async function createTestMortyRelayBindings(allowedOrigins: ReadonlySet<string> = new Set(["*"])) {
     const createBindings = await prepareTestMortyRelayBindings();
     return createBindings(allowedOrigins);
@@ -79,8 +66,7 @@ async function createRelayBindings(script: string, allowedOrigins: ReadonlySet<s
     const { runtime, configure } = createCloudflareRuntime(script, allowedOrigins);
     try {
         const ready = await runtime.ready;
-        const env = await runtime.getBindings<TestRelayBindings>();
-        await migrate(env.RELAY_DIRECTORY_DATABASE, new NodeURL("../../worker/migrations/d1", import.meta.url));
+        const env = await runtime.getBindings();
         const request = async (input: Request): Promise<Response> => {
             const body = input.body === null ? undefined : await input.arrayBuffer();
             const result = await runtime.dispatchFetch(input.url, {

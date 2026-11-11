@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readD1Migrations } from "@cloudflare/vitest-plugin";
 import {
     COMPUTER_HEARTBEAT_ACK_MESSAGE,
     COMPUTER_HEARTBEAT_MESSAGE,
@@ -46,7 +45,6 @@ beforeAll(async () => {
                 COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                 UNAVAILABLE_COMPUTER: { className: "UnavailableComputer", useSQLite: true },
             },
-            d1Databases: ["RELAY_DIRECTORY_DATABASE"],
             compatibilityFlags: ["nodejs_compat"],
             ratelimits: { ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1000, period: 60 } } },
             bindings: {
@@ -63,13 +61,6 @@ beforeAll(async () => {
         }),
     );
     await runtime.ready;
-    const bindings = await runtime.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
-    const directory = fileURLToPath(new URL("../../worker/migrations/d1", import.meta.url));
-    for (const migration of await readD1Migrations(directory)) {
-        await bindings.RELAY_DIRECTORY_DATABASE.batch(
-            migration.queries.map((sql) => bindings.RELAY_DIRECTORY_DATABASE.prepare(sql)),
-        );
-    }
 });
 
 afterAll(async () => {

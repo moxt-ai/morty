@@ -9,7 +9,7 @@ type SetupClient = "browser" | "agent";
 /** The setup steps a new user passes, from fetching the instructions to opening Morty through the returned link. */
 const funnelSteps = [
     { event: "setup_instructions_served", method: "GET", path: /^\/setup\.md$/u },
-    { event: "identity_created", method: "POST", path: /^\/morty\/api\/identity\/anonymous-users$/u },
+    { event: "identity_created", method: "POST", path: /^\/morty\/api\/computers$/u },
     {
         event: "sharing_link_issued",
         method: "POST",

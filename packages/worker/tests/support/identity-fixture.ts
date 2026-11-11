@@ -111,7 +111,7 @@ async function startIdentityFixture(
         };
         const createAnonymousUser = async () => {
             const response = await worker.fetch(
-                new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+                new Request(`${APP_ORIGIN}/morty/api/computers`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ creationKey: anonymousCreationKey() }),
@@ -125,6 +125,17 @@ async function startIdentityFixture(
             );
         };
         return {
+            reassignComputerOwner: async (computerId: string, userId: string) => {
+                const namespace = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
+                const response = await namespace
+                    .get(namespace.idFromName(computerId))
+                    .fetch("https://computer.internal/reassign", {
+                        method: "POST",
+                        body: JSON.stringify({ computerId, userId }),
+                        signal: AbortSignal.timeout(15_000),
+                    });
+                expect(response.status).toBe(204);
+            },
             reload: reconfigure,
             revokeComputer: async (computerId: string) => {
                 const object = computerObjects.get(computerObjects.idFromName(computerId));

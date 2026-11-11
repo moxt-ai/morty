@@ -1,10 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { d1DatabaseBindingSchema } from "../src/contracts/cloud-bindings.ts";
-import { computerDirectoryDrizzle } from "../src/directory/storage/relay-drizzle-database.ts";
-import { computerAccount } from "../src/schema/d1/index.ts";
 import worker, { fetchPublicApplication } from "../src/worker/application.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -247,13 +243,6 @@ test("Given a saved owner credential, When the directory no longer assigns that 
             environment,
         );
     expect((await request()).status).toBe(200);
-    const directory = computerDirectoryDrizzle(
-        v.parse(v.object({ RELAY_DIRECTORY_DATABASE: d1DatabaseBindingSchema }), environment).RELAY_DIRECTORY_DATABASE,
-    );
-    await directory
-        .update(computerAccount)
-        .set({ userId: `usr_${crypto.randomUUID()}` })
-        .where(eq(computerAccount.computerId, owner.computerId))
-        .run();
+    await fixture.reassignComputerOwner(owner.computerId, `usr_${crypto.randomUUID()}`);
     expect((await request()).status).toBe(401);
 });

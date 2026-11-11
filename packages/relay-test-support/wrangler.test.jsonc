@@ -18,14 +18,6 @@
             "new_sqlite_classes": ["ComputerRelay"]
         }
     ],
-    "d1_databases": [
-        {
-            "binding": "RELAY_DIRECTORY_DATABASE",
-            "database_name": "morty-test-directory",
-            "database_id": "00000000-0000-0000-0000-000000000102",
-            "migrations_dir": "../worker/migrations/d1"
-        }
-    ],
     "vars": {
         "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
         "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret",

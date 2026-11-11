@@ -1,6 +1,8 @@
+import * as v from "valibot";
 import { requestTestComputerControl } from "../../../relay-test-support/src/backend-fixture.ts";
 import { ComputerRelay as ProductionComputerRelay } from "../../src/computer-relay/computer-relay.ts";
 import { computerInternalPath } from "../../src/contracts/computer-relay-http.ts";
+import { ProjectRowSchema } from "../../src/contracts/relay/relay-records.ts";
 import type { ConfiguredRelayBindings } from "../../src/contracts/relay-bindings.ts";
 import chat from "../../src/index.ts";
 
@@ -31,6 +33,14 @@ export default {
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
+        if (request.url === "https://computer.internal/reassign" && request.method === "POST") {
+            const value: unknown = await request.json();
+            const input = v.parse(v.object({ computerId: v.string(), userId: v.string() }), value);
+            const stored: unknown = await this.ctx.storage.get("computer-account");
+            const account = v.parse(ProjectRowSchema, stored);
+            await this.ctx.storage.put("computer-account", { ...account, user_id: input.userId });
+            return new Response(null, { status: 204 });
+        }
         if (request.url === "https://computer.internal/revoked-computer" && request.method === "POST") {
             const computerId = await request.text();
             const revoked = await super.fetch(

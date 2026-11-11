@@ -12,7 +12,7 @@ export async function createTestOwner(
         .replaceAll("/", "_")
         .replace(/=+$/u, "");
     const response = await request(
-        new Request(`${origin}/morty/api/identity/anonymous-users`, {
+        new Request(`${origin}/morty/api/computers`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ creationKey }),

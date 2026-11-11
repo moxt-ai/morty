@@ -29,7 +29,7 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             }),
         );
-    const created = await request("/identity/anonymous-users", undefined, {
+    const created = await request("/computers", undefined, {
         creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),
     });
     expect(created.status).toBe(201);
