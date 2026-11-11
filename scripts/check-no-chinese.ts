@@ -1,24 +1,23 @@
 import { spawnSync } from "node:child_process";
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 const HAN_CHARACTER = /\p{Script=Han}/u;
 const NULL_BYTE = 0;
 const GIT_OUTPUT_LIMIT = 16 * 1024 * 1024;
 
-export interface TextLocation {
+interface TextLocation {
     readonly character: string;
     readonly line: number;
     readonly column: number;
 }
 
-export interface ChineseTextViolation extends TextLocation {
+interface ChineseTextViolation extends TextLocation {
     readonly path: string;
     readonly source: "content" | "path" | "symlink-target";
 }
 
-export function findHanCharacter(value: string): TextLocation | null {
+function findHanCharacter(value: string): TextLocation | null {
     const match = HAN_CHARACTER.exec(value);
     if (match === null) {
         return null;
@@ -38,7 +37,7 @@ function violation(path: string, source: ChineseTextViolation["source"], locatio
     return { path, source, ...location };
 }
 
-export function findChineseTextViolations(root: string, paths: readonly string[]): readonly ChineseTextViolation[] {
+function findChineseTextViolations(root: string, paths: readonly string[]): readonly ChineseTextViolation[] {
     const violations: ChineseTextViolation[] = [];
 
     for (const path of paths) {
@@ -114,7 +113,7 @@ function formatViolation(item: ChineseTextViolation): string {
     return `${item.path}:${item.line}:${item.column}: prohibited Han character ${JSON.stringify(item.character)} in ${item.source}`;
 }
 
-export function run(): number {
+function run(): number {
     const root = repositoryRoot();
     const paths = repositoryPaths(root);
     const violations = findChineseTextViolations(root, paths);
@@ -130,7 +129,4 @@ export function run(): number {
     return 0;
 }
 
-const entryPath = process.argv[1];
-if (entryPath !== undefined && resolve(entryPath) === fileURLToPath(import.meta.url)) {
-    process.exitCode = run();
-}
+process.exitCode = run();

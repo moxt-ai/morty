@@ -9,7 +9,6 @@ import {
 import type { NativeSessionTarget, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
-import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
@@ -33,7 +32,6 @@ import {
     sessionUpdatesEndedError,
 } from "./session-connection.ts";
 import { acceptedTurn, ownerRunsTurn, workingIndicator } from "./session-current-turn.ts";
-import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { sessionDeliveryPresentation } from "./session-delivery-presentation.ts";
 import {
     awaitingMessage,
@@ -1432,11 +1430,6 @@ export function createSessionPaneModel(options: {
             connection: () => store.getState().connection,
             failedThrough,
         });
-        const unregisterDebug = registerMortyDebugSession({
-            target: sessionTarget,
-            blocks: () => sessionDebugBlocks({ messages: timelineMessages() }),
-        });
-        lifetime.signal.addEventListener("abort", unregisterDebug, { once: true });
         void store
             .getState()
             .connect(lifetime.signal)

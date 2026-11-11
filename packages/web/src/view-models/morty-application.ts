@@ -1,5 +1,4 @@
 import { createStore } from "zustand/vanilla";
-import type { PageAnalytics } from "../services/analytics/google-analytics.ts";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
 import { browserSetupHandoff, type SetupHandoff } from "../services/device/setup-handoff.ts";
@@ -36,9 +35,6 @@ type SessionWorkspaceStoreApi = ReturnType<typeof createSessionWorkspaceStore>;
 const createSessionWorkspaceStore = () => createStore<{ workspace: ChatWorkspace | null }>(() => ({ workspace: null }));
 
 export interface MortyApplication {
-    readonly clock: Clock;
-    /** Page and setup-step measurement; null when the deployment configures no analytics. */
-    readonly analytics: PageAnalytics | null;
     /** How this device moves setup to the computer where the agent runs. */
     readonly setupHandoff: SetupHandoffModel;
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
@@ -55,7 +51,6 @@ export interface MortyApplication {
     readonly continuation: ReturnType<typeof createContinueStore>;
     /** The signed-in surface; carries the workspace for the active identity. */
     readonly sessionWorkspace: SessionWorkspaceStoreApi;
-    readonly transport: ApiTransport;
     readonly reloadIdentity: () => void;
     readonly dispose: () => void;
 }
@@ -76,9 +71,7 @@ export interface MortyApplication {
 export function createMortyApplication(options: {
     readonly origin: string;
     readonly transport: ApiTransport;
-    readonly url?: string;
     readonly clock?: Clock;
-    readonly analytics?: PageAnalytics | null;
     readonly setupHandoff?: SetupHandoff;
 }): MortyApplication {
     const lifetime = new AbortController();
@@ -100,9 +93,7 @@ export function createMortyApplication(options: {
         options.clock ?? systemClock,
     );
     const bugReportDialog = createBugReportDialogStore(() => (disposed ? null : transport));
-    const setupHandoff = setupHandoffModel(options.setupHandoff ?? browserSetupHandoff(), () =>
-        options.analytics?.trackEvent("setup_link_shared"),
-    );
+    const setupHandoff = setupHandoffModel(options.setupHandoff ?? browserSetupHandoff());
     const sessionWorkspace = createSessionWorkspaceStore();
     const continuation = createContinueStore(transport.fetch);
     let workspace: ChatWorkspace | null = null;
@@ -171,7 +162,6 @@ export function createMortyApplication(options: {
             bugReportDialog,
             computerId: identity.computerId,
             requests,
-            url: options.url ?? window.location.href,
             createTransfer: access.createTransfer,
             currentAccessToken: access.currentAccessToken,
             endRemoteAccess: access.endRemoteAccess,
@@ -259,15 +249,12 @@ export function createMortyApplication(options: {
         reloadIdentity();
     }
     return {
-        clock: options.clock ?? systemClock,
-        analytics: options.analytics ?? null,
         setupHandoff,
         anonymousSession,
         bugReportDialog,
         remoteImages: createRemoteImageConsentStore(),
         continuation,
         sessionWorkspace,
-        transport,
         reloadIdentity,
         dispose: () => {
             if (disposed) {

@@ -9,10 +9,7 @@ const assetBindingSchema = v.custom<Fetcher>(
 
 // Keep the document entry points aligned with the application's three routers.
 // Unmatched paths must reach the public application's HTTP 404 handler.
-const paths = ["/setup", "/chat", "/continue", "/playground", "/playground/:entryId"].flatMap((path) => [
-    path,
-    `${path}/`,
-]);
+const paths = ["/setup", "/chat", "/continue"].flatMap((path) => [path, `${path}/`]);
 
 export const webPages = new Hono<{ readonly Bindings: CloudBindings }>().on("GET", paths, async (context) => {
     const assets = v.safeParse(assetBindingSchema, context.env.ASSETS);

@@ -2,7 +2,6 @@
 node_modules/
 dist/
 coverage/
-.vitest-reports/
 .env
 .env.*
 *.pem
@@ -13,7 +12,6 @@ coverage/
 worker-configuration.d.ts
 test-results/
 e2e-diagnostics/
-playwright-report/
 !/.dev.vars.example
 
 __screenshots__/

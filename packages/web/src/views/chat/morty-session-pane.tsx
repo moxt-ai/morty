@@ -729,7 +729,7 @@ function UnconfirmedDeliveryCard({
     readonly onRetry: () => void;
 }) {
     return (
-        <div className={chatSessionMessageItemClassName} data-testid={dataTestId.unconfirmedDelivery}>
+        <div className={chatSessionMessageItemClassName}>
             <UserPromptMessage
                 attachments={delivery.attachments}
                 attachmentLabels={delivery.attachmentLabels}
@@ -1273,11 +1273,6 @@ function MortySessionPaneBody({
                                         <SessionWelcomeInChat
                                             canSuggestProgress={presentation.canSuggestProgress}
                                             onDismiss={pane.welcome.getState().dismiss}
-                                            onMockSuggestProgress={() =>
-                                                model.setDraft(
-                                                    "Summarize the current task's progress and anything that needs my attention.",
-                                                )
-                                            }
                                             onSuggestProgress={pane.welcome.getState().suggestProgress}
                                             visible={welcome.kind === "visible"}
                                         />

@@ -18,7 +18,6 @@ import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
-import { SessionWelcomeMock } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -416,7 +415,6 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                             )}
                                         </div>
                                     )}
-                                    <SessionWelcomeMock />
                                 </div>
                             </FollowLatestScrollArea>
                             {model.computerConfiguration !== null && model.selection.kind === "draft" && (

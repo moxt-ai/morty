@@ -554,7 +554,6 @@ export function NativeSessionDialog({
                                         <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
                                             <Button
                                                 className={sheetControlHeightClassName}
-                                                data-testid={dataTestId.importLocalSession}
                                                 variant="outline"
                                                 disabled={
                                                     model.preview.kind !== "ready" ||
@@ -573,7 +572,6 @@ export function NativeSessionDialog({
                                             </Button>
                                             <Button
                                                 className={sheetControlHeightClassName}
-                                                data-testid={dataTestId.forkLocalSession}
                                                 disabled={model.preview.kind !== "ready" || model.operation !== "idle"}
                                                 onClick={() =>
                                                     withSignal(

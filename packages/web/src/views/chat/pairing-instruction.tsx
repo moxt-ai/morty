@@ -75,15 +75,11 @@ function ShareSetupLink({
 export function PairingInstruction({
     actionPresentation = "setup-card",
     handoff = copyPrompt,
-    onCopied,
-    onLinkSent = () => {},
 }: {
     /** Setup cards use full-width rounded actions; dialogs use standard cloud buttons. */
     readonly actionPresentation?: PairingActionPresentation;
     /** How this device moves setup to the agent's computer; copying the prompt unless the caller knows better. */
     readonly handoff?: SetupHandoffModel;
-    readonly onCopied?: () => void;
-    readonly onLinkSent?: () => void;
 }) {
     const setupInstruction = agentSetupPrompt();
     const primaryAction = pairingPrimaryActionProps(actionPresentation);
@@ -105,7 +101,6 @@ export function PairingInstruction({
                         className={primaryAction.className}
                         failureToast={unavailableLink}
                         label="Copy link"
-                        onCopied={onLinkSent}
                         size={primaryAction.size}
                         successToast={{
                             description: "Open it on the computer where your agent runs.",
@@ -126,7 +121,6 @@ export function PairingInstruction({
                         title: "Could not copy",
                     }}
                     label="Copy setup prompt"
-                    {...(onCopied === undefined ? {} : { onCopied })}
                     size={primaryAction.size}
                     successToast={{
                         description: "Paste into your agent, then open the link it returns.",

@@ -1,5 +1,4 @@
 import { createStore } from "zustand/vanilla";
-import { isComponentLibraryPath } from "../../navigation/component-library-path.ts";
 import {
     type AnonymousIdentity,
     AnonymousIdentityApi,
@@ -228,10 +227,8 @@ export const createAnonymousSessionStore = (
                             continue;
                         }
                         const identity = check.identity;
-                        if (!isComponentLibraryPath(window.location.pathname)) {
-                            const address = new URL(computerAddress(identity, computer.destination), origin);
-                            window.history.replaceState(window.history.state, "", address);
-                        }
+                        const address = new URL(computerAddress(identity, computer.destination), origin);
+                        window.history.replaceState(window.history.state, "", address);
                         centralSessionStorage.remove(accessEndedNoticeEntry);
                         centralSessionStorage.remove(accessEndedComputerEntry);
                         activate(

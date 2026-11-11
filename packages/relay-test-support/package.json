@@ -8,7 +8,6 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "exports": {
-        "./app": "./src/app.ts",
         "./cloudflare": "./src/cloudflare.ts",
         "./response-loss-proxy": "./src/response-loss-proxy.ts",
         "./websocket": "./src/websocket.ts"
