@@ -113,7 +113,6 @@ export class CodexAcpAgent {
         this.signal.throwIfAborted();
     };
     readonly runsTurns = (): boolean => this.#sessionAgent.runsTurns;
-    readonly nativeTurnId = (): string | null => this.#sessionAgent.nativeTurnId();
     readonly agentSettingsModelEffort = () => this.#settings.agentModelEffort();
     readonly sessionConfiguration = () => ({ configOptions: this.#settings.configOptions() });
     readonly sessionState = () => ({

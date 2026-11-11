@@ -1,9 +1,12 @@
 import { methods } from "@agentclientprotocol/sdk/unstable";
 import type { SessionCapabilities } from "@morty-build/client/protocol";
-import { AcpExecutionError } from "../acp-error.ts";
-import type { NativeSessionQuery } from "../native-history/preview-contract.ts";
-import { type NativeSessionPage, nativeSessionPageSchema } from "../protocol/native-session.ts";
-import { RetryableAcpInitializationError, validateAgentRuntime } from "./agent-initialization.ts";
+import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
+import {
+    RetryableAcpInitializationError,
+    validateAgentRuntime,
+} from "../../../src/engine/acp/adapter/agent-initialization.ts";
+import type { NativeSessionQuery } from "../../../src/engine/acp/native-history/preview-contract.ts";
+import { type NativeSessionPage, nativeSessionPageSchema } from "../../../src/engine/acp/protocol/native-session.ts";
 import type { AcpSessionConnector, AdapterSessionConnection } from "./session-events.ts";
 
 /** Adapter-owned ACP reader. It has neither a live observer nor interactive-session state. */

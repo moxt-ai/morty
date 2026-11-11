@@ -4,31 +4,34 @@ import {
     type SessionCapabilities,
     type SessionConfigOption,
 } from "@morty-build/client/protocol";
-import { truncate } from "../../util/value-utils.ts";
-import { AcpExecutionError } from "../acp-error.ts";
-import type { AcpAgentDefinition } from "../agent/agent-definition.ts";
-import type { BackgroundActivity, PromptDelegationStage } from "../agent/agent-lifecycle.ts";
-import type { AgentConnection } from "../connection/agent-connection.ts";
-import { AgentUpdateStream } from "../connection/agent-update-stream.ts";
-import type { AcpClientHandler } from "../connection/create-client.ts";
-import type { IdentifiedSessionNotification as SessionNotification } from "../connection/session-notification.ts";
-import type { AcpContentExternalizer, ExternalizeSessionUpdate } from "../content/content-externalizer.ts";
-import { restrictAcpSessionCapabilities } from "../protocol/session-capabilities.ts";
-import { sessionConfigProtocolForAgent } from "../protocol/session-config-protocol.ts";
-import { initializeAgentConnection } from "./agent-initialization.ts";
+import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
+import { initializeAgentConnection } from "../../../src/engine/acp/adapter/agent-initialization.ts";
 import {
     applyConfigurationChanges,
     applyConfigurationMode,
     type ConfigurationChanges,
     recordConfigurationMode,
     recordConfigurationOptions,
-} from "./configuration-changes.ts";
+} from "../../../src/engine/acp/adapter/configuration-changes.ts";
 import {
     type NativeSessionEvent,
     type NativeSessionInfoChange,
     type NativeSessionInteractions,
     withMortyFields,
-} from "./native-session-event.ts";
+} from "../../../src/engine/acp/adapter/native-session-event.ts";
+import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
+import type { BackgroundActivity, PromptDelegationStage } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
+import type { AgentConnection } from "../../../src/engine/acp/connection/agent-connection.ts";
+import { AgentUpdateStream } from "../../../src/engine/acp/connection/agent-update-stream.ts";
+import type { AcpClientHandler } from "../../../src/engine/acp/connection/create-client.ts";
+import type { IdentifiedSessionNotification as SessionNotification } from "../../../src/engine/acp/connection/session-notification.ts";
+import type {
+    AcpContentExternalizer,
+    ExternalizeSessionUpdate,
+} from "../../../src/engine/acp/content/content-externalizer.ts";
+import { restrictAcpSessionCapabilities } from "../../../src/engine/acp/protocol/session-capabilities.ts";
+import { sessionConfigProtocolForAgent } from "../../../src/engine/acp/protocol/session-config-protocol.ts";
+import { truncate } from "../../../src/engine/util/value-utils.ts";
 
 interface SessionConnectionScope {
     readonly agent: AcpAgentDefinition;
@@ -41,11 +44,6 @@ export interface AdapterSessionConnectionOptions extends SessionConnectionScope 
     readonly onBackgroundActivity?: (activity: BackgroundActivity) => void;
     readonly onPromptDelegation?: (stage: PromptDelegationStage) => Promise<void>;
     readonly interactions: NativeSessionInteractions;
-}
-
-/** Internal execution port shared by the live session and adapter-owned history capture. */
-interface AdapterSessionConnector {
-    readonly connectSession: (options: AdapterSessionConnectionOptions) => AdapterSessionConnection;
 }
 
 export interface AdapterSessionSnapshot {
@@ -84,7 +82,6 @@ export class AdapterSessionConnection {
     constructor(
         options: AdapterSessionConnectionOptions,
         externalizer: Pick<AcpContentExternalizer, "update">,
-        normalizeEvent: (event: unknown) => unknown,
         onClosed: () => void = () => undefined,
     ) {
         this.#agent = options.agent;
@@ -107,9 +104,7 @@ export class AdapterSessionConnection {
             signal.throwIfAborted();
             const update = externalized.agent;
             for (const eventUpdate of externalized.events) {
-                const payload = decodeAcpSessionUpdate(
-                    JSON.stringify(normalizeEvent(withMortyFields(update, eventUpdate))),
-                );
+                const payload = decodeAcpSessionUpdate(JSON.stringify(withMortyFields(update, eventUpdate)));
                 let event: NativeSessionEvent;
                 switch (update.sessionUpdate) {
                     case "available_commands_update":
@@ -333,20 +328,12 @@ export class AdapterSessionConnection {
     };
 }
 
-/** Reusable ACP transport implementation; each harness adapter owns its connector. */
-export class AcpSessionConnector implements AdapterSessionConnector {
+/** Query connections for the stateful controlled ACP peer. */
+export class AcpSessionConnector {
     readonly #externalizer: Pick<AcpContentExternalizer, "update">;
-    readonly #normalizeEvent: (event: unknown) => unknown;
-    constructor(
-        externalizer: Pick<AcpContentExternalizer, "update">,
-        normalizeEvent: (event: unknown) => unknown = (event) => event,
-    ) {
+    constructor(externalizer: Pick<AcpContentExternalizer, "update">) {
         this.#externalizer = externalizer;
-        this.#normalizeEvent = normalizeEvent;
     }
-    readonly connectSession = (options: AdapterSessionConnectionOptions): AdapterSessionConnection =>
-        new AdapterSessionConnection(options, this.#externalizer, this.#normalizeEvent);
-
     readonly connectQuerySession = (options: SessionConnectionScope): AdapterSessionConnection => {
         const rejectInteraction = async (): Promise<never> => {
             throw new AcpExecutionError(
@@ -365,7 +352,6 @@ export class AcpSessionConnector implements AdapterSessionConnector {
                 },
             },
             this.#externalizer,
-            this.#normalizeEvent,
         );
     };
 }

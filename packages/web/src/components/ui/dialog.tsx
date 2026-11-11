@@ -12,12 +12,7 @@ import {
 import { MobileSheetTitle } from "../chat/mobile-sheet-title.tsx";
 import { useDialogBodyClippedEdges } from "../utils/use-dialog-body-clipped-edges.ts";
 import { Button } from "./cloud-button.tsx";
-import {
-    type DialogAppearance,
-    type DialogVariant,
-    dialogVariantLayout,
-    resolveDialogGeneration,
-} from "./dialog-variant.ts";
+import { type DialogAppearance, type DialogVariant, resolveDialogGeneration } from "./dialog-variant.ts";
 import { overlaySurfacePanelClassName, overlaySurfaceRadiusClassName } from "./overlay-surface.ts";
 import {
     centeredOverlayHorizontalInsetClassName,
@@ -61,7 +56,7 @@ export function Dialog({
     readonly description?: ReactNode;
     readonly onClose: () => void;
     readonly busy?: boolean;
-    /** Applies default `size`, `appearance`, and `mobileSheet` from {@link dialogVariantLayout}. */
+    /** Applies default `size`, `appearance`, and `mobileSheet` from the product dialog preset. */
     readonly variant?: DialogVariant;
     /** Overrides variant desktop max-width tier. */
     readonly size?: DialogSize;
@@ -90,10 +85,6 @@ export function Dialog({
     });
     const setup = generated.appearance === "setup";
     const surface = generated.appearance === "surface";
-    const variantPreset = variant !== undefined ? dialogVariantLayout[variant] : undefined;
-    const defaultAppearanceHeaderMarginBottomClassName = variantPreset?.headerMarginBottomClassName ?? "pb-5";
-    const defaultAppearanceDescriptionMarginTopClassName = variantPreset?.descriptionMarginTopClassName ?? "mt-1.5";
-    const defaultAppearanceDescriptionTextClassName = "text-14 leading-5";
     const desktopMaxWidthClassName = sharedDialogDesktopMaxWidthClassName(generated.size);
     const mobileSheetDesktopMaxWidthClassName = sharedDialogMobileSheetDesktopMaxWidthClassName(generated.size);
     const titleEmbedded = typeof children === "function";
@@ -162,7 +153,7 @@ export function Dialog({
                                 ? generated.mobileSheet
                                     ? "mb-0 max-sm:pr-14 max-sm:pl-5 sm:mb-4"
                                     : "mb-4"
-                                : defaultAppearanceHeaderMarginBottomClassName,
+                                : "pb-5",
                           headerEndPaddingClassName,
                       ),
             )}
@@ -189,7 +180,7 @@ export function Dialog({
                             ? "mt-2 text-16 leading-[26px] text-muted-foreground"
                             : surface
                               ? "mt-1.5 text-13 text-morty-text-3"
-                              : `${defaultAppearanceDescriptionMarginTopClassName} ${defaultAppearanceDescriptionTextClassName} text-muted-foreground`
+                              : "mt-1.5 text-14 leading-5 text-muted-foreground"
                     }
                 >
                     {description}

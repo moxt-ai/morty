@@ -18,7 +18,6 @@ export interface CodexSessionAgent {
     ) => Promise<{ readonly outcome: "injected" } | { readonly outcome: "promptRequired"; readonly reason: string }>;
     readonly cancel: () => Promise<void>;
     readonly close: () => Promise<void>;
-    readonly nativeTurnId: () => string | null;
     /** Reports a manual compaction through thread/compact/start. Unsupported session
      *  agents (borrowed queue access) reject with an execution error. */
     readonly compact: (signal: AbortSignal) => Promise<PromptResponse>;

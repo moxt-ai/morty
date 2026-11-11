@@ -16,21 +16,17 @@ const dialogVariants = [
 
 export type DialogVariant = (typeof dialogVariants)[number];
 
-export type DialogVariantLayout = {
+type DialogVariantLayout = {
     readonly appearance: DialogAppearance;
     readonly mobileSheet: boolean;
     readonly size: DialogSize;
-    /** Overrides default-appearance header bottom padding (`pb-5`). */
-    readonly headerMarginBottomClassName?: "mb-3" | "mb-4";
-    /** Overrides default-appearance description top margin (`mt-1.5`). */
-    readonly descriptionMarginTopClassName?: "mt-0" | "mt-1";
 };
 
 /**
  * Default width and shell choices when each product dialog is rendered.
  * `appearance="setup"` always uses {@link overlayWidthPx.dialogStandard} regardless of `size`.
  */
-export const dialogVariantLayout: Record<DialogVariant, DialogVariantLayout> = {
+const dialogVariantLayout: Record<DialogVariant, DialogVariantLayout> = {
     bugReport: {
         appearance: "default",
         mobileSheet: false,

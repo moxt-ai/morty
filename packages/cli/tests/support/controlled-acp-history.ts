@@ -5,7 +5,6 @@ import {
     validateAgentRuntime,
 } from "../../src/engine/acp/adapter/agent-initialization.ts";
 import { nativeSessionPreviewKey, nativeSessionQueryKey } from "../../src/engine/acp/adapter/query-scope.ts";
-import type { AcpSessionConnector, AdapterSessionConnection } from "../../src/engine/acp/adapter/session-events.ts";
 import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type {
     NativeSessionPreviewRequest,
@@ -18,6 +17,7 @@ import {
     NativeHistoryPreviewSnapshots,
 } from "../../src/engine/acp/native-history/preview-snapshots.ts";
 import type { AgentProcessPool } from "../../src/engine/session/process/agent-process-pool.ts";
+import type { AcpSessionConnector, AdapterSessionConnection } from "./acp/session-events.ts";
 
 /** Controlled peers replay history over ACP; real vendors own their native history readers. */
 export class ControlledAcpHistory {

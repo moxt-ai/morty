@@ -140,7 +140,6 @@ export interface DraftControlsStore {
     readonly runtimeChanged: (configuration: BotRuntimeConfiguration, signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
     readonly setCwdMenuOpen: (open: boolean) => void;
-    readonly refreshAgentSettings: (signal: AbortSignal) => Promise<void>;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
     readonly selectRecentCwd: (directory: string, signal: AbortSignal) => Promise<void>;
     readonly selectHarness: (value: string, disabled: boolean, signal: AbortSignal) => Promise<void>;
@@ -606,12 +605,6 @@ export const createDraftControlsStore = (
                         ? { cwdMenuOpen: true, recentCwds: readRecentCwdPreferences(computerId) ?? [] }
                         : { cwdMenuOpen: false },
                 ),
-            refreshAgentSettings: async (signal) => {
-                const settings = get().settings;
-                if (settings.kind === "ready") {
-                    await refreshSettings(settings, true, signal);
-                }
-            },
             saveCwd: async (signal) => {
                 const browser = get().cwdBrowser;
                 const settings = get().settings;
