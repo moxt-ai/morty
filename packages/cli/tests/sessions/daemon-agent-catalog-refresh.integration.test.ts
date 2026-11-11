@@ -77,12 +77,21 @@ if (process.argv.includes("--version")) {
     process.exit(0);
 }
 if (process.argv.includes("app-server")) {
+    const threads = new Set();
     const { createInterface } = await import("node:readline");
     const input = createInterface({ input: process.stdin });
     input.on("line", (line) => {
         const message = JSON.parse(line);
         if (message.id === undefined) return;
         if (message.method === "initialize") {
+            process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
+        } else if (message.method === "thread/start") {
+            const id = crypto.randomUUID();
+            threads.add(id);
+            process.stdout.write(JSON.stringify({ id: message.id, result: { thread: { id } } }) + "\\n");
+        } else if (message.method === "model/list" || message.method === "thread/list") {
+            process.stdout.write(JSON.stringify({ id: message.id, result: { data: [], nextCursor: null } }) + "\\n");
+        } else if (message.method === "thread/settings/update" && threads.has(message.params.threadId)) {
             process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
         } else if (message.method === "thread/turns/list") {
             const result = {

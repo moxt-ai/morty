@@ -57,7 +57,8 @@ export class CodexAdapter implements Adapter {
         params: AdapterSessionCreateParams,
         open: (agent: CodexAcpAgent, signal: AbortSignal) => Promise<CodexOpened>,
     ) => {
-        const runtime = this.#agent;
+        // The Runtime adds per-session launch values without changing the catalog identity.
+        const runtime = params.scope.agent;
         const signal = this.#signal(params.signal);
         const { session, response } = await HarnessSession.start(
             {
