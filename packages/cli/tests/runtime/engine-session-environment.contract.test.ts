@@ -15,24 +15,23 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
-import { MortyRuntimeEngine, type RunLoopParams } from "../../src/engine/runtime/engine.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
 
-test.for(["saved", "provided"] as const)(
-    "Given an embedded Engine with a %s connection, When successive loops prepare concurrent Sessions with and without scoped environments, Then Agent children receive only their own loop and Session identity",
-    async (kind, { signal }) => {
-        vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
-        const directory = await mkdtemp(join(tmpdir(), "morty-engine-session-env-"));
-        const workspace = join(directory, "workspace");
-        const executable = join(directory, "codex.mjs");
-        const reports = join(directory, "environments.jsonl");
-        await mkdir(workspace);
-        await mkdir(join(directory, "threads"));
-        await writeFile(reports, "");
-        await writeFile(
-            executable,
-            `#!${process.execPath}
+test("Given an embedded Engine with a saved connection, When successive loops prepare concurrent Sessions with and without scoped environments, Then Agent children receive only their own loop and Session identity", async ({
+    signal,
+}) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-session-env-"));
+    const workspace = join(directory, "workspace");
+    const executable = join(directory, "codex.mjs");
+    const reports = join(directory, "environments.jsonl");
+    await mkdir(workspace);
+    await mkdir(join(directory, "threads"));
+    await writeFile(reports, "");
+    await writeFile(
+        executable,
+        `#!${process.execPath}
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -63,148 +62,134 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     process.stdout.write(JSON.stringify({ id: request.id, result }) + "\\n");
 });
 `,
-            { mode: 0o700 },
-        );
-        const http = createServer((request, response) => {
-            request.resume();
-            response.writeHead(204).end();
+        { mode: 0o700 },
+    );
+    const http = createServer((request, response) => {
+        request.resume();
+        response.writeHead(204).end();
+    });
+    const relay = new WebSocketServer({ server: http });
+    relay.on("connection", (socket) => {
+        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.on("message", (encoded) => {
+            if (encoded.toString() === RUNTIME_HEARTBEAT_MESSAGE) {
+                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            }
         });
-        const relay = new WebSocketServer({ server: http });
-        relay.on("connection", (socket) => {
-            socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
-            socket.on("message", (encoded) => {
-                if (encoded.toString() === RUNTIME_HEARTBEAT_MESSAGE) {
-                    socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
-                }
-            });
-        });
-        await listen(http);
-        const origin = `http://127.0.0.1:${port(http)}`;
-        const engine = new MortyRuntimeEngine({
-            engineDataDir: join(directory, "data"),
-            agentLaunchEnvironment: {
-                PATH: "",
-                MORTY_CODEX_PATH: executable,
-                MORTY_CLAUDE_PATH: "",
-                MORTY_PI_PATH: "",
-                MORTY_OPENCODE_PATH: "",
-                MORTY_TEST_BASE: "launch-environment",
-                MORTY_TEST_SESSION_CONTEXT: "unscoped",
+    });
+    await listen(http);
+    const origin = `http://127.0.0.1:${port(http)}`;
+    const engine = new MortyRuntimeEngine({
+        engineDataDir: join(directory, "data"),
+        agentLaunchEnvironment: {
+            PATH: "",
+            MORTY_CODEX_PATH: executable,
+            MORTY_CLAUDE_PATH: "",
+            MORTY_PI_PATH: "",
+            MORTY_TEST_BASE: "launch-environment",
+            MORTY_TEST_SESSION_CONTEXT: "unscoped",
+        },
+    });
+    try {
+        const saved = await (
+            await RuntimeInstallationStore.open(join(directory, "data"), AbortSignal.timeout(5_000))
+        ).saveConnection(
+            {
+                computerId: "environment-channel",
+                defaultWorkspace: workspace,
+                relayOrigin: new URL(origin),
+                runtimeCredential: "r".repeat(43),
             },
-        });
-        try {
-            const saved = await (
-                await RuntimeInstallationStore.open(join(directory, "data"), AbortSignal.timeout(5_000))
-            ).saveConnection(
-                {
-                    computerId: "environment-channel",
-                    defaultWorkspace: workspace,
-                    relayOrigin: new URL(origin),
-                    runtimeCredential: "r".repeat(43),
-                },
-                signal,
-            );
-            const connection: RunLoopParams["connection"] =
-                kind === "saved"
-                    ? { kind, pairingGeneration: saved.pairingGeneration }
+            signal,
+        );
+        const expected: { readonly context: string; readonly base: string }[] = [];
+        const targets: NativeSessionTarget[] = [];
+        for (const scope of ["first-loop", "second-loop", undefined]) {
+            const shutdown = new AbortController();
+            const loopSignal = AbortSignal.any([signal, shutdown.signal]);
+            const connected = once(relay, "connection", { signal: loopSignal });
+            const execution = engine.runLoop({
+                pairingGeneration: saved.pairingGeneration,
+                signal: loopSignal,
+                ...(scope === undefined
+                    ? {}
                     : {
-                          kind,
-                          connection: {
-                              computerId: saved.computerId,
-                              defaultWorkspace: workspace,
-                              relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                              credentials: memoryRuntimeCredentials(saved.credentials.current),
-                          },
-                      };
-            const expected: { readonly context: string; readonly base: string }[] = [];
-            const targets: NativeSessionTarget[] = [];
-            for (const scope of ["first-loop", "second-loop", undefined]) {
-                const shutdown = new AbortController();
-                const loopSignal = AbortSignal.any([signal, shutdown.signal]);
-                const connected = once(relay, "connection", { signal: loopSignal });
-                const execution = engine.runLoop({
-                    connection,
-                    signal: loopSignal,
-                    ...(scope === undefined
-                        ? {}
-                        : {
-                              sessionEnvironment: (target) => ({
-                                  MORTY_TEST_SESSION_CONTEXT: JSON.stringify({ scope, ...target }),
-                              }),
+                          sessionEnvironment: (target) => ({
+                              MORTY_TEST_SESSION_CONTEXT: JSON.stringify({ scope, ...target }),
                           }),
-                });
-                // Observe preparation errors immediately as well as on cleanup.
-                void execution.catch((cause: unknown) => shutdown.abort(cause));
-                try {
-                    const socket: WebSocket = (await connected)[0];
-                    const ready = new Set<string>();
-                    const receive = async () => {
-                        for await (const [encoded] of on(socket, "message", { signal: loopSignal })) {
-                            const text = String(encoded);
-                            if (text === RUNTIME_HEARTBEAT_MESSAGE) {
-                                continue;
-                            }
-                            const message = decodeDaemonToServiceMessage(text);
-                            if (message.kind === "session.operation.failed") {
-                                throw new Error(message.message);
-                            }
-                            if (message.kind === "session.ready") {
-                                ready.add(message.target.sessionId);
-                                if (scope === "first-loop") {
-                                    targets.push(message.target);
-                                }
-                            }
-                            if (ready.size === 2) {
-                                return;
+                      }),
+            });
+            // Observe preparation errors immediately as well as on cleanup.
+            void execution.catch((cause: unknown) => shutdown.abort(cause));
+            try {
+                const socket: WebSocket = (await connected)[0];
+                const ready = new Set<string>();
+                const receive = async () => {
+                    for await (const [encoded] of on(socket, "message", { signal: loopSignal })) {
+                        const text = String(encoded);
+                        if (text === RUNTIME_HEARTBEAT_MESSAGE) {
+                            continue;
+                        }
+                        const message = decodeDaemonToServiceMessage(text);
+                        if (message.kind === "session.operation.failed") {
+                            throw new Error(message.message);
+                        }
+                        if (message.kind === "session.ready") {
+                            ready.add(message.target.sessionId);
+                            if (scope === "first-loop") {
+                                targets.push(message.target);
                             }
                         }
-                    };
-                    const prepared = receive();
-                    for (const index of [0, 1]) {
-                        const target = targets[index];
-                        socket.send(
-                            target === undefined
-                                ? encodeSessionCreateCommand({
-                                      kind: "session.create",
-                                      requestId: crypto.randomUUID(),
-                                      operationId: crypto.randomUUID(),
-                                      harness: "codex",
-                                      directory: ".",
-                                      configurations: [],
-                                  })
-                                : encodeSessionPrepareCommand({
-                                      kind: "session.prepare",
-                                      requestId: crypto.randomUUID(),
-                                      target,
-                                  }),
-                        );
-                        expected.push({
-                            context:
-                                scope === undefined || target === undefined
-                                    ? "unscoped"
-                                    : JSON.stringify({ scope, ...target }),
-                            base: "launch-environment",
-                        });
+                        if (ready.size === 2) {
+                            return;
+                        }
                     }
-                    await prepared;
-                    const observed: unknown[] = (await readFile(reports, "utf8"))
-                        .trim()
-                        .split("\n")
-                        .map((line) => JSON.parse(line));
-                    expect(observed).toHaveLength(expected.length);
-                    expect(observed).toEqual(expect.arrayContaining(expected));
-                } finally {
-                    shutdown.abort();
-                    await execution;
+                };
+                const prepared = receive();
+                for (const index of [0, 1]) {
+                    const target = targets[index];
+                    socket.send(
+                        target === undefined
+                            ? encodeSessionCreateCommand({
+                                  kind: "session.create",
+                                  requestId: crypto.randomUUID(),
+                                  operationId: crypto.randomUUID(),
+                                  harness: "codex",
+                                  directory: ".",
+                                  configurations: [],
+                              })
+                            : encodeSessionPrepareCommand({
+                                  kind: "session.prepare",
+                                  requestId: crypto.randomUUID(),
+                                  target,
+                              }),
+                    );
+                    expected.push({
+                        context:
+                            scope === undefined || target === undefined
+                                ? "unscoped"
+                                : JSON.stringify({ scope, ...target }),
+                        base: "launch-environment",
+                    });
                 }
+                await prepared;
+                const observed: unknown[] = (await readFile(reports, "utf8"))
+                    .trim()
+                    .split("\n")
+                    .map((line) => JSON.parse(line));
+                expect(observed).toHaveLength(expected.length);
+                expect(observed).toEqual(expect.arrayContaining(expected));
+            } finally {
+                shutdown.abort();
+                await execution;
             }
-        } finally {
-            for (const socket of relay.clients) {
-                socket.terminate();
-            }
-            await new Promise<void>((resolve) => relay.close(() => http.close(() => resolve())));
-            await rm(directory, { recursive: true, force: true });
-            vi.useRealTimers();
         }
-    },
-);
+    } finally {
+        for (const socket of relay.clients) {
+            socket.terminate();
+        }
+        await new Promise<void>((resolve) => relay.close(() => http.close(() => resolve())));
+        await rm(directory, { recursive: true, force: true });
+        vi.useRealTimers();
+    }
+});

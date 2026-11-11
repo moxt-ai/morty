@@ -15,7 +15,6 @@ class HistoryAgentSpecification extends ControlledAcpSpecification {
     readonly agentExecutable = "controlled-acp";
     readonly adapterVersion = "1.0.0";
     override readonly minimumSupportedAgentVersion = "1.0.0";
-    override readonly maximumTestedAgentVersion = "1.0.0";
     constructor() {
         super("MORTY_TEST_CONTROLLED_ACP_PATH", []);
     }

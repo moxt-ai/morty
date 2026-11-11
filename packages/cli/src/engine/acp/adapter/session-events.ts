@@ -69,8 +69,6 @@ type ExecutionState =
 export class AdapterSessionConnection {
     readonly #connection: AgentConnection;
     readonly #onBackgroundActivity: (activity: BackgroundActivity) => void;
-    #backgroundActivity: BackgroundActivity = "none";
-    readonly hasBackgroundActivity = (): boolean => this.#backgroundActivity !== "none";
     readonly #updates: AgentUpdateStream;
     readonly #lifetime = new AbortController();
     readonly #onClosed: () => void;
@@ -202,7 +200,6 @@ export class AdapterSessionConnection {
                 if (this.#lifetime.signal.aborted) {
                     return;
                 }
-                this.#backgroundActivity = activity;
                 this.#onBackgroundActivity(activity);
             },
             onPromptDelegation: async (stage) => {
@@ -330,7 +327,6 @@ export class AdapterSessionConnection {
                 await this.#updates.drained().catch(() => undefined);
             } finally {
                 this.#onClosed();
-                this.#backgroundActivity = "none";
                 this.#onBackgroundActivity("none");
             }
         }

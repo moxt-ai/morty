@@ -4,7 +4,6 @@ import { ControlledAcpConnection } from "./controlled-acp-connection.ts";
 
 /** Discovery fixture for controlled peers that expose ACP on stdio. */
 export abstract class ControlledAcpSpecification extends LocalAgentSpecification {
-    readonly adapterOverrideVariable: string;
     readonly agentOverrideVariable: string;
     readonly launchArguments: readonly string[];
     readonly createConnection: AgentConnectionFactory = (options) =>
@@ -20,7 +19,6 @@ export abstract class ControlledAcpSpecification extends LocalAgentSpecification
 
     protected constructor(executableOverrideVariable: string, launchArguments: readonly string[]) {
         super();
-        this.adapterOverrideVariable = executableOverrideVariable;
         this.agentOverrideVariable = executableOverrideVariable;
         this.launchArguments = Object.freeze([...launchArguments]);
     }

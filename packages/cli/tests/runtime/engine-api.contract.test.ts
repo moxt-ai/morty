@@ -14,7 +14,6 @@ import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
 import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 it("Given an explicit data directory, When a host constructs Engine and reopens its store, Then construction has no side effects and saved connections survive", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-api-"));
@@ -83,7 +82,7 @@ it("Given a fresh installation, When a host concurrently saves connections, Then
     }
 });
 
-it("Given saved and provided connections with opaque credentials, When a host serves and cancels successive loops, Then both publish their Agent directory, disconnect before completion without saving the provided connection, and the saved connection presents the successor it saved next time", async () => {
+it("Given a saved connection with an opaque credential, When a host serves and cancels its loop, Then it publishes its Agent directory, disconnects before completion, and presents its saved successor next time", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-loop-"));
     const catalogs: unknown[] = [];
     const requests: string[] = [];
@@ -131,7 +130,6 @@ it("Given saved and provided connections with opaque credentials, When a host se
                 MORTY_CLAUDE_PATH: "",
                 MORTY_CODEX_PATH: "",
                 MORTY_PI_PATH: "",
-                MORTY_OPENCODE_PATH: "",
             },
         });
         const manager = await RuntimeInstallationStore.open(join(directory, "data"), deadline);
@@ -144,50 +142,38 @@ it("Given saved and provided connections with opaque credentials, When a host se
             },
             deadline,
         );
-        const connections = [
-            { kind: "saved", pairingGeneration: saved.pairingGeneration },
-            {
-                kind: "provided",
-                connection: {
-                    computerId: "provided_channel",
-                    defaultWorkspace: saved.defaultWorkspace,
-                    relayUrl: `ws://127.0.0.1:${port(http)}/morty/api/v1/runtimes/connect`,
-                    credentials: memoryRuntimeCredentials("b".repeat(73)),
-                },
+        const shutdown = new AbortController();
+        let online = false;
+        const counts: number[] = [];
+        await engine.runLoop({
+            pairingGeneration: saved.pairingGeneration,
+            signal: AbortSignal.any([deadline, shutdown.signal]),
+            onConnectionStatus: (status) => {
+                if (status === "online") {
+                    online = true;
+                    shutdown.abort();
+                }
             },
-        ] as const;
-        for (const connection of connections) {
-            const shutdown = new AbortController();
-            let online = false;
-            const counts: number[] = [];
-            await engine.runLoop({
-                connection,
-                signal: AbortSignal.any([deadline, shutdown.signal]),
-                onConnectionStatus: (status) => {
-                    if (status === "online") {
-                        online = true;
-                        shutdown.abort();
-                    }
-                },
-                onExecutionCountChange: (count) => counts.push(count),
-            });
-            await disconnected.promise;
-            disconnected = Promise.withResolvers<void>();
-            expect(online).toBe(true);
-            expect(counts.at(-1)).toBe(0);
-        }
-        expect(requests).toHaveLength(2);
-        expect(authorizations).toEqual([`Bearer ${"a".repeat(73)}`, `Bearer ${"b".repeat(73)}`]);
-        expect(catalogs).toHaveLength(2);
-        expect(catalogs).toEqual([expect.objectContaining({ agents: [] }), expect.objectContaining({ agents: [] })]);
+            onExecutionCountChange: (count) => counts.push(count),
+        });
+        await disconnected.promise;
+        expect(online).toBe(true);
+        expect(counts.at(-1)).toBe(0);
+        expect(requests).toHaveLength(1);
+        expect(authorizations).toEqual([`Bearer ${"a".repeat(73)}`]);
+        expect(catalogs).toHaveLength(1);
+        expect(catalogs).toEqual([expect.objectContaining({ agents: [] })]);
         const [savedSuccessor] = successors;
         expect(savedSuccessor).toMatch(/^[A-Za-z0-9_-]{73}$/u);
         expect(await manager.listConnections(deadline)).toEqual([
             { ...saved, credentials: { current: savedSuccessor, successor: null } },
         ]);
 
+        disconnected = Promise.withResolvers<void>();
         revoke = true;
-        await expect(engine.runLoop({ connection: connections[0], signal: deadline })).rejects.toMatchObject({
+        await expect(
+            engine.runLoop({ pairingGeneration: saved.pairingGeneration, signal: deadline }),
+        ).rejects.toMatchObject({
             code: "runtime_relay_revoked",
         });
         await disconnected.promise;

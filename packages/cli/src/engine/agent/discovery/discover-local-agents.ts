@@ -6,7 +6,6 @@ import { discoverAgent } from "./discover-agent.ts";
 
 export { CodexAgentSpecification } from "../specification/vendors/codex-agent.ts";
 export { PiAgentSpecification } from "../specification/vendors/pi-agent.ts";
-export { supportedLocalAgentSpecifications } from "../specification/vendors/supported-agent-specifications.ts";
 export { LocalAgentInventory } from "./agent-discovery.ts";
 
 export interface DiscoverLocalAgentInventoryOptions extends LocalAgentDiscoveryContext {

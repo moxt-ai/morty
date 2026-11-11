@@ -264,7 +264,7 @@ export class SessionManager {
                     await AgentSession.start(
                         effectiveOptions,
                         recovery,
-                        () => this.#observer,
+                        this.#observer,
                         this.#executionRecord,
                         this.#store,
                         metrics,
@@ -286,7 +286,7 @@ export class SessionManager {
                     await AgentSession.start(
                         options,
                         recovery,
-                        () => this.#observer,
+                        this.#observer,
                         this.#executionRecord,
                         this.#store,
                         unmeasuredOperationMetrics,
@@ -351,7 +351,7 @@ export class SessionManager {
                     await AgentSession.start(
                         options,
                         recovery,
-                        () => this.#observer,
+                        this.#observer,
                         this.#executionRecord,
                         this.#store,
                         unmeasuredOperationMetrics,
@@ -489,7 +489,7 @@ export class SessionManager {
                 async () =>
                     await AgentSession.create(
                         options,
-                        () => this.#agentSettingsObserver,
+                        this.#agentSettingsObserver,
                         { agentCommand: () => undefined, settledTurns: () => [] },
                         new MemorySessionStore(),
                         unmeasuredOperationMetrics,
@@ -967,7 +967,7 @@ export class SessionManager {
                 async () =>
                     await AgentSession.create(
                         options,
-                        () => this.#observer,
+                        this.#observer,
                         this.#executionRecord,
                         this.#store,
                         unmeasuredOperationMetrics,
@@ -1117,7 +1117,7 @@ export class SessionManager {
                             options,
                             origin,
                             capabilities,
-                            () => this.#observer,
+                            this.#observer,
                             this.#executionRecord,
                             this.#store,
                             unmeasuredOperationMetrics,
