@@ -1,7 +1,7 @@
 import type { ProjectLocationHint, SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
-import { encodeRelayComputerId } from "../../contracts/computer-id.ts";
+import { decodeComputerPlacement, encodeRelayComputerId } from "../../contracts/computer-id.ts";
 import { ComputerManagementError, hasControlCharacters } from "../../contracts/relay/computer-management.ts";
-import { createRandomToken, validateIdentifier } from "../../contracts/relay/pairing.ts";
+import { createRandomToken, PairingDirectoryError, validateIdentifier } from "../../contracts/relay/pairing.ts";
 import type { ProjectRow } from "../../contracts/relay/relay-records.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { BackendProjectAccess } from "./backend-project-access.ts";
@@ -131,6 +131,19 @@ export class ComputerManagementService {
             signal,
         );
         return account?.user_id ?? null;
+    };
+
+    readonly isActive = async (computerId: string, signal: AbortSignal): Promise<boolean> => {
+        signal.throwIfAborted();
+        if (decodeComputerPlacement(computerId) === null) {
+            throw new PairingDirectoryError("directory_unavailable", "Project storage placement is unavailable");
+        }
+        const account = await this.storage.readActiveComputerScope(computerId, signal);
+        if (account === null) {
+            return false;
+        }
+        signal.throwIfAborted();
+        return true;
     };
 
     readonly requireActiveAccount = async (computerId: string, signal: AbortSignal): Promise<void> => {

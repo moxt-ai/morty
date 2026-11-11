@@ -34,8 +34,8 @@ export class SessionTurns {
     readonly get = (commandId: string, sessionTarget: NativeSessionTarget): ActiveRuntimeTurn | undefined =>
         this.#bySessionTarget.get(sessionTarget)?.get(commandId);
 
-    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
-        return this.session(command.target).start(command, attemptId, onQueued);
+    readonly start = (command: SessionPromptCommand, onQueued: () => void): ActiveRuntimeTurn => {
+        return this.session(command.target).start(command, onQueued);
     };
 
     readonly finish = (turn: ActiveRuntimeTurn): void => {

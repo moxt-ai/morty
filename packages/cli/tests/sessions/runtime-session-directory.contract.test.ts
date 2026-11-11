@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { MortyClient } from "@morty-build/client";
 import { decodeSessionReadyEvent } from "@morty-build/client/protocol";
 import { expect, it, onTestFinished } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
@@ -182,17 +181,7 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
             },
             signal,
         );
-        const access = await runtime.api.access(signal, sessionTarget);
-        const session = new MortyClient({
-            endpoint: relay.baseUrl,
-            computerId: project.computerId,
-            credentialProvider: {
-                credential: async (signal: AbortSignal) => {
-                    signal.throwIfAborted();
-                    return access.credential;
-                },
-            },
-        });
+        const session = await runtime.sessionClient(sessionTarget, signal);
         onTestFinished(() => session.close());
 
         const turn = await session.turns.submit(

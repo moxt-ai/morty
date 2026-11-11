@@ -69,11 +69,28 @@ export async function createChatWorkerEnvironment(
             if (setup.status !== 202) {
                 throw new Error(`Could not prepare the test Computer: ${setup.status} ${await setup.text()}`);
             }
+            // The second client reaches the same Worker directly; only the browser uses the failing network.
             const sessionClient = async (
                 target: { readonly harness: string; readonly sessionId: string },
                 signal: AbortSignal,
             ) => {
-                const access = await runtime.api.access(signal, target);
+                const response = await cloud.dispatchFetch(
+                    `${cloud.directOrigin}/morty/api/chat/computers/${runtime.computerId}/session-access`,
+                    {
+                        method: "POST",
+                        signal,
+                        headers: {
+                            authorization: `Bearer ${identity.token}`,
+                            "content-type": "application/json",
+                        },
+                        body: JSON.stringify(target),
+                    },
+                );
+                if (!response.ok) {
+                    throw new Error(`Could not authorize the second client: ${response.status}`);
+                }
+                const access = v.parse(v.object({ credential: v.string() }), await response.json());
+                signal.throwIfAborted();
                 return new MortyClient({
                     endpoint: cloud.directOrigin,
                     computerId: runtime.computerId,

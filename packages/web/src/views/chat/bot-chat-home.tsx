@@ -81,7 +81,6 @@ function PreSessionFailure({
 type BotChatHomeProps = {
     readonly requests: Pick<
         BotChatApi,
-        | "access"
         | "archiveManagedSession"
         | "computerConfiguration"
         | "directory"

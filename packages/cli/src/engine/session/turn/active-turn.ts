@@ -64,7 +64,6 @@ export const isWithdrawn = (signal: AbortSignal): boolean =>
     signal.aborted && signal.reason instanceof PromptWithdrawal;
 
 export class ActiveRuntimeTurn {
-    readonly attemptId: string;
     readonly command: SessionPromptCommand;
     readonly epoch = decodeIdentifier(randomUUID());
     readonly #controller: AbortController;
@@ -85,12 +84,10 @@ export class ActiveRuntimeTurn {
      */
     constructor(
         command: SessionPromptCommand,
-        attemptId: string,
         started: () => boolean,
         startedAt: () => string | undefined,
         executing: () => boolean,
     ) {
-        this.attemptId = attemptId;
         this.command = command;
         this.#controller = new AbortController();
         this.#started = started;

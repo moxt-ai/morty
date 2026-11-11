@@ -1,8 +1,7 @@
 import type { VerifiedComputerAccess } from "../../../../contracts/relay/pairing.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
-import type { ProjectStorageContext } from "../../../../contracts/relay/project-storage-context.ts";
-import type { ComputerManagementStorageDirectory } from "../../../../directory/service/computer-management-storage-directory.ts";
+import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import { DatabaseError } from "../../../../infra/sql-database.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
 
@@ -18,31 +17,27 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
 export class ComputerIdentityService {
     readonly #computerId: string;
     readonly #store: ComputerRelayStore;
-    readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
-    constructor(
-        computerId: string,
-        store: ComputerRelayStore,
-        projects: Pick<ComputerManagementStorageDirectory, "resolve">,
-    ) {
+    readonly #accounts: Pick<ComputerManagementService, "isActive">;
+    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerManagementService, "isActive">) {
         this.#computerId = computerId;
         this.#store = store;
-        this.#projects = projects;
+        this.#accounts = accounts;
     }
 
     readonly authenticateProject = async (
         credential: ComputerIdentityCredential,
         signal: AbortSignal,
-    ): Promise<ProjectStorageContext> => {
+    ): Promise<VerifiedComputerAccess> => {
         const identity = await this.authenticate(credential, signal);
-        const project = await this.#projects.resolve(identity.computerId, signal);
+        const active = await this.#accounts.isActive(identity.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (!active) {
             throw unmatchedCredential(credential);
         }
-        if (project.computerId !== this.#computerId) {
+        if (identity.computerId !== this.#computerId) {
             throw new PairingDirectoryError("directory_unavailable", "Workspace storage is unavailable");
         }
-        return project;
+        return identity;
     };
 
     /**
@@ -72,12 +67,12 @@ export class ComputerIdentityService {
                     return rotation satisfies never;
             }
             const computerId = validateIdentifier(rotation.computer.computer_id, "computer_id");
-            const project = await this.#projects.resolve(computerId, signal);
+            const active = await this.#accounts.isActive(computerId, signal);
             signal.throwIfAborted();
-            if (project === null) {
+            if (!active) {
                 throw new PairingDirectoryError("unauthorized", "A valid Computer credential is required");
             }
-            if (computerId !== this.#computerId || project.computerId !== this.#computerId) {
+            if (computerId !== this.#computerId) {
                 throw new PairingDirectoryError("directory_unavailable", "Computer storage is unavailable");
             }
             return {
