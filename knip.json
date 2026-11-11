@@ -38,7 +38,7 @@
             "includeEntryExports": true
         },
         "packages/relay-test-support": {
-            "entry": ["src/relay-worker-entry.ts"]
+            "entry": ["src/worker-entry.ts"]
         }
     },
     "ignoreBinaries": ["openssl"],

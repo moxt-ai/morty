@@ -6,7 +6,7 @@ import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { RequestDeadline } from "../../../infra/request-deadline.ts";
 import { readJsonBody } from "../../../middleware/body-parser.ts";
 import { anonymousCreationKey } from "../entity/computer-bootstrap.ts";
-import { provisionAccount } from "../service/account-provisioning-service.ts";
+import type { AccountProvisioner } from "../service/account-provisioning-service.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 
 const inputSchema = v.strictObject({
@@ -28,37 +28,36 @@ async function userIdFor(key: string): Promise<string> {
     return `usr_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export const anonymousUserRoutes = new Hono<{ readonly Bindings: CloudBindings }>().post(
-    "/identity/anonymous-users",
-    async (context) => {
-        const request = context.req.raw;
-        using deadline = new RequestDeadline(request.signal, 45_000);
-        const signal = deadline.signal;
-        const input = v.parse(inputSchema, await readJsonBody(request));
-        signal.throwIfAborted();
-        await admitAnonymousCreation(request, context.env);
-        signal.throwIfAborted();
-        const userId = await userIdFor(input.creationKey);
-        const project = await provisionAccount(
-            context.env,
-            userId,
-            userId,
-            input.locationHint ?? projectLocationHint(request) ?? "apac",
+export const anonymousUserRoutes = new Hono<{
+    readonly Bindings: CloudBindings;
+    readonly Variables: { readonly provisionAccount: AccountProvisioner };
+}>().post("/identity/anonymous-users", async (context) => {
+    const request = context.req.raw;
+    using deadline = new RequestDeadline(request.signal, 45_000);
+    const signal = deadline.signal;
+    const input = v.parse(inputSchema, await readJsonBody(request));
+    signal.throwIfAborted();
+    await admitAnonymousCreation(request, context.env);
+    signal.throwIfAborted();
+    const userId = await userIdFor(input.creationKey);
+    const project = await context.var.provisionAccount(
+        userId,
+        userId,
+        input.locationHint ?? projectLocationHint(request) ?? "apac",
+        signal,
+    );
+    const response = await computerObject(context.env, project.computerId).fetch(
+        new Request("https://computer.internal/__computer/bootstrap", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
             signal,
-        );
-        const response = await computerObject(context.env, project.computerId).fetch(
-            new Request("https://computer.internal/__computer/bootstrap", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                signal,
-                body: JSON.stringify({
-                    computer: project,
-                    userId,
-                    origin: { kind: "created", creationKey: input.creationKey },
-                }),
+            body: JSON.stringify({
+                computer: project,
+                userId,
+                origin: { kind: "created", creationKey: input.creationKey },
             }),
-        );
-        signal.throwIfAborted();
-        return response;
-    },
-);
+        }),
+    );
+    signal.throwIfAborted();
+    return response;
+});

@@ -5,8 +5,8 @@ import { createTestComputerBackend } from "../../relay-test-support/src/backend-
 import { createTestOwner } from "../../relay-test-support/src/identity-fixture.ts";
 import worker from "../../worker/src/application.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
+import { createHostedRelayAccess } from "../../worker/src/composition/relay-services.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
-import { createRelayAccessServices } from "../src/relay-worker.ts";
 
 export const ownerOrigin = "https://relay.test";
 const ownerEnvironment = () => ({ ...env, APP_ORIGIN: ownerOrigin });
@@ -28,7 +28,7 @@ async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
         const credential = await new IdentityStorage(
             new DurableObjectDatabase(state.storage),
             computerId,
-            await createRelayAccessServices(env).control.readComputerOwner(computerId, AbortSignal.timeout(10_000)),
+            await createHostedRelayAccess(env).control.readComputerOwner(computerId, AbortSignal.timeout(10_000)),
         ).findCredential(token, Date.now(), AbortSignal.timeout(10_000));
         if (credential === null) {
             throw new Error("Expected active owner access");
@@ -39,7 +39,7 @@ async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
 
 /** Session protocol scenarios start with an authorized computer and an issued Session credential. */
 export async function issueSession(computerId: string, target: NativeSessionTarget) {
-    return createRelayAccessServices(env).sessionAccess.issue(
+    return createHostedRelayAccess(env).sessionAccess.issue(
         { kind: "session", computerId, target },
         900,
         await ownerHolder(computerId),

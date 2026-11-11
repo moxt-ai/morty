@@ -5,6 +5,7 @@ import {
     ProjectAuthenticationError,
     ProjectPermission,
 } from "../../entity/authentication/project-authentication.ts";
+import type { ProjectAccessAuthorizer } from "../../entity/authentication/project-authorization.ts";
 import type { ComputerScope } from "../../entity/do/session.ts";
 import type { AgentDescriptor, ClaimedPairing } from "../../entity/pairing/pairing.ts";
 import {
@@ -23,7 +24,6 @@ import {
 import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { RuntimePairingRow } from "../../entity/pairing/pairing-records.ts";
 import { projectRuntimePairingStatus, runtimeRevokedAt } from "../../entity/pairing/runtime-pairing-state.ts";
-import type { ProjectAccessAuthorizer } from "../../gateway/project-access-authorizer.ts";
 import type { MachineAccountDirectory } from "../../infra/machine-account-directory.ts";
 import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
 import type { ProjectStore } from "../../infra/project-store.ts";

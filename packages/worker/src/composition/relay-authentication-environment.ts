@@ -1,5 +1,5 @@
 import { ProjectAuthenticationError } from "@morty-build/relay-core";
-import { RelayAuthenticationConfiguration } from "../entity/computer-management.ts";
+import { RelayAuthenticationConfiguration } from "../../../relay/src/entity/computer-management.ts";
 
 export interface RelayAuthenticationEnvironment {
     readonly MORTY_ALLOWED_ORIGINS: string;

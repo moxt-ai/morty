@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { hashPairingCredential } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/relay-worker.ts";
+import { RelayAuthenticationConfiguration } from "../src/entity/computer-management.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
@@ -33,7 +33,7 @@ afterEach(() => vi.useRealTimers());
 afterAll(async () => await abortAllDurableObjects());
 
 async function project(_name = "Runtime pairing") {
-    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(), createRelayGateways);
+    const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const owner = await createOwner();
     const { computerId } = owner;
     const backend = computerBackend(computerId);
@@ -93,7 +93,7 @@ async function project(_name = "Runtime pairing") {
 it("Given a current pairing reservation, When an obsolete claim endpoint is called, Then it returns not found and leaves the reservation available for redemption", async () => {
     const app = await project();
     const pairing = await app.pair("retired-claim");
-    expect(await responseJson(await app.claim(pairing, "claim"), 404)).toMatchObject({ error: { code: "not_found" } });
+    expect(await responseJson(await app.claim(pairing, "claim"), 404)).toMatchObject({ error: { code: "NOT_FOUND" } });
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
     expect((await app.claim(pairing)).status).toBe(200);
 });
