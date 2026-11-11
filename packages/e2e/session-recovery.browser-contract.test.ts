@@ -476,9 +476,11 @@ test("Given an active turn on mobile, when the browser goes offline and the user
 }) => {
     const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    await runtime.openPairedChat();
-    await conversationLoaded(page);
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
+    await expect(composer).toBeEnabled();
+    await conversationLoaded(page);
     await composer.fill("wait for steering");
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.getByRole("status", { name: "Agent is working" })).toBeVisible();
@@ -493,6 +495,7 @@ test("Given an active turn on mobile, when the browser goes offline and the user
     await page.context().setOffline(false);
     await page.clock.runFor(5000);
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     await composer.press("Enter");
     await expect(page.getByTestId(dataTestId.queuedMessage)).toContainText("Keep this follow-up");
 });
