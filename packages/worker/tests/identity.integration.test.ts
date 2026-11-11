@@ -369,7 +369,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         fixture.environment(),
     );
     expect(served.status).toBe(200);
-    expect(await served.json()).toEqual({ runtimePairing: "unpaired" });
+    expect(await served.json()).toEqual({ computerPairing: "unpaired" });
     const projectResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer`, {
             headers: { authorization: `Bearer ${identity.token}` },

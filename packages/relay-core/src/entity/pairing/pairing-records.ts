@@ -19,18 +19,18 @@ interface RuntimeRegistrationRow {
     readonly workspace_name: string;
 }
 
-export interface RuntimeChannelRow extends PairingScopeRow, RuntimeRegistrationRow {}
+export interface ComputerDirectoryRow extends PairingScopeRow, RuntimeRegistrationRow {}
 
 export interface RuntimeDirectoryRow extends PairingScopeRow {
     readonly revoked_at: number | null;
     readonly registration: RuntimeRegistrationRow | null;
 }
 
-export interface PairingChannelRow extends RuntimeDirectoryRow {
+export interface PairingComputerRow extends RuntimeDirectoryRow {
     readonly expires_at: number;
 }
 
-export interface PairingClaimRow extends PairingChannelRow {
+export interface PairingClaimRow extends PairingComputerRow {
     readonly poll_token_hash: string;
 }
 

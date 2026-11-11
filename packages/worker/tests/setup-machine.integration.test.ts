@@ -204,7 +204,7 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     expect(original.status).toBe(200);
     const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
     expect(originalStatus).toBe("paired");
-    expect(actual).toEqual({ runtimePairing: "paired" });
+    expect(actual).toEqual({ computerPairing: "paired" });
     expect(saved.identity.computer_id).toBe(pairedRuntime);
 });
 
@@ -274,7 +274,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         expect(response.status).toBe(200);
         return {
             identity,
-            runtimePairing: v.parse(v.object({ runtimePairing: v.string() }), await response.json()).runtimePairing,
+            computerPairing: v.parse(v.object({ computerPairing: v.string() }), await response.json()).computerPairing,
         };
     };
     const first = await run();
@@ -289,7 +289,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     expect(revokedWorkspace.status).toBe(401);
     expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "runtime_revoked" } });
 
-    expect((await machineRuntime()).runtimePairing).toBe("revoked");
+    expect((await machineRuntime()).computerPairing).toBe("revoked");
 
     const again = await run();
     const after = await machineRuntime();
@@ -299,5 +299,5 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     );
     expect(again.ready.computerId).toBe(first.ready.computerId);
     expect(after.identity).toEqual(before.identity);
-    expect(after.runtimePairing).toBe("paired");
+    expect(after.computerPairing).toBe("paired");
 });

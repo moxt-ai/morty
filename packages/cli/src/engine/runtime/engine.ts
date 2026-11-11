@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { waitForSharedOperation } from "../session/manager/operation-drain.ts";
-import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 import { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 import { type MortyRuntimePairingOptions, pairRuntimeConnection, prepareRuntimeConnection } from "./pairing.ts";
 import { RuntimeLoop, type RuntimeLoopOptions } from "./runtime-loop.ts";
@@ -72,7 +72,7 @@ export class MortyRuntimeEngine {
     readonly pair = async (
         input: MortyRuntimePairingOptions,
         signal: AbortSignal,
-    ): Promise<VerifiedRuntimeConnection> =>
+    ): Promise<VerifiedComputerConnection> =>
         await pairRuntimeConnection(
             await this.#ensureInstallation(signal),
             input,
@@ -96,6 +96,6 @@ export class MortyRuntimeEngine {
     };
 }
 
-export type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
+export type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 
 export type { MortyRuntimePairingOptions } from "./pairing.ts";

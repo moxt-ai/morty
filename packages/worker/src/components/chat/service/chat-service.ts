@@ -11,7 +11,7 @@ import {
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "../../management/entity/computer-management.ts";
-import { runtimeRevoked } from "../../management/entity/runtime-pairing.ts";
+import { runtimeRevoked } from "../../management/entity/computer-pairing.ts";
 import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
