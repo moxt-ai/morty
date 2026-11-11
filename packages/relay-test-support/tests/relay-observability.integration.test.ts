@@ -106,7 +106,7 @@ async function api(
 
 async function provisionComputer() {
     const owner = await api(
-        "/identity/anonymous-users",
+        "/computers",
         {
             method: "POST",
             body: JSON.stringify({
