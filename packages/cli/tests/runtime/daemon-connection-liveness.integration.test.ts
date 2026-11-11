@@ -35,6 +35,7 @@ import { ComputerRelayRevokedError } from "../../src/engine/runtime/relay/comput
 import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtime/relay/session-event-publisher.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { type ScheduledTask, systemTimer, type Timer } from "../../src/engine/util/timer.ts";
+import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
@@ -969,23 +970,26 @@ describe("daemon relay connection liveness", () => {
                     `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/reconciliation-channel/daemon`,
                 ),
             },
-            new RuntimeAgentDependencies([
-                new AcpAgentDefinition(
-                    "codex",
-                    "Codex",
-                    process.execPath,
-                    (options) =>
-                        new ControlledAcpConnection(
-                            {
-                                harness: "codex",
-                                adapterPath: process.execPath,
-                                arguments: [fakeAgentPath],
-                                environment: options.environment,
-                            },
-                            options,
-                        ),
-                ),
-            ]),
+            new RuntimeAgentDependencies(
+                [
+                    new AcpAgentDefinition(
+                        "codex",
+                        "Codex",
+                        process.execPath,
+                        (options) =>
+                            new ControlledAcpConnection(
+                                {
+                                    harness: "codex",
+                                    adapterPath: process.execPath,
+                                    arguments: [fakeAgentPath],
+                                    environment: options.environment,
+                                },
+                                options,
+                            ),
+                    ),
+                ],
+                acpAdapters,
+            ),
             new RuntimeLocalContext(stateDirectory, process.env),
         );
 

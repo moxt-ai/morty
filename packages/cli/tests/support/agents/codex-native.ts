@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NativeSessionCommand, NativeSessionTarget } from "@morty-build/client/protocol";
-import { CodexAgentConnection } from "../../../src/engine/acp/adapter/codex/agent-connection.ts";
+import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../../src/engine/acp/content/content-externalizer.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
@@ -16,7 +16,6 @@ import { WorkspaceDirectoryService } from "../../../src/engine/session/workspace
 import { SessionCreationTable } from "../../../src/engine/storage/session/session-creation-table.ts";
 import { openAcpSessionDatabase } from "../../../src/engine/storage/sqlite/local-databases.ts";
 import { systemTimer } from "../../../src/engine/util/timer.ts";
-import { acpAdapters } from "../acp-adapters.ts";
 import { memoryComputerCredentials } from "../computer-credentials.ts";
 import { FakeOpenAiProvider } from "../llm/openai.ts";
 import { SessionRuntimeFixture as SessionManager } from "../session-runtime.ts";
@@ -26,20 +25,14 @@ import { CodexFixture } from "./codex.ts";
 export async function codexFixture(
     answer = "REAL_CODEX_REPLY",
     providerOptions: Parameters<typeof FakeOpenAiProvider.start>[2] = {},
-    adapters: AdapterResolver = acpAdapters,
+    adapters: AdapterResolver = harnessAdapters,
 ) {
     const temporary = await realpath(await mkdtemp(join(tmpdir(), "morty-native-codex-")));
     const workspace = join(temporary, "workspace");
     await mkdir(workspace);
     const provider = await FakeOpenAiProvider.start("morty-test-model", answer, providerOptions);
     const codex = await CodexFixture.create(provider);
-    const agent = new AcpAgentDefinition(
-        "codex",
-        "Codex",
-        codex.executable,
-        (options) => new CodexAgentConnection(options),
-        codex.environment,
-    );
+    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, null, codex.environment);
     const store = new MemorySessionStore();
     const sessions = new SessionManager({
         observer: new NullSessionObserver(),

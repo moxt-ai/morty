@@ -2,8 +2,8 @@ import { and, count, eq, gt, inArray, isNotNull, notInArray, or, type SQL, sql }
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type {
     ComputerCredentialRotation,
-    ComputerDirectoryRow,
     ComputerPairingAudit,
+    ComputerPairingDirectoryRow,
     ComputerPairingRow,
     PairingClaimRow,
 } from "../entity/pairing/pairing-records.ts";
@@ -16,7 +16,7 @@ import {
     computerRevocation,
     daemonCredential,
     retiredDaemonCredential,
-} from "../schema/project-do/index.ts";
+} from "../schema/computer-relay-do/index.ts";
 import { activeGeneration, currentGeneration } from "./computer-generation.ts";
 
 const registrationFields = {
@@ -298,7 +298,10 @@ export class ComputerDirectoryStorage {
     };
 
     /** The computer's current generation as a Computer: its registration and revocation, if they happened. */
-    readonly readComputer = async (computerId: string, signal: AbortSignal): Promise<ComputerDirectoryRow | null> => {
+    readonly readComputer = async (
+        computerId: string,
+        signal: AbortSignal,
+    ): Promise<ComputerPairingDirectoryRow | null> => {
         const row = await this.readProjectPairing(computerId, signal);
         return row === null
             ? null
@@ -402,7 +405,7 @@ export class ComputerDirectoryStorage {
             readonly auditId: string;
         },
         signal: AbortSignal,
-    ): Promise<ComputerDirectoryRow | null> => {
+    ): Promise<ComputerPairingDirectoryRow | null> => {
         if (value.computerId !== this.#computerId) {
             return null;
         }
@@ -438,7 +441,7 @@ export class ComputerDirectoryStorage {
         return await this.readComputer(value.computerId, signal);
     };
 
-    readonly readChannel = async (computerId: string, signal: AbortSignal) => {
+    readonly readRegisteredComputer = async (computerId: string, signal: AbortSignal) => {
         const row = await this.readComputer(computerId, signal);
         return row?.registration && row.revoked_at === null
             ? { computer_id: row.computer_id, ...row.registration }
@@ -446,8 +449,8 @@ export class ComputerDirectoryStorage {
     };
 
     readonly listComputers = async (signal: AbortSignal) => {
-        const channel = await this.readChannel(this.#computerId, signal);
-        return channel === null ? [] : [channel];
+        const computer = await this.readRegisteredComputer(this.#computerId, signal);
+        return computer === null ? [] : [computer];
     };
 
     readonly updateAgents = async (computerId: string, tokenHash: string, agents: string, signal: AbortSignal) => {

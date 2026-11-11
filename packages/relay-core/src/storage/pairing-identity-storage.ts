@@ -4,7 +4,7 @@ import type { ComputerIdentityCredential } from "../entity/pairing/pairing-ident
 import type { PairingScopeRow } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { computerPairing, daemonCredential } from "../schema/project-do/index.ts";
+import { computerPairing, daemonCredential } from "../schema/computer-relay-do/index.ts";
 import { activeGeneration, currentGeneration } from "./computer-generation.ts";
 
 /** The Projects in this storage whose credential matches. */

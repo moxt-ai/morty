@@ -1,6 +1,6 @@
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
-import { logDirectory, unhandledRejectionLogFilename } from "../../engine/storage/logs/log-files.ts";
+import { logDirectory, UNHANDLED_REJECTION_LOG_FILENAME } from "../../engine/storage/logs/log-files.ts";
 
 const MAXIMUM_REJECTION_LOG_BYTES = 512 * 1_024;
 const MAXIMUM_REJECTION_TEXT_BYTES = 2_048;
@@ -71,7 +71,7 @@ export function surviveUnhandledRejections(): UnhandledRejectionGuard {
             }
             log = new BoundedLineLog(
                 logDirectory(stateDirectory),
-                unhandledRejectionLogFilename("worker"),
+                UNHANDLED_REJECTION_LOG_FILENAME,
                 MAXIMUM_REJECTION_LOG_BYTES,
                 (cause) => {
                     process.stderr.write(`The unhandled rejection log could not be written: ${String(cause)}\n`);

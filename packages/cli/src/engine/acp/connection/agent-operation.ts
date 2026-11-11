@@ -2,7 +2,7 @@ import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { isRecord, truncate } from "../../util/value-utils.ts";
 import { AcpExecutionError, AcpPromptExecutionError } from "../acp-error.ts";
-import { type AcpEndpointTermination, acpEndpointTerminationError } from "../agent/in-process-endpoint.ts";
+import { type AgentTermination, agentTerminationError } from "../agent/agent-lifecycle.ts";
 
 const promptFailureIdentitySchema = z.object({ messageId: z.string().min(1).max(2_048) });
 
@@ -38,7 +38,7 @@ function requestErrorMessage(error: RequestError): string {
 /** Observes an already-started operation even when cancellation wins before entry. */
 export async function raceAgentOperation<T>(
     operation: Promise<T>,
-    termination: Promise<AcpEndpointTermination>,
+    termination: Promise<AgentTermination>,
     exitMessage: string,
     signal: AbortSignal,
 ): Promise<T> {
@@ -58,7 +58,7 @@ export async function raceAgentOperation<T>(
             aborted,
             operation,
             termination.then((result) => {
-                const cause = acpEndpointTerminationError(result);
+                const cause = agentTerminationError(result);
                 throw new AcpExecutionError(exitMessage, { cause }, cause.code);
             }),
         ]);

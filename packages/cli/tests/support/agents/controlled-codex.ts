@@ -20,7 +20,7 @@ export class ControlledCodexFixture implements AsyncDisposable {
         options: {
             readonly holdTurn?: boolean;
             readonly consumeSteeringAfterFirstTurn?: boolean;
-            readonly endFirstTurnOnSteering?: "completed" | "failed";
+            readonly endFirstTurnOnSteering?: "completed" | "failed" | "interrupted";
             readonly failTurnWith?: string;
             readonly latePreviousUser?: boolean;
             readonly skipSecondSteering?: boolean;

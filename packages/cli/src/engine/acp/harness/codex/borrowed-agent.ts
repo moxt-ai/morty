@@ -4,10 +4,10 @@ import { z } from "zod";
 import { systemTimer, type Timer } from "../../../util/timer.ts";
 import { AcpExecutionError } from "../../acp-error.ts";
 import {
-    type AcpEndpointTermination,
-    acpEndpointTerminationError,
+    type AgentTermination,
+    agentTerminationError,
     type PromptDelegationStage,
-} from "../../agent/in-process-endpoint.ts";
+} from "../../agent/agent-lifecycle.ts";
 import type { CodexAppServerClient, CodexAppServerServerRequest } from "./app-server-client.ts";
 import { CODEX_HISTORY_TURN_PAGE_LIMIT, threadTurnsPageSchema } from "./app-server-protocol.ts";
 import { decodeThreadItem, messageQuestions, reasoningText, toolCallUpdate } from "./items.ts";
@@ -405,8 +405,8 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
     readonly onServerRequest = async (request: CodexAppServerServerRequest): Promise<void> => {
         this.#client.respondWithError(request.id, -32_601, "Borrowed sessions cannot handle owner requests");
     };
-    readonly onTerminated = (termination: AcpEndpointTermination): void => {
-        const error = acpEndpointTerminationError(termination);
+    readonly onTerminated = (termination: AgentTermination): void => {
+        const error = agentTerminationError(termination);
         this.#lifecycle = { kind: "failed", error };
         this.#pending?.completion.reject(error);
         this.#closed.abort();

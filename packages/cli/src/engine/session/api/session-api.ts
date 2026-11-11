@@ -19,7 +19,7 @@ import type {
     SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
-import type { BackgroundActivity } from "../../acp/agent/in-process-endpoint.ts";
+import type { BackgroundActivity } from "../../acp/agent/agent-lifecycle.ts";
 import type { PromptImageInput, PromptResourceInput } from "../../acp/client/prompt-content.ts";
 import type { AcpContentExternalizer } from "../../acp/content/content-externalizer.ts";
 import type { Adapter } from "../../acp/native-history/preview-contract.ts";

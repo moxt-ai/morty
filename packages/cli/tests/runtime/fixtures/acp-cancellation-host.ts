@@ -10,12 +10,11 @@ import {
     encodeAgentSettingsDiscoverCommand,
     encodeComputerLivenessReadyEvent,
 } from "@morty-build/client/protocol";
+import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
-import type { InProcessAcpEndpoint } from "../../../src/engine/acp/agent/in-process-endpoint.ts";
 import { RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
 import { RuntimeLoop } from "../../../src/engine/runtime/runtime-loop.ts";
-import { ControlledEndpointConnection } from "../../support/agents/controlled-endpoint-connection.ts";
 import { memoryComputerCredentials } from "../../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../../support/controlled-runtime-config.ts";
 
@@ -50,7 +49,7 @@ const app = acpAgent({ name: "cancellation-peer" })
     }))
     .onRequest(methods.agent.session.new, () => ({ sessionId: "settings-session", configOptions: [] }));
 
-const endpoint = (): InProcessAcpEndpoint => {
+const endpoint = (): ControlledAcpPeer => {
     const initialized = Promise.withResolvers<void>();
     const terminated = Promise.withResolvers<{ readonly kind: "closed" }>();
     let pending = false;

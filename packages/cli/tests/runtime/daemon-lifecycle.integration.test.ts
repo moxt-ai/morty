@@ -97,7 +97,7 @@ describe("Morty daemon lifecycle", () => {
         expect(result.code).toBe(0);
         expect(result.stdout).not.toContain("Starting morty");
         const control = await openMortyInstallation(deadline, environment);
-        await expect(readFile(join(control.stateDirectory, "manager.lock"))).rejects.toMatchObject({
+        await expect(readFile(join(control.stateDirectory, "daemon.lock"))).rejects.toMatchObject({
             code: "ENOENT",
         });
     });
@@ -118,7 +118,7 @@ describe("Morty daemon lifecycle", () => {
                 stderr: "",
                 stdout: "Morty daemon stopped.\n",
             });
-            for (const name of ["manager.lock"]) {
+            for (const name of ["daemon.lock"]) {
                 await expect(readFile(join(control.stateDirectory, name), "utf8")).rejects.toMatchObject({
                     code: "ENOENT",
                 });
@@ -176,7 +176,7 @@ describe("Morty pairing lifecycle", () => {
             expect(initiallyListed.stdout).toContain(connection.computerId);
             expect(initiallyListed.stdout).not.toContain(connection.pairingGeneration);
 
-            const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
+            const daemonPid = await readFile(join(control.stateDirectory, "daemon.lock"), "utf8");
             const outputPath = join(stateRoot, "pairings.json");
             await writeFile(outputPath, "", { mode: 0o600 });
             const listedAsJson = await runCli(["pair", "list", `--output-json=${outputPath}`], environment, deadline);
@@ -201,7 +201,7 @@ describe("Morty pairing lifecycle", () => {
             expect(stopped.code).toBe(0);
             expect(stopped.stdout).toBe("Pairing stopped.\n");
 
-            expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).toBe(daemonPid);
+            expect(await readFile(join(control.stateDirectory, "daemon.lock"), "utf8")).toBe(daemonPid);
             const listedStopped = await runCli(["pair", "list"], environment, deadline);
             expect(listedStopped.stdout).toContain(connection.computerId);
             expect(listedStopped.stdout).toContain("stopped");
@@ -276,7 +276,7 @@ async function startRelay(ready = true): Promise<{ readonly origin: URL; readonl
 }
 
 async function holdControlConnection(stateDirectory: InstallationDirectory, signal: AbortSignal): Promise<Socket> {
-    const token = (await readFile(join(stateDirectory, "manager.token"), "utf8")).trim();
+    const token = (await readFile(join(stateDirectory, "daemon.token"), "utf8")).trim();
     const socket = createConnection({ allowHalfOpen: true, path: controlSocketPath(stateDirectory) });
     try {
         await new Promise<void>((resolve_, reject) => {

@@ -2,7 +2,6 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { CodexAgentConnection } from "../../src/engine/acp/adapter/codex/agent-connection.ts";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { CodexAppServerClient } from "../../src/engine/acp/harness/codex/app-server-client.ts";
 import { stopProcessTree } from "../../src/engine/util/process/executable.ts";
@@ -200,7 +199,7 @@ it.each([
             ...extra,
         ];
         const command = await historyAppServer(items);
-        const agent = new AcpAgentDefinition("codex", "Codex", command, (options) => new CodexAgentConnection(options));
+        const agent = new AcpAgentDefinition("codex", "Codex", command, null);
         const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
         const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
         const updates = (page: typeof preview) =>
@@ -249,7 +248,7 @@ it.each(["mcpToolCall", "dynamicToolCall"])(
             },
         ];
         const command = await historyAppServer(items);
-        const agent = new AcpAgentDefinition("codex", "Codex", command, (options) => new CodexAgentConnection(options));
+        const agent = new AcpAgentDefinition("codex", "Codex", command, null);
         const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
         const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
         for (const page of [preview, opened]) {
@@ -303,7 +302,7 @@ it("Given a saved Codex tool result exceeds the nesting limit, When it is previe
             },
         },
     ]);
-    const agent = new AcpAgentDefinition("codex", "Codex", command, (options) => new CodexAgentConnection(options));
+    const agent = new AcpAgentDefinition("codex", "Codex", command, null);
     const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
     const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
     for (const page of [preview, opened]) {
@@ -339,7 +338,7 @@ it("Given a saved failed Codex turn has no assistant answer, When it is previewe
         [{ id: "user", type: "userMessage", content: [{ type: "text", text: "Saved failed prompt" }] }],
         { message: "Native failure ".repeat(1_000) },
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", command, (options) => new CodexAgentConnection(options));
+    const agent = new AcpAgentDefinition("codex", "Codex", command, null);
     const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
     const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
     const failures = (page: typeof preview) =>

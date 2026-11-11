@@ -3,10 +3,10 @@ import type {
     ComputerConnection,
     ComputerConnectionIdentity,
     LatestComputerConnection,
-} from "../entity/channel/computer-connection.ts";
+} from "../entity/computer/computer-connection.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import { DatabaseError } from "../infra/sql-database.ts";
-import { computerConnection } from "../schema/project-do/index.ts";
+import { computerConnection } from "../schema/computer-relay-do/index.ts";
 import { activeGeneration } from "./computer-generation.ts";
 
 const connectionFields = {

@@ -24,14 +24,14 @@ import {
     WORKSPACE_ENTRIES_KIND,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
+import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import type { InProcessAcpEndpointFactory } from "../../src/engine/acp/agent/in-process-endpoint.ts";
+import type { IdentifiedSessionNotification } from "../../src/engine/acp/connection/session-notification.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
-import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -104,7 +104,9 @@ class StreamingAgent {
     readonly #waiters: Array<(turn: ControlledTurn) => void> = [];
     readonly #completions: Array<() => void> = [];
 
-    readonly createEndpoint: InProcessAcpEndpointFactory = ({ onSessionUpdate }) => {
+    readonly createEndpoint = (
+        onSessionUpdate: (notification: IdentifiedSessionNotification) => Promise<void>,
+    ): ControlledAcpPeer => {
         const terminated = Promise.withResolvers<{ readonly kind: "closed" }>();
         let connection: AgentConnection | null = null;
         const app = agent({ name: "controlled-offline-output" })
@@ -303,13 +305,7 @@ async function startRuntime() {
                 "Controlled Agent",
                 process.execPath,
                 (options) =>
-                    new ControlledEndpointConnection(
-                        producer.createEndpoint({
-                            ...options,
-                            onSessionUpdate: options.client.onUpdate,
-                        }),
-                        options.client,
-                    ),
+                    new ControlledEndpointConnection(producer.createEndpoint(options.client.onUpdate), options.client),
             ),
         ],
         new RuntimeLocalContext(directory, {}),

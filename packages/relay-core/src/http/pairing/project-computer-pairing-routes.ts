@@ -39,20 +39,20 @@ export function createProjectComputerPairingRoutes() {
         )
         .get("/computers/connect", async (context) => {
             const request = context.req.raw;
-            const connection = await context.var.relay.services.channels.connectComputer(
+            const connection = await context.var.relay.services.computerConnections.connectComputer(
                 bearerToken(request),
                 request.headers.get(COMPUTER_SUCCESSOR_CREDENTIAL_HEADER) ?? "",
                 request.signal,
             );
             switch (connection.kind) {
                 case "accepted":
-                    return await context.var.relay.gateways.channelGateway.acceptDaemon(
+                    return await context.var.relay.gateways.computerRelayGateway.acceptDaemon(
                         connection.access,
                         request,
                         request.signal,
                     );
                 case "revoked":
-                    return context.var.relay.gateways.channelGateway.refuseRevokedDaemon();
+                    return context.var.relay.gateways.computerRelayGateway.refuseRevokedDaemon();
             }
         });
 }

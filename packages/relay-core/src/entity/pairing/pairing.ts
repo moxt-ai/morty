@@ -37,7 +37,7 @@ export interface ClaimedPairing {
     readonly daemonToken: string;
 }
 
-export interface VerifiedChannelAccess {
+export interface VerifiedComputerAccess {
     readonly computerId: string;
 }
 
@@ -46,7 +46,7 @@ export interface VerifiedChannelAccess {
  * names the credential, and every message it sends re-reads whether the credential still grants
  * `PROJECT_HOST_PERMISSIONS` and the message's own permission in the Project.
  */
-export class ChannelDescriptor {
+export class ComputerDescriptor {
     readonly agents: readonly AgentDescriptor[];
     readonly machineName: string;
     readonly computerId: string;
@@ -118,10 +118,10 @@ function pairingDirectoryErrorStatus(code: string): number {
 }
 
 export class RevokedProjectComputer {
-    readonly access: VerifiedChannelAccess;
+    readonly access: VerifiedComputerAccess;
     readonly revokedAt: string;
 
-    constructor(access: VerifiedChannelAccess, revokedAt: string) {
+    constructor(access: VerifiedComputerAccess, revokedAt: string) {
         this.access = access;
         this.revokedAt = revokedAt;
     }
@@ -257,7 +257,7 @@ export function validateIdentifier(value: string, field: string): string {
 
 export function validateToken(value: string): string {
     if (!TOKEN_PATTERN.test(value)) {
-        throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
+        throw new PairingDirectoryError("unauthorized", "A valid computer token is required");
     }
     return value;
 }

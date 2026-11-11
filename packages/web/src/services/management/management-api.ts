@@ -7,7 +7,7 @@ export type ManagedProject = v.InferOutput<typeof projectSchema>;
 const machineSchema = v.object({ computerPairing: v.picklist(["unpaired", "paired", "revoked"]) });
 
 /**
- * Where the Computer's pairing stands: not yet paired (or its pairing request is pending or expired), paired,
+ * Where the Machine's Runtime pairing stands: not yet paired (or its pairing request is pending or expired), paired,
  * or revoked until setup pairs it again. The Relay owns this fact; the Worker reads it for the Machine.
  */
 export type ComputerPairing = v.InferOutput<typeof machineSchema>["computerPairing"];

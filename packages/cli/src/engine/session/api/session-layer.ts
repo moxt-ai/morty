@@ -5,7 +5,7 @@ import { LiveEventPositionTable } from "../../storage/session/live-event-positio
 import { SessionCreationTable } from "../../storage/session/session-creation-table.ts";
 import { SessionEventCacheTable } from "../../storage/session/session-event-cache-table.ts";
 import {
-    channelSessionDatabasePaths,
+    computerSessionDatabasePaths,
     openAcpSessionDatabase,
     openSessionEventCacheDatabase,
 } from "../../storage/sqlite/local-databases.ts";
@@ -72,7 +72,7 @@ export interface SessionLayerOptions {
 /** Wires the session layer for one runtime: its stores, manager, turns, and native session browsing. */
 export function buildSessionLayer(options: SessionLayerOptions) {
     const { computerId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
-    const databases = channelSessionDatabasePaths(stateDirectory, computerId);
+    const databases = computerSessionDatabasePaths(stateDirectory, computerId);
     const sessionDatabase = openAcpSessionDatabase(databases.sessions);
     let events: CachedSessionEventStore;
     let operations: ExecutionReceipts;

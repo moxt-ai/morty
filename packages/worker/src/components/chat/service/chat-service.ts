@@ -237,7 +237,11 @@ export class ChatService {
     readonly #requireComputerAgent = async (scope: ChatScope, harness: string) => {
         const computer = await this.#relay.getChatComputerAgents(scope.computerId, scope.signal);
         if (!computer.agents.some((agent) => agent.harness === harness)) {
-            throw new ComputerManagementError("AGENT_UNAVAILABLE", "Choose an agent provided by this Computer.", 409);
+            throw new ComputerManagementError(
+                "AGENT_UNAVAILABLE",
+                "Choose an agent provided by this Machine's Runtime.",
+                409,
+            );
         }
     };
 
@@ -588,7 +592,7 @@ export class ChatService {
 
     /**
      * Setup's check that the computer's paired Computer offers `harness` and can open its settings in the default
-     * working directory. It records nothing: the Relay owns the Computer's pairing state.
+     * working directory. It records nothing: whether the Machine has a Runtime is the Relay's pairing.
      */
     readonly verifyAgent = async (scope: ChatScope, input: AgentSetupInput) => {
         if (input.computerId !== scope.computerId) {

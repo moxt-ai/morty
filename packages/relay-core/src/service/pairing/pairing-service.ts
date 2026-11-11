@@ -3,15 +3,15 @@ import type { AgentSettingsDiscoverCommand, WorkspaceListCommand } from "@morty-
 import { decodeComputerDiagnosticsRequest } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
-import type { ChannelGateway } from "../../gateway/channel-gateway.ts";
-import { ComputerDescriptor } from "../channel/channel.ts";
-import type { LocalSessionOperations } from "../channel/local-session-operations.ts";
+import type { ComputerRelayGateway } from "../../gateway/computer-relay-gateway.ts";
+import { ComputerSummary } from "../computer-relay/computer.ts";
+import type { LocalSessionOperations } from "../computer-relay/local-session-operations.ts";
 import { computerControlPermission } from "./computer-control-registry.ts";
 import type { ComputerControlCommand } from "./computer-control-request.ts";
 import type { PairingOperations } from "./pairing-operations.ts";
 
 export class PairingService {
-    readonly #channels: ChannelGateway;
+    readonly #relay: ComputerRelayGateway;
     readonly #pairings: PairingOperations;
     // Computer operations execute only in the ComputerRelay that holds the daemon connection; every Computer route reaches it there.
     readonly #runtimeOperations: LocalSessionOperations | undefined;
@@ -19,11 +19,11 @@ export class PairingService {
     constructor(cx: {
         readonly services: { readonly pairings: PairingOperations };
         readonly gateways: {
-            readonly channelGateway: ChannelGateway;
+            readonly computerRelayGateway: ComputerRelayGateway;
             readonly runtimeOperations?: LocalSessionOperations;
         };
     }) {
-        this.#channels = cx.gateways.channelGateway;
+        this.#relay = cx.gateways.computerRelayGateway;
         this.#runtimeOperations = cx.gateways.runtimeOperations;
         this.#pairings = cx.services.pairings;
     }
@@ -47,22 +47,22 @@ export class PairingService {
     };
 
     readonly listProjectComputers = async (computerId: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectComputers(computerId, signal);
+        const computers = await this.#pairings.listProjectComputers(computerId, signal);
         return await Promise.all(
-            channels.map(
-                async (channel) =>
-                    new ComputerDescriptor(
-                        channel,
-                        await this.#channels.readComputerStatus({ computerId: channel.computerId }, signal),
+            computers.map(
+                async (computer) =>
+                    new ComputerSummary(
+                        computer,
+                        await this.#relay.readComputerStatus({ computerId: computer.computerId }, signal),
                     ),
             ),
         );
     };
 
     readonly getComputerAgents = async (computerId: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectComputers(computerId, signal);
-        const channel = channels.find((candidate) => candidate.computerId === computerId);
-        if (channel === undefined) {
+        const computers = await this.#pairings.listProjectComputers(computerId, signal);
+        const computer = computers.find((candidate) => candidate.computerId === computerId);
+        if (computer === undefined) {
             // A revoked Computer is not listed; saying so lets its Machine be paired again instead of waiting for it.
             if (await this.#pairings.isProjectComputerRevoked(computerId, signal)) {
                 throw new PairingDirectoryError("computer_revoked", "The Computer has been revoked");
@@ -72,9 +72,9 @@ export class PairingService {
                 "The project credential cannot access this Computer",
             );
         }
-        return new ComputerDescriptor(
-            channel,
-            await this.#channels.readComputerStatus({ computerId: channel.computerId }, signal),
+        return new ComputerSummary(
+            computer,
+            await this.#relay.readComputerStatus({ computerId: computer.computerId }, signal),
         );
     };
 
@@ -158,7 +158,7 @@ export class PairingService {
     readonly revokeProjectComputer = async (computerId: string, signal: AbortSignal): Promise<void> => {
         const revoked = await this.#pairings.revokeProjectComputer(computerId, signal);
         try {
-            await this.#channels.disconnectComputer(revoked.access, signal);
+            await this.#relay.disconnectComputer(revoked.access, signal);
         } catch (cause) {
             signal.throwIfAborted();
             throw new PairingDirectoryError(

@@ -117,7 +117,7 @@ user's real data.
 | --- | --- | --- |
 | "The Chat WebSocket bridge could not connect" / `WEBSOCKET_ORIGIN_FORBIDDEN` | The proxy forwarded the browser's `Origin: http://localhost:<port>` to the deployed Worker | Confirm `headers: { origin: deployed }` on both proxy entries of the committed config |
 | Bridge opens but takes many seconds, then "Morty is temporarily unavailable" | Direct (non-proxy) egress to the origin is slow or reset; the session load missed its 15 s deadline | Start with `NODE_OPTIONS=--use-env-proxy` so the config's `agent: globalAgent` routes through the environment proxy |
-| "Morty is temporarily unavailable" on **every** reload with a signed-in identity | Dev entry still double-mounts components (StrictMode) that terminal-close the transport mid-load | Requires the application-root fix that renders without StrictMode |
+| Repeated connection failures during development mounts | Application lifetime may be coupled to React mount cleanup | Keep StrictMode enabled; inspect application ownership and ensure mount replay does not close shared transports |
 | `503`/`502` from `/morty/api` through the proxy | Wrong `target` origin, or the deployed Worker is down | Verify the origin with `curl` directly, then check `WEB_DEV_ORIGIN` and the config's `target` |
 | Continue page rejects the code | The one-time code was already redeemed, or it expired | Ask the user for a fresh continue link |
 

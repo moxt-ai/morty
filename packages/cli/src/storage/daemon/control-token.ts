@@ -8,7 +8,7 @@ import {
 import { isNodeError } from "../../engine/util/node-error.ts";
 
 function controlTokenPath(stateDirectory: InstallationDirectory): string {
-    return join(stateDirectory, "manager.token");
+    return join(stateDirectory, "daemon.token");
 }
 
 /** The secret local control clients present to the daemon, created on first use with owner-only permissions. */

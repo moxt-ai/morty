@@ -1,12 +1,12 @@
 import type { ProjectAccessContext, ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import type {
     AgentDescriptor,
-    ChannelDescriptor,
     ClaimedPairing,
+    ComputerDescriptor,
     CreatedComputerPairing,
     PairingStatus,
     RevokedProjectComputer,
-    VerifiedChannelAccess,
+    VerifiedComputerAccess,
 } from "../../entity/pairing/pairing.ts";
 export interface PairingOperations {
     /**
@@ -18,9 +18,9 @@ export interface PairingOperations {
         successor: string,
         signal: AbortSignal,
     ) => Promise<
-        { readonly kind: "rotated" | "reused"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
+        { readonly kind: "rotated" | "reused"; readonly access: VerifiedComputerAccess } | { readonly kind: "revoked" }
     >;
-    readonly authorizePairedHost: (computerId: string, signal: AbortSignal) => Promise<VerifiedChannelAccess>;
+    readonly authorizePairedHost: (computerId: string, signal: AbortSignal) => Promise<VerifiedComputerAccess>;
     readonly authorizeProject: (
         computerId: string,
         permission: ProjectPermission,
@@ -30,7 +30,7 @@ export interface PairingOperations {
         computerId: string,
         permission: ProjectPermission,
         signal: AbortSignal,
-    ) => Promise<VerifiedChannelAccess>;
+    ) => Promise<VerifiedComputerAccess>;
     // v1: reserve capacity atomically. The same Project/key/credential replays
     // the original identity, secrets, and deadline, including after expiration
     // or revocation. A failed response may follow a commit; retry the same key.
@@ -40,7 +40,7 @@ export interface PairingOperations {
         idempotencyKey: string,
         signal: AbortSignal,
     ) => Promise<CreatedComputerPairing>;
-    readonly listProjectComputers: (computerId: string, signal: AbortSignal) => Promise<readonly ChannelDescriptor[]>;
+    readonly listProjectComputers: (computerId: string, signal: AbortSignal) => Promise<readonly ComputerDescriptor[]>;
     /** Whether the Project's Computer was revoked; false for one the Project never had. */
     readonly isProjectComputerRevoked: (computerId: string, signal: AbortSignal) => Promise<boolean>;
     // Read-only v1 projection: revoked, claimed, expired, or pending, in that

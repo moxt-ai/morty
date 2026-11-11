@@ -6,7 +6,7 @@ import {
     type SessionNotification,
 } from "@agentclientprotocol/sdk/unstable";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
-import type { AcpEndpointTermination } from "../../../src/engine/acp/agent/in-process-endpoint.ts";
+import type { AgentTermination } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
 import type { AgentConnection, AgentConnectionOptions } from "../../../src/engine/acp/connection/agent-connection.ts";
 import { raceAgentOperation } from "../../../src/engine/acp/connection/agent-operation.ts";
 import { createAcpClient } from "../../../src/engine/acp/connection/create-client.ts";
@@ -48,7 +48,7 @@ function isIdentifiedNotification(notification: SessionNotification): notificati
 /** Stateful controlled ACP peer transport used only by daemon integration scenarios. */
 export class ControlledAcpConnection implements AgentConnection {
     readonly connection: ClientConnection;
-    readonly termination: Promise<AcpEndpointTermination>;
+    readonly termination: Promise<AgentTermination>;
     readonly #child: ChildProcess;
     readonly #consumeStderr: (chunk: Buffer) => void;
     #closePromise: Promise<void> | null = null;
@@ -68,7 +68,7 @@ export class ControlledAcpConnection implements AgentConnection {
             child.kill("SIGKILL");
             throw new AcpExecutionError("ACP process streams are unavailable");
         }
-        const termination = Promise.withResolvers<AcpEndpointTermination>();
+        const termination = Promise.withResolvers<AgentTermination>();
         this.termination = termination.promise;
         child.once("error", (cause) => {
             termination.resolve({

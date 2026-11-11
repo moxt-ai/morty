@@ -1403,7 +1403,7 @@ it.each(["text", "binary"])(
             await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_computer_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
+                state.storage.sql.exec(`CREATE TRIGGER reject_computer_disconnect BEFORE UPDATE OF disconnected_at ON computer_connection
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
@@ -1499,7 +1499,7 @@ it("Given a Session credential with an open live view, When the owner revokes th
         const replacement = await runtime.connect(await runtime.pairAgain("session-pairing-generation-replacement"));
         const daemon = replacement.webSocket;
         if (daemon === null) {
-            throw new Error("Expected the paired Runtime socket");
+            throw new Error("Expected the paired Computer socket");
         }
         const messages = new SocketMessages(daemon);
         daemon.accept();
@@ -2209,7 +2209,7 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
     it("Given a Session credential, When HTTP reaches ComputerRelay directly, Then the command executes without a project relay hop and remains correlated", async () => {
-        const runtime = await connectComputerDaemon("direct-computer");
+        const runtime = await connectComputerDaemon("direct-runtime");
         try {
             const submitted = runtime.submitComputerTurn("direct-command");
             const first = await Promise.race([

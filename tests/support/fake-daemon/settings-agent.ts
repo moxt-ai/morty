@@ -2,16 +2,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk/unstable";
 import {
+    type ControlledAcpPeer,
     ControlledEndpointConnection,
     type ControlledSessionUpdate,
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@morty-build/runtime-test-support/fake-daemon";
 import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
-import type {
-    AcpEndpointTermination,
-    InProcessAcpEndpoint,
-} from "../../../packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
+import type { AgentTermination } from "../../../packages/cli/src/engine/acp/agent/agent-lifecycle.ts";
 
 /** Like Claude Code, a new session starts with the model its working directory's `.claude/settings.json` names. */
 async function projectModel(cwd: string): Promise<string | undefined> {
@@ -33,7 +31,7 @@ async function projectModel(cwd: string): Promise<string | undefined> {
 const defineAgent = (
     id: string,
     label: string,
-    createEndpoint: (onSessionUpdate: ControlledSessionUpdate) => InProcessAcpEndpoint,
+    createEndpoint: (onSessionUpdate: ControlledSessionUpdate) => ControlledAcpPeer,
     version = "controlled-harness",
 ): AcpAgentDefinition =>
     new AcpAgentDefinition(
@@ -66,8 +64,8 @@ export function createSettingsAgent(
         }
         return options;
     };
-    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
-        const termination = Promise.withResolvers<AcpEndpointTermination>();
+    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): ControlledAcpPeer => {
+        const termination = Promise.withResolvers<AgentTermination>();
         const app = acp
             .agent({ name: "morty-settings-agent" })
             .onRequest(acp.methods.agent.initialize, () => ({
@@ -331,8 +329,8 @@ export type UnavailableAgentFailure = "signed-out" | "broken";
 
 /** An installed Agent that refuses every new session, as a real harness does when it cannot start. */
 export function createUnavailableAgent(id: string, name: string, failure: UnavailableAgentFailure) {
-    const createEndpoint = (): InProcessAcpEndpoint => {
-        const termination = Promise.withResolvers<AcpEndpointTermination>();
+    const createEndpoint = (): ControlledAcpPeer => {
+        const termination = Promise.withResolvers<AgentTermination>();
         const app = acp
             .agent({ name: "morty-unavailable-agent" })
             .onRequest(acp.methods.agent.initialize, () => ({

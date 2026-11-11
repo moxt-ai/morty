@@ -2,7 +2,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { relayDrizzle } from "../../relay-core/src/infra/drizzle-database.ts";
 import { DurableObjectDatabaseAdapter } from "../../relay-core/src/infra/durable-object-sql-database.ts";
-import { computerPairing, computerRegistration } from "../../relay-core/src/schema/project-do/index.ts";
+import { computerPairing, computerRegistration } from "../../relay-core/src/schema/computer-relay-do/index.ts";
 import { holdsAccess } from "../../worker/src/components/management/service/authentication-service.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { createHostedRelayAccess } from "../../worker/src/composition/relay-services.ts";

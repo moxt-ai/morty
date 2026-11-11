@@ -126,7 +126,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         return store;
     }
 
-    readonly #localChannel = (computerId: string, request: Request): Promise<Response> => {
+    readonly #localRelay = (computerId: string, request: Request): Promise<Response> => {
         if (!this.#owns(computerId)) {
             throw new Error("Computer ID does not match this relay");
         }
@@ -305,7 +305,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         return {
             computerId,
             store,
-            channel: this.#localChannel,
+            relay: this.#localRelay,
             operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
         };
     }

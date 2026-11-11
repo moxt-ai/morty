@@ -1,14 +1,14 @@
 import type { ProjectCredentialAuthority } from "../entity/authentication/project-authorization.ts";
-import { CloudflareChannelPeers } from "../gateway/cloudflare-channel-peers.ts";
+import { CloudflareRelayPeers } from "../gateway/cloudflare-relay-peers.ts";
+import type { ComputerRelayStoreResolver } from "../infra/computer-relay-store.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
-import type { ProjectStoreResolver } from "../infra/project-store.ts";
 import { createDurableObjectDependencies } from "./create-durable-object-dependencies.ts";
 
 export function createDurableObjectContext(
     state: DurableObjectState,
     options: {
-        readonly stores: ProjectStoreResolver;
+        readonly stores: ComputerRelayStoreResolver;
         readonly projects: ProjectStorageDirectory;
         readonly projectCredentials: ProjectCredentialAuthority;
         readonly doDatabase: DoSqlDatabase;
@@ -21,7 +21,7 @@ export function createDurableObjectContext(
             projectDirectory: options.projects,
         },
         gateways: {
-            peers: new CloudflareChannelPeers(state),
+            peers: new CloudflareRelayPeers(state),
             projectCredentials: options.projectCredentials,
         },
         utilities: {

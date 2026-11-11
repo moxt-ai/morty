@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/durable-sqlite";
-import * as computerConnectionSchema from "../schema/computer-connection-do/index.ts";
+import * as relayOperationsSchema from "../schema/relay-operations-do/index.ts";
 import {
     DatabaseError,
     type DoSqlDatabase,
@@ -31,7 +31,7 @@ export class DurableObjectSqlDatabase implements DoSqlDatabase {
 
     constructor(storage: DurableObjectStorage) {
         this.#storage = storage;
-        this.orm = drizzle(storage, { schema: computerConnectionSchema });
+        this.orm = drizzle(storage, { schema: relayOperationsSchema });
     }
 
     readonly query = (sql: string, values: readonly DoSqlValue[] = []): readonly DoSqlRow[] =>

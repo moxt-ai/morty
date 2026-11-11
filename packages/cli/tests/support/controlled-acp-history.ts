@@ -13,12 +13,15 @@ import type {
     SessionEventPage,
     SessionEventStore,
 } from "../../src/engine/acp/native-history/preview-contract.ts";
-import { NativeHistoryPreviewSnapshots } from "../../src/engine/acp/native-history/preview-snapshots.ts";
+import {
+    memoryHistoryPreviewSnapshot,
+    NativeHistoryPreviewSnapshots,
+} from "../../src/engine/acp/native-history/preview-snapshots.ts";
 import type { AgentProcessPool } from "../../src/engine/session/process/agent-process-pool.ts";
 
 /** Controlled peers replay history over ACP; real vendors own their native history readers. */
 export class ControlledAcpHistory {
-    readonly #snapshots = new NativeHistoryPreviewSnapshots();
+    readonly #snapshots = new NativeHistoryPreviewSnapshots(memoryHistoryPreviewSnapshot, Infinity);
     readonly #processes: AgentProcessPool;
     readonly #connector: AcpSessionConnector;
     #agent: AcpAgentDefinition;
@@ -79,9 +82,10 @@ export class ControlledAcpHistory {
         if (cursor !== null) {
             return this.#snapshots.get(key).page(target, eventLimit, cursor);
         }
-        const store = this.#snapshots.replace(key);
+        const snapshot = this.#snapshots.create();
+        const store = snapshot.events;
         try {
-            return await this.#processes.runTransient(
+            const page = await this.#processes.runTransient(
                 query.signal,
                 () => this.#start(scoped, sessionId, store),
                 async (connection) => {
@@ -110,8 +114,11 @@ export class ControlledAcpHistory {
                 },
                 (connection) => connection.closeProcess(),
             );
+            query.signal.throwIfAborted();
+            this.#snapshots.retain(key, snapshot);
+            return page;
         } catch (error) {
-            this.#snapshots.discard(key, store);
+            snapshot.close();
             throw error;
         }
     };

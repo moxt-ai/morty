@@ -60,14 +60,14 @@ function validatePairingGeneration(value: string): string {
 
 function validateIdentifier(value: string, code: string): string {
     if (!isIdentifier(value)) {
-        throw new RuntimeInstallationStoreError(code, "The saved Computer connection is invalid");
+        throw new RuntimeInstallationStoreError(code, "The saved Runtime connection is invalid");
     }
     return value;
 }
 
 function validateComputerCredential(value: string): string {
     if (!COMPUTER_CREDENTIAL_PATTERN.test(value)) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid");
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     return value;
 }
@@ -77,7 +77,7 @@ function parseRelayOrigin(value: string): URL {
     try {
         origin = new URL(value);
     } catch (cause) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid", {
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid", {
             cause,
         });
     }
@@ -87,7 +87,7 @@ function parseRelayOrigin(value: string): URL {
         origin.password.length > 0 ||
         (origin.protocol === "http:" && origin.hostname !== "127.0.0.1" && origin.hostname !== "localhost")
     ) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid");
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     origin.hash = "";
     origin.pathname = "/";
@@ -108,7 +108,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         (value["version"] !== 8 && value["version"] !== PAIRING_RECORD_VERSION) ||
         value["kind"] !== "verified"
     ) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid");
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
     const pairingGeneration = value[generationKey];
@@ -127,7 +127,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         typeof credentials["current"] !== "string" ||
         (credentials["successor"] !== null && typeof credentials["successor"] !== "string")
     ) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid");
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     return new VerifiedComputerConnection(
         activation,
@@ -144,7 +144,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
 
 function decodeConnection(value: unknown): VerifiedComputerConnection {
     if (!isRecord(value)) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid");
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     return decodeVerifiedConnection(value);
 }
@@ -154,7 +154,7 @@ async function readJsonFile(path: string, signal: AbortSignal, missingCode: stri
     const read = await readInstallationFile(path);
     switch (read.kind) {
         case "missing":
-            throw new RuntimeInstallationStoreError(missingCode, "The saved Computer connection was not found", {
+            throw new RuntimeInstallationStoreError(missingCode, "The saved Runtime connection was not found", {
                 cause: read.cause,
             });
         case "unopenable":
@@ -166,7 +166,7 @@ async function readJsonFile(path: string, signal: AbortSignal, missingCode: stri
                 },
             );
         case "not-a-small-file":
-            throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid");
+            throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
         case "read":
             break;
     }
@@ -174,7 +174,7 @@ async function readJsonFile(path: string, signal: AbortSignal, missingCode: stri
     try {
         return JSON.parse(read.text);
     } catch (cause) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Computer connection is invalid", {
+        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid", {
             cause,
         });
     }
@@ -189,13 +189,9 @@ async function writeJsonAtomically(
         await writeInstallationFile(path, `${JSON.stringify(value, null, 2)}\n`, signal);
     } catch (cause) {
         signal.throwIfAborted();
-        throw new RuntimeInstallationStoreError(
-            "connection_unavailable",
-            "The local Computer state cannot be written",
-            {
-                cause,
-            },
-        );
+        throw new RuntimeInstallationStoreError("connection_unavailable", "The local Runtime state cannot be written", {
+            cause,
+        });
     }
 }
 

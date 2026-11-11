@@ -208,7 +208,7 @@ test("Given the answer to setup's Computer pairing is lost, When setup runs agai
     expect(saved.identity.computer_id).toBe(pairedComputer);
 });
 
-test("Given a Computer whose pairing Morty revoked, When setup runs again, Then it pairs the Computer again and keeps its identity", {
+test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
     timeout: 60_000,
 }, async () => {
     await using cleanup = new AsyncDisposableStack();
