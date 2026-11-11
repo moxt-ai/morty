@@ -40,7 +40,7 @@ export class ClaudeAdapter implements Adapter {
     constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
         this.dependencies = dependencies;
         this.#agent = agent;
-        this.#previews = new HarnessHistoryPreviews(dependencies.processes, memoryHistoryPreviewSnapshot);
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes, memoryHistoryPreviewSnapshot, Infinity);
     }
 
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {

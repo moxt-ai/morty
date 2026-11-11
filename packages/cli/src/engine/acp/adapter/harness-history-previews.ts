@@ -27,9 +27,9 @@ function unexpectedSnapshotIdentity(identity: never): never {
 export class HarnessHistoryPreviews {
     readonly #snapshots: NativeHistoryPreviewSnapshots;
     readonly processes: AgentProcessPool;
-    constructor(processes: AgentProcessPool, createSnapshot: () => HistoryPreviewSnapshot) {
+    constructor(processes: AgentProcessPool, createSnapshot: () => HistoryPreviewSnapshot, capacity: number) {
         this.processes = processes;
-        this.#snapshots = new NativeHistoryPreviewSnapshots(createSnapshot);
+        this.#snapshots = new NativeHistoryPreviewSnapshots(createSnapshot, capacity);
     }
 
     readonly read = async (params: {
@@ -55,12 +55,16 @@ export class HarnessHistoryPreviews {
         if (request.cursor !== null) {
             return this.#snapshots.get(key).page(target, request.eventLimit, request.cursor);
         }
-        const store = this.#snapshots.replace(key);
-        const events: SessionEventPayload[] = [];
+        let releaseUnretainedSnapshot = (): void => {};
         try {
-            return await this.processes.runTransient(
+            const snapshot = await this.processes.runTransient(
                 query.signal,
                 async () => {
+                    // Waiting callers consume no SQLite handles; process capacity also bounds active caches.
+                    const snapshot = this.#snapshots.create();
+                    releaseUnretainedSnapshot = snapshot.close;
+                    const store = snapshot.events;
+                    const events: SessionEventPayload[] = [];
                     const lifetime = new AbortController();
                     const callbacks = harnessPreviewCallbacks(query, async (received, event) => {
                         if (received !== sessionId) {
@@ -90,6 +94,8 @@ export class HarnessHistoryPreviews {
                     return {
                         source,
                         lifetime,
+                        snapshot,
+                        events,
                         closeProcess: async () => {
                             try {
                                 await disposeHarnessClient(source.client, sessionId, source.drained, "graceful");
@@ -99,7 +105,7 @@ export class HarnessHistoryPreviews {
                         },
                     };
                 },
-                async ({ source, lifetime }) => {
+                async ({ source, lifetime, snapshot, events }) => {
                     const signal = AbortSignal.any([query.signal, lifetime.signal]);
                     await waitForAgentOperation(source.load(sessionId, signal), signal);
                     await waitForAgentOperation(source.drained(), signal);
@@ -107,17 +113,25 @@ export class HarnessHistoryPreviews {
                         case "fresh":
                             break;
                         case "content":
-                            store.materialize(target, params.identity.generationId(sessionId, events), events);
+                            snapshot.events.materialize(
+                                target,
+                                params.identity.generationId(sessionId, events),
+                                events,
+                            );
                             break;
                         default:
                             unexpectedSnapshotIdentity(params.identity);
                     }
-                    return store.page(target, request.eventLimit, null);
+                    return snapshot;
                 },
                 (runtime) => runtime.closeProcess(),
             );
+            query.signal.throwIfAborted();
+            const page = snapshot.events.page(target, request.eventLimit, null);
+            this.#snapshots.retain(key, snapshot);
+            return page;
         } catch (cause) {
-            this.#snapshots.discard(key, store);
+            releaseUnretainedSnapshot();
             throw agentOperationError(cause);
         }
     };

@@ -14,18 +14,29 @@ export function memoryHistoryPreviewSnapshot(): HistoryPreviewSnapshot {
 }
 
 export class NativeHistoryPreviewSnapshots {
+    readonly #capacity: number;
     readonly #snapshots = new Map<NativeSessionPreviewKey, HistoryPreviewSnapshot>();
-    readonly #create: () => HistoryPreviewSnapshot;
+    readonly create: () => HistoryPreviewSnapshot;
 
-    constructor(create: () => HistoryPreviewSnapshot) {
-        this.#create = create;
+    constructor(create: () => HistoryPreviewSnapshot, capacity: number) {
+        this.create = create;
+        this.#capacity = capacity;
     }
 
-    readonly replace = (key: NativeSessionPreviewKey): SessionEventStore => {
+    /** Only completed readers enter retention; active readers keep ownership of their own cache. */
+    readonly retain = (key: NativeSessionPreviewKey, snapshot: HistoryPreviewSnapshot): void => {
         this.#snapshots.get(key)?.close();
-        const store = this.#create();
-        this.#snapshots.set(key, store);
-        return store.events;
+        this.#snapshots.delete(key);
+        this.#snapshots.set(key, snapshot);
+        while (this.#snapshots.size > this.#capacity) {
+            const oldest = this.#snapshots.entries().next();
+            if (oldest.done) {
+                return;
+            }
+            const [key, expired] = oldest.value;
+            this.#snapshots.delete(key);
+            expired.close();
+        }
     };
 
     readonly get = (key: NativeSessionPreviewKey): SessionEventStore => {
@@ -33,15 +44,9 @@ export class NativeHistoryPreviewSnapshots {
         if (store === undefined) {
             throw new AcpExecutionError("The native event cursor is invalid", {}, "invalid_native_session_response");
         }
+        this.#snapshots.delete(key);
+        this.#snapshots.set(key, store);
         return store.events;
-    };
-
-    readonly discard = (key: NativeSessionPreviewKey, store: SessionEventStore): void => {
-        const snapshot = this.#snapshots.get(key);
-        if (snapshot?.events === store) {
-            this.#snapshots.delete(key);
-            snapshot.close();
-        }
     };
 
     readonly close = (): void => {

@@ -53,7 +53,7 @@ export class PiAdapter implements Adapter {
         this.#agent = agent;
         this.#runtime = piRuntime(agent);
         this.#dependencies = dependencies;
-        this.#previews = new HarnessHistoryPreviews(dependencies.processes, memoryHistoryPreviewSnapshot);
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes, memoryHistoryPreviewSnapshot, Infinity);
     }
 
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {

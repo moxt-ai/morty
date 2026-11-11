@@ -42,7 +42,7 @@ export class CodexAdapter implements Adapter {
     constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
         this.#agent = agent;
         this.#dependencies = dependencies;
-        this.#previews = new HarnessHistoryPreviews(dependencies.processes, openPreviewEventCache);
+        this.#previews = new HarnessHistoryPreviews(dependencies.processes, openPreviewEventCache, 16);
     }
     readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
         this.#agent = agent;
@@ -336,7 +336,7 @@ export class CodexAdapter implements Adapter {
     readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
         findNativeSession(this.listSessions, query, sessionId, budget);
     readonly readSessionHistory: Adapter["readSessionHistory"] = async ({ query, request }) => {
-        const runtime = this.#agent;
+        const runtime = query.agent;
         query.signal.throwIfAborted();
         sessionIdSchema.parse(request.sessionId);
         if (query.agent.harness !== "codex" || runtime.harness !== "codex") {
