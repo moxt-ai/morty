@@ -61,7 +61,7 @@ async function computer() {
         create,
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
-        status: async (_pairing: Pairing) => management("GET"),
+        status: async () => management("GET"),
         claim: async (pairing: Pairing, computerName = "Paired computer") =>
             request(`/v1/pairings/${pairing.computerId}/redeem`, "POST", {
                 pairingCode: pairing.pairingCode,
@@ -69,7 +69,7 @@ async function computer() {
                 workspaceName: "Computer workspace",
                 agents: [],
             }),
-        revoke: async (_pairing: Pairing) => {
+        revoke: async () => {
             try {
                 await revokeTestComputer(env, computerId, AbortSignal.timeout(10000));
                 return new Response(null, { status: 204 });
@@ -102,7 +102,7 @@ it("Given pending reservations at capacity, When their deadline passes without e
         WHEN NEW.action = 'computer_pairing.expired'
         BEGIN SELECT RAISE(ABORT, 'Expiry maintenance is unavailable'); END`);
     vi.setSystemTime(new Date(first.expiresAt));
-    expect(await responseJson(await app.status(first), 200)).toEqual({ status: "expired" });
+    expect(await responseJson(await app.status(), 200)).toEqual({ status: "expired" });
     expect(await responseJson(await app.claim(first), 400)).toMatchObject({ error: { code: "invalid_pairing_code" } });
     expect(await app.pair("replacement")).toMatchObject({ computerId: app.computerId });
     expect(await app.pair("reservation-0")).toEqual(first);
@@ -140,7 +140,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
         ),
     );
     expect(claimed).toBe(false);
-    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
+    expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "pending" });
     expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
 });
 
@@ -151,7 +151,7 @@ it("Given a claim whose audit cannot commit, When the caller retries after recov
         WHEN NEW.action = 'computer_pairing.claimed'
         BEGIN SELECT RAISE(ABORT, 'Controlled claim failure'); END`);
     expect((await app.claim(pairing)).status).toBe(500);
-    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
+    expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "pending" });
     expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
     await app.sql("DROP TRIGGER reject_claim");
     const claimed = v.parse(
@@ -193,7 +193,7 @@ it("Given a committed redemption response is lost, When the caller retries after
             storage.sql.exec("SELECT action FROM audit_events WHERE category = 'pairing' ORDER BY action").toArray(),
         ),
     ).toEqual([{ action: "computer_pairing.claimed" }, { action: "computer_pairing.requested" }]);
-    expect((await app.revoke(pairing)).status).toBe(204);
+    expect((await app.revoke()).status).toBe(204);
     expect(await responseJson(await app.claim(pairing), 400)).toMatchObject({
         error: { code: "invalid_pairing_code" },
     });
@@ -210,13 +210,13 @@ it("Given a revocation whose audit cannot commit, When it is retried, Then acces
     await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON audit_events
         WHEN NEW.action = 'computer_pairing.revoked'
         BEGIN SELECT RAISE(ABORT, 'Controlled revocation failure'); END`);
-    expect((await app.revoke(pairing)).status).toBe(500);
-    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "paired" });
+    expect((await app.revoke()).status).toBe(500);
+    expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "paired" });
     expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(204);
     await app.sql("DROP TRIGGER reject_revocation");
-    expect((await app.revoke(pairing)).status).toBe(204);
+    expect((await app.revoke()).status).toBe(204);
     expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(401);
-    expect(await responseJson(await app.status(pairing), 200)).toEqual({
+    expect(await responseJson(await app.status(), 200)).toEqual({
         status: "revoked",
         revokedAt: new Date().toISOString(),
     });
@@ -234,7 +234,7 @@ it("Given one available Computer place, When distinct requests compete, Then exa
     const pairing = v.parse(pairingSchema, await responseJson(winner, 201));
     const key = winnerIndex === 0 ? "competitor-a" : "competitor-b";
     expect(await app.pair(key)).toEqual(pairing);
-    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
+    expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "pending" });
 });
 
 it("Given a pending pairing, When claims arrive concurrently, Then they return the same credential and its Computer survives the handshake deadline", async () => {
@@ -248,17 +248,17 @@ it("Given a pending pairing, When claims arrive concurrently, Then they return t
     expect(await responseJson(await app.claim(pairing), 400)).toMatchObject({
         error: { code: "invalid_pairing_code" },
     });
-    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "paired", agents: [] });
+    expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "paired", agents: [] });
     expect((await app.publish(pairing, computerCredential)).status).toBe(204);
     expect(await responseJson(await app.list(), 200)).toMatchObject({
         computers: [{ computerId: pairing.computerId }],
     });
-    expect((await app.revoke(pairing)).status).toBe(204);
-    const revoked = await responseJson(await app.status(pairing), 200);
+    expect((await app.revoke()).status).toBe(204);
+    const revoked = await responseJson(await app.status(), 200);
     expect(revoked).toEqual({ status: "revoked", revokedAt: new Date().toISOString() });
     vi.setSystemTime(new Date(Date.now() + 1_000));
-    expect((await app.revoke(pairing)).status).toBe(204);
-    expect(await responseJson(await app.status(pairing), 200)).toEqual(revoked);
+    expect((await app.revoke()).status).toBe(204);
+    expect(await responseJson(await app.status(), 200)).toEqual(revoked);
     expect(await responseJson(await app.publish(pairing, computerCredential), 401)).toMatchObject({
         error: { code: "unauthorized" },
     });
@@ -269,14 +269,14 @@ it("Given a pending pairing, When claims arrive concurrently, Then they return t
 it("Given an unclaimed Computer identity, When it is revoked, Then its code cannot claim it and revocation remains visible after expiry", async () => {
     const app = await computer();
     const pairing = await app.pair("cancel-before-claim");
-    expect((await app.revoke(pairing)).status).toBe(204);
-    const revoked = await responseJson(await app.status(pairing), 200);
+    expect((await app.revoke()).status).toBe(204);
+    const revoked = await responseJson(await app.status(), 200);
     expect(revoked).toMatchObject({ status: "revoked" });
     expect(await responseJson(await app.claim(pairing), 400)).toMatchObject({
         error: { code: "invalid_pairing_code" },
     });
     vi.setSystemTime(new Date(pairing.expiresAt));
-    expect(await responseJson(await app.status(pairing), 200)).toEqual(revoked);
+    expect(await responseJson(await app.status(), 200)).toEqual(revoked);
     expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
 });
 
@@ -296,7 +296,7 @@ it("Given a Computer its owner revoked, When the computer is paired again, Then 
     const credential = v.object({ computerId: v.string(), computerCredential: v.string() });
     const old = v.parse(credential, await responseJson(await app.claim(original), 200));
     expect(old.computerId).toBe(original.computerId);
-    expect((await app.revoke(original)).status).toBe(204);
+    expect((await app.revoke()).status).toBe(204);
     const replacement = await app.pair("replacement");
     const current = v.parse(credential, await responseJson(await app.claim(replacement), 200));
     expect(current.computerId).toBe(replacement.computerId);
