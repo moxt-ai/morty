@@ -55,8 +55,9 @@ transports, and the production daemon. A controlled ACP Agent does not establish
 compatibility with a vendor Agent.
 
 A released Moxt/Mobius installation must remain usable while Morty starts, stops,
-updates, and is removed; verify the converse as well. This verifies independent installation and operation; Morty never inherits
-Moxt state or modifies Agent-owned history.
+updates, and is removed; verify the converse as well. This verifies independent
+installation and operation; Morty never inherits Moxt state or modifies Agent-owned
+history.
 
 Exercise interrupted installation and update through the supported installation
 boundary. Verify local IPC authentication, resolved-path ownership, and rejected
