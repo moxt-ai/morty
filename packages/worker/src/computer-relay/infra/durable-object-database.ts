@@ -1,6 +1,5 @@
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import * as identities from "../schema/computer-relay-do/index.ts";
-import * as connections from "../schema/connection-do/index.ts";
 import * as pairings from "../schema/pairing-do/index.ts";
 import { migrateComputerStorage } from "./migrate-computer-storage.ts";
 
@@ -16,7 +15,7 @@ export class DurableObjectDatabase {
     constructor(storage: DurableObjectStorage) {
         migrateComputerStorage(storage);
         this.#storage = storage;
-        this.orm = drizzle(storage, { schema: { ...identities, ...connections, ...pairings } });
+        this.orm = drizzle(storage, { schema: { ...identities, ...pairings } });
     }
 
     readonly run = (query: Mutation, signal: AbortSignal) => {

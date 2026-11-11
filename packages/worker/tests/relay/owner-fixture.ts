@@ -8,7 +8,7 @@ import { SessionAccessSigner } from "../../src/computer-relay/components/runtime
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import worker from "../../src/worker/application.ts";
-import { computerDirectory, readComputerOwner } from "../../src/worker/composition/account-provisioning.ts";
+import { computerDirectory, readComputerOwner } from "./computer-directory.ts";
 
 export const ownerOrigin = "https://relay.test";
 const ownerEnvironment = () => ({ ...env, APP_ORIGIN: ownerOrigin });
