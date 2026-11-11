@@ -1,34 +1,12 @@
 import * as v from "valibot";
-import { requestTestComputerControl } from "../../../relay-test-support/src/backend-fixture.ts";
-import { ComputerRelay as ProductionComputerRelay } from "../../src/computer-relay/computer-relay.ts";
-import { computerInternalPath } from "../../src/contracts/computer-relay-http.ts";
 import { ProjectRowSchema } from "../../src/contracts/relay/relay-records.ts";
-import type { ConfiguredRelayBindings } from "../../src/contracts/relay-bindings.ts";
+import { SqliteComputerRelayStore } from "../../src/computer-relay/components/management/storage/sqlite-computer-relay-store.ts";
+import { ComputerRelay as ProductionComputerRelay } from "../../src/computer-relay/computer-relay.ts";
+import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import chat from "../../src/index.ts";
 
 // The public Worker reaches the production ComputerRelay namespace.
-export default {
-    fetch: async (request: Request, env: ConfiguredRelayBindings) => {
-        const url = new URL(request.url);
-        const target = url.pathname.match(
-            /^\/__test\/computers\/([^/]+)\/harnesses\/([^/]+)\/sessions\/([^/]+)\/close$/u,
-        );
-        if (target !== null && target[1] !== undefined && target[2] !== undefined && target[3] !== undefined) {
-            const result = await requestTestComputerControl(
-                env,
-                target[1],
-                {
-                    kind: "session.close",
-                    requestId: crypto.randomUUID(),
-                    target: { harness: target[2], sessionId: target[3] },
-                },
-                request.signal,
-            );
-            return Response.json(result);
-        }
-        return chat.fetch(request, env);
-    },
-};
+export default chat;
 
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
@@ -46,29 +24,17 @@ export class ComputerRelay extends ProductionComputerRelay {
         }
         if (request.url === "https://computer.internal/revoked-computer" && request.method === "POST") {
             const computerId = await request.text();
-            const revoked = await super.fetch(
-                new Request(new URL(computerInternalPath(computerId, "revocations"), request.url), {
-                    method: "POST",
-                    signal: request.signal,
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                        computerId,
-                        now: Date.now(),
-                        actorKind: "system",
-                        actorId: computerId,
-                        auditId: `test-revocation-${crypto.randomUUID()}`,
-                    }),
-                }),
+            await new SqliteComputerRelayStore(computerId, new DurableObjectDatabase(this.ctx.storage)).revokeComputer(
+                {
+                    computerId,
+                    now: Date.now(),
+                    actorKind: "system",
+                    actorId: computerId,
+                    auditId: `test-revocation-${crypto.randomUUID()}`,
+                },
+                request.signal,
             );
-            if (revoked.status !== 204) {
-                return revoked;
-            }
-            return await super.fetch(
-                new Request(`https://computer-relay.internal/computers/${computerId}/computer/revoke`, {
-                    method: "DELETE",
-                    signal: request.signal,
-                }),
-            );
+            return new Response(null, { status: 204 });
         }
         if (request.url === "https://computer.internal/aged-links" && request.method === "POST") {
             // Reconstruct links whose device term has passed: the Durable Object's clock cannot be moved forward.

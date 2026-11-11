@@ -29,10 +29,7 @@ export class PairingService {
         return await Promise.all(
             channels.map(
                 async (channel) =>
-                    new ComputerSummary(
-                        channel,
-                        await this.#runtime.readStatus({ computerId: channel.computerId }, signal),
-                    ),
+                    new ComputerSummary(channel, await this.#runtime.readStatus(channel.computerId, signal)),
             ),
         );
     };
@@ -50,7 +47,7 @@ export class PairingService {
                 "The project credential cannot access this Computer",
             );
         }
-        return new ComputerSummary(channel, await this.#runtime.readStatus({ computerId: channel.computerId }, signal));
+        return new ComputerSummary(channel, await this.#runtime.readStatus(channel.computerId, signal));
     };
 
     readonly readProjectComputerPairing = (computerId: string, signal: AbortSignal) =>

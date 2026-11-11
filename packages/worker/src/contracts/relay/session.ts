@@ -1,14 +1,6 @@
 import { SESSION_CLOSED_ERROR_CODE, type SessionOperationFailedEvent } from "@morty-build/client/protocol";
 import type { HttpError } from "../http-error.ts";
 
-export class ComputerScope {
-    readonly computerId: string;
-
-    constructor(computerId: string) {
-        this.computerId = computerId;
-    }
-}
-
 function sessionRuntimeErrorStatus(code: string): number {
     if (code === "session_not_found") {
         return 404;

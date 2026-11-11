@@ -37,7 +37,6 @@ export function createComputerRelayServices(
         store,
         services: {
             identities: new ComputerIdentityService(computerId, store, control),
-            projectAuthentication: control,
             computerAccounts: control,
         },
     });

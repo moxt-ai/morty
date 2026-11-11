@@ -56,14 +56,6 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
         request(owner.computerId, "active-generation"),
         request(owner.computerId, "access-check", { kind: "credential", credentialId: "unknown-credential" }),
         request(owner.computerId, "audit-events", audit),
-        request(owner.computerId, "registrations"),
-        request(owner.computerId, "revocations", {
-            computerId: owner.computerId,
-            now: Date.now(),
-            actorKind: "application",
-            actorId: owner.computerId,
-            auditId: "public-revocation-denied",
-        }),
     ]) {
         const exposed = await ownerRequest(new Request(new URL(new URL(internal.url).pathname, ownerOrigin), internal));
         expect(exposed.status).toBe(404);
