@@ -92,7 +92,24 @@ if (production === null) {
 }
 const target = (revision) => JSON.parse(git("show", `${revision}:deployment/targets.json`)).environments.production;
 if (target("HEAD").d1_id === undefined) {
-    if (git("diff", "--name-only", production, "HEAD", "--", migrations).trim() !== "") {
+    // #230 moved the unchanged history from relay to worker. Compare the complete trees, including snapshots,
+    // rather than treating that source relocation as added migrations or allowing edits to retained history.
+    const productionMigrations = git(
+        "ls-tree",
+        "-d",
+        "--name-only",
+        production,
+        "--",
+        migrations,
+        "packages/relay/migrations/d1",
+    ).trim();
+    if (productionMigrations === "" || productionMigrations.includes("\n")) {
+        throw new Error("The production D1 migration history cannot be identified unambiguously.");
+    }
+    if (
+        git("rev-parse", `${production}:${productionMigrations}`).trim() !==
+        git("rev-parse", `HEAD:${migrations}`).trim()
+    ) {
         throw new Error("Retired D1 migration history must remain unchanged.");
     }
     console.log("D1 is no longer bound or migrated; the retained database remains unchanged for recovery.");
