@@ -23,53 +23,24 @@ The local execution boundary is the only authority allowed to approve local side
 - Validate both the requested representation and the resolved representation of paths, URLs, commands, and other security-sensitive targets.
 - Never let a remote assertion, prior validation result, or user-interface approval bypass authorization at the execution boundary.
 
-## Independent product cutover
+## Product boundaries
 
-Morty is one product. The cloud Relay is an internal Morty service, not a public
-developer platform. Morty keeps no cloud copy of conversation history: history is
-read from the connected Machine and the Agent's own storage. Retire the separate
-platform dashboard, app
-registration, Clerk login, organization/invite management, and Clerk proxy.
-Preserve Morty device, recovery, pairing and service authorization, production
-business records, and immutable migration history. Production and isolated local
-development are the only supported environments; issue #12 retires hosted
-staging and benchmark resources. Removing a login provider never authorizes
-anonymous access to privileged operations.
+Morty is one product. Relay is an internal responsibility of the Morty Worker,
+not a public developer platform or a separately deployed service. Conversation
+history remains on the connected Machine in the Agent's own storage. Preserve
+device, recovery, pairing and service authorization, production business records,
+and immutable migration history.
 
-Issue #6 records the maintainer-authorized fresh-install cutover to an independent
-Morty distribution. Existing Morty users reinstall and pair again. Do not build
-legacy installation adapters, inherit Mobius local state, or depend on the retired
-Morty forwarding path. This authorization does not permit changes to Moxt,
-destruction of production business data, or changes to Agent-owned history.
+Production and isolated local development are the supported environments. Local
+development must work without production credentials. Morty and Moxt have
+independent publication, installation, state, credentials, process control and
+update lifecycles; verify non-interference with a real released Moxt installation.
+Do not inherit Moxt state or fall back to its services.
 
-Morty and Moxt must have independent package publication, installation, state,
-credentials, process control, and update lifecycles. Verify non-interference with
-a real released Moxt/Mobius installation. Production uses Morty-owned resources
-and credentials. Local development must work without production secrets
-or remote test environments, and must never fall back to Moxt services.
-
-Publish the new Morty npm package only after the complete acceptance gates in
-issue #6 pass for the exact archive. Keep the existing production installer in
-service until the new package is available and its replacement is verified.
-
-### Pre-launch contract reset
-
-On 2026-11-07 the maintainer confirmed that Morty is a new product with no users
-and explicitly authorized completing the remaining work without preserving any
-old Morty compatibility. The launch release may replace Morty protocol names,
-credential representations, browser persistence and local installation state;
-remove retired Morty adapters rather than maintaining dual paths. Earlier
-Morty builds and saved state are unsupported and require fresh installation and
-pairing. Verify the complete current release through real product boundaries.
-
-This authorization is specific to this pre-launch reset. It does not authorize
-changes to Moxt, deletion of Agent-owned history, weakened authentication or
-rewriting committed database migration history. Preserve retained production
-records and snapshots; leaving historical data in storage does not require an
-active legacy reader. Record release identity, coordinated cloud/CLI activation,
-and recovery consequences before publishing. After launch, the compatibility
-rules below apply to subsequent independently deployed releases unless a
-maintainer explicitly authorizes another break.
+Publish only after the complete acceptance gates pass for the exact archive.
+Record release identity and recovery consequences, activate matching cloud and CLI
+artifacts, and verify the current product through its real boundaries. Recovery
+must preserve retained records, Agent-owned history and committed migrations.
 
 ## State Modeling
 

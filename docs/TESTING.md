@@ -55,12 +55,7 @@ transports, and the production daemon. A controlled ACP Agent does not establish
 compatibility with a vendor Agent.
 
 A released Moxt/Mobius installation must remain usable while Morty starts, stops,
-updates, and is removed; verify the converse as well. This is a non-interference
-requirement, not support for old Morty installations. The issue #6 cutover requires
-old Morty installations to be replaced instead of inheriting their pairing state.
-The subsequent pre-launch reset also retires earlier Morty wire contracts and
-credential representations. Verify the current release end to end and rejection
-of retired credentials; do not preserve mixed-version Morty adapters for this reset.
+updates, and is removed; verify the converse as well. Verify independent process control, credentials and local state in both directions.
 
 Exercise interrupted installation and update through the supported installation
 boundary. Verify local IPC authentication, resolved-path ownership, and rejected
