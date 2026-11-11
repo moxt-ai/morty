@@ -65,7 +65,7 @@ export function ChatMessageQueue({
                     </div>
                 </div>
                 <div className="overflow-hidden rounded-t-md bg-morty-fill-white">
-                    <ScrollArea className="max-h-[152px]" viewportClassName="max-h-[inherit]">
+                    <ScrollArea className="max-h-[152px]" viewportClassName="max-h-[inherit] [&>div]:block!">
                         <ol className="mb-0 flex w-full min-w-0 list-none flex-col gap-0 px-3 pt-1 pb-6">
                             {messages.map((message) => {
                                 const pending = message.kind !== "queued";
