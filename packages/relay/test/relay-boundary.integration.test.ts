@@ -312,20 +312,6 @@ describe.sequential("Relay Session-only boundary", () => {
         try {
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
             expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
-            const rollback = {
-                kind: "runtime.upgrade.result",
-                requestId: "local-npm-upgrade",
-                version: "0.0.227",
-                targetVersion: "0.0.228",
-                outcome: {
-                    status: "failed",
-                    code: "worker_exited",
-                    message: "The new daemon exited before becoming ready",
-                    retryAfter: 3600000,
-                },
-            };
-            daemon.send(JSON.stringify(rollback));
-            expect(JSON.parse(await hostMessages.next())).toEqual(rollback);
             const closeResponse = requestTestComputerControl(
                 env,
                 computerId,
@@ -579,7 +565,12 @@ describe.sequential("Relay Session-only boundary", () => {
             );
             // Computer and Session lanes can overtake each other. Keep this barrier
             // on the settings response's Computer lane to detect a dropped route.
-            const settingsBarrier = { ...rollback, requestId: "settings-response-barrier" };
+            const settingsBarrier = {
+                kind: "agent.settings.discovery.failed",
+                requestId: "settings-response-barrier",
+                code: "probe_failed",
+                message: "Controlled barrier",
+            };
             daemon.send(JSON.stringify(settingsBarrier));
             expect(JSON.parse(await hostMessages.next())).toMatchObject({
                 kind: "agent.settings.discovery.failed",

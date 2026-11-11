@@ -136,13 +136,6 @@ it("Given future unroutable daemon variants, When the Relay receives them, Then 
                 status: { kind: "future-status" },
             },
             {
-                kind: "runtime.upgrade.result",
-                requestId: "upgrade-1",
-                version: "0.0.334",
-                targetVersion: "0.0.335",
-                outcome: { status: "future-outcome" },
-            },
-            {
                 kind: "native.session.result",
                 action: "future-action",
                 requestId: "native-1",

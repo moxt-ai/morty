@@ -1,5 +1,5 @@
 import { styleText } from "node:util";
-import type { NativeSessionTarget, RuntimeUpgradeResult } from "@morty-build/client/protocol";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createRuntimeAdapterRegistry } from "../agent/runtime-agents.ts";
 import { buildSessionLayer } from "../session/api/session-layer.ts";
 import { LocalExternalContentStore } from "../session/content/external-content-store.ts";
@@ -17,7 +17,6 @@ import { runRelayConnection } from "./relay/run-relay-connection.ts";
 import { RuntimeSessionEventPublisher } from "./relay/session-event-publisher.ts";
 
 const RELAY_RECONNECT_DELAY_MILLISECONDS = 500;
-const defaultReportUpgradeAvailability = (): Promise<void> => Promise.resolve();
 
 function waitForRelayRetry(signal: AbortSignal, timer: Timer): Promise<void> {
     if (signal.aborted) {
@@ -71,11 +70,6 @@ export interface RunRuntimeOptions {
     readonly agentProcesses?: RuntimeAgentProcesses;
     readonly onExecutionCountChange?: (count: number) => void;
     readonly onConnectionStatus?: (status: "online" | "reconnecting") => void;
-    /** Reports a finished daemon upgrade to the relay. The daemon worker supplies it. */
-    readonly reportUpgradeAvailability?: (
-        send: (result: RuntimeUpgradeResult) => void,
-        signal: AbortSignal,
-    ) => Promise<void>;
     /**
      * State directory of the daemon processes supervising this Runtime. Their
      * lifecycle and rejection logs are the only witness of a silent worker death,
@@ -90,7 +84,6 @@ export async function runRuntime(
     timer: Timer = systemTimer,
     options: RunRuntimeOptions = {},
 ): Promise<void> {
-    const { reportUpgradeAvailability = defaultReportUpgradeAvailability } = options;
     const shutdown = new AbortController();
     const signal = AbortSignal.any([parentSignal, shutdown.signal]);
     const stateDirectory = config.localContext.stateDirectory;
@@ -202,7 +195,6 @@ export async function runRuntime(
                     externalContent,
                     sessionTurns: activeSessions,
                     connectionEpoch,
-                    reportUpgradeAvailability,
                     diagnostics,
                     onConnected: () => {
                         if (catalogPublished) {

@@ -2,7 +2,6 @@ import {
     COMPUTER_HEARTBEAT_ACK_KIND,
     COMPUTER_LIVENESS_READY_KIND,
     decodeKnownServiceToDaemonMessage,
-    type RuntimeUpgradeResult,
     readUndecodedRequestAddress,
 } from "@morty-build/client/protocol";
 import { type MessageEvent, WebSocket } from "undici";
@@ -46,11 +45,6 @@ function closeRelaySocket(socket: WebSocket, code: number, reason: string): void
 export interface RelayConnectionOptions {
     readonly resolveAgent: ResolveAgent;
     readonly config: RuntimeConfig;
-    /** Reports a finished daemon upgrade to the relay. The daemon worker supplies it. */
-    readonly reportUpgradeAvailability: (
-        send: (result: RuntimeUpgradeResult) => void,
-        signal: AbortSignal,
-    ) => Promise<void>;
     readonly directories: WorkspaceDirectoryService;
     readonly sessions: SessionManager;
     readonly sessionCreations: SessionCreations;
@@ -70,7 +64,6 @@ export interface RelayConnectionOptions {
 export async function runRelayConnection({
     resolveAgent,
     config,
-    reportUpgradeAvailability,
     directories,
     sessionTurns,
     sessionCreations,
@@ -112,15 +105,6 @@ export async function runRelayConnection({
         socket,
         signal: connectionController.signal,
         timer,
-    });
-    void reportUpgradeAvailability((result) => {
-        if (socket.readyState === WebSocket.OPEN) {
-            send(socket, result);
-        }
-    }, signal).catch((cause: unknown) => {
-        if (!signal.aborted) {
-            console.error("Could not report daemon upgrade", cause);
-        }
     });
 
     try {

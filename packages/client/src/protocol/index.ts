@@ -42,8 +42,6 @@ export { PROJECT_LOCATION_HINTS } from "./relay/project-location.ts";
 export type { ProjectPermissionName } from "./relay/project-permission.ts";
 export { RELAY_APP_PROJECT_PERMISSIONS } from "./relay/project-permission.ts";
 
-export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
-
 export type {
     SessionAccessClaims,
     SessionAccessGrant,

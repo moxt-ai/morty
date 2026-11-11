@@ -459,7 +459,6 @@ export class ComputerRelayActor {
                 return;
             case WORKSPACE_ENTRIES_KIND:
                 return;
-            case "runtime.upgrade.result":
             case "computer.diagnostics.result":
             case COMPUTER_PONG_KIND:
                 return;
