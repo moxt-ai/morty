@@ -9,11 +9,11 @@ import {
     type HarnessReplyPlan,
 } from "@morty-build/runtime-test-support/fake-daemon";
 import * as v from "valibot";
-import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
 import type { RuntimeCredentials } from "../../../packages/cli/src/engine/runtime/connection/runtime-credentials.ts";
 import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
+import { acpAdapters } from "../../../packages/cli/tests/support/acp-adapters.ts";
 import { memoryRuntimeCredentials } from "../../../packages/cli/tests/support/runtime-credentials.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
@@ -71,34 +71,11 @@ function controlledRuntime(
 ): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => RuntimeLoop } {
     const config = createRuntimeConfig(
         connection,
-        new RuntimeAgentDependencies(agents),
+        new RuntimeAgentDependencies(agents, acpAdapters),
         new RuntimeLocalContext(directory, process.env),
     );
     return {
-        start: (onConnectionStatus) =>
-            new RuntimeLoop(
-                async () => ({
-                    ...config,
-                    // Every injected peer speaks ACP, regardless of its catalog label. Use the production
-                    // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
-                    // Alias only adapter selection; catalog and session identities stay intact.
-                    adapters: (agent, dependencies) =>
-                        config.adapters(
-                            new AcpAgentDefinition(
-                                "claude",
-                                agent.label,
-                                agent.command,
-                                (options) => agent.createConnection(options),
-                                agent.environment,
-                                agent.agentVersion,
-                                agent.agentIdentity,
-                                agent.capabilities,
-                            ),
-                            dependencies,
-                        ),
-                }),
-                { onConnectionStatus },
-            ),
+        start: (onConnectionStatus) => new RuntimeLoop(async () => config, { onConnectionStatus }),
     };
 }
 
