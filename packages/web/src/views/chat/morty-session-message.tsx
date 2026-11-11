@@ -88,8 +88,9 @@ function MessageContentBlock({
                 speaker === "user" ? (
                     <PreviewImage
                         alt="Your attachment"
-                        className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                        className="size-[120px] max-w-full shrink-0 rounded-[12px] object-cover"
                         data-testid={dataTestId.userMessageImage}
+                        insetStroke
                         src={`data:${content.mimeType};base64,${content.data}`}
                     />
                 ) : (
@@ -182,26 +183,48 @@ function UserMessage({
     const copyText = message.contents
         .flatMap((content) => (content.type === "text" ? [content.text] : []))
         .join("\n\n");
+    const isImage = (content: ContentBlock) =>
+        content.type === "image" ||
+        content.type === "external_image" ||
+        (content.type === "resource_link" && isDisplayableImageType(content.mimeType ?? ""));
+    const images = message.contents.filter(isImage);
+    const bubbleContents = message.contents.filter((content) => !isImage(content));
     return (
         <div className="min-w-0 space-y-2">
             <ImageGallery>
                 <UserMessageShell>
-                    <MessageBubble
-                        {...(copyText.length === 0 ? {} : { copyText })}
-                        data-testid={dataTestId.userMessage}
-                        speaker="user"
-                    >
-                        {message.contents.map((content, index) => (
-                            <MessageContentBlock
-                                content={content}
-                                createResourceStore={createResourceStore}
-                                key={`${message.firstEvent.eventId}:${index.toString()}`}
-                                openLocalFile={openLocalFile}
-                                readImage={readImage}
-                                speaker="user"
-                            />
-                        ))}
-                    </MessageBubble>
+                    {images.length > 0 && (
+                        <div className="flex min-w-0 flex-wrap justify-end gap-2">
+                            {images.map((content, index) => (
+                                <MessageContentBlock
+                                    content={content}
+                                    createResourceStore={createResourceStore}
+                                    key={`${message.firstEvent.eventId}:image:${index.toString()}`}
+                                    openLocalFile={openLocalFile}
+                                    readImage={readImage}
+                                    speaker="user"
+                                />
+                            ))}
+                        </div>
+                    )}
+                    {bubbleContents.length > 0 && (
+                        <MessageBubble
+                            {...(copyText.length === 0 ? {} : { copyText })}
+                            data-testid={dataTestId.userMessage}
+                            speaker="user"
+                        >
+                            {bubbleContents.map((content, index) => (
+                                <MessageContentBlock
+                                    content={content}
+                                    createResourceStore={createResourceStore}
+                                    key={`${message.firstEvent.eventId}:${index.toString()}`}
+                                    openLocalFile={openLocalFile}
+                                    readImage={readImage}
+                                    speaker="user"
+                                />
+                            ))}
+                        </MessageBubble>
+                    )}
                 </UserMessageShell>
             </ImageGallery>
             {deliveryUnknown && (

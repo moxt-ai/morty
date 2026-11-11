@@ -124,7 +124,9 @@ function GalleryScope({
     return <GalleryContext value={gallery}>{children}</GalleryContext>;
 }
 
-export function PreviewImage(props: ComponentProps<"img"> & { readonly blob?: Blob | undefined }) {
+export function PreviewImage(
+    props: ComponentProps<"img"> & { readonly blob?: Blob | undefined; readonly insetStroke?: boolean },
+) {
     const gallery = useContext(GalleryContext);
     return gallery === null ? (
         <ImageGallery>
@@ -141,8 +143,13 @@ function ImageTrigger({
     alt,
     src,
     className,
+    insetStroke = false,
     ...props
-}: ComponentProps<"img"> & { readonly blob?: Blob | undefined; readonly gallery: Gallery }) {
+}: ComponentProps<"img"> & {
+    readonly blob?: Blob | undefined;
+    readonly gallery: Gallery;
+    readonly insetStroke?: boolean;
+}) {
     const name = alt?.trim() || "Image";
     const register = useCallback(
         (node: HTMLButtonElement | null) => {
@@ -153,7 +160,10 @@ function ImageTrigger({
     return (
         <button
             aria-label={`View image: ${name}`}
-            className="inline-flex max-w-full cursor-zoom-in items-center justify-center rounded-lg align-middle outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring"
+            className={cn(
+                "relative inline-flex max-w-full cursor-zoom-in items-center justify-center rounded-lg align-middle outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring",
+                insetStroke && "rounded-[12px]",
+            )}
             onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -168,6 +178,13 @@ function ImageTrigger({
                 className={cn("max-h-[480px] max-w-full object-contain", className)}
                 src={src}
             />
+            {insetStroke && (
+                <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 rounded-[inherit]"
+                    style={{ boxShadow: "inset 0 0 0 0.5px color-mix(in srgb, var(--foreground) 5%, transparent)" }}
+                />
+            )}
         </button>
     );
 }

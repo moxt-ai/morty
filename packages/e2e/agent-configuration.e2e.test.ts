@@ -53,6 +53,35 @@ test("Given desktop configuration, When the user opens settings and selects a mo
     await expect(trigger).toContainText("Test Large");
 });
 
+test("Given an open setting submenu, When the pointer crosses another row toward it, Then the original submenu stays open", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await runtime.openPairedChat();
+    await page.getByRole("button", { name: "Configure agent" }).click();
+
+    const model = page.getByRole("combobox", { name: "Model", exact: true });
+    await model.hover();
+    const modelOptions = page.getByRole("dialog", { name: "Model options" });
+    await expect(modelOptions).toBeVisible();
+    const [modelBounds, optionsBounds] = await Promise.all([model.boundingBox(), modelOptions.boundingBox()]);
+    expect(modelBounds).not.toBeNull();
+    expect(optionsBounds).not.toBeNull();
+    if (modelBounds === null || optionsBounds === null) {
+        return;
+    }
+
+    await page.mouse.move(modelBounds.x + 20, modelBounds.y + modelBounds.height / 2);
+    await page.mouse.move(optionsBounds.x + 8, optionsBounds.y + optionsBounds.height - 16, { steps: 12 });
+    await expect(modelOptions).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Effort options" })).toBeHidden();
+
+    const effort = page.getByRole("combobox", { name: "Effort", exact: true });
+    await effort.hover();
+    await expect(page.getByRole("dialog", { name: "Effort options" })).toBeVisible();
+});
+
 test.describe("touch configuration", () => {
     test.use({ contextOptions: { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } } });
 

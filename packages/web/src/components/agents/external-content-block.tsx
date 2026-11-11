@@ -45,11 +45,12 @@ export function LinkedResourceBlock({
                         alt={speaker === "user" ? "Your attachment" : "Agent-provided content"}
                         className={
                             speaker === "user"
-                                ? "h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                                ? "size-[120px] max-w-full shrink-0 rounded-[12px] object-cover"
                                 : "max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
                         }
                         data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
                         blob={state.blob}
+                        insetStroke={speaker === "user"}
                         src={state.source}
                     />
                 ) : (
@@ -125,11 +126,12 @@ function renderContent(
                     alt={speaker === "user" ? "Your attachment" : "Agent-provided content"}
                     className={
                         speaker === "user"
-                            ? "h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                            ? "size-[120px] max-w-full shrink-0 rounded-[12px] object-cover"
                             : "max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
                     }
                     data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
                     blob={state.blob}
+                    insetStroke={speaker === "user"}
                     src={state.source}
                 />
             ) : (
@@ -149,11 +151,12 @@ function renderContent(
                     alt={speaker === "user" ? "Your attachment" : "Agent-provided content"}
                     className={
                         speaker === "user"
-                            ? "h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                            ? "size-[120px] max-w-full shrink-0 rounded-[12px] object-cover"
                             : "max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
                     }
                     data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
                     blob={state.blob}
+                    insetStroke={speaker === "user"}
                     src={state.source}
                 />
             ) : content.encoding === "text" && state.kind === "text" ? (

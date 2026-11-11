@@ -169,7 +169,7 @@ function SidebarSessionOption({
             className={
                 variant === "card"
                     ? mobileDrawerCardRowClassName
-                    : "flex w-full items-center gap-3 rounded-lg px-3.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
+                    : "flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
             }
             data-testid={testId}
             disabled={disabled}
@@ -269,7 +269,9 @@ function ManagedSessionDirectoryList({
             )}
             {archive.kind === "failed" && <MortyAlert>{archive.message}</MortyAlert>}
             {sessions !== null && sessions.length === 0 && (
-                <p className="py-3 text-xs text-muted-foreground sm:py-2">Your Chat sessions will appear here.</p>
+                <p className="py-3 text-xs text-muted-foreground sm:py-2 sm:pl-3.5">
+                    Your Chat sessions will appear here.
+                </p>
             )}
             {conversationGroups?.map((group) => (
                 <section className="min-w-0 w-full pb-3 last:pb-0" key={group.label}>

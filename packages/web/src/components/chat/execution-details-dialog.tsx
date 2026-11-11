@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { dataTestId } from "../../data-testid.ts";
+import { Button } from "../ui/cloud-button.tsx";
 import { executionDetailsDialogDesktopWidthClassName, overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { mobileHeaderIconButtonBelowSmClassName } from "./chat-header-control.ts";
@@ -28,8 +29,8 @@ const executionDetailsTermClassName = "shrink-0 whitespace-nowrap text-muted-for
 
 function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
     return (
-        <dl className="grid gap-5 text-[13px] leading-5">
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-5">
+        <dl className="grid gap-4 text-[13px] leading-5">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4">
                 <dt className={executionDetailsTermClassName}>Agent</dt>
                 <dd className="min-w-0 font-medium text-foreground">
                     <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -82,10 +83,10 @@ export function ExecutionDetailsDialog({
     return (
         <Dialog.Root open={open} onOpenChange={onOpenChange}>
             <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 z-[190] bg-black/25" />
+                <Dialog.Overlay className="fixed inset-0 z-[190] bg-black/30" />
                 <Dialog.Content
                     className={cn(
-                        "fixed inset-x-0 bottom-0 z-[191] flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[28px] pt-0 pb-[max(24px,env(safe-area-inset-bottom))] shadow-xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:flex sm:max-h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:border-border sm:bg-card sm:px-6 sm:pt-6 sm:pb-6",
+                        "fixed inset-x-0 bottom-0 z-[191] flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[28px] pt-0 pb-[max(24px,env(safe-area-inset-bottom))] font-inter text-13 leading-5 text-foreground shadow-lg outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:flex sm:max-h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:border-white sm:bg-card sm:px-6 sm:pt-6 sm:pb-6",
                         // Same phone-sheet surface as the other chat sheets: opaque card with a 1px white edge.
                         mobileSheetSurfaceClassName,
                         executionDetailsDialogDesktopWidthClassName,
@@ -108,18 +109,22 @@ export function ExecutionDetailsDialog({
                                 Computer availability, session connection, Agent, and working directory.
                             </Dialog.Description>
                         </div>
-                        <Dialog.Close
-                            className={cn(
-                                "flex shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 sm:mt-2.5 sm:mr-2.5 sm:size-9",
-                                mobileHeaderIconButtonBelowSmClassName,
-                            )}
-                            aria-label="Close execution details"
-                        >
-                            <X aria-hidden="true" className="size-4 max-sm:size-5" />
+                        <Dialog.Close asChild>
+                            <Button
+                                aria-label="Close execution details"
+                                className={cn("sm:-mr-1.5", mobileHeaderIconButtonBelowSmClassName)}
+                                size="icon"
+                                variant="ghost"
+                            >
+                                <X aria-hidden="true" className="size-4 max-sm:size-5" />
+                            </Button>
                         </Dialog.Close>
                     </header>
                     {/* 24px matches the text baseline of the other sheets' rows, which inset 16px inside their 8px list gutter. */}
-                    <ScrollArea className="min-h-0 flex-1" viewportClassName="h-full max-h-[inherit] px-6 sm:px-0">
+                    <ScrollArea
+                        className="min-h-0 flex-1 sm:-mx-1"
+                        viewportClassName="h-full max-h-[inherit] px-6 sm:px-1"
+                    >
                         <ExecutionDetails context={context} />
                     </ScrollArea>
                 </Dialog.Content>
