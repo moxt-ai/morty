@@ -25,8 +25,6 @@ You may install missing prerequisites and pair this machine.
 
 Read the [setup instructions](https://morty.build/setup.md) before running them.
 Open the resulting link in a browser or scan its QR code on your phone.
-The launch release requires fresh Morty installation and pairing; earlier Morty
-state and browser links are unsupported. Agent-owned history is preserved.
 
 ## Manage your installation
 
