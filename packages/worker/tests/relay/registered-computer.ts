@@ -3,13 +3,13 @@ import { env } from "cloudflare:workers";
 import { holdsAccess } from "../../src/computer-relay/components/management/service/authentication-service.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { SqliteComputerManagementStore } from "../../src/computer-relay/components/management/storage/sqlite-computer-management-store.ts";
+import { readComputerOwner } from "../../src/computer-relay/composition/account-provisioning.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { migrateComputerStorage } from "../../src/computer-relay/infra/migrate-computer-storage.ts";
 import { computerPairing, computerRegistration } from "../../src/computer-relay/schema/pairing-do/index.ts";
 import { computerDirectoryDrizzle } from "../../src/directory/storage/relay-drizzle-database.ts";
 import { relayDrizzle } from "../../src/infra/drizzle-database.ts";
 import { computerAccount } from "../../src/schema/d1/index.ts";
-import { readComputerOwner } from "../../src/worker/composition/account-provisioning.ts";
 
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {

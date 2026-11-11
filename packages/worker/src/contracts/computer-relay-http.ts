@@ -49,14 +49,3 @@ export const computerRevocationRequestSchema = v.pipe(
     }),
     v.readonly(),
 ) satisfies v.GenericSchema<unknown, RevokeComputer>;
-export const computerRegistrationsResponseSchema = v.object({
-    computers: v.array(
-        v.object({
-            computer_id: identifier,
-            claimed_at: timestamp,
-            agents_json: v.string(),
-            computer_name: v.string(),
-            workspace_name: v.string(),
-        }),
-    ),
-});
