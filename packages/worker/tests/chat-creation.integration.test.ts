@@ -238,10 +238,13 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
     expect(rebound.status).toBe(409);
     expect(await rebound.json()).toMatchObject({ error: { code: "BOT_COMPUTER_FIXED" } });
 
+    const settingsWithoutDirectory = await fixture.request(`chat/agent-settings`, { harness: setup.harness });
+    expect(settingsWithoutDirectory.status).toBe(400);
     expect(
         (
             await fixture.request(`chat/agent-settings`, {
                 harness: setup.harness,
+                workspaceRef: ".",
             })
         ).status,
     ).toBe(200);
