@@ -158,8 +158,7 @@ Use `chat-local-full-dev` to:
 
    Checkout prerequisites are already complete. The setup command prepares the
    local CLI automatically; do not build or install it separately.
-   Do not run pnpm sync:submodules, git checkout, git switch, or git submodule
-   update. Preserve the prepared checkout revision.
+   Do not change the prepared checkout revision.
    ```
 
    ```sh

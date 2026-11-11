@@ -16,12 +16,20 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | Evidence | Location |
 | --- | --- |
 | Morty Worker output | `chatLog` from `prepare` |
-| Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`) and the manager's `daemon.log` at a versioned installation path under `<stateDir>/morty` (`find <stateDir>/morty -name daemon.log`) |
+| Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`); read the daemon log with the checkout CLI as shown below |
 | D1 / Durable Objects / R2 | `chatPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
 
-Read logs with `node scripts/local-dev.cjs logs --state-dir <stateDir> ...` rather
-than opening files directly, so filtering and following stay consistent.
+Read Worker and setup logs with
+`node scripts/local-dev.cjs logs --state-dir <stateDir> ...`. Read the paired
+daemon's diagnostics through the built checkout CLI:
+
+```sh
+node packages/cli/dist/cli.js logs --state-directory <stateDir>/morty
+```
+
+Use the selected stack's state directory; do not search retired installation
+generations or read another daemon's log.
 
 ## Correlating one request
 
