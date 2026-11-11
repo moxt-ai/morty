@@ -87,10 +87,10 @@ objects during ordinary deployment. Provision resources using the independent
 Morty production target. Local development uses isolated local resources without
 production credentials. Hosted staging and benchmark environments are retired.
 
-### CLI setup
+### Setup
 
-Setup runs through the installed Morty CLI. The website serves instructions that
-invoke that CLI; it does not host a separate executable setup download.
+Users install the Morty CLI and run `morty setup`. The website serves setup
+instructions; it does not distribute a separate setup script.
 
-Keep setup intent (identity and workspace selection) separate from daemon-owned
-pairing and connection state.
+Keep setup intent (identity and workspace selection) separate from daemon-owned pairing
+and connection state.

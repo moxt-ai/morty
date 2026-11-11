@@ -153,57 +153,28 @@ export function settleResumedComputer(): void {
     }
 }
 
-/**
- * Everything this browser stores about its access, read entry by entry. Another Morty version may store tokens or
- * computer records this version cannot read; they are kept aside and written back untouched, never dropped.
- */
 interface StoredAccess {
     readonly credentials: ReadonlyMap<string, string>;
-    readonly unreadableCredentials: Readonly<Record<string, unknown>>;
     readonly computers: readonly RememberedComputer[];
-    readonly unreadableComputers: readonly unknown[];
-    /** The users of computer records this version cannot read, as far as their records say. */
-    readonly unreadableComputerUsers: ReadonlySet<string>;
-}
-
-/** Whose computer a record this version cannot read is, when it still names its user the way this version does. */
-function recordedUser(record: unknown): string | null {
-    if (typeof record !== "object" || record === null || !("scope" in record)) {
-        return null;
-    }
-    const scope = record.scope;
-    if (typeof scope !== "object" || scope === null || !("userId" in scope)) {
-        return null;
-    }
-    return typeof scope.userId === "string" ? scope.userId : null;
 }
 
 function readStoredAccess(): StoredAccess {
     const snapshot = centralLocalStorage.read(browserAccessEntry);
     const credentials = new Map<string, string>();
-    const unreadableCredentials: Record<string, unknown> = {};
     for (const [userId, token] of Object.entries(snapshot?.credentials ?? {})) {
         const readable = readableCredential(userId, token);
-        if (readable === null) {
-            unreadableCredentials[userId] = token;
-        } else {
+        if (readable !== null) {
             credentials.set(userId, readable);
         }
     }
     const computers: RememberedComputer[] = [];
-    const unreadableComputers: unknown[] = [];
     for (const record of snapshot?.computers ?? []) {
         const readable = readableComputer(record);
-        if (readable === null) {
-            unreadableComputers.push(record);
-        } else {
+        if (readable !== null) {
             computers.push({ ...readable, ...centralLocalStorage.read(computerPreferenceEntry(readable.scope)) });
         }
     }
-    const unreadableComputerUsers = new Set(
-        unreadableComputers.map(recordedUser).filter((userId): userId is string => userId !== null),
-    );
-    return { credentials, unreadableCredentials, computers, unreadableComputers, unreadableComputerUsers };
+    return { credentials, computers };
 }
 
 /** The computers this version can open: those whose token it can read. */
@@ -234,31 +205,14 @@ function updateComputers(
 ): void {
     const { added } = change;
     const stored = readStoredAccess();
-    // Computer records this version cannot read are kept, so the tokens they name are needed as much as any other.
-    const needed = new Set([...computers.map((computer) => computer.scope.userId), ...stored.unreadableComputerUsers]);
+    const needed = new Set(computers.map((computer) => computer.scope.userId));
     const kept = [...stored.credentials].filter(([userId]) => userId !== added?.userId && needed.has(userId));
     if (added !== undefined) {
         kept.push([added.userId, added.token]);
     }
-    // What only another version can read stays as it was: its tokens, and the computers that need them.
-    const unreadable = Object.fromEntries(
-        Object.entries(stored.unreadableCredentials).filter(
-            ([userId]) => !kept.some(([keptUserId]) => keptUserId === userId),
-        ),
-    );
-    const theirs = stored.computers.filter(
-        (computer) =>
-            computer.scope.userId in unreadable &&
-            !computers.some((listed) => computerKey(listed.scope) === computerKey(computer.scope)),
-    );
-    const allCredentials = { ...unreadable, ...Object.fromEntries(kept) };
     const saved = centralLocalStorage.write(browserAccessEntry, {
-        credentials: allCredentials,
-        computers: [
-            ...computers.map(({ scope }) => ({ scope })),
-            ...theirs.map(({ scope }) => ({ scope })),
-            ...stored.unreadableComputers,
-        ],
+        credentials: Object.fromEntries(kept),
+        computers: computers.map(({ scope }) => ({ scope })),
     });
     if (!saved) {
         throw new BrowserAccessStorageError(

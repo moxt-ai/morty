@@ -5,55 +5,16 @@ import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 const timestampSchema = z.string().datetime({ offset: true });
 
-const domainErrorSchema = z
-    .object({
-        code: identifierSchema,
-        message: z.string().min(1).max(2_000),
-        retryable: z.boolean(),
-    })
-    .readonly();
-
-const executionResultSchema = z
-    .object({
-        kind: z.literal("agent_result"),
-        stopReason: z.string().min(1).max(128),
-    })
-    .readonly();
-
 const reconciliationSchema = z
     .object({
         detectedAt: timestampSchema,
-        reason: z.enum(["connection_lost", "dispatch_indeterminate", "runtime_restarted"]),
+        reason: z.literal("dispatch_indeterminate"),
     })
     .readonly();
-
-const terminalTurnStateSchema = z.discriminatedUnion("kind", [
-    z
-        .object({
-            completedAt: timestampSchema,
-            kind: z.literal("succeeded"),
-            result: executionResultSchema,
-        })
-        .readonly(),
-    z
-        .object({
-            error: domainErrorSchema,
-            failedAt: timestampSchema,
-            kind: z.literal("failed"),
-        })
-        .readonly(),
-    z
-        .object({
-            cancelledAt: timestampSchema,
-            kind: z.literal("cancelled"),
-        })
-        .readonly(),
-]);
 
 const turnStateSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("queued") }).readonly(),
     z.object({ kind: z.literal("running"), startedAt: timestampSchema }).readonly(),
-    ...terminalTurnStateSchema.options,
     z
         .object({
             kind: z.literal("indeterminate"),
@@ -71,7 +32,6 @@ const promptTurnRequestSchema = z
         sessionConfigurations: sessionConfigurationSelectionsSchema.default([]),
     })
     .readonly();
-const notRetainedTurnRequestSchema = z.object({ kind: z.literal("not_retained") }).readonly();
 
 const turnIdentitySchema = z.object({
     acceptedAt: timestampSchema,
@@ -79,14 +39,11 @@ const turnIdentitySchema = z.object({
     target: nativeSessionTargetSchema,
     turnId: identifierSchema,
 });
-const turnSchema = z.union([
-    turnIdentitySchema.extend({ request: promptTurnRequestSchema, state: turnStateSchema }).readonly(),
-    turnIdentitySchema.extend({ request: notRetainedTurnRequestSchema, state: terminalTurnStateSchema }).readonly(),
-]);
+const turnSchema = turnIdentitySchema.extend({ request: promptTurnRequestSchema, state: turnStateSchema }).readonly();
 
 export type Turn = z.infer<typeof turnSchema>;
 
-/** Decodes a Turn resource, or skips an entry this SDK cannot consume. */
+/** Validates the acknowledgement returned when Morty submits a prompt. */
 export const decodeTurn = (value: unknown): Turn | null => {
     const decoded = turnSchema.safeParse(value);
     return decoded.success ? decoded.data : null;

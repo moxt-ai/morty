@@ -3,7 +3,7 @@ const CONVERSATION_TITLE_CHARACTER_LIMIT = 42;
 /**
  * Derives a human-readable conversation title from the first turn's prompt text.
  *
- * Shared presentation helper for consumers of the SDK main entry; it is not part
+ * Shared presentation helper for Morty views and services; it is not part
  * of the wire protocol, so it lives outside the protocol layer.
  */
 export function conversationTitleFromText(text: string): string {
