@@ -4,17 +4,15 @@ import {
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import {
-    AuditActor,
     ComputerScope,
     ProjectAccessContext,
     ProjectAuthenticationError,
     type ProjectCredentialAuthority,
-    ProjectPermission,
+    type ProjectPermission,
 } from "@morty-build/relay-core";
-import { RelayAuditActorKind } from "../entity/computer-management.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 
-const permissions = new Set(RELAY_APP_PROJECT_PERMISSIONS.map(ProjectPermission.named));
+const permissions = new Set(RELAY_APP_PROJECT_PERMISSIONS);
 
 /** Rechecks account lifecycle and session revocation at the execution boundary, including live connections. */
 export class BackendProjectAccess implements ProjectCredentialAuthority {
@@ -35,11 +33,10 @@ export class BackendProjectAccess implements ProjectCredentialAuthority {
         if (!requiredPermissions.every((permission) => permissions.has(permission))) {
             throw new ProjectAuthenticationError("project_permission_denied", "The operation is not permitted");
         }
-        return new ProjectAccessContext(
-            new ComputerScope(project.computer_id),
-            permissions,
-            new AuditActor(RelayAuditActorKind.Application, project.user_id),
-        );
+        return new ProjectAccessContext(new ComputerScope(project.computer_id), permissions, {
+            kind: "application",
+            actorId: project.user_id,
+        });
     };
 
     readonly authorizeSession = async (

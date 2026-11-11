@@ -1,35 +1,16 @@
-import { PROJECT_PERMISSION_NAMES, type ProjectPermissionName } from "@morty-build/client/protocol";
+import type { ProjectPermissionName } from "@morty-build/client/protocol";
 import type { ComputerScope } from "../do/session.ts";
 import type { HttpError } from "../http-error.ts";
-import { VerifiedChannelAccess } from "../pairing/pairing.ts";
 
-export class ProjectPermission {
-    // The vocabulary is defined once by the protocol; each name has exactly one instance.
-    static readonly #byName: ReadonlyMap<string, ProjectPermission> = new Map(
-        PROJECT_PERMISSION_NAMES.map((name) => [name, new ProjectPermission(name)]),
-    );
+export type ProjectPermission = ProjectPermissionName;
 
-    static readonly named = (name: ProjectPermissionName): ProjectPermission => {
-        const permission = ProjectPermission.#byName.get(name);
-        if (permission === undefined) {
-            throw new Error(`Project permission ${name} is missing from the vocabulary`);
-        }
-        return permission;
-    };
-    static readonly RuntimePair = ProjectPermission.named("runtime:pair");
-    static readonly RuntimeRead = ProjectPermission.named("runtime:read");
-    static readonly RuntimeRevoke = ProjectPermission.named("runtime:revoke");
-    static readonly SessionRead = ProjectPermission.named("session:read");
-    static readonly SessionWrite = ProjectPermission.named("session:write");
-
-    readonly value: ProjectPermissionName;
-
-    private constructor(value: ProjectPermissionName) {
-        this.value = value;
-    }
-
-    readonly toJSON = (): string => this.value;
-}
+export const ProjectPermission = {
+    RuntimePair: "runtime:pair",
+    RuntimeRead: "runtime:read",
+    RuntimeRevoke: "runtime:revoke",
+    SessionRead: "session:read",
+    SessionWrite: "session:write",
+} as const satisfies Readonly<Record<string, ProjectPermission>>;
 
 /**
  * What a project credential must grant to open a Runtime host connection and to keep using it. The connection
@@ -41,24 +22,9 @@ export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.fre
     ProjectPermission.SessionRead,
 ]);
 
-export class AuditActorKind {
-    readonly value: string;
-
-    protected constructor(value: string) {
-        this.value = value;
-    }
-
-    readonly toJSON = (): string => this.value;
-}
-
-export class AuditActor {
+export interface AuditActor {
     readonly actorId: string;
-    readonly kind: AuditActorKind;
-
-    constructor(kind: AuditActorKind, actorId: string) {
-        this.kind = kind;
-        this.actorId = actorId;
-    }
+    readonly kind: "application";
 }
 
 export class ProjectAccessContext {
@@ -105,14 +71,5 @@ function projectAuthenticationErrorStatus(code: string): number {
             return 403;
         default:
             return 503;
-    }
-}
-
-export class RuntimeAccessContext extends VerifiedChannelAccess {
-    readonly scope: ComputerScope;
-
-    constructor(scope: ComputerScope) {
-        super(scope.computerId, []);
-        this.scope = scope;
     }
 }

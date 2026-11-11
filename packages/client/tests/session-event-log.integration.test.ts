@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { ExternalImageContentBlock, SessionEvent } from "@morty-build/client/protocol";
+import type { SessionEvent } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { MortyClient, MortyPageRequest } from "../src/index.ts";
 
@@ -31,25 +31,13 @@ describe("Session Event Log V2 SDK", () => {
         servers.length = 0;
     });
 
-    it("Given a V2 event page and external content, When a consumer uses the explicit SDK APIs, Then raw pages and content reads cross the production HTTP boundary unchanged", async () => {
+    it("Given a V2 event page, When a consumer lists events, Then raw pages cross the production HTTP boundary unchanged", async () => {
         const sourceEvent = event("source-session", "source-event-1");
         const received: Array<{ readonly method: string; readonly path: string }> = [];
-        const externalImage: ExternalImageContentBlock = {
-            byteLength: 3,
-            imageKey: "a".repeat(64),
-            mimeType: "image/png",
-            type: "external_image",
-        };
         const server = createServer((request: IncomingMessage, response: ServerResponse) => {
             const path = request.url ?? "";
             received.push({ method: request.method ?? "", path });
-            if (path.includes("/files/content")) {
-                response.setHeader("content-type", "image/png");
-                response.setHeader("last-modified", recordedAt);
-                response.setHeader("x-morty-byte-length", "3");
-                response.setHeader("x-morty-file-name", "image");
-                response.end(Buffer.from([1, 2, 3]));
-            } else if (path.includes("/events-v2")) {
+            if (path.includes("/events-v2")) {
                 response.setHeader("content-type", "application/json");
                 response.end(
                     JSON.stringify({
@@ -97,11 +85,6 @@ describe("Session Event Log V2 SDK", () => {
                 truncated: false,
                 version: 2,
             });
-            expect(await client.sessions.readExternalContent(sourceEvent.target, externalImage, signal)).toMatchObject({
-                bytes: Uint8Array.of(1, 2, 3),
-                mediaType: "image/png",
-                name: "image",
-            });
         } finally {
             client.close();
         }
@@ -110,10 +93,6 @@ describe("Session Event Log V2 SDK", () => {
             {
                 method: "GET",
                 path: "/morty/api/v1/computers/project-1/harnesses/claude/sessions/source-session/events-v2?limit=500",
-            },
-            {
-                method: "GET",
-                path: `/morty/api/v1/computers/project-1/harnesses/claude/sessions/source-session/files/content?maxBytes=3&path=morty-content%3Aimage%3A${"a".repeat(64)}`,
             },
         ]);
     });

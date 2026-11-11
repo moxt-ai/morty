@@ -63,9 +63,6 @@ export async function routeComputerDurableObject(
     allowedOrigins: ReadonlySet<string>,
 ): Promise<Response | null> {
     const pathname = new URL(request.url).pathname;
-    if (pathname === `${MORTY_API_PREFIX}/dashboard` || pathname.startsWith(`${MORTY_API_PREFIX}/dashboard/`)) {
-        return null;
-    }
     const computerId = computerIdFromPath(pathname) ?? (await computerIdFromUnscopedRequest(request));
     if (computerId === null) {
         return null;
