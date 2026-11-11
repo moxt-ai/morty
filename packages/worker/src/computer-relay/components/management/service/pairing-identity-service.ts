@@ -18,11 +18,7 @@ export class ComputerIdentityService {
     readonly #computerId: string;
     readonly #store: ComputerRelayStore;
     readonly #accounts: Pick<ComputerManagementService, "isActive">;
-    constructor(
-        computerId: string,
-        store: ComputerRelayStore,
-        accounts: Pick<ComputerManagementService, "isActive">,
-    ) {
+    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerManagementService, "isActive">) {
         this.#computerId = computerId;
         this.#store = store;
         this.#accounts = accounts;

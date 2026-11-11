@@ -1,5 +1,5 @@
-import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import type { ComputerAccessService } from "../../../../directory/service/computer-access-service.ts";
+import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import type { ComputerRelayStore } from "../../management/storage/computer-relay-store.ts";
 import type { ComputerSocketIdentity } from "./computer-service.ts";
 

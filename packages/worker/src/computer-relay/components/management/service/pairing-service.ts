@@ -69,7 +69,4 @@ export class PairingService {
             agents,
             signal,
         );
-
-    readonly authorizePairedHost = async (computerId: string, signal: AbortSignal) =>
-        await this.#pairings.authorizePairedHost(computerId, signal);
 }

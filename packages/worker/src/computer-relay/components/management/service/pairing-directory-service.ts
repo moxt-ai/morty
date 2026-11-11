@@ -100,31 +100,6 @@ export class PairingDirectoryService {
     readonly authorizeProject = async (computerId: string, signal: AbortSignal): Promise<ComputerAccess> =>
         await this.#cx.services.computerAccounts.authorizeProject(computerId, signal);
 
-    readonly authorizePairedHost = async (computerId: string, signal: AbortSignal): Promise<VerifiedComputerAccess> => {
-        const access = await this.authorizeProject(computerId, signal);
-        const storage = await this.projectStorage(access.computerId, signal);
-        const runtime = await this.readActivePairing(storage, computerId, signal);
-        return { computerId: runtime.computerId };
-    };
-
-    private readonly readActivePairing = async (
-        storage: ComputerRelayStore,
-        computerId: string,
-        signal: AbortSignal,
-    ) => {
-        const row = await storage.readComputer(validateIdentifier(computerId, "computer_id"), signal);
-        if (row === null) {
-            throw new PairingDirectoryError(
-                "computer_access_denied",
-                "The project credential cannot access this Computer",
-            );
-        }
-        if (computerRevokedAt(row.revoked_at) !== null || row.registration === null) {
-            throw new PairingDirectoryError("computer_unavailable", "The selected Computer is unavailable");
-        }
-        return { computerId: row.computer_id };
-    };
-
     private readonly decodeCreatedComputerPairing = async (
         row: ComputerPairingRow,
         owner: ComputerAccess,

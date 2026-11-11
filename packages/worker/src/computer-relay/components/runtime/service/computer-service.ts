@@ -311,7 +311,7 @@ export class ComputerService {
         await relay.attachDaemon(replaced, signal);
     };
 
-    /** The public HTTP handler already authorized this operation; no host credential is involved. */
+    /** The public HTTP handler already authorized this local operation. */
     readonly receiveOperation = async (
         computerId: string,
         socket: ComputerOperationSocket,

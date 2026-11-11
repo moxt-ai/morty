@@ -1,6 +1,7 @@
 import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
 import { ComputerAccessService } from "../../directory/service/computer-access-service.ts";
+import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
 import { ComputerManagementStorage } from "../../directory/storage/computer-management-storage.ts";
 import type { ComputerManagementStore } from "../components/management/storage/computer-management-store.ts";
 import { CloudflareRelayPeers } from "../components/runtime/gateway/cloudflare-relay-peers.ts";
@@ -26,7 +27,10 @@ export function createRelayDurableObjectContext(
                     storage.storeFor(computerId).readActiveGeneration(computerId, signal),
             },
         },
-        services: { computerAccounts: new ComputerManagementService(controlStorage), projectAccess: new ComputerAccessService(controlStorage) },
+        services: {
+            computerAccounts: new ComputerManagementService(controlStorage),
+            projectAccess: new ComputerAccessService(controlStorage),
+        },
         gateways: { peers: new CloudflareRelayPeers(state) },
         utilities: { waitUntil: (operation) => state.waitUntil(operation) },
         doDatabase: storage.database,
