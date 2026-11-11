@@ -2,7 +2,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
@@ -10,6 +9,7 @@ import { MemorySessionStore } from "../../src/engine/session/record/session-stor
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
@@ -36,10 +36,7 @@ describe("acp commands environment", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -50,6 +47,9 @@ describe("acp commands environment", () => {
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
 
         try {

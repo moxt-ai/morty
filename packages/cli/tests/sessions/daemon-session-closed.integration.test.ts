@@ -23,7 +23,7 @@ import {
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
-import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
+import type { AgentConnectionFactory } from "../support/agents/agent-connection.ts";
 import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import {

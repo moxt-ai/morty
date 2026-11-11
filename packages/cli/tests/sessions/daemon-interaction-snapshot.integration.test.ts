@@ -3,7 +3,6 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-
 import {
     decodeMessageKind,
     decodeNativeSessionResult,
@@ -46,10 +45,10 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
@@ -107,10 +106,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/interaction/daemon`);
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "claude",
-        "Claude Code",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -121,6 +117,9 @@ test("Given a newly created native Session, When its first Turn resolves interac
                 },
                 options,
             ),
+        "claude",
+        "Claude Code",
+        process.execPath,
         {
             MORTY_FAKE_ACP_PAUSE_AFTER_PERMISSION: "1",
             MORTY_FAKE_ACP_PAUSE_AFTER_ELICITATION: "1",
@@ -315,10 +314,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/announced-permission/daemon`,
     );
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "claude",
-        "Claude Code",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -329,6 +325,9 @@ test("Given an Agent announced a tool call with its input, When it requests perm
                 },
                 options,
             ),
+        "claude",
+        "Claude Code",
+        process.execPath,
     );
     const config = createRuntimeConfig(
         {
@@ -421,10 +420,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/null-input-permission/daemon`,
     );
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "claude",
-        "Claude Code",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -435,6 +431,9 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
                 },
                 options,
             ),
+        "claude",
+        "Claude Code",
+        process.execPath,
     );
     const config = createRuntimeConfig(
         {
@@ -527,10 +526,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/orphan-update-permission/daemon`,
     );
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "claude",
-        "Claude Code",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -541,6 +537,9 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
                 },
                 options,
             ),
+        "claude",
+        "Claude Code",
+        process.execPath,
     );
     const config = createRuntimeConfig(
         {
@@ -633,10 +632,7 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/session-query/daemon`,
     );
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "codex",
-        "Codex",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -647,6 +643,9 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
                 },
                 options,
             ),
+        "codex",
+        "Codex",
+        process.execPath,
     );
     const config = createRuntimeConfig(
         {
@@ -719,10 +718,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/session-restore/daemon`,
     );
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "codex",
-        "Codex",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -733,6 +729,9 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
                 },
                 options,
             ),
+        "codex",
+        "Codex",
+        process.execPath,
         { MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent") },
     );
     const config = createRuntimeConfig(
@@ -870,10 +869,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/queued-identity/daemon`,
     );
     const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
-    const agent = new AcpAgentDefinition(
-        "claude",
-        "Claude Code",
-        process.execPath,
+    const agent = createControlledAgent(
         (options) =>
             new ControlledAcpConnection(
                 {
@@ -884,6 +880,9 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
                 },
                 options,
             ),
+        "claude",
+        "Claude Code",
+        process.execPath,
         {
             MORTY_FAKE_ACP_PAUSE_AFTER_PERMISSION: "1",
             MORTY_FAKE_ACP_STATE_DIRECTORY: join(stateDirectory, "agent"),

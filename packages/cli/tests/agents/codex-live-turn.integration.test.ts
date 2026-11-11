@@ -108,7 +108,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
     websocketServer.on("connection", (socket) => connected.resolve(socket));
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/real-codex/daemon`);
-    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, null, codex.environment);
+    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, codex.environment);
     const config = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),

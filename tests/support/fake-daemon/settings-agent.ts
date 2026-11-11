@@ -8,8 +8,9 @@ import {
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@morty-build/runtime-test-support/fake-daemon";
-import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
+import type { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import type { AgentTermination } from "../../../packages/cli/src/engine/acp/agent/agent-lifecycle.ts";
+import { createControlledAgent } from "../../../packages/cli/tests/support/agents/controlled-agent-definition.ts";
 
 /** Like Claude Code, a new session starts with the model its working directory's `.claude/settings.json` names. */
 async function projectModel(cwd: string): Promise<string | undefined> {
@@ -34,12 +35,12 @@ const defineAgent = (
     createEndpoint: (onSessionUpdate: ControlledSessionUpdate) => ControlledAcpPeer,
     version = "controlled-harness",
 ): AcpAgentDefinition =>
-    new AcpAgentDefinition(
+    createControlledAgent(
+        (options) =>
+            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         id,
         label,
         process.execPath,
-        (options) =>
-            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
         version,
         undefined,

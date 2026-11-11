@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
-
 import {
     type NativeSessionTarget,
     SESSION_CLOSED_ERROR_CODE,
@@ -13,17 +12,12 @@ import {
 } from "@morty-build/client/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { openPreviewEventCache } from "../../src/engine/acp/adapter/preview-event-cache.ts";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { acpSessionStoreMigrations } from "../../src/engine/generated/acp-session-store-migrations.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { SqliteSessionLiveEventPosition } from "../../src/engine/session/history/live-event-positions.ts";
 import { CachedSessionEventStore } from "../../src/engine/session/history/session-event-store.ts";
-import {
-    FoundStoredSession,
-    MemorySessionStore,
-    SqliteSessionStore,
-} from "../../src/engine/session/record/session-store.ts";
+import { MemorySessionStore, SqliteSessionStore } from "../../src/engine/session/record/session-store.ts";
 import { AcpSessionTable } from "../../src/engine/storage/session/acp-session-table.ts";
 import { LiveEventPositionTable } from "../../src/engine/storage/session/live-event-position-table.ts";
 import { SessionEventCacheTable } from "../../src/engine/storage/session/session-event-cache-table.ts";
@@ -36,6 +30,7 @@ import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { createWritableAcpStream } from "../support/agents/acp-stream.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { RecordingObserver } from "./acp-feature-fixture.ts";
@@ -73,10 +68,7 @@ function processExists(pid: number): boolean {
 describe("ACP conversation sessions", () => {
     it("Given a prompt that already finished, When its cancellation arrives late, Then the next prompt in the conversation still runs", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-late-cancel-"));
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -87,6 +79,9 @@ describe("ACP conversation sessions", () => {
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: temporaryDirectory },
         );
         const manager = new SessionManager({
@@ -132,10 +127,7 @@ describe("ACP conversation sessions", () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         const store = new MemorySessionStore();
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-activity-time-"));
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -146,6 +138,9 @@ describe("ACP conversation sessions", () => {
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: temporaryDirectory },
         );
         const firstManager = new SessionManager({
@@ -186,7 +181,7 @@ describe("ACP conversation sessions", () => {
                 signal,
             });
             const initial = store.read(target);
-            if (!(initial instanceof FoundStoredSession)) {
+            if (initial === undefined) {
                 throw new Error("Expected the conversation to be stored");
             }
             await firstManager.close();
@@ -218,10 +213,10 @@ describe("ACP conversation sessions", () => {
                     signal,
                 });
                 const reopened = store.read(target);
-                if (!(reopened instanceof FoundStoredSession)) {
+                if (reopened === undefined) {
                     throw new Error("Expected the reopened conversation to remain stored");
                 }
-                expect(reopened.session.updatedAt).toBe(initial.session.updatedAt);
+                expect(reopened.updatedAt).toBe(initial.updatedAt);
 
                 await reopenedManager.runPrompt({
                     agent,
@@ -234,11 +229,11 @@ describe("ACP conversation sessions", () => {
                     signal,
                 });
                 const active = store.read(target);
-                if (!(active instanceof FoundStoredSession)) {
+                if (active === undefined) {
                     throw new Error("Expected the active conversation to remain stored");
                 }
                 // Activity preserves the Agent's reported modification time rather than the Computer clock.
-                expect(active.session.updatedAt).toBe("2026-09-05T00:00:00Z");
+                expect(active.updatedAt).toBe("2026-09-05T00:00:00Z");
             } finally {
                 await reopenedManager.close();
             }
@@ -703,10 +698,7 @@ describe("ACP conversation sessions", () => {
     it("Given a managed Claude Code conversation, When the Computer restarts, Then its Session remains discoverable", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-session-store-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
-        const agent = new AcpAgentDefinition(
-            "claude",
-            "Claude Code",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -717,6 +709,9 @@ describe("ACP conversation sessions", () => {
                     },
                     options,
                 ),
+            "claude",
+            "Claude Code",
+            process.execPath,
         );
         const signal = new AbortController().signal;
         const firstStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
@@ -839,10 +834,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             });
             const adapterIdentity = readExecutableIdentity(adapterPath);
             const agentIdentity = readExecutableIdentity(process.execPath);
-            const agent = new AcpAgentDefinition(
-                "pi",
-                "Pi",
-                process.execPath,
+            const agent = createControlledAgent(
                 (options) =>
                     new ControlledAcpConnection(
                         {
@@ -853,6 +845,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                         },
                         options,
                     ),
+                "pi",
+                "Pi",
+                process.execPath,
                 { MORTY_TEST_PI_PID_FILE: piPidPath },
                 "0.85.0",
                 agentIdentity,
@@ -942,10 +937,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const codex = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const codex = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -956,11 +948,11 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
-        );
-        const claude = new AcpAgentDefinition(
-            "claude",
-            "Claude Code",
+            "codex",
+            "Codex",
             process.execPath,
+        );
+        const claude = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -971,6 +963,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "claude",
+            "Claude Code",
+            process.execPath,
         );
 
         try {
@@ -1022,10 +1017,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             maxProcesses: null,
         });
         const preparation = await manager.createSession({
-            agent: new AcpAgentDefinition(
-                "codex",
-                "Codex",
-                process.execPath,
+            agent: createControlledAgent(
                 (options) =>
                     new ControlledAcpConnection(
                         {
@@ -1036,6 +1028,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                         },
                         options,
                     ),
+                "codex",
+                "Codex",
+                process.execPath,
             ),
             cwd: process.cwd(),
             signal: new AbortController().signal,
@@ -1080,10 +1075,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1094,6 +1086,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
 
         try {
@@ -1171,10 +1166,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: 10,
         });
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1185,6 +1177,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
             { MORTY_FAKE_ACP_STATE_DIRECTORY: temporaryDirectory },
         );
         const signal = new AbortController().signal;
@@ -1228,10 +1223,10 @@ child.once("exit", (code) => process.exit(code ?? 84));
         };
         const writerName = (sessionTarget: NativeSessionTarget): string => {
             const stored = store.read(sessionTarget);
-            if (!(stored instanceof FoundStoredSession)) {
+            if (stored === undefined) {
                 throw new Error(`Expected ${sessionTarget} to have a persisted native session`);
             }
-            return `${encodeURIComponent(stored.session.sessionId)}.writer`;
+            return `${encodeURIComponent(stored.sessionId)}.writer`;
         };
 
         try {
@@ -1282,10 +1277,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1302,6 +1294,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
 
         try {
@@ -1336,10 +1331,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1350,6 +1342,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
 
         try {
@@ -1384,10 +1379,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "controlled-acp",
-            "Controlled ACP",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1398,6 +1390,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "controlled-acp",
+            "Controlled ACP",
+            process.execPath,
         );
 
         try {
@@ -1444,10 +1439,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1458,6 +1450,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
         );
 
         try {
@@ -1533,10 +1528,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             { mode: 0o700 },
         );
         await chmod(adapterPath, 0o700);
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1547,6 +1539,9 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
             {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: temporaryDirectory,
                 MORTY_TEST_CHILD_PID_FILE: childPidPath,
@@ -1627,10 +1622,7 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             timer: systemTimer,
             maxProcesses: null,
         });
-        const agent = new AcpAgentDefinition(
-            "codex",
-            "Codex",
-            process.execPath,
+        const agent = createControlledAgent(
             (options) =>
                 new ControlledAcpConnection(
                     {
@@ -1641,6 +1633,9 @@ agent.once("exit", (code) => process.exit(code ?? 84));
                     },
                     options,
                 ),
+            "codex",
+            "Codex",
+            process.execPath,
         );
         const signal = new AbortController().signal;
 

@@ -12,9 +12,9 @@ import {
 } from "@morty-build/client/protocol";
 import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { WebSocketServer } from "ws";
-import { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
 import { RuntimeLoop } from "../../../src/engine/runtime/runtime-loop.ts";
+import { createControlledAgent } from "../../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../../support/controlled-runtime-config.ts";
 
@@ -113,11 +113,11 @@ const config = createRuntimeConfig(
         credentials: memoryComputerCredentials("r".repeat(43)),
     },
     [
-        new AcpAgentDefinition(
+        createControlledAgent(
+            (options) => new ControlledEndpointConnection(endpoint(), options.client),
             "cancellation-peer",
             "Cancellation peer",
             process.execPath,
-            (options) => new ControlledEndpointConnection(endpoint(), options.client),
         ),
     ],
     new RuntimeLocalContext(directory, { PATH: process.env["PATH"] }),

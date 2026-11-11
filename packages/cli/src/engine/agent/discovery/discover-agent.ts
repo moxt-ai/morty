@@ -156,7 +156,6 @@ export async function discoverAgent(
                     specification.harness,
                     specification.label,
                     agent.path,
-                    specification.createConnection,
                     launchEnvironment,
                     agentVersion,
                     agent.identity,

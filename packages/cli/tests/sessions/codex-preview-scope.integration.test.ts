@@ -28,7 +28,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 `,
         { mode: 0o700 },
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", command, null, { CODEX_HOME: "catalog" });
+    const agent = new AcpAgentDefinition("codex", "Codex", command, { CODEX_HOME: "catalog" });
     const { adapter, processes } = codexHistoryAdapter(agent);
     return {
         adapter,

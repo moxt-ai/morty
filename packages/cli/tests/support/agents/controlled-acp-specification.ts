@@ -1,4 +1,4 @@
-import type { AgentConnectionFactory } from "../../../src/engine/acp/connection/agent-connection.ts";
+import type { AgentConnectionFactory } from "./agent-connection.ts";
 import { ControlledAcpConnection } from "./controlled-acp-connection.ts";
 import { ControlledReadinessSpecification } from "./controlled-readiness-specification.ts";
 

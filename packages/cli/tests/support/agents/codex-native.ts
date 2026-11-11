@@ -32,7 +32,7 @@ export async function codexFixture(
     await mkdir(workspace);
     const provider = await FakeOpenAiProvider.start("morty-test-model", answer, providerOptions);
     const codex = await CodexFixture.create(provider);
-    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, null, codex.environment);
+    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, codex.environment);
     const store = new MemorySessionStore();
     const sessions = new SessionManager({
         observer: new NullSessionObserver(),

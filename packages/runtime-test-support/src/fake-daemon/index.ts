@@ -1,6 +1,6 @@
 import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
-import { AcpAgentDefinition } from "../../../cli/src/engine/acp/agent/agent-definition.ts";
-import type { AgentConnectionOptions } from "../../../cli/src/engine/acp/connection/agent-connection.ts";
+import type { AgentConnectionOptions } from "../../../cli/tests/support/agents/agent-connection.ts";
+import { createControlledAgent } from "../../../cli/tests/support/agents/controlled-agent-definition.ts";
 import { ControlledEndpointConnection } from "./controlled-connection.ts";
 import { createFakeHarness, fakeHarnessCapabilities } from "./fake-harness/index.ts";
 import type { FakeAgentHarnessOptions } from "./fake-harness/model.ts";
@@ -32,25 +32,24 @@ export { type ControlledAcpPeer, ControlledEndpointConnection } from "./controll
 export function createFakeDaemon(options: FakeAgentHarnessOptions) {
     const harness = createFakeHarness(options);
     return {
-        agents: harness.agents.map(
-            (agent) =>
-                new AcpAgentDefinition(
-                    agent.harness,
-                    agent.name,
-                    process.execPath,
-                    (options) =>
-                        new ControlledEndpointConnection(
-                            agent.createEndpoint(
-                                controlledSessionUpdates(options.client),
-                                async (stage) => await options.onPromptDelegation?.(stage),
-                            ),
-                            options.client,
+        agents: harness.agents.map((agent) =>
+            createControlledAgent(
+                (options) =>
+                    new ControlledEndpointConnection(
+                        agent.createEndpoint(
+                            controlledSessionUpdates(options.client),
+                            async (stage) => await options.onPromptDelegation?.(stage),
                         ),
-                    {},
-                    "controlled-harness",
-                    undefined,
-                    fakeHarnessCapabilities,
-                ),
+                        options.client,
+                    ),
+                agent.harness,
+                agent.name,
+                process.execPath,
+                {},
+                "controlled-harness",
+                undefined,
+                fakeHarnessCapabilities,
+            ),
         ),
         catalog: harness.catalog,
         continueReply: harness.continueReply,
